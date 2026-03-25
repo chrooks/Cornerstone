@@ -43,8 +43,16 @@ All skill profiles, thresholds, flags, and legend profiles are persisted in Supa
 
 ```
 cornerstone/
-  backend/    Flask API — stat fetching, skill mapping, Claude integration
-  frontend/   Next.js app — pipeline UI, review queue, roster builder
+  backend/
+    api/           Route blueprints (organized by domain)
+    migrations/    SQL migration source files
+    services/      Business logic (stat fetching, skill mapping, Supabase client)
+  frontend/
+    app/           Next.js App Router pages
+    components/    Shared UI components (shadcn/ui)
+    lib/           API client, Supabase browser client, shared types
+  supabase/
+    migrations/    Supabase CLI migration files (applied via `supabase db push`)
 ```
 
 ---
@@ -65,6 +73,40 @@ cornerstone/
    - **Project URL** (Settings > API > Project URL)
    - **Service Role Key** (Settings > API > service_role secret key)
    - **Anon/Public Key** (Settings > API > anon public key)
+   - **DB Password** (Settings > Database > Database password)
+3. Fill in `backend/.env` and `frontend/.env.local` with the values above
+
+### Database Schema
+
+The schema is managed via the Supabase CLI. Migrations live in `supabase/migrations/`.
+
+**Tables:**
+
+| Table | Description |
+|---|---|
+| `players` | Current NBA players with metadata and season info |
+| `player_stats` | Raw stat blobs fetched from NBA.com via `nba_api` |
+| `skill_profiles` | 19-skill ratings per player/season, per source |
+| `skill_flags` | Disagreements between stat-based and Claude ratings, pending review |
+| `skill_thresholds` | Calibration rules mapping stats to skill tiers (Elite/Capable/None) |
+| `legends` | 36 all-time greats — rated manually via the Legends Profile Builder |
+| `anchor_players` | Known-good tier assignments used to validate threshold calibration |
+
+**To apply migrations to a new project:**
+
+```bash
+# Install Supabase CLI if needed: brew install supabase/tap/supabase
+supabase login
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+**To create a new migration:**
+
+```bash
+# Add a new file to supabase/migrations/ with a timestamp prefix, then:
+supabase db push
+```
 
 ---
 
@@ -121,7 +163,8 @@ The app will be available at http://localhost:3000.
 | Variable | Description |
 |---|---|
 | `SUPABASE_URL` | Your Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | Your Supabase service role key (keep secret) |
+| `SUPABASE_SERVICE_KEY` | Your Supabase service role key (keep secret — server only) |
+| `SUPABASE_DB_PASSWORD` | Your Supabase database password (used by Supabase CLI) |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key for Claude integration |
 
 ### frontend/.env.local
