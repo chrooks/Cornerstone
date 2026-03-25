@@ -1,0 +1,23 @@
+# Python / Backend
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/**/*.pyo
+backend/.env
+
+# Next.js / Frontend
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+frontend/.env.local
+frontend/.env.*.local
+
+# General
+.DS_Store
+*.log
+npm-debug.log*
+
+.vscode
+.claude
+prompts/
