@@ -164,7 +164,6 @@ The app will be available at http://localhost:3000.
 |---|---|
 | `SUPABASE_URL` | Your Supabase project URL |
 | `SUPABASE_SERVICE_KEY` | Your Supabase service role key (keep secret — server only) |
-| `SUPABASE_DB_PASSWORD` | Your Supabase database password (used by Supabase CLI) |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key for Claude integration |
 
 ### frontend/.env.local
