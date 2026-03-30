@@ -3,6 +3,9 @@ Flask application entry point.
 Initializes the app, registers blueprints, and configures CORS and env loading.
 """
 
+import logging
+import os
+
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -10,7 +13,16 @@ from dotenv import load_dotenv
 # Load environment variables from .env before anything else
 load_dotenv()
 
+# Configure logging — INFO by default, override with LOG_LEVEL env var
+logging.basicConfig(
+    level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+
 from api.health import health_bp
+from api.players import players_bp
+from api.salaries import salaries_bp
 
 
 def create_app() -> Flask:
@@ -22,6 +34,8 @@ def create_app() -> Flask:
 
     # Register route blueprints
     app.register_blueprint(health_bp)
+    app.register_blueprint(players_bp)
+    app.register_blueprint(salaries_bp)
 
     return app
 
