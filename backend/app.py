@@ -23,6 +23,7 @@ logging.basicConfig(
 from api.health import health_bp
 from api.players import players_bp
 from api.salaries import salaries_bp
+from api.skills import skills_bp
 
 
 def create_app() -> Flask:
@@ -36,6 +37,7 @@ def create_app() -> Flask:
     app.register_blueprint(health_bp)
     app.register_blueprint(players_bp)
     app.register_blueprint(salaries_bp)
+    app.register_blueprint(skills_bp)  # Prompt 4: skill evaluation endpoints
 
     return app
 

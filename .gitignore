@@ -17,6 +17,7 @@ frontend/.env.*.local
 .DS_Store
 *.log
 npm-debug.log*
+TODO.md
 
 .vscode
 .claude
