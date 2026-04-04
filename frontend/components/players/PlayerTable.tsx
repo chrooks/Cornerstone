@@ -12,7 +12,7 @@
  *  - Click a row → navigate to /players/[id]
  */
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
@@ -88,6 +88,44 @@ const SKILL_COLUMNS: ColDef[] = SKILL_COLUMN_KEYS.map((key) => ({
 const ALL_COLUMNS: ColDef[] = [...META_COLUMNS, ...SKILL_COLUMNS];
 
 // ---------------------------------------------------------------------------
+// Skill tier context menu
+// ---------------------------------------------------------------------------
+
+const SKILL_TIERS: SkillTier[] = ["All-Time Great", "Elite", "Capable", "None"];
+
+const TIER_COLORS: Record<SkillTier, string> = {
+  "All-Time Great": "text-violet-800 hover:bg-violet-50",
+  Elite:            "text-emerald-800 hover:bg-emerald-50",
+  Capable:          "text-amber-800 hover:bg-amber-50",
+  None:             "text-slate-500 hover:bg-slate-50",
+};
+
+const TIER_ACTIVE: Record<SkillTier, string> = {
+  "All-Time Great": "bg-violet-100 ring-1 ring-violet-300",
+  Elite:            "bg-emerald-100 ring-1 ring-emerald-200",
+  Capable:          "bg-amber-100 ring-1 ring-amber-200",
+  None:             "bg-slate-100 ring-1 ring-slate-200",
+};
+
+interface ContextMenuState {
+  open: boolean;
+  x: number;
+  y: number;
+  playerId: string;
+  playerName: string;
+  skillKey: string;
+  skillLabel: string;
+  currentTier: SkillTier | undefined;
+  saving: boolean;
+}
+
+const CLOSED_MENU: ContextMenuState = {
+  open: false, x: 0, y: 0,
+  playerId: "", playerName: "", skillKey: "", skillLabel: "",
+  currentTier: undefined, saving: false,
+};
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -110,6 +148,14 @@ interface PlayerTableProps {
   pageSize: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
+  /**
+   * When provided, right-clicking a skill cell shows a tier-edit context menu.
+   * The callback receives the player id, skill key, and chosen tier — the caller
+   * is responsible for the API call and optimistic state update.
+   *
+   * TODO: gate this behind an admin mode check in the parent before passing the prop.
+   */
+  onSkillOverride?: (playerId: string, skillKey: string, tier: SkillTier) => Promise<void>;
 }
 
 export function PlayerTable({
@@ -121,6 +167,7 @@ export function PlayerTable({
   pageSize,
   onPageChange,
   onPageSizeChange,
+  onSkillOverride,
 }: PlayerTableProps) {
   const router = useRouter();
 
@@ -132,6 +179,67 @@ export function PlayerTable({
   // Hidden columns — all visible by default
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [columnsOpen, setColumnsOpen] = useState(false);
+
+  // Context menu for right-click skill tier editing
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(CLOSED_MENU);
+
+  // Close context menu on Escape key (outside clicks handled by the backdrop div)
+  useEffect(() => {
+    if (!contextMenu.open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setContextMenu(CLOSED_MENU); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [contextMenu.open]);
+
+  // Right-click handler for skill cells — opens the tier edit menu
+  const handleSkillContextMenu = useCallback(
+    (e: React.MouseEvent, player: PlayerWithSkills, skillKey: string) => {
+      if (!onSkillOverride) return; // feature disabled when prop is not provided
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Clamp position so the menu stays inside the viewport
+      // (estimated menu size: 200px wide × 185px tall)
+      const x = Math.min(e.clientX, window.innerWidth - 210);
+      const y = Math.min(e.clientY, window.innerHeight - 195);
+
+      const next = {
+        open: true,
+        x, y,
+        playerId: player.id,
+        playerName: player.name,
+        skillKey,
+        skillLabel: SKILL_LABELS[skillKey] ?? skillKey,
+        currentTier: (player.skills?.[skillKey] as SkillTier) ?? undefined,
+        saving: false,
+      };
+      console.log("[SkillMenu] opening context menu", next);
+      setContextMenu(next);
+    },
+    [onSkillOverride],
+  );
+
+  // Called when the user picks a tier from the context menu
+  const handleTierSelect = useCallback(
+    async (tier: SkillTier) => {
+      console.log("[SkillMenu] handleTierSelect called", { tier, contextMenu, hasOverride: !!onSkillOverride });
+      if (!onSkillOverride) { console.warn("[SkillMenu] onSkillOverride is not set — aborting"); return; }
+      if (contextMenu.saving) { console.warn("[SkillMenu] already saving — aborting"); return; }
+      const { playerId, skillKey } = contextMenu;
+      if (!playerId || !skillKey) { console.warn("[SkillMenu] empty playerId or skillKey — aborting", { playerId, skillKey }); return; }
+      setContextMenu((prev) => ({ ...prev, saving: true }));
+      try {
+        console.log("[SkillMenu] calling onSkillOverride", { playerId, skillKey, tier });
+        await onSkillOverride(playerId, skillKey, tier);
+        console.log("[SkillMenu] onSkillOverride resolved OK");
+      } catch (err) {
+        console.error("[SkillMenu] onSkillOverride threw", err);
+      } finally {
+        setContextMenu(CLOSED_MENU);
+      }
+    },
+    [onSkillOverride, contextMenu],
+  );
 
   // Resize state stored in refs to avoid re-renders during drag
   const resizingCol = useRef<string | null>(null);
@@ -359,18 +467,27 @@ export function PlayerTable({
                   onClick={() => router.push(`/players/${player.id}`)}
                   className="border-b border-border hover:bg-muted/40 cursor-pointer transition-colors group"
                 >
-                  {visibleColumns.map((col) => (
-                    <td
-                      key={col.key}
-                      style={{ width: columnWidths[col.key] ?? col.defaultWidth }}
-                      className={cn(
-                        "px-2 py-1.5 whitespace-nowrap overflow-hidden text-ellipsis",
-                        col.sticky && "sticky left-0 z-10 bg-background group-hover:bg-muted/40 border-r border-border transition-colors",
-                      )}
-                    >
-                      {renderCell(player, col)}
-                    </td>
-                  ))}
+                  {visibleColumns.map((col) => {
+                    const isSkillCol = SKILL_COLUMN_KEYS.includes(col.key);
+                    return (
+                      <td
+                        key={col.key}
+                        style={{ width: columnWidths[col.key] ?? col.defaultWidth }}
+                        className={cn(
+                          "px-2 py-1.5 whitespace-nowrap overflow-hidden text-ellipsis",
+                          col.sticky && "sticky left-0 z-10 bg-background group-hover:bg-muted border-r border-border transition-colors",
+                          isSkillCol && onSkillOverride && "cursor-context-menu",
+                        )}
+                        onContextMenu={
+                          isSkillCol
+                            ? (e) => handleSkillContextMenu(e, player, col.key)
+                            : undefined
+                        }
+                      >
+                        {renderCell(player, col)}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))
             )}
@@ -430,6 +547,66 @@ export function PlayerTable({
           </div>
         </div>
       </div>
+
+      {/* ── Skill tier context menu (right-click on skill cells) ── */}
+      {contextMenu.open && (
+        <>
+          {/* Full-screen backdrop — clicking outside the menu closes it without
+              interfering with the menu's own click handlers */}
+          <div
+            className="fixed inset-0 z-[9998]"
+            onMouseDown={() => setContextMenu(CLOSED_MENU)}
+          />
+        <div
+          role="menu"
+          aria-label={`Edit ${contextMenu.skillLabel} tier for ${contextMenu.playerName}`}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          className="fixed z-[9999] w-48 rounded-lg border border-border bg-background shadow-lg py-1 text-xs"
+        >
+          {/* Header */}
+          <div className="px-3 py-1.5 border-b border-border">
+            <div className="font-semibold text-foreground truncate">{contextMenu.skillLabel}</div>
+            <div className="text-muted-foreground truncate">{contextMenu.playerName}</div>
+          </div>
+
+          {/* Tier options */}
+          <div className="py-1">
+            {SKILL_TIERS.map((tier) => {
+              const isCurrent = contextMenu.currentTier === tier ||
+                (!contextMenu.currentTier && tier === "None");
+              return (
+                <button
+                  key={tier}
+                  type="button"
+                  role="menuitem"
+                  disabled={contextMenu.saving}
+                  onClick={() => handleTierSelect(tier)}
+                  className={cn(
+                    "w-full text-left px-3 py-1.5 flex items-center gap-2 transition-colors",
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                    TIER_COLORS[tier],
+                    isCurrent && TIER_ACTIVE[tier],
+                  )}
+                >
+                  {isCurrent && (
+                    <span className="text-[10px]">✓</span>
+                  )}
+                  {!isCurrent && <span className="w-[14px]" />}
+                  <span className="font-medium">{tier}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Loading overlay */}
+          {contextMenu.saving && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/70">
+              <span className="text-muted-foreground">Saving…</span>
+            </div>
+          )}
+        </div>
+        </>
+      )}
     </div>
   );
 }

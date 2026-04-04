@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { listPlayersWithSkills } from "@/lib/api";
+import { listPlayersWithSkills, manualOverrideSkill } from "@/lib/api";
 import { FilterBar } from "@/components/players/FilterBar";
 import { SortControls } from "@/components/players/SortControls";
 import { PlayerTable, DEFAULT_PAGE_SIZE } from "@/components/players/PlayerTable";
@@ -31,7 +31,7 @@ import {
   MAX_ACTIVE_FILTERS,
 } from "@/components/players/playerFilters";
 import type { SortKey } from "@/components/players/SortControls";
-import type { PlayerWithSkills } from "@/lib/types";
+import type { PlayerWithSkills, SkillTier } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // View mode persistence key
@@ -141,6 +141,28 @@ export default function PlayersPage() {
       .catch(() => setError("Failed to load players"))
       .finally(() => setLoading(false));
   }, []);
+
+  // ── Skill tier override (right-click edit in table) ──────────────────────
+  //
+  // TODO: gate this behind an admin mode check before passing to PlayerTable.
+  //   e.g. const isAdmin = useAdminMode();
+  //        onSkillOverride={isAdmin ? handleSkillOverride : undefined}
+  const handleSkillOverride = useCallback(
+    async (playerId: string, skillKey: string, tier: SkillTier) => {
+      console.log("[SkillOverride] API call start", { playerId, skillKey, tier });
+      const res = await manualOverrideSkill(playerId, { skill_name: skillKey, resolved_value: tier });
+      console.log("[SkillOverride] API response", res);
+      if (!res.success) { console.error("[SkillOverride] API error:", res.error); return; }
+      setPlayers((prev) =>
+        prev.map((p) =>
+          p.id !== playerId
+            ? p
+            : { ...p, skills: { ...(p.skills ?? {}), [skillKey]: tier } },
+        ),
+      );
+    },
+    [],
+  );
 
   // ── Restore view mode from localStorage (client-only) ────────────────────
   useEffect(() => {
@@ -330,6 +352,7 @@ export default function PlayersPage() {
               pageSize={pageSize}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
+              onSkillOverride={handleSkillOverride}
             />
           ) : (
             <>

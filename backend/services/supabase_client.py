@@ -37,6 +37,14 @@ def get_supabase() -> Client:
 
         _client = create_client(url, key)
 
+        # h2 is installed, so httpx negotiates HTTP/2 by default. Supabase's
+        # PostgREST sends a GOAWAY frame after ~34 streams per connection, which
+        # causes RemoteProtocolError on the 35th request. Swapping the transport
+        # to HTTP/1.1-only prevents exhaustion entirely — connection pooling still
+        # works, it just doesn't multiplex streams. All existing session headers
+        # (apikey, Authorization, etc.) are preserved on the same session object.
+        _client.postgrest.session._transport = httpx.HTTPTransport(http2=False)
+
     return _client
 
 
