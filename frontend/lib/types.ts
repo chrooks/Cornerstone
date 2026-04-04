@@ -310,6 +310,36 @@ export interface PlayerProfile {
 export type FlagResolution = "trust_stats" | "trust_claude" | "manual_override";
 
 // ---------------------------------------------------------------------------
+// Players Explorer — bulk list with embedded skills
+// ---------------------------------------------------------------------------
+
+/**
+ * Condensed skill map returned by GET /api/players/bulk.
+ * Maps skill_name → final_tier string. Only final_tier is included (no full
+ * composite details) to keep the bulk payload light.
+ */
+export type PlayerSkillMap = Record<string, string>;
+
+/** A player row from GET /api/players/bulk — includes embedded skill tiers and flag summary. */
+export interface PlayerWithSkills {
+  id: string;
+  name: string;
+  team: string | null;
+  position: string | null;
+  age: number | null;
+  height: string | null;
+  weight: number | null;
+  salary: number | null;
+  games_played: number | null;
+  minutes_per_game: number | null;
+  season: string;
+  /** Composite skill profile condensed to final_tier per skill, or null if no profile exists yet. */
+  skills: PlayerSkillMap | null;
+  /** Aggregate flag status — used to surface review badges in the explorer. */
+  flag_summary: { total: number; unresolved: number };
+}
+
+// ---------------------------------------------------------------------------
 // Prompt 8 — Legends Profile Builder
 // ---------------------------------------------------------------------------
 

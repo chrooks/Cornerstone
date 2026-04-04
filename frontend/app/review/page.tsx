@@ -88,11 +88,31 @@ export default function ReviewQueuePage() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-fetch whenever filters change (debounced via key press for search)
+  // Re-fetch whenever filters are submitted
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     fetchQueue();
   }, [fetchQueue]);
+
+  // Clear handler: resets all filters AND refetches from the API so the list
+  // reflects current DB state rather than the stale initial-load snapshot.
+  // This prevents resolved players from "reappearing" when filters are cleared.
+  const handleClear = useCallback(async () => {
+    setSearch("");
+    setTeamFilter("");
+    setPosFilter("");
+    setReasonFilter("");
+    setLoading(true);
+    setError(null);
+    const res = await getReviewQueue();
+    if (res.success && res.data) {
+      setAllPlayers(res.data);
+      setPlayers(res.data);
+    } else {
+      setError(res.error ?? "Failed to load review queue");
+    }
+    setLoading(false);
+  }, []);
 
   // Derive dropdown options from the full unfiltered list so options never
   // disappear when a filter is applied (which would lock users into that filter)
@@ -195,18 +215,11 @@ export default function ReviewQueuePage() {
           Filter
         </button>
 
-        {/* Clear filters */}
+        {/* Clear filters — refetches from API to avoid showing stale resolved players */}
         {(search || teamFilter || posFilter || reasonFilter) && (
           <button
             type="button"
-            onClick={() => {
-              setSearch("");
-              setTeamFilter("");
-              setPosFilter("");
-              setReasonFilter("");
-              // Restore the full unfiltered list (already in state)
-              setPlayers(allPlayers);
-            }}
+            onClick={handleClear}
             className="px-3 py-1.5 rounded-md border border-input text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Clear

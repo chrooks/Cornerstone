@@ -7,6 +7,7 @@
 import type {
   ApiResponse,
   Player,
+  PlayerWithSkills,
   StatsBlob,
   PlayerSkills,
   ThresholdRow,
@@ -80,6 +81,23 @@ export async function listPlayers(
   if (search) params.set("search", search);
   const qs = params.toString() ? `?${params}` : "";
   return apiFetch<Player[]>(`/api/players${qs}`);
+}
+
+/**
+ * Fetch all qualifying players with composite skill tiers and flag summaries
+ * embedded inline — used by the /players explorer page.
+ *
+ * Returns a single request rather than N+1 per-player profile fetches.
+ */
+export async function listPlayersWithSkills(
+  season?: string,
+  minMpg?: number,
+): Promise<ApiResponse<PlayerWithSkills[]>> {
+  const params = new URLSearchParams();
+  if (season) params.set("season", season);
+  if (minMpg != null) params.set("min_mpg", String(minMpg));
+  const qs = params.toString() ? `?${params}` : "";
+  return apiFetch<PlayerWithSkills[]>(`/api/players/bulk${qs}`);
 }
 
 /** Get the full stats blob for a player. Pass refresh=true to bypass the cache. */
@@ -198,6 +216,10 @@ export async function runStatsFetch(season?: string, refresh = false): Promise<A
   fetched: number;
   skipped: number;
   errors: number;
+  /** Players whose ESPN salary was successfully matched and upserted. */
+  salary_matched: number;
+  /** Players in Supabase with no ESPN salary match (name mismatch or below MPG threshold). */
+  salary_unmatched: number;
 }>> {
   return apiFetch("/api/pipeline/fetch-stats", {
     method: "POST",

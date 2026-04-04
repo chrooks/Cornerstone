@@ -146,16 +146,22 @@ export default function PipelinePage() {
       if (res.success && res.data) {
         const d = res.data;
         setStep0Result(
-          <div className="space-y-1">
-            <p className="text-green-700 font-medium">Stats fetch complete</p>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-muted-foreground mt-1">
-              <span>Total: <strong className="text-foreground">{d.total}</strong></span>
-              <span>Fetched: <strong className="text-foreground">{d.fetched}</strong></span>
+          <div className="space-y-2">
+            <p className="text-green-700 font-medium">Stats &amp; salary fetch complete</p>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-muted-foreground">
+              <span>Total players: <strong className="text-foreground">{d.total}</strong></span>
+              <span>Stats fetched: <strong className="text-foreground">{d.fetched}</strong></span>
               <span>Errors: <strong className="text-foreground">{d.errors}</strong></span>
             </div>
+            {(d.salary_matched != null || d.salary_unmatched != null) && (
+              <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-muted-foreground border-t border-border pt-1.5">
+                <span>Salaries matched: <strong className="text-foreground">{d.salary_matched ?? "—"}</strong></span>
+                <span>Unmatched: <strong className="text-foreground">{d.salary_unmatched ?? "—"}</strong></span>
+              </div>
+            )}
           </div>
         );
-        toast.success(`Stats fetch complete — ${d.fetched}/${d.total} players`);
+        toast.success(`Stats fetch complete — ${d.fetched}/${d.total} players, ${d.salary_matched ?? 0} salaries updated`);
       } else {
         setStep0Result(
           <p className="text-destructive text-sm">{res.error ?? "Unknown error"}</p>
@@ -341,7 +347,7 @@ export default function PipelinePage() {
         <StepCard
           step={0}
           title="Fetch Player Stats"
-          description="Pull raw stats from nba_api for every qualifying player and cache them in player_stats. Required before Step 1. Long-running — expect 30–60 min for ~300 players."
+          description="Pull raw stats from nba_api and scrape ESPN salaries for every qualifying player. Stats are cached in player_stats; salaries are upserted into the players table. Required before Step 1. Long-running — expect 30–60 min."
           running={step0Running}
           lastResult={step0Result}
           onRun={handleRunStep0}

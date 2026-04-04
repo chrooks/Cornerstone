@@ -19,6 +19,7 @@ from services.players_service import (
     DEFAULT_MIN_MPG,
     get_or_fetch_players,
     get_or_fetch_player_stats,
+    run_bulk_salary_scrape,
 )
 
 logger = logging.getLogger(__name__)
@@ -196,10 +197,12 @@ def fetch_stats_batch():
 
     Response data:
       {
-        "total":     int,   // players attempted
-        "fetched":   int,   // stats blobs successfully retrieved/cached
-        "skipped":   int,   // already cached (and refresh=false)
-        "errors":    int,   // fetch failures
+        "total":            int,   // players attempted
+        "fetched":          int,   // stats blobs successfully retrieved/cached
+        "skipped":          int,   // already cached (and refresh=false)
+        "errors":           int,   // fetch failures
+        "salary_matched":   int,   // players whose salary was updated from ESPN
+        "salary_unmatched": int,   // qualifying players with no ESPN salary match
       }
     """
     body       = request.get_json(silent=True) or {}
@@ -243,11 +246,28 @@ def fetch_stats_batch():
             fetched, skipped, errors, total,
         )
 
+        # Scrape salaries from ESPN for all teams (~30–45s) and upsert into Supabase.
+        # We run this after stats so both steps complete in one pipeline trigger.
+        salary_matched   = 0
+        salary_unmatched = 0
+        try:
+            salary_result    = run_bulk_salary_scrape(None, supabase)
+            salary_matched   = salary_result.get("matched", 0)
+            salary_unmatched = salary_result.get("unmatched", 0)
+            logger.info(
+                "fetch-stats salary scrape: %d matched, %d unmatched",
+                salary_matched, salary_unmatched,
+            )
+        except Exception:
+            logger.exception("fetch-stats: salary scrape failed (non-fatal)")
+
         return _ok({
-            "total":   total,
-            "fetched": fetched,
-            "skipped": skipped,
-            "errors":  errors,
+            "total":            total,
+            "fetched":          fetched,
+            "skipped":          skipped,
+            "errors":           errors,
+            "salary_matched":   salary_matched,
+            "salary_unmatched": salary_unmatched,
         })
 
     except Exception:

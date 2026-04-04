@@ -237,6 +237,20 @@ def _parse_salary_table(html: str) -> dict[str, int]:
 # Salary matching helpers
 # ---------------------------------------------------------------------------
 
+# ESPN salary pages append a position abbreviation to player names in the same
+# table cell: e.g. "Stephen Curry G", "Nikola Jokic C", "Karl-Anthony Towns C".
+# After normalization these become "stephen curry g", "nikola jokic c", etc.
+# This pattern strips that trailing token when building a position-stripped lookup.
+_TRAILING_POSITION = re.compile(
+    r"\s+(pg|sg|sf|pf|g-f|f-g|f-c|c-f|g|f|c)$"
+)
+
+
+def _strip_position(key: str) -> str:
+    """Remove a trailing ESPN position abbreviation from a normalized name key."""
+    return _TRAILING_POSITION.sub("", key).strip()
+
+
 def match_salaries_to_players(
     salary_map: dict[str, int],
     players: list[dict],
@@ -246,16 +260,29 @@ def match_salaries_to_players(
     Updates the salary field on matched player dicts in-place.
 
     Returns (matched_count, unmatched_count).
+
+    ESPN appends position abbreviations to player names in their salary tables
+    (e.g. "stephen curry g"). We build a position-stripped mirror of salary_map
+    so both the raw and stripped keys are checked on each lookup.
     """
+    # Build a position-stripped mirror: "stephen curry g" → "stephen curry"
+    stripped_map = {_strip_position(k): v for k, v in salary_map.items()}
+
     matched = 0
     for player in players:
         key = _normalize_name(player.get("name", ""))
+
+        # 1. Direct match (raw ESPN key — works if ESPN stops appending positions)
         salary = salary_map.get(key)
 
-        # Try common name variants if direct match fails
+        # 2. Position-stripped match (handles current ESPN format)
+        if salary is None:
+            salary = stripped_map.get(key)
+
+        # 3. Alternate name key (handles common name variants like "Nic" → "Nicolas")
         if salary is None:
             key_alt = _alternate_name_key(player.get("name", ""))
-            salary = salary_map.get(key_alt)
+            salary = salary_map.get(key_alt) or stripped_map.get(key_alt)
 
         if salary is not None:
             player["salary"] = salary

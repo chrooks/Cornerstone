@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 CURRENT_SEASON = "2025-26"
 DEFAULT_MIN_MPG = 15.0
 
+# NBA minimum salary for the current season (0 years of service).
+# Update this each offseason when the new CBA minimum is set.
+# 2025-26 minimum: $1,119,563
+NBA_MINIMUM_SALARY = 1_119_563
+
 # Salary cache TTL — 7 days
 _SALARY_TTL_DAYS = 7
 
@@ -365,14 +370,18 @@ def run_bulk_salary_scrape(
     if team_abbrev:
         players = [p for p in players if p.get("team", "").upper() == team_abbrev.upper()]
 
+    # Snapshot salaries before matching so we only PATCH rows that actually changed.
+    pre_match = {p["id"]: p.get("salary") for p in players}
+
     # Match salary map to player records (updates salary field in-place)
     matched, unmatched = salary_scraper.match_salaries_to_players(salary_map, players)
 
-    # Update matched players in Supabase — use individual UPDATE calls (not upsert)
-    # to avoid NOT NULL violations on columns we're not setting.
+    # Only PATCH players whose salary was newly set by this scrape — not players
+    # that already had a salary value (which would cause redundant writes).
     update_count = 0
     for p in players:
-        if p.get("salary") is not None:
+        new_salary = p.get("salary")
+        if new_salary is not None and new_salary != pre_match.get(p["id"]):
             supabase.table("players").update({"salary": p["salary"]}).eq("id", p["id"]).execute()
             update_count += 1
     if update_count:
@@ -380,6 +389,26 @@ def run_bulk_salary_scrape(
 
     total = len(players)
     logger.info("Salary bulk scrape: %d matched, %d unmatched, %d total", matched, unmatched, total)
+
+    # Assign the NBA minimum salary to players we couldn't match on ESPN.
+    # All unmatched players are confirmed to be on minimum/two-way contracts,
+    # so this is a safe fallback rather than leaving salary as NULL.
+    min_salary_count = 0
+    for p in players:
+        if p.get("salary") is None:
+            p["salary"] = NBA_MINIMUM_SALARY
+            # Only PATCH if the DB value is not already the minimum (avoids spurious writes).
+            if pre_match.get(p["id"]) != NBA_MINIMUM_SALARY:
+                supabase.table("players").update({"salary": NBA_MINIMUM_SALARY}).eq("id", p["id"]).execute()
+                min_salary_count += 1
+
+    if min_salary_count:
+        logger.info(
+            "Assigned NBA minimum salary ($%d) to %d unmatched players",
+            NBA_MINIMUM_SALARY,
+            min_salary_count,
+        )
+
     return {"matched": matched, "unmatched": unmatched, "total": total}
 
 

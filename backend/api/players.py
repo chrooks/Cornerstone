@@ -157,6 +157,149 @@ def player_career(player_id: str):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/players/bulk
+# ---------------------------------------------------------------------------
+
+# NOTE: All literal-segment routes (/bulk, /search) must be registered BEFORE
+# the <player_id> dynamic route so Flask doesn't swallow them as UUIDs.
+
+@players_bp.route("/players/bulk", methods=["GET"])
+def list_players_bulk():
+    """
+    Return all qualifying players for the season with their composite skill
+    tiers and flag summaries embedded inline — one request, no N+1.
+
+    This is the primary data source for the /players explorer page.
+
+    Query params:
+      ?season=2025-26   (default: current season)
+      ?min_mpg=15       (default: 15)
+
+    Response data: list of player objects, each containing:
+      { id, name, team, position, age, height, weight, salary,
+        games_played, minutes_per_game, season,
+        skills: { skill_name: final_tier_string, ... } | null,
+        flag_summary: { total: int, unresolved: int } }
+
+    Skills are condensed to just final_tier per skill — full composite details
+    are available via GET /api/players/<id>/profile.
+    """
+    season = request.args.get("season", players_service.CURRENT_SEASON)
+
+    # Validate min_mpg before entering the try block so we can return a proper 400
+    try:
+        min_mpg = float(request.args.get("min_mpg", players_service.DEFAULT_MIN_MPG))
+    except (ValueError, TypeError):
+        return _err("'min_mpg' must be a number", status=400)
+
+    try:
+        supabase = get_supabase()
+
+        # 1. Fetch all qualifying players for this season
+        players_rows = (
+            supabase.table("players")
+            .select(
+                "id, name, team, position, age, height, weight, salary, "
+                "games_played, minutes_per_game, season"
+            )
+            .eq("season", season)
+            .gte("minutes_per_game", min_mpg)
+            .order("name")
+            .execute()
+        )
+        players_data = players_rows.data or []
+        if not players_data:
+            return _ok([])
+
+        player_ids = [p["id"] for p in players_data]
+
+        # 2. Fetch composite skill profiles — chunked in batches of 100 to stay
+        #    within PostgREST URL length limits (~8 KB default in most proxies).
+        _BATCH = 100
+        profiles_data: list = []
+        for i in range(0, len(player_ids), _BATCH):
+            batch = player_ids[i : i + _BATCH]
+            rows = (
+                supabase.table("skill_profiles")
+                .select("id, player_id, profile")
+                .in_("player_id", batch)
+                .eq("season", season)
+                .eq("source", "composite")
+                .limit(_BATCH + 1)  # +1 lets us detect unexpected overflow
+                .execute()
+            )
+            profiles_data.extend(rows.data or [])
+
+        # Index profiles by player_id for O(1) lookup
+        profiles_by_player: dict = {}
+        profile_id_to_player_id: dict = {}
+        for row in profiles_data:
+            profiles_by_player[row["player_id"]] = row
+            profile_id_to_player_id[row["id"]] = row["player_id"]
+
+        # 3. Fetch flag counts — chunked by the same batch size.
+        #    Counts are accumulated in Python; we log a warning if any batch hits
+        #    the limit, which would signal silent truncation of flag counts.
+        profile_ids = list(profile_id_to_player_id.keys())
+        flags_by_profile_id: dict = {}
+        _FLAG_BATCH_LIMIT = 1000  # per-batch row ceiling
+        if profile_ids:
+            for i in range(0, len(profile_ids), _BATCH):
+                batch = profile_ids[i : i + _BATCH]
+                flags_rows = (
+                    supabase.table("skill_flags")
+                    .select("skill_profile_id, resolution")
+                    .in_("skill_profile_id", batch)
+                    .limit(_FLAG_BATCH_LIMIT)
+                    .execute()
+                )
+                flags_batch = flags_rows.data or []
+                if len(flags_batch) >= _FLAG_BATCH_LIMIT:
+                    logger.warning(
+                        "Flag batch hit row limit (%d) — flag counts may be understated. "
+                        "Consider aggregating via an RPC instead.",
+                        _FLAG_BATCH_LIMIT,
+                    )
+                for flag in flags_batch:
+                    pid = flag["skill_profile_id"]
+                    if pid not in flags_by_profile_id:
+                        flags_by_profile_id[pid] = {"total": 0, "unresolved": 0}
+                    flags_by_profile_id[pid]["total"] += 1
+                    if flag.get("resolution") is None:
+                        flags_by_profile_id[pid]["unresolved"] += 1
+
+        # 4. Join everything and build the response list
+        result = []
+        for player in players_data:
+            profile_row = profiles_by_player.get(player["id"])
+            skills = None
+            flag_summary = {"total": 0, "unresolved": 0}
+
+            if profile_row:
+                raw_profile = profile_row.get("profile") or {}
+                # Condense to just final_tier per skill — keeps payload light
+                skills = {
+                    skill: (details.get("final_tier") if isinstance(details, dict) else details)
+                    for skill, details in raw_profile.items()
+                }
+                flag_summary = flags_by_profile_id.get(
+                    profile_row["id"], {"total": 0, "unresolved": 0}
+                )
+
+            result.append({
+                **player,
+                "skills": skills,
+                "flag_summary": flag_summary,
+            })
+
+        return _ok(result)
+
+    except Exception as exc:
+        logger.exception("Error in GET /api/players/bulk")
+        return _err(str(exc))
+
+
+# ---------------------------------------------------------------------------
 # GET /api/players/search
 # ---------------------------------------------------------------------------
 

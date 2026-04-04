@@ -21,7 +21,9 @@ export function NavBar() {
   const [legendsTotal, setLegendsTotal] = useState<number>(36);
 
   useEffect(() => {
-    // Fetch pipeline status for the review badge
+    // Fetch pipeline status for the review badge.
+    // Re-runs on every navigation so the count reflects any flags resolved on
+    // the review page without requiring a hard reload.
     getPipelineStatus()
       .then((res) => {
         if (res.success && res.data) {
@@ -44,7 +46,7 @@ export function NavBar() {
       .catch(() => {
         // Silently ignore — badge is informational
       });
-  }, []);
+  }, [pathname]); // pathname changes on every navigation, keeping badges fresh
 
   interface NavItem {
     href: string;
