@@ -99,6 +99,7 @@ from api.composite import composite_bp
 from api.calibration import calibration_bp
 from api.pipeline import pipeline_bp
 from api.review import review_bp
+from api.legends import legends_bp
 
 
 def create_app() -> Flask:
@@ -117,6 +118,7 @@ def create_app() -> Flask:
     app.register_blueprint(calibration_bp)  # Prompt 6: calibration tool endpoints
     app.register_blueprint(pipeline_bp)     # Prompt 7: pipeline status dashboard
     app.register_blueprint(review_bp)       # Prompt 7: review queue + flag resolution
+    app.register_blueprint(legends_bp)      # Prompt 8: legends profile builder
 
     return app
 

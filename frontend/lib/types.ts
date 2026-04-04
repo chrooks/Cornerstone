@@ -308,3 +308,40 @@ export interface PlayerProfile {
 
 /** Valid resolution choices for a skill flag */
 export type FlagResolution = "trust_stats" | "trust_claude" | "manual_override";
+
+// ---------------------------------------------------------------------------
+// Prompt 8 — Legends Profile Builder
+// ---------------------------------------------------------------------------
+
+/** A legend row from the legends table (used in grid view) */
+export interface LegendSummary {
+  id: string;
+  name: string;
+  peak_era: string;
+  notes: string | null;
+  /** Number of the 20 skills that have been deliberately rated (even "None" counts) */
+  completion: number;
+  completion_pct: number;
+}
+
+/** Tier value for a legend skill — null means unrated (not yet evaluated) */
+export type LegendTier = "None" | "Capable" | "Elite" | "All-Time Great" | null;
+
+/** Profile map for a legend — all 20 skills, each may be null (unrated) or a tier value */
+export type LegendProfile = Record<string, LegendTier>;
+
+/** A single legend with full skill profile (used in editor view) */
+export interface LegendDetail extends LegendSummary {
+  profile: LegendProfile;
+}
+
+/** Claude's suggestion for a single skill */
+export interface ClaudeSkillSuggestion {
+  tier: Exclude<LegendTier, null>;
+  justification: string;
+}
+
+/** Full Claude suggestion response for a legend */
+export interface LegendClaudeSuggestion {
+  skills: Record<string, ClaudeSkillSuggestion>;
+}

@@ -20,6 +20,10 @@ import type {
   PlayerReviewDetail,
   PlayerProfile,
   FlagResolution,
+  LegendSummary,
+  LegendDetail,
+  LegendProfile,
+  LegendClaudeSuggestion,
 } from "./types";
 
 // Points to the Flask dev server by default; override via env var in production.
@@ -350,4 +354,46 @@ export async function searchPlayers(
   const params = new URLSearchParams({ q });
   if (season) params.set("season", season);
   return apiFetch(`/api/players/search?${params}`);
+}
+
+// ---------------------------------------------------------------------------
+// Legends (Prompt 8)
+// ---------------------------------------------------------------------------
+
+/** Get all 36 legends with completion counts (lightweight — no full profiles). */
+export async function listLegends(): Promise<ApiResponse<LegendSummary[]>> {
+  return apiFetch<LegendSummary[]>("/api/legends");
+}
+
+/** Get a single legend with its full skill profile. */
+export async function getLegend(legendId: string): Promise<ApiResponse<LegendDetail>> {
+  return apiFetch<LegendDetail>(`/api/legends/${encodeURIComponent(legendId)}`);
+}
+
+/**
+ * Upsert a partial skill profile update for a legend.
+ * Partial updates are supported — only the skills in `profile` are changed.
+ * Pass `notes` to simultaneously update the legend's notes field.
+ */
+export async function updateLegendSkills(
+  legendId: string,
+  params: { profile?: Partial<LegendProfile>; notes?: string }
+): Promise<ApiResponse<{ completion: number; completion_pct: number; updated_skills: string[] }>> {
+  return apiFetch(`/api/legends/${encodeURIComponent(legendId)}/skills`, {
+    method: "PUT",
+    body: JSON.stringify(params),
+  });
+}
+
+/**
+ * Get Claude's skill suggestions for a legend.
+ * Results are NOT persisted — the client decides what to accept.
+ */
+export async function getLegendClaudeSuggestion(
+  legendId: string
+): Promise<ApiResponse<LegendClaudeSuggestion>> {
+  return apiFetch<LegendClaudeSuggestion>(
+    `/api/legends/${encodeURIComponent(legendId)}/claude-suggestion`,
+    { method: "POST" }
+  );
 }
