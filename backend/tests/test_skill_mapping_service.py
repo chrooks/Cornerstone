@@ -673,9 +673,9 @@ class TestComputeDerivedStats:
         assert result["computed"]["combined_freq"] == pytest.approx(0.13)
 
     def test_expression_poa_defender_composite(self):
-        """AC: stl_pct 2.0 × 10 + deflections 3.5 + contested_3pt 2.0 × 0.5 = 24.5."""
+        """AC: stl_pct 0.02 × 1000 + deflections 3.5 + contested_3pt 2.0 × 0.5 = 24.5."""
         blob = _make_stats_blob(
-            advanced__stl_pct=2.0,
+            advanced__stl_pct=0.02,  # stored as decimal fraction (0.02 = 2%)
             tracking_defense__deflections=3.5,
             tracking_defense__contested_shots_3pt=2.0,
         )

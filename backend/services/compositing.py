@@ -47,8 +47,8 @@ from services.notability import NOTABILITY_MEDIUM
 
 logger = logging.getLogger(__name__)
 
-# Tier ordering: higher index = higher tier (Elite > Capable > None)
-_TIER_ORDER = ["None", "Capable", "Elite"]
+# Tier ordering: higher index = higher tier (All-Time Great > Elite > Capable > None)
+_TIER_ORDER = ["None", "Capable", "Elite", "All-Time Great"]
 
 # All 19 skill keys in canonical order
 ALL_SKILLS: list[str] = sorted(
@@ -71,7 +71,7 @@ _FLAG_REASONS = frozenset({
 
 
 def _tier_index(tier: str | None) -> int:
-    """Return the integer index of a tier (None=0, Capable=1, Elite=2)."""
+    """Return the integer index of a tier (None=0, Capable=1, Elite=2, All-Time Great=3)."""
     if tier is None or tier not in _TIER_ORDER:
         return 0  # Treat unknown / null as "None"
     return _TIER_ORDER.index(tier)

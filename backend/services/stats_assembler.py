@@ -32,6 +32,7 @@ def assemble_stats_blob(
     games_played: int,
     minutes_per_game: float,
     player_index: dict[int, dict] | None = None,
+    weight: int | None = None,
 ) -> dict:
     """
     Build and return a complete stats blob for one player.
@@ -103,9 +104,12 @@ def assemble_stats_blob(
             "oreb_pct":          _v(adv, "OREB_PCT"),
             "dreb_pct":          _v(adv, "DREB_PCT"),
             "reb_pct":           _v(adv, "REB_PCT"),
-            # STL_PCT / BLK_PCT are in the advanced endpoint for some nba_api versions
-            "stl_pct":           _v(adv, "STL_PCT"),
-            "blk_pct":           _v(adv, "BLK_PCT"),
+            # STL_PCT / BLK_PCT are absent from the advanced endpoint (verified 2025-26).
+            # Computed via per-48-minute normalization from base stats: stat × 48 / MIN.
+            # This is proportional to the true NBA% and consistent with basketball-reference's
+            # approximation. stl_pct is stored as a percentage (e.g. 1.64 for ~1.6%).
+            "stl_pct": _compute_per48_pct(_v(base, "STL"), _v(base, "MIN")),
+            "blk_pct": _compute_per48_pct(_v(base, "BLK"), _v(base, "MIN")),
             # free_throw_rate = FTA / FGA (computed from base, PerGame already applied)
             "free_throw_rate":   round(fta / fga, 4) if fga else None,
         })
@@ -127,6 +131,8 @@ def assemble_stats_blob(
             "catch_shoot_pts":     _v(cs, "CATCH_SHOOT_PTS"),
             "pullup_fg3_pct":      _v(pu, "PULL_UP_FG3_PCT"),
             "pullup_fg3a":         _v(pu, "PULL_UP_FG3A"),
+            "pullup_fg2_pct":      _v(pu, "PULL_UP_FG2_PCT"),
+            "pullup_fg2a":         _v(pu, "PULL_UP_FG2A"),
             "pullup_fga":          _v(pu, "PULL_UP_FGA"),
             "pullup_fg_pct":       _v(pu, "PULL_UP_FG_PCT"),
             "pullup_pts":          _v(pu, "PULL_UP_PTS"),
@@ -159,7 +165,7 @@ def assemble_stats_blob(
             "potential_assists":  _v(pas, "POTENTIAL_AST"),
             "secondary_assists":  _v(pas, "SECONDARY_AST"),
             "passes_made":        _v(pas, "PASSES_MADE"),
-            "ast_adj":            _v(pas, "ADJUSTED_AST"),
+            "ast_adj":            _v(pas, "AST_ADJ"),  # actual column name in nba_api
         })
         succeeded.append("tracking_passing")
     else:
@@ -167,18 +173,24 @@ def assemble_stats_blob(
 
     # -----------------------------------------------------------------------
     # tracking_defense — Defense PtStats + LeagueDashPtDefend (Less Than 6Ft)
+    #
+    # Column name notes (verified against live API 2025-26):
+    #   - CONTESTED_SHOTS / DEFLECTIONS live in the hustle endpoint, NOT defense
+    #   - defend_less_than_6ft uses FGA_LT_06 / LT_06_PCT (not D_FGA / D_FG_PCT)
     # -----------------------------------------------------------------------
     dfn = row("defense")
     rim = row("defend_less_than_6ft")
-    if dfn or rim:
+    hus_def = row("hustle")  # contested shots and deflections come from hustle
+    if dfn or rim or hus_def:
         blob["tracking_defense"].update({
-            "contested_shots":      _v(dfn, "CONTESTED_SHOTS"),
-            "contested_shots_2pt":  _v(dfn, "CONTESTED_SHOTS_2PT"),
-            "contested_shots_3pt":  _v(dfn, "CONTESTED_SHOTS_3PT"),
-            "deflections":          _v(dfn, "DEFLECTIONS"),
-            # From LeagueDashPtDefend 'Less Than 6Ft' — AC #12 specifies this category
-            "defended_at_rim_fga":  _v(rim, "D_FGA"),
-            "defended_at_rim_fg_pct": _v(rim, "D_FG_PCT"),
+            # Contested shots and deflections are in LeagueHustleStatsPlayer
+            "contested_shots":        _v(hus_def, "CONTESTED_SHOTS"),
+            "contested_shots_2pt":    _v(hus_def, "CONTESTED_SHOTS_2PT"),
+            "contested_shots_3pt":    _v(hus_def, "CONTESTED_SHOTS_3PT"),
+            "deflections":            _v(hus_def, "DEFLECTIONS"),
+            # LeagueDashPtDefend 'Less Than 6Ft' actual column names
+            "defended_at_rim_fga":    _v(rim, "FGA_LT_06"),
+            "defended_at_rim_fg_pct": _v(rim, "LT_06_PCT"),
         })
         if dfn:
             succeeded.append("LeagueDashPtStats/Defense")
@@ -359,8 +371,9 @@ def assemble_stats_blob(
         if syn:
             blob["play_type"][f"{blob_key}_freq"] = _v(syn, "POSS_PCT")
             blob["play_type"][f"{blob_key}_ppp"]  = _v(syn, "PPP")
-            poss = _v(syn, "POSS")
-            blob["play_type"][f"{blob_key}_poss"] = int(poss) if poss is not None else None
+            # Store as float (not int) to preserve per-game precision (e.g. 1.4, not 1).
+            # The evaluator multiplies by games_played when per="season" is used in conditions.
+            blob["play_type"][f"{blob_key}_poss"] = _v(syn, "POSS")
             synergy_ok = True
     if synergy_ok:
         succeeded.append("play_type")
@@ -373,12 +386,12 @@ def assemble_stats_blob(
     hus = row("hustle")
     if hus:
         blob["hustle"].update({
-            "screen_assists":       _v(hus, "SCREEN_ASSISTS"),
-            "screen_assist_pts":    _v(hus, "SCREEN_AST_PTS"),
-            "charges_drawn":        _v(hus, "CHARGES_DRAWN"),
+            "screen_assists":        _v(hus, "SCREEN_ASSISTS"),
+            "screen_assist_pts":     _v(hus, "SCREEN_AST_PTS"),
+            "charges_drawn":         _v(hus, "CHARGES_DRAWN"),
             "loose_balls_recovered": _v(hus, "LOOSE_BALLS_RECOVERED"),
-            "box_outs_off":         _v(hus, "BOX_OUTS_OFF"),
-            "box_outs_def":         _v(hus, "BOX_OUTS_DEF"),
+            "box_outs_off":          _v(hus, "OFF_BOXOUTS"),   # actual column name
+            "box_outs_def":          _v(hus, "DEF_BOXOUTS"),   # actual column name
         })
         succeeded.append("hustle")
     else:
@@ -407,6 +420,7 @@ def assemble_stats_blob(
         "season":           season,
         "games_played":     games_played,
         "minutes_per_game": minutes_per_game,
+        "weight":           weight,   # lbs from players table; used in threshold conditions
         "sources_succeeded": succeeded,
         "sources_failed":   failed,
     })
@@ -435,7 +449,8 @@ def _compute_matchup_defense(
     """
     POSITIONS = ["PG", "SG", "SF", "PF", "C"]
     MIN_TOTAL_POSS = 200
-    MEANINGFUL_THRESHOLD = 0.10  # 10% of total possessions
+    MEANINGFUL_THRESHOLD = 0.20  # 20% of total possessions — 10% was too low,
+    # causing almost every player to reach 3 groups due to switches
 
     if matchup_df is None or matchup_df.empty:
         return None
@@ -485,7 +500,7 @@ def _compute_matchup_defense(
     positional_groups_guarded = len(meaningful_groups)
 
     # --- cross_group_fg_pct_diff: compare against league-average FG% per position ---
-    league_avg_fg_pct = _compute_league_avg_fg_pct_by_position(bulk_data)
+    league_avg_fg_pct = _compute_league_avg_fg_pct_by_position(bulk_data, player_index)
     cross_diff = _compute_cross_group_diff(
         meaningful_groups, group_fg_pct, group_poss, league_avg_fg_pct
     )
@@ -509,17 +524,24 @@ def _compute_matchup_defense(
 
 def _compute_league_avg_fg_pct_by_position(
     bulk_data: dict[str, dict[int, dict]],
+    player_index: dict[int, dict],
 ) -> dict[str, float | None]:
     """
-    Approximate league-average FG% per positional group from bulk base stats.
-    Groups players by POSITION, computes weighted-average FG% per group.
+    Approximate league-average FG% per positional group.
+
+    Uses PlayerIndex (not base stats) for position lookup — LeagueDashPlayerStats
+    does not include a position column. PlayerIndex uses "G" for all guards, so the
+    SG bucket accumulates all guard FGA; PG will typically be empty. This is a known
+    data limitation — cross_group_fg_pct_diff is only computed over positions with data.
     """
     POSITIONS = ["PG", "SG", "SF", "PF", "C"]
     totals: dict[str, dict] = {p: {"fga": 0.0, "fgm": 0.0} for p in POSITIONS}
 
     base_data = bulk_data.get("base", {})
     for pid, r in base_data.items():
-        raw_pos = str(r.get("POSITION", "")).strip()
+        # Resolve position from PlayerIndex — base stats have no position column
+        index_entry = player_index.get(int(pid), {})
+        raw_pos = str(index_entry.get("position") or "").strip()
         pos = nba_api_client._map_position(raw_pos)
         if pos not in POSITIONS:
             continue
@@ -567,6 +589,25 @@ def _compute_cross_group_diff(
 # ---------------------------------------------------------------------------
 # Utility
 # ---------------------------------------------------------------------------
+
+def _compute_per48_pct(stat: Any, minutes: Any) -> float | None:
+    """
+    Normalize a counting stat to a per-48-minute rate, stored as a decimal fraction.
+    Used to approximate STL% / BLK% when the API does not return them directly.
+
+    Stored as a decimal (e.g. 0.0164 for ~1.6%) to match every other _pct stat in
+    the blob. The frontend multiplies _pct keys by 100 for display.
+
+    Returns None if either input is missing or minutes is zero.
+    """
+    if stat is None or minutes is None:
+        return None
+    try:
+        m = float(minutes)
+        return round(float(stat) * 48.0 / m / 100.0, 4) if m > 0 else None
+    except (TypeError, ValueError):
+        return None
+
 
 def _v(row: dict, key: str) -> Any:
     """Safe row value accessor — returns None (not KeyError) for missing keys."""

@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 _LEAGUE_AVG_STAT_KEYS: list[str] = [
     "tracking_shooting.catch_shoot_fg3_pct",
     "tracking_shooting.pullup_fg3_pct",
+    "tracking_shooting.pullup_fg2_pct",
     "tracking_drives.drive_fg_pct",
     "shot_zones.paint_non_ra_fg_pct",
     "shot_zones.mid_range_fg_pct",

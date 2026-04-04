@@ -9,12 +9,14 @@ remain unit-testable without a live connection.
 """
 
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 
 from supabase import Client
 
 from services import nba_api_client, salary_scraper
 from services.stats_assembler import assemble_stats_blob
+from services.supabase_client import run_query
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +30,10 @@ _SALARY_TTL_DAYS = 7
 # Career cache TTL — 30 days, stored in player_stats with season="career"
 _CAREER_TTL_DAYS = 30
 
-# Stats cache TTL for the current season
-_STATS_TTL_HOURS = 24
+# Stats cache TTL for the current season.
+# Season averages change slowly — 7 days keeps review workflows fast
+# while still reflecting meaningful stat shifts across a week of games.
+_STATS_TTL_HOURS = 168  # 7 days
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +119,25 @@ def get_or_fetch_players(
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _sanitize_floats(obj: object) -> object:
+    """
+    Recursively walk a JSON-serializable structure and replace any float
+    NaN or Inf values with None. Required because Python's json module
+    (and httpx's JSON encoder) rejects non-compliant IEEE 754 values.
+    """
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_floats(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_floats(v) for v in obj]
+    return obj
+
+
+# ---------------------------------------------------------------------------
 # GET /api/players/<player_id>/stats
 # ---------------------------------------------------------------------------
 
@@ -122,6 +145,7 @@ def get_or_fetch_player_stats(
     player_id: str,
     season: str,
     supabase: Client,
+    refresh: bool = False,
 ) -> dict | None:
     """
     Return the stats blob for a player/season, using Supabase as the cache.
@@ -129,6 +153,9 @@ def get_or_fetch_player_stats(
     Cache TTL:
       - Current season: 24 hours (stats change game to game)
       - Prior seasons: indefinite (historical data doesn't change)
+
+    Pass refresh=True to bypass the cache and force a fresh NBA API fetch.
+    Useful when a previous fetch timed out and left incomplete data cached.
 
     Returns None if the player is not found.
     """
@@ -143,7 +170,7 @@ def get_or_fetch_player_stats(
 
     # Check cache: look for a player_stats row for this player + season
     cutoff = _stats_cache_cutoff(season)
-    cached = (
+    cached = run_query(lambda: (
         supabase.table("player_stats")
         .select("stats, fetched_at")
         .eq("player_id", player_id)
@@ -151,8 +178,8 @@ def get_or_fetch_player_stats(
         .order("fetched_at", desc=True)
         .limit(1)
         .execute()
-    )
-    if cached.data:
+    ))
+    if cached.data and not refresh:
         row = cached.data[0]
         fetched_at = _parse_ts(row["fetched_at"])
         if cutoff is None or (fetched_at and fetched_at > cutoff):
@@ -171,8 +198,9 @@ def get_or_fetch_player_stats(
     shot_chart_df = nba_api_client.get_player_shot_chart(nba_api_id, season)
     matchup_df    = nba_api_client.get_player_matchups(nba_api_id, season)
 
-    # Get salary from players table
+    # Get salary and physical attributes from players table
     salary = player.get("salary")
+    weight = player.get("weight")  # lbs integer from PlayerIndex
 
     blob = assemble_stats_blob(
         nba_api_id=nba_api_id,
@@ -184,18 +212,24 @@ def get_or_fetch_player_stats(
         games_played=gp,
         minutes_per_game=mpg,
         player_index=player_index,
+        weight=weight,
     )
 
     # Ensure salary is written to players.salary as well as the blob (AC #7)
     if salary is not None:
-        supabase.table("players").update({"salary": salary}).eq("id", player_id).execute()
+        run_query(lambda: supabase.table("players").update({"salary": salary}).eq("id", player_id).execute())
+
+    # Sanitize the blob before persisting — replace NaN/Inf floats with None
+    # so the JSON encoder doesn't raise on non-compliant float values (e.g. when
+    # a partial fetch like LeagueSeasonMatchups times out and leaves NaN in the data).
+    blob = _sanitize_floats(blob)
 
     # Persist stats blob to Supabase (blob already contains salary section)
-    supabase.table("player_stats").insert({
+    run_query(lambda: supabase.table("player_stats").insert({
         "player_id": player_id,
         "season":    season,
         "stats":     blob,
-    }).execute()
+    }).execute())
 
     return blob
 

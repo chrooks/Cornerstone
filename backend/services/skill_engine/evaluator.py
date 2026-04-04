@@ -25,8 +25,8 @@ from services.skill_engine.transforms import (
 logger = logging.getLogger(__name__)
 
 # Tier labels — order matters for comparisons (highest to lowest).
-# Elite=index 0, Capable=index 1, None=index 2.
-_TIER_ORDER = ["Elite", "Capable", "None"]
+# All-Time Great=index 0, Elite=index 1, Capable=index 2, None=index 3.
+_TIER_ORDER = ["All-Time Great", "Elite", "Capable", "None"]
 
 
 def evaluate_skill(
@@ -114,7 +114,7 @@ def evaluate_skill(
         raw_tier_defs = rule.get("tiers", {})
         tier_defs = {k.lower(): v for k, v in raw_tier_defs.items()}
 
-        for tier_name in ["elite", "capable"]:
+        for tier_name in ["all-time great", "elite", "capable"]:
             tier_rule = tier_defs.get(tier_name)
             if not tier_rule:
                 continue
@@ -131,8 +131,10 @@ def evaluate_skill(
                 # Missing data for this tier's conditions — flag it
                 data_missing = True
 
-        # --- Step 6: Check top-level tier_bumps (promote Capable → Elite if condition met) ---
-        if tier == "Capable":
+        # --- Step 6: Check top-level tier_bumps ---
+        # Bumps promote by exactly one tier (None→Capable, Capable→Elite, Elite→All-Time Great),
+        # subject to each bump's max_tier ceiling. Runs whenever not already at the top tier.
+        if tier != "All-Time Great":
             for bump in rule.get("tier_bumps", []):
                 effect = bump.get("effect", "")
                 max_tier = bump.get("max_tier", "Elite")
@@ -141,9 +143,16 @@ def evaluate_skill(
                 if effect != "bump_up_one_tier":
                     continue
 
-                # Ensure we won't exceed max_tier (Elite=0, Capable=1, None=2 in _TIER_ORDER)
-                if _TIER_ORDER.index("Elite") < _TIER_ORDER.index(max_tier):
-                    continue  # max_tier would cap below Elite — skip
+                # Compute the promoted tier: one step up in _TIER_ORDER
+                # (lower index = higher tier, so subtract 1 from current index)
+                current_idx = _TIER_ORDER.index(tier)
+                bumped_tier = _TIER_ORDER[current_idx - 1]
+
+                # Respect max_tier ceiling — skip if the promoted tier would exceed it.
+                # e.g. max_tier="Capable" (idx 1): bumped "Elite" (idx 0) → 0 < 1 → skip.
+                # e.g. max_tier="Capable" (idx 1): bumped "Capable" (idx 1) → 1 < 1 → allow.
+                if _TIER_ORDER.index(bumped_tier) < _TIER_ORDER.index(max_tier):
+                    continue  # Bump would exceed max_tier ceiling — skip
 
                 # Evaluate the bump condition; it may be a block (has "conditions" key) or a leaf
                 if "conditions" in bump_condition or "logic" in bump_condition:
@@ -152,10 +161,12 @@ def evaluate_skill(
                     bump_result = evaluate_condition(bump_condition, stats_map, games_played)
 
                 if bump_result is True:
-                    logger.debug("Tier bump applied: Capable → Elite (rule: %s)", skill_name)
-                    tier = "Elite"
+                    logger.debug(
+                        "Tier bump applied: %s → %s (rule: %s)", tier, bumped_tier, skill_name
+                    )
+                    tier = bumped_tier
                     tier_bump_applied = True
-                    break  # Only one bump can apply
+                    break  # Only one bump can apply per evaluation pass
 
         # --- Step 7: Collect driving stats (key stats referenced in the rule) ---
         driving_stats = _collect_driving_stats(rule, stats_map, stabilized_vals)
@@ -164,6 +175,14 @@ def evaluate_skill(
     # Covers: data missing, always_flag_for_review rules, and tier bump borderline promotions.
     always_flag = rule.get("always_flag_for_review", False)
     review_recommended = data_missing or bool(always_flag) or tier_bump_applied
+
+    # Strip the "stabilized." prefix so keys match the "section.key" format
+    # used by the frontend's PlayerStatDisplay (e.g. "play_type.pr_ball_handler_ppp").
+    # The frontend merges these over the blob's stabilized sub-dict to show the
+    # correct Bayesian-adjusted values for the active skill.
+    stripped_stabilized = {
+        k[len("stabilized."):]: v for k, v in stabilized_vals.items()
+    }
 
     result_dict: dict = {
         "skill_name": skill_name,
@@ -176,6 +195,7 @@ def evaluate_skill(
         "tier_bump_applied": tier_bump_applied,
         "auto_promoted": False,  # Second-pass promotions set this; default False
         "flags": [],
+        "stabilized_vals": stripped_stabilized,  # Skill-specific Bayesian values for UI display
     }
 
     # Attach debug info when requested (full rule, stats_map snapshot, tier decisions)
@@ -188,6 +208,125 @@ def evaluate_skill(
         }
 
     return result_dict
+
+
+def collect_condition_results(
+    rule: dict,
+    stats_blob: dict,
+    league_avgs: dict[str, float],
+) -> list[dict]:
+    """
+    Return per-condition pass/fail details for the calibration UI.
+
+    Runs the same preprocessing pipeline as evaluate_skill (pre-adjustments,
+    derived stats, stabilization) and then evaluates every leaf condition
+    individually, returning a flat list ordered by section:
+      volume_gate → elite → capable → tier_bump
+
+    Each entry: {section, stat, operator, threshold, actual_value, passed, per, stabilized}
+    """
+    games_played = int(
+        (stats_blob.get("metadata") or {}).get("games_played") or 0
+    )
+    stats_map = apply_pre_adjustments(rule, stats_blob)
+    stats_map = compute_derived_stats(rule, stats_map)
+    stabilized_vals = apply_stabilization(rule, stats_map, games_played, league_avgs)
+
+    # Merge stabilized values into stats_map so condition evaluation works
+    stats_map = dict(stats_map)
+    stats_map["stabilized"] = {}
+    for k, v in stabilized_vals.items():
+        inner_key = k[len("stabilized."):]
+        stats_map["stabilized"][inner_key] = v
+
+    results: list[dict] = []
+
+    def _eval_leaf(condition: dict, section: str) -> dict:
+        stat_path = condition.get("stat", "")
+        op = condition.get("operator", ">=")
+        threshold = condition.get("value")
+        per = condition.get("per", "")
+        is_stabilized = condition.get("stabilized", False)
+
+        # Resolve the actual value — prefer stabilized path when the condition uses it
+        if is_stabilized:
+            actual = resolve_stat(stats_map, f"stabilized.{stat_path}")
+            if actual is None:
+                actual = resolve_stat(stats_map, stat_path)
+        else:
+            actual = resolve_stat(stats_map, stat_path)
+
+        # Scale per-season conditions the same way evaluate_condition does.
+        # play_type._poss values are stored per-game, so they must also be multiplied.
+        display_value = actual
+        if actual is not None and per == "season":
+            display_value = actual * games_played
+
+        # Compute pass/fail
+        passed: bool | None = None
+        if display_value is not None and threshold is not None:
+            t = float(threshold)
+            if op == ">=":   passed = display_value >= t
+            elif op == ">":  passed = display_value > t
+            elif op == "<=": passed = display_value <= t
+            elif op == "<":  passed = display_value < t
+            elif op == "==": passed = display_value == t
+            elif op == "!=": passed = display_value != t
+
+        return {
+            "section":      section,
+            "stat":         stat_path,
+            "operator":     op,
+            "threshold":    threshold,
+            "actual_value": display_value,
+            "passed":       passed,
+            "per":          per or None,
+            "stabilized":   is_stabilized,
+            # Grouping fields — filled in by _walk_block
+            "group_id":     None,
+            "group_logic":  None,
+            "depth":        0,
+        }
+
+    # Monotonically incrementing counter for group IDs so the frontend can
+    # detect group boundaries without comparing adjacent items.
+    _group_counter = [0]
+
+    def _walk_block(block: dict, section: str, depth: int = 0) -> None:
+        logic = block.get("logic", "AND").upper()
+        group_id = _group_counter[0]
+        _group_counter[0] += 1
+
+        for item in block.get("conditions", []):
+            if "conditions" in item:
+                # Nested AND/OR group — recurse one level deeper
+                _walk_block(item, section, depth + 1)
+            else:
+                leaf = _eval_leaf(item, section)
+                leaf["group_id"] = group_id
+                leaf["group_logic"] = logic
+                leaf["depth"] = depth
+                results.append(leaf)
+
+    # Sections in display order
+    vg = rule.get("volume_gate")
+    if vg:
+        _walk_block(vg, "volume_gate")
+
+    tiers_lower = {k.lower(): v for k, v in rule.get("tiers", {}).items()}
+    for tier_name in ["elite", "capable"]:
+        tier_block = tiers_lower.get(tier_name, {})
+        if tier_block:
+            _walk_block(tier_block, tier_name)
+
+    for bump in rule.get("tier_bumps", []):
+        bump_cond = bump.get("condition", {})
+        if "conditions" in bump_cond:
+            _walk_block(bump_cond, "tier_bump")
+        elif bump_cond:
+            results.append(_eval_leaf(bump_cond, "tier_bump"))
+
+    return results
 
 
 def _collect_driving_stats(

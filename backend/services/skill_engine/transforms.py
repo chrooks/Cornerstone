@@ -184,14 +184,15 @@ def compute_derived_stats(rule: dict, stats_map: dict) -> dict:
 
             if expr_name == "poa_defender_composite":
                 # POA Defender composite formula (per spec):
-                #   (stl_pct × 10) + deflections + (contested_shots_3pt × 0.5)
-                # stl_pct is already a percentage (e.g., 2.0 for 2%), multiply by 10.
+                #   (stl_pct × 1000) + deflections + (contested_shots_3pt × 0.5)
+                # stl_pct is stored as a decimal fraction (e.g., 0.02 for 2%),
+                # so multiply by 1000 to scale it to the same magnitude as the other terms.
                 stl_pct = resolve_stat(modified, "advanced.stl_pct")
                 deflections = resolve_stat(modified, "tracking_defense.deflections")
                 contested_3pt = resolve_stat(modified, "tracking_defense.contested_shots_3pt")
 
                 if all(v is not None for v in [stl_pct, deflections, contested_3pt]):
-                    computed_val = (stl_pct * 10) + deflections + (contested_3pt * 0.5)
+                    computed_val = (stl_pct * 1000) + deflections + (contested_3pt * 0.5)
                 # else: computed_val remains None (data missing)
 
         # Store the computed value under the "computed" sub-dict

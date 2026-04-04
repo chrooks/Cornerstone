@@ -51,7 +51,8 @@ _NBA_HEADERS = {
     "Cache-Control": "no-cache",
 }
 
-_REQUEST_TIMEOUT = 15  # seconds — reduced for faster failure detection; increase to 60 for production
+_REQUEST_TIMEOUT = 15          # seconds — default for most endpoints
+_MATCHUPS_TIMEOUT = 60         # leagueseasonmatchups is consistently slow; needs extra headroom
 
 # ---------------------------------------------------------------------------
 # In-memory caches
@@ -385,7 +386,7 @@ def get_player_matchups(nba_api_id: int, season: str = "2025-26") -> pd.DataFram
                 "OffPlayerIDNullable":  "",
             },
             headers=_NBA_HEADERS,
-            timeout=_REQUEST_TIMEOUT,
+            timeout=_MATCHUPS_TIMEOUT,
         )
         data = resp.json()
         result_sets = data.get("resultSets", [])

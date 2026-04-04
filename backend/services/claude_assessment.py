@@ -43,7 +43,7 @@ HIGH_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
     "off_dribble_shooter",
     "rebounder",
     "offensive_rebounder",
-    "ball_dominator",
+    "isolation_scorer",
 })
 
 # Skills where Claude runs blind (sees stats but NOT the stat tier)
@@ -55,7 +55,7 @@ MODERATE_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
     "mid_post_player",
     "low_post_player",
     "screen_setter",
-    "vertical_spacer_lob_threat",
+    "vertical_spacer",
     "transition_threat",
     "pnr_ball_handler",
     "pnr_finisher",
@@ -77,7 +77,7 @@ _SKILL_DISPLAY_NAMES: dict[str, str] = {
     "mid_post_player":          "Mid Post Player",
     "low_post_player":          "Low Post Player",
     "screen_setter":            "Screen Setter",
-    "vertical_spacer_lob_threat": "Vertical Spacer / Lob Threat",
+    "vertical_spacer":           "Vertical Spacer",
     "transition_threat":        "Transition Threat",
     "pnr_ball_handler":         "PnR Ball Handler",
     "pnr_finisher":             "PnR Finisher",
@@ -104,7 +104,7 @@ _SKILL_DEFINITIONS: dict[str, str] = {
         "Scores effectively with back-to-basket moves in the low post.",
     "screen_setter":
         "Sets quality screens that free teammates for open shots.",
-    "vertical_spacer_lob_threat":
+    "vertical_spacer":
         "Threatens vertically as a lob target and above-the-rim finisher, creating "
         "driving lanes for teammates.",
     "transition_threat":
@@ -241,8 +241,10 @@ def _build_blind_section() -> str:
     lines = [
         "## Sub-section A — Blind Skill Assessment (Moderate Confidence)",
         "",
-        "Rate each skill below at **None**, **Capable**, or **Elite** based solely "
+        "Rate each skill below at **None**, **Capable**, **Elite**, or **All-Time Great** based solely "
         "on the player's statistics above and your contextual knowledge. "
+        "Reserve **All-Time Great** only for historically exceptional skill levels — "
+        "the kind that defines a player's legacy or sets the standard at the position. "
         "Do NOT use any prior knowledge of official ratings or tier systems.",
         "",
         "Skill definitions:",
@@ -455,7 +457,7 @@ def _validate_skill_entry(entry: Any) -> bool:
     """Return True if a single skill entry has the required keys and valid values."""
     if not isinstance(entry, dict):
         return False
-    valid_tiers = {"None", "Capable", "Elite"}
+    valid_tiers = {"None", "Capable", "Elite", "All-Time Great"}
     valid_conf  = {"high", "medium", "low"}
     return (
         entry.get("tier") in valid_tiers

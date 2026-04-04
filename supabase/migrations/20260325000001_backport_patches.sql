@@ -308,8 +308,8 @@ INSERT INTO skill_thresholds (skill_name, thresholds) VALUES
   }
 }'),
 
-('vertical_spacer_lob_threat', '{
-  "skill_name": "vertical_spacer_lob_threat",
+('vertical_spacer', '{
+  "skill_name": "vertical_spacer",
   "skill_category": "additive",
   "stat_confidence": "moderate",
   "always_flag_for_review": false,
@@ -736,8 +736,8 @@ INSERT INTO skill_thresholds (skill_name, thresholds) VALUES
 -- ZERO-SUM SKILLS
 -- ---------------------------------------------------------------------------
 
-('ball_dominator', '{
-  "skill_name": "ball_dominator",
+('isolation_scorer', '{
+  "skill_name": "isolation_scorer",
   "skill_category": "zero_sum",
   "stat_confidence": "high",
   "always_flag_for_review": false,

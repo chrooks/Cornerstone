@@ -82,24 +82,31 @@ def evaluate_condition(
     op = condition.get("operator", ">=")
     threshold = condition.get("value")
     per = condition.get("per", "")  # "season" or "" (per-game default)
+    is_stabilized = condition.get("stabilized", False)
 
     if threshold is None:
         logger.warning("Condition missing 'value' for stat=%s", stat_path)
         return None
 
-    raw_val = resolve_stat(stats_map, stat_path)
+    # When the condition is marked stabilized, prefer the Bayesian-adjusted value
+    # stored under the "stabilized.*" namespace (populated by apply_stabilization).
+    # Fall back to the raw stat if stabilized value is unavailable.
+    if is_stabilized:
+        raw_val = resolve_stat(stats_map, f"stabilized.{stat_path}")
+        if raw_val is None:
+            raw_val = resolve_stat(stats_map, stat_path)
+    else:
+        raw_val = resolve_stat(stats_map, stat_path)
+
     if raw_val is None:
         return None  # Signal data is missing for this stat
 
-    # Scale per-game stats to season totals when per="season",
-    # but skip play_type _poss stats which are already season totals.
+    # Scale per-game stats to season totals when per="season".
+    # play_type._poss values are stored per-game (Synergy uses per_mode_simple="PerGame"),
+    # so they must also be multiplied by games_played when per="season".
     val = raw_val
     if per == "season":
-        stat_key = stat_path.split(".")[-1]
-        # _poss stats in play_type are already season totals — don't re-multiply
-        is_poss_stat = stat_key.endswith("_poss") and stat_path.startswith("play_type.")
-        if not is_poss_stat:
-            val = raw_val * games_played
+        val = raw_val * games_played
 
     # Evaluate the comparison operator
     threshold = float(threshold)

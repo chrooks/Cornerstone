@@ -69,6 +69,8 @@ _TEMPLATE: dict = {
         "catch_shoot_pts": None,
         "pullup_fg3_pct": None,
         "pullup_fg3a": None,
+        "pullup_fg2_pct": None,
+        "pullup_fg2a": None,
         "pullup_fga": None,
         "pullup_fg_pct": None,
         "pullup_pts": None,
