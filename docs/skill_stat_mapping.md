@@ -1,6 +1,6 @@
 # Skill-to-Stat Mapping — Composite Definitions & Thresholds
 
-This document defines the deterministic stat-based classification rules for all 19 skills in the Build Around taxonomy. Each skill maps to specific keys in the `player_stats.stats` JSON blob, combines them into a composite, and applies universal thresholds (not position-adjusted) to assign None/Capable/Elite tiers.
+This document defines the deterministic stat-based classification rules for all 19 skills in the Cornerstone taxonomy. Each skill maps to specific keys in the `player_stats.stats` JSON blob, combines them into a composite, and applies universal thresholds (not position-adjusted) to assign None/Capable/Elite tiers.
 
 Thresholds are starting points for calibration. The calibration tool (Prompt 6) exists specifically to fine-tune these using anchor players.
 

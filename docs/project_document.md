@@ -1,4 +1,4 @@
-# Build Around — The Rules
+# Cornerstone — The Rules
 *How to build a modern NBA team around any all-time great*
 
 ---
@@ -15,7 +15,7 @@ Average the five highest team payrolls in the current NBA season. This sets a re
 Build a rotation of 8 players using current players and their real salaries. Remaining roster spots are filled with minimum contracts. All 8 salaries must fit within the total budget.
 
 **Rule 4 — Define the Star's Modern Role**
-Before building, decide how the superstar fits in today's NBA. Are they a primary ball-handler, a post scorer, a facilitator? This determines everything else about how you build around them.
+Before building, decide how the superstar fits in today's NBA. Are they a primary ball-handler, a post scorer, a facilitator? This determines everything else about how you Cornerstone them.
 
 **Rule 5 — Identify What They Need**
 Based on the star's role, define a checklist of what the supporting cast must provide using the skill taxonomy below.

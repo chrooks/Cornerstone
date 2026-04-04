@@ -1,8 +1,8 @@
-# Build Around — Implementation Plan
+# Cornerstone — Implementation Plan
 
 ## Overview
 
-Build Around is an internal tool for constructing modern NBA rosters around all-time great players. The system profiles every qualifying current NBA player across 19 basketball skills using a hybrid pipeline: deterministic stat thresholds handle what numbers can measure, a Claude AI pass fills in what they can't, and a manual review layer resolves disagreements. Historical legends are profiled manually with Claude's assistance. The full stack is Next.js (frontend), Flask (backend), Supabase (database), nba_api + ESPN salary scraping (data sources), and the Anthropic API (Claude assessment).
+Cornerstone is an internal tool for constructing modern NBA rosters around all-time great players. The system profiles every qualifying current NBA player across 19 basketball skills using a hybrid pipeline: deterministic stat thresholds handle what numbers can measure, a Claude AI pass fills in what they can't, and a manual review layer resolves disagreements. Historical legends are profiled manually with Claude's assistance. The full stack is Next.js (frontend), Flask (backend), Supabase (database), nba_api + ESPN salary scraping (data sources), and the Anthropic API (Claude assessment).
 
 The project is built across 8 sequential prompts. Each prompt produces a working, testable feature before the next begins.
 
