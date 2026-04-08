@@ -16,7 +16,8 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
-import { formatSalary, formatHeight, parseHeight, tierToNum, SKILL_LABELS } from "./playerFilters";
+import { formatSalary, formatHeight, parseHeight, SKILL_LABELS } from "./playerFilters";
+import { SKILL_TIERS, tierToNum, TIER_CONTEXT_COLORS, TIER_CONTEXT_ACTIVE } from "@/lib/tiers";
 import type { SortKey } from "./SortControls";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SkillTier } from "@/lib/types";
@@ -91,21 +92,7 @@ const ALL_COLUMNS: ColDef[] = [...META_COLUMNS, ...SKILL_COLUMNS];
 // Skill tier context menu
 // ---------------------------------------------------------------------------
 
-const SKILL_TIERS: SkillTier[] = ["All-Time Great", "Elite", "Capable", "None"];
-
-const TIER_COLORS: Record<SkillTier, string> = {
-  "All-Time Great": "text-violet-800 hover:bg-violet-50",
-  Elite:            "text-emerald-800 hover:bg-emerald-50",
-  Capable:          "text-amber-800 hover:bg-amber-50",
-  None:             "text-slate-500 hover:bg-slate-50",
-};
-
-const TIER_ACTIVE: Record<SkillTier, string> = {
-  "All-Time Great": "bg-violet-100 ring-1 ring-violet-300",
-  Elite:            "bg-emerald-100 ring-1 ring-emerald-200",
-  Capable:          "bg-amber-100 ring-1 ring-amber-200",
-  None:             "bg-slate-100 ring-1 ring-slate-200",
-};
+// SKILL_TIERS, TIER_CONTEXT_COLORS, TIER_CONTEXT_ACTIVE imported from @/lib/tiers
 
 interface ContextMenuState {
   open: boolean;
@@ -131,7 +118,8 @@ const CLOSED_MENU: ContextMenuState = {
 
 function elitePlusCount(player: PlayerWithSkills): number {
   if (!player.skills) return 0;
-  return Object.values(player.skills).filter((t) => tierToNum(t) >= 2).length;
+  // >= 3 = Elite or better (Proficient=2, Elite=3, All-Time Great=4)
+  return Object.values(player.skills).filter((t) => tierToNum(t) >= 3).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -584,8 +572,8 @@ export function PlayerTable({
                   className={cn(
                     "w-full text-left px-3 py-1.5 flex items-center gap-2 transition-colors",
                     "disabled:opacity-50 disabled:cursor-not-allowed",
-                    TIER_COLORS[tier],
-                    isCurrent && TIER_ACTIVE[tier],
+                    TIER_CONTEXT_COLORS[tier],
+                    isCurrent && TIER_CONTEXT_ACTIVE[tier],
                   )}
                 >
                   {isCurrent && (

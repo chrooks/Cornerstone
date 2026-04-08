@@ -73,7 +73,7 @@ def require_write_key(fn):
     return wrapper
 
 # Valid values for tier names and JSONB operators
-_VALID_TIERS = {"None", "Capable", "Elite", "All-Time Great"}
+_VALID_TIERS = {"None", "Capable", "Proficient", "Elite", "All-Time Great"}
 _VALID_OPERATORS = {">=", "<=", ">", "<", "==", "!="}
 _VALID_LOGIC = {"AND", "OR"}
 

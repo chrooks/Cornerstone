@@ -241,7 +241,7 @@ def _build_blind_section() -> str:
     lines = [
         "## Sub-section A — Blind Skill Assessment (Moderate Confidence)",
         "",
-        "Rate each skill below at **None**, **Capable**, **Elite**, or **All-Time Great** based solely "
+        "Rate each skill below at **None**, **Capable**, **Proficient**, **Elite**, or **All-Time Great** based solely "
         "on the player's statistics above and your contextual knowledge. "
         "Reserve **All-Time Great** only for historically exceptional skill levels — "
         "the kind that defines a player's legacy or sets the standard at the position. "
@@ -406,7 +406,7 @@ def build_claude_prompt(
         json.dumps({
             "skills": {
                 "<skill_key>": {
-                    "tier": "None | Capable | Elite",
+                    "tier": "None | Capable | Proficient | Elite",
                     "justification": "one sentence",
                     "confidence": "high | medium | low",
                 }
@@ -457,7 +457,7 @@ def _validate_skill_entry(entry: Any) -> bool:
     """Return True if a single skill entry has the required keys and valid values."""
     if not isinstance(entry, dict):
         return False
-    valid_tiers = {"None", "Capable", "Elite", "All-Time Great"}
+    valid_tiers = {"None", "Capable", "Proficient", "Elite", "All-Time Great"}
     valid_conf  = {"high", "medium", "low"}
     return (
         entry.get("tier") in valid_tiers

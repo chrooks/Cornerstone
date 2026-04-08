@@ -59,7 +59,7 @@ export interface StatsBlob {
 }
 
 /** Skill tier value — ordered highest to lowest */
-export type SkillTier = "All-Time Great" | "Elite" | "Capable" | "None";
+export type SkillTier = "All-Time Great" | "Elite" | "Proficient" | "Capable" | "None";
 
 /** Stat confidence level */
 export type StatConfidence = "high" | "moderate" | "low";
@@ -355,7 +355,7 @@ export interface LegendSummary {
 }
 
 /** Tier value for a legend skill — null means unrated (not yet evaluated) */
-export type LegendTier = "None" | "Capable" | "Elite" | "All-Time Great" | null;
+export type LegendTier = "None" | "Capable" | "Proficient" | "Elite" | "All-Time Great" | null;
 
 /** Profile map for a legend — all 20 skills, each may be null (unrated) or a tier value */
 export type LegendProfile = Record<string, LegendTier>;

@@ -220,14 +220,21 @@ class TestNotabilityTier:
 # ===========================================================================
 
 class TestTierHelpers:
+    # Tier order: None=0, Capable=1, Proficient=2, Elite=3, All-Time Great=4
     def test_tier_index_none(self):
         assert _tier_index("None") == 0
 
     def test_tier_index_capable(self):
         assert _tier_index("Capable") == 1
 
+    def test_tier_index_proficient(self):
+        assert _tier_index("Proficient") == 2
+
     def test_tier_index_elite(self):
-        assert _tier_index("Elite") == 2
+        assert _tier_index("Elite") == 3
+
+    def test_tier_index_all_time_great(self):
+        assert _tier_index("All-Time Great") == 4
 
     def test_tier_index_null_treated_as_none(self):
         assert _tier_index(None) == 0
@@ -236,12 +243,24 @@ class TestTierHelpers:
         assert _tier_diff("Elite", "Elite") == 0
         assert _tier_diff("None", "None") == 0
 
-    def test_tier_diff_one(self):
-        assert _tier_diff("Elite", "Capable") == 1
+    def test_tier_diff_one_adjacent(self):
+        # Adjacent tiers are 1 apart
+        assert _tier_diff("Proficient", "Capable") == 1
+        assert _tier_diff("Elite", "Proficient") == 1
         assert _tier_diff("Capable", "None") == 1
 
-    def test_tier_diff_two(self):
-        assert _tier_diff("Elite", "None") == 2
+    def test_tier_diff_two_capable_elite(self):
+        # Capable and Elite are now 2 apart (Proficient sits between them)
+        assert _tier_diff("Elite", "Capable") == 2
+
+    def test_tier_diff_three_elite_none(self):
+        assert _tier_diff("Elite", "None") == 3
+
+    def test_lower_tier_elite_proficient(self):
+        assert _lower_tier("Elite", "Proficient") == "Proficient"
+
+    def test_lower_tier_proficient_capable(self):
+        assert _lower_tier("Proficient", "Capable") == "Capable"
 
     def test_lower_tier_elite_capable(self):
         assert _lower_tier("Elite", "Capable") == "Capable"
@@ -295,34 +314,61 @@ class TestCompositeModerateConfidence:
         assert result["flagged"] is False
         assert result["agreement"] == "exact"
 
-    def test_one_tier_disagreement_lower_tier(self):
-        """Stat says Elite, Claude says Capable → final = Capable, auto_accepted."""
-        result = composite_skill("cutter", self._stat("Elite"), self._claude("Capable"), 60)
+    def test_one_tier_disagreement_elite_proficient(self):
+        """Stat says Elite, Claude says Proficient → 1-tier diff → final = Proficient, auto_accepted."""
+        result = composite_skill("cutter", self._stat("Elite"), self._claude("Proficient"), 60)
+        assert result["source"] == "auto_accepted"
+        assert result["final_tier"] == "Proficient"
+        assert result["flagged"] is False
+        assert result["agreement"] == "one_tier"
+
+    def test_one_tier_disagreement_proficient_capable(self):
+        """Stat says Proficient, Claude says Capable → 1-tier diff → final = Capable, auto_accepted."""
+        result = composite_skill("cutter", self._stat("Proficient"), self._claude("Capable"), 60)
         assert result["source"] == "auto_accepted"
         assert result["final_tier"] == "Capable"
         assert result["flagged"] is False
         assert result["agreement"] == "one_tier"
 
-    def test_one_tier_disagreement_reverse_order(self):
-        """Stat says Capable, Claude says Elite → final = Capable, auto_accepted."""
-        result = composite_skill("cutter", self._stat("Capable"), self._claude("Elite"), 60)
-        assert result["source"] == "auto_accepted"
-        assert result["final_tier"] == "Capable"
-        assert result["flagged"] is False
+    def test_capable_elite_is_now_two_tier_disagreement(self):
+        """Stat says Elite, Claude says Capable → 2-tier diff (Proficient sits between) → flagged.
+        Previously this was a 1-tier auto-accept; the addition of Proficient changed this."""
+        result = composite_skill("cutter", self._stat("Elite"), self._claude("Capable"), 60)
+        assert result["source"] == "flagged"
+        assert result["flagged"] is True
+        assert result["flag_reason"] == "two_tier_disagreement"
+        assert result["final_tier"] == "Capable"  # Lower of Elite/Capable
 
-    def test_two_tier_disagreement_flagged(self):
-        """Stat says Elite, Claude says None → flagged."""
+    def test_capable_elite_reverse_also_two_tier(self):
+        """Stat says Capable, Claude says Elite → 2-tier diff → flagged."""
+        result = composite_skill("cutter", self._stat("Capable"), self._claude("Elite"), 60)
+        assert result["source"] == "flagged"
+        assert result["flagged"] is True
+        assert result["flag_reason"] == "two_tier_disagreement"
+
+    def test_proficient_exact_agreement_auto_accepted(self):
+        """Both agree on Proficient → exact agreement, auto_accepted."""
+        result = composite_skill("cutter", self._stat("Proficient"), self._claude("Proficient"), 60)
+        assert result["source"] == "auto_accepted"
+        assert result["final_tier"] == "Proficient"
+        assert result["flagged"] is False
+        assert result["agreement"] == "exact"
+
+    def test_two_tier_disagreement_elite_none_flagged(self):
+        """Stat says Elite, Claude says None → 3-tier diff → flagged (diff >= 2)."""
         result = composite_skill("cutter", self._stat("Elite"), self._claude("None"), 60)
         assert result["source"] == "flagged"
         assert result["flagged"] is True
         assert result["flag_reason"] == "two_tier_disagreement"
         assert result["final_tier"] == "None"  # Lower of Elite/None
 
-    def test_exact_spec_check_elite_capable_auto_accepted(self):
-        """Spec spot-check: stat=Elite, Claude=Capable → final=Capable, auto_accepted."""
-        result = composite_skill("passer", self._stat("Elite"), self._claude("Capable"), 75)
-        assert result["final_tier"] == "Capable"
-        assert result["source"] == "auto_accepted"
+    def test_proficient_none_is_two_tier_disagreement(self):
+        """Stat says Proficient, Claude says None → 2-tier diff → flagged."""
+        result = composite_skill("cutter", self._stat("Proficient"), self._claude("None"), 60)
+        assert result["source"] == "flagged"
+        assert result["flagged"] is True
+        assert result["flag_reason"] == "two_tier_disagreement"
+        assert result["final_tier"] == "None"
 
     def test_exact_spec_check_elite_none_flagged(self):
         """Spec spot-check: stat=Elite, Claude=None → flagged, final=None pending review."""
@@ -349,7 +395,8 @@ class TestCompositeLowConfidence:
         assert result["flagged"] is False
 
     def test_one_tier_disagreement_flagged(self):
-        result = composite_skill("switchable_defender", self._stat("Elite"), self._claude("Capable"), 60)
+        # Elite/Proficient is 1-tier apart; low-confidence skills flag even 1-tier disagreements
+        result = composite_skill("switchable_defender", self._stat("Elite"), self._claude("Proficient"), 60)
         assert result["source"] == "flagged"
         assert result["flagged"] is True
         assert result["flag_reason"] == "one_tier_low_confidence"
@@ -410,18 +457,19 @@ class TestClaudeSelfReportedLowConfidence:
 
     def test_moderate_skill_claude_low_confidence_one_tier_flagged(self):
         """Moderate skill + Claude says 'low' → one-tier disagreement is flagged."""
-        result = composite_skill("cutter", self._stat("Elite"), self._claude("Capable", "low"), 60)
+        # Use Elite/Proficient (1-tier apart) to isolate the low-confidence flag logic
+        result = composite_skill("cutter", self._stat("Elite"), self._claude("Proficient", "low"), 60)
         assert result["flagged"] is True
         assert result["flag_reason"] == "claude_low_confidence"
 
     def test_moderate_skill_claude_medium_confidence_one_tier_auto_accepted(self):
         """Moderate skill + Claude says 'medium' → one-tier disagreement is auto-accepted."""
-        result = composite_skill("cutter", self._stat("Elite"), self._claude("Capable", "medium"), 60)
+        result = composite_skill("cutter", self._stat("Elite"), self._claude("Proficient", "medium"), 60)
         assert result["flagged"] is False
         assert result["source"] == "auto_accepted"
 
     def test_moderate_skill_claude_high_confidence_one_tier_auto_accepted(self):
-        result = composite_skill("cutter", self._stat("Elite"), self._claude("Capable", "high"), 60)
+        result = composite_skill("cutter", self._stat("Elite"), self._claude("Proficient", "high"), 60)
         assert result["flagged"] is False
 
 

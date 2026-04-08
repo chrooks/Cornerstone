@@ -312,14 +312,14 @@ def update_legend_skills(legend_id: str):
     incoming_notes: str | None = body.get("notes")
 
     # Validate tier values
-    valid_tiers = {"None", "Capable", "Elite", "All-Time Great", None}
+    valid_tiers = {"None", "Capable", "Proficient", "Elite", "All-Time Great", None}
     for skill_key, tier_val in incoming_profile.items():
         if skill_key not in ALL_SKILLS:
             return _err(f"Unknown skill: '{skill_key}'", status=400)
         if tier_val not in valid_tiers:
             return _err(
                 f"Invalid tier '{tier_val}' for skill '{skill_key}'. "
-                "Must be None, Capable, Elite, or All-Time Great.",
+                "Must be None, Capable, Proficient, Elite, or All-Time Great.",
                 status=400,
             )
 
@@ -465,7 +465,7 @@ def _build_legend_prompt(
     response_schema = json.dumps({
         "skills": {
             "<skill_key>": {
-                "tier": "None | Capable | Elite | All-Time Great",
+                "tier": "None | Capable | Proficient | Elite | All-Time Great",
                 "justification": "one or two sentence explanation",
             }
         }
@@ -484,6 +484,7 @@ def _build_legend_prompt(
         "Rate each skill using these tier values:",
         "- **None** — did not possess this skill at a meaningful level",
         "- **Capable** — solid, reliable contributor in this area",
+        "- **Proficient** — clearly above average; a notable strength",
         "- **Elite** — among the best at this skill in their era",
         "- **All-Time Great** — historically exceptional; defines the standard for this skill",
         "",
@@ -622,7 +623,7 @@ def claude_suggestion(legend_id: str):
             return _err("Claude assessment failed — please try again", status=502)
 
         # Validate and normalize tiers — unknown tiers default to None
-        valid_tiers = {"None", "Capable", "Elite", "All-Time Great"}
+        valid_tiers = {"None", "Capable", "Proficient", "Elite", "All-Time Great"}
         normalized: dict[str, dict] = {}
         for skill in ALL_SKILLS:
             entry = skills_result.get(skill) or {}

@@ -9,6 +9,7 @@ import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { StatConfidenceIndicator } from "@/components/StatConfidenceIndicator";
 import { ConditionBreakdown } from "@/components/ConditionBreakdown";
 import type { PlayerProfile, CompositeSkillResult, SkillTier, StatConfidence, ConditionResult } from "@/lib/types";
+import { SKILL_TIERS, TIER_PICKER_ACTIVE_CLASS } from "@/lib/tiers";
 
 const CURRENT_SEASON = "2025-26";
 
@@ -74,16 +75,10 @@ function TierPicker({
   value: SkillTier | "";
   onChange: (tier: SkillTier) => void;
 }) {
-  const tiers: SkillTier[] = ["All-Time Great", "Elite", "Capable", "None"];
-  const tierActiveClass: Record<SkillTier, string> = {
-    "All-Time Great": "bg-violet-100 border-violet-300 text-violet-800",
-    Elite:            "bg-emerald-100 border-emerald-300 text-emerald-800",
-    Capable:          "bg-amber-100 border-amber-300 text-amber-800",
-    None:             "bg-slate-100 border-slate-300 text-slate-700",
-  };
+  // SKILL_TIERS and TIER_PICKER_ACTIVE_CLASS imported from @/lib/tiers
   return (
     <div className="flex gap-1 flex-wrap">
-      {tiers.map((t) => (
+      {SKILL_TIERS.map((t) => (
         <button
           key={t}
           type="button"
@@ -91,7 +86,7 @@ function TierPicker({
           className={cn(
             "text-xs px-2 py-0.5 rounded border transition-colors",
             value === t
-              ? tierActiveClass[t]
+              ? TIER_PICKER_ACTIVE_CLASS[t]
               : "border-input text-muted-foreground hover:border-foreground"
           )}
         >

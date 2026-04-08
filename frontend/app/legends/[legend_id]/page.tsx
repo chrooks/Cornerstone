@@ -12,6 +12,7 @@ import type {
   ClaudeSkillSuggestion,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SKILL_TIERS, TIER_SELECTOR_STYLES } from "@/lib/tiers";
 
 // Total skills in the legend profile — must match backend ALL_SKILLS
 const TOTAL_SKILLS = 20;
@@ -55,27 +56,7 @@ const SKILL_GROUPS: { label: string; skills: string[] }[] = [
   },
 ];
 
-const TIER_VALUES: Exclude<LegendTier, null>[] = ["None", "Capable", "Elite", "All-Time Great"];
-
-// Tier styling for the selector buttons
-const TIER_STYLES: Record<Exclude<LegendTier, null>, { base: string; active: string }> = {
-  "None": {
-    base:   "border-slate-200 text-slate-500 hover:bg-slate-50",
-    active: "bg-slate-100 border-slate-400 text-slate-700 font-semibold",
-  },
-  "Capable": {
-    base:   "border-amber-200 text-amber-700 hover:bg-amber-50",
-    active: "bg-amber-100 border-amber-400 text-amber-800 font-semibold",
-  },
-  "Elite": {
-    base:   "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
-    active: "bg-emerald-100 border-emerald-400 text-emerald-800 font-semibold",
-  },
-  "All-Time Great": {
-    base:   "border-violet-200 text-violet-700 hover:bg-violet-50",
-    active: "bg-violet-100 border-violet-400 text-violet-800 font-semibold",
-  },
-};
+// SKILL_TIERS and TIER_SELECTOR_STYLES imported from @/lib/tiers
 
 /** Format a snake_case skill key to Title Case display name. */
 function formatSkillName(key: string): string {
@@ -126,9 +107,9 @@ function TierSelector({ skillKey, value, onChange, aiSuggested, disabled }: Tier
       </button>
 
       {/* Tier buttons */}
-      {TIER_VALUES.map((tier, i) => {
+      {SKILL_TIERS.map((tier, i) => {
         const isActive = value === tier;
-        const styles = TIER_STYLES[tier];
+        const styles = TIER_SELECTOR_STYLES[tier];
         return (
           <button
             key={tier}
@@ -141,7 +122,7 @@ function TierSelector({ skillKey, value, onChange, aiSuggested, disabled }: Tier
               "px-2.5 py-1.5 text-xs border-r last:border-r-0 transition-colors",
               isActive ? styles.active : styles.base,
               disabled && "opacity-50 cursor-not-allowed",
-              i === TIER_VALUES.length - 1 && "rounded-r-md"
+              i === SKILL_TIERS.length - 1 && "rounded-r-md"
             )}
           >
             {tier}

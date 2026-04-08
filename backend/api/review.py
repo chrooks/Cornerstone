@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 review_bp = Blueprint("review", __name__, url_prefix="/api")
 
 # Valid tier values for resolved_value on manual_override
-_VALID_TIERS = {"None", "Capable", "Elite", "All-Time Great"}
+_VALID_TIERS = {"None", "Capable", "Proficient", "Elite", "All-Time Great"}
 
 # Valid resolution choices
 _VALID_RESOLUTIONS = {"trust_stats", "trust_claude", "manual_override"}
@@ -338,7 +338,7 @@ def resolve_flag(player_id: str):
     if resolution == "manual_override":
         if resolved_value not in _VALID_TIERS:
             return _err(
-                "'resolved_value' must be None/Capable/Elite when resolution=manual_override"
+                "'resolved_value' must be None/Capable/Proficient/Elite when resolution=manual_override"
             )
 
     try:
@@ -620,7 +620,7 @@ def manual_override_skill(player_id: str):
     if not skill_name:
         return _err("'skill_name' is required")
     if resolved_value not in _VALID_TIERS:
-        return _err("'resolved_value' must be None, Capable, or Elite")
+        return _err("'resolved_value' must be None, Capable, Proficient, or Elite")
 
     try:
         supabase = get_supabase()

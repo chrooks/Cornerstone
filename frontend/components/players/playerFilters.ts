@@ -8,6 +8,10 @@
  */
 
 import type { PlayerWithSkills } from "@/lib/types";
+import { SKILL_TIERS, tierToNum } from "@/lib/tiers";
+
+// Re-export so existing imports from this file keep working.
+export { SKILL_TIERS, tierToNum };
 
 // ---------------------------------------------------------------------------
 // Developer-configurable constants
@@ -15,13 +19,6 @@ import type { PlayerWithSkills } from "@/lib/types";
 
 /** Maximum number of active filter entries (including parens) allowed at once. */
 export const MAX_ACTIVE_FILTERS = 10;
-
-// ---------------------------------------------------------------------------
-// Tier helpers
-// ---------------------------------------------------------------------------
-
-/** Ordered skill tiers — highest first. */
-export const SKILL_TIERS = ["All-Time Great", "Elite", "Capable", "None"] as const;
 
 /** All skill names in the composite profile. */
 export const ALL_SKILL_NAMES = [
@@ -70,16 +67,6 @@ export const SKILL_LABELS: Record<string, string> = {
   point_of_attack_defender: "POA Defender",
   high_flyer: "High Flyer",
 };
-
-/** Convert a tier string to a numeric rank for comparison (higher = better). */
-export function tierToNum(tier: string | null | undefined): number {
-  switch (tier) {
-    case "All-Time Great": return 3;
-    case "Elite":          return 2;
-    case "Capable":        return 1;
-    default:               return 0; // "None" or missing
-  }
-}
 
 /**
  * Parse a height string like "6-5" (feet-inches) into total inches.
@@ -249,15 +236,16 @@ export function evalFilterEntries(
 // ---------------------------------------------------------------------------
 
 /** Tier minimum options for the skill-tier filter dropdown. */
-const TIER_OPTIONS = ["Capable or higher", "Elite or higher", "All-Time Great"] as const;
+const TIER_OPTIONS = ["Capable or higher", "Proficient or higher", "Elite or higher", "All-Time Great"] as const;
 
 /** Minimum numeric tier for each tier option string. */
 function minTierNum(option: string): number {
   switch (option) {
-    case "All-Time Great":    return 3;
-    case "Elite or higher":   return 2;
-    case "Capable or higher": return 1;
-    default:                  return 1;
+    case "All-Time Great":       return 4;
+    case "Elite or higher":      return 3;
+    case "Proficient or higher": return 2;
+    case "Capable or higher":    return 1;
+    default:                     return 1;
   }
 }
 
@@ -370,7 +358,7 @@ export const AVAILABLE_FILTERS: PlayerFilterType[] = [
       const n = parseFloat(value);
       if (isNaN(n) || !player.skills) return false;
       const count = Object.values(player.skills).filter(
-        (t) => tierToNum(t) >= 2,
+        (t) => tierToNum(t) >= 3,
       ).length;
       return count >= n;
     },

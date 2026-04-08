@@ -47,22 +47,13 @@ from services.notability import NOTABILITY_MEDIUM
 
 logger = logging.getLogger(__name__)
 
-# Tier ordering: higher index = higher tier (All-Time Great > Elite > Capable > None)
-_TIER_ORDER = ["None", "Capable", "Elite", "All-Time Great"]
+# Tier ordering: higher index = higher tier (All-Time Great > Elite > Proficient > Capable > None)
+_TIER_ORDER = ["None", "Capable", "Proficient", "Elite", "All-Time Great"]
 
 # All 19 skill keys in canonical order
 ALL_SKILLS: list[str] = sorted(
     HIGH_CONFIDENCE_SKILLS | MODERATE_CONFIDENCE_SKILLS | LOW_CONFIDENCE_SKILLS
 )
-
-# Valid flag reasons
-_FLAG_REASONS = frozenset({
-    "two_tier_disagreement",
-    "one_tier_low_confidence",
-    "low_notability",
-    "claude_low_confidence",
-    "data_missing",
-})
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +62,7 @@ _FLAG_REASONS = frozenset({
 
 
 def _tier_index(tier: str | None) -> int:
-    """Return the integer index of a tier (None=0, Capable=1, Elite=2, All-Time Great=3)."""
+    """Return the integer index of a tier (None=0, Capable=1, Proficient=2, Elite=3, All-Time Great=4)."""
     if tier is None or tier not in _TIER_ORDER:
         return 0  # Treat unknown / null as "None"
     return _TIER_ORDER.index(tier)

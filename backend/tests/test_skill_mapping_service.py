@@ -781,6 +781,44 @@ class TestComputeDerivedStats:
 # ===========================================================================
 
 
+# A rule that includes a Proficient tier block, used to verify the evaluator
+# walks Elite → Proficient → Capable correctly when the middle tier is defined.
+_PROFICIENT_RULE = {
+    "skill_name": "spot_up_shooter",
+    "skill_category": "additive",
+    "stat_confidence": "moderate",
+    "always_flag_for_review": False,
+    "stabilization": [],
+    "volume_gate": {
+        "conditions": [
+            {"stat": "tracking_shooting.catch_shoot_fg3a", "operator": ">=", "value": 1.0, "per": "game"},
+        ],
+        "logic": "AND",
+    },
+    "tiers": {
+        "Elite": {
+            "conditions": [
+                {"stat": "tracking_shooting.catch_shoot_fg3_pct", "operator": ">=", "value": 0.42},
+            ],
+            "logic": "AND",
+        },
+        "Proficient": {
+            "conditions": [
+                {"stat": "tracking_shooting.catch_shoot_fg3_pct", "operator": ">=", "value": 0.38},
+            ],
+            "logic": "AND",
+        },
+        "Capable": {
+            "conditions": [
+                {"stat": "tracking_shooting.catch_shoot_fg3_pct", "operator": ">=", "value": 0.34},
+            ],
+            "logic": "AND",
+        },
+    },
+    "tier_bumps": [],
+}
+
+
 # A minimal "spot_up_shooter" rule matching the migration schema
 _SPOT_UP_RULE = {
     "skill_name": "spot_up_shooter",
@@ -889,9 +927,10 @@ class TestEvaluateSkill:
         result = evaluate_skill("spot_up_shooter", flagged_rule, blob, self._league_avgs())
         assert result["review_recommended"] is True
 
-    def test_tier_bump_from_capable_to_elite(self):
-        """A player at Capable with high spotup_ppp should be bumped to Elite."""
-        # Set up a player just below Elite C&S pct but high spotup PPP
+    def test_tier_bump_from_capable_up_one(self):
+        """A player at Capable with a passing bump condition is bumped up one tier.
+        With _TIER_ORDER = [ATG, Elite, Proficient, Capable, None], bumping from Capable
+        lands at Proficient (one step up), not Elite."""
         blob = _make_stats_blob(
             tracking_shooting__catch_shoot_fg3_pct=0.37,   # stabilizes to ~0.37 → barely Capable
             tracking_shooting__catch_shoot_fg3a=2.5,
@@ -899,13 +938,13 @@ class TestEvaluateSkill:
             play_type__spotup_ppp=1.10,  # above 1.05 bump threshold
         )
         blob["metadata"]["games_played"] = 65
-        # Use a rule with a very low Elite threshold to guarantee Capable first
+        # Use a rule with an impossible Elite threshold to guarantee Capable first
         rule = {
             **_SPOT_UP_RULE,
             "tiers": {
                 "Elite": {
                     "conditions": [
-                        {"stat": "tracking_shooting.catch_shoot_fg3_pct", "operator": ">=", "value": 0.99},  # impossible
+                        {"stat": "tracking_shooting.catch_shoot_fg3_pct", "operator": ">=", "value": 0.99},
                     ],
                     "logic": "AND",
                 },
@@ -918,7 +957,7 @@ class TestEvaluateSkill:
             },
         }
         result = evaluate_skill("spot_up_shooter", rule, blob, self._league_avgs())
-        assert result["tier"] == "Elite"
+        assert result["tier"] == "Proficient"  # one step above Capable in _TIER_ORDER
         assert result["tier_bump_applied"] is True
 
     def test_result_shape(self):
@@ -1049,6 +1088,53 @@ class TestApplyAutoPromotions:
         skills = self._make_skills_result("Capable", "None")
         apply_auto_promotions(skills, self._movement_thresholds())
         assert skills["spot_up_shooter"]["tier"] == "None"  # original unchanged
+
+
+# ===========================================================================
+# 8b. evaluate_skill — Proficient tier block
+# ===========================================================================
+
+
+class TestEvaluateSkillProficientTier:
+    """Verify the evaluator correctly walks Elite → Proficient → Capable → None
+    when a skill rule defines a 'proficient' tier block."""
+
+    def _league_avgs(self):
+        return {}
+
+    def _blob(self, fg3_pct: float, fg3a: float = 2.0):
+        blob = _make_stats_blob(
+            tracking_shooting__catch_shoot_fg3_pct=fg3_pct,
+            tracking_shooting__catch_shoot_fg3a=fg3a,
+        )
+        blob["metadata"]["games_played"] = 65
+        return blob
+
+    def test_above_elite_threshold_is_elite(self):
+        """fg3_pct=0.43 clears the Elite threshold (0.42) → Elite."""
+        result = evaluate_skill("spot_up_shooter", _PROFICIENT_RULE, self._blob(0.43), self._league_avgs())
+        assert result["tier"] == "Elite"
+
+    def test_between_proficient_and_elite_is_proficient(self):
+        """fg3_pct=0.39 clears Proficient (0.38) but not Elite (0.42) → Proficient."""
+        result = evaluate_skill("spot_up_shooter", _PROFICIENT_RULE, self._blob(0.39), self._league_avgs())
+        assert result["tier"] == "Proficient"
+
+    def test_between_capable_and_proficient_is_capable(self):
+        """fg3_pct=0.35 clears Capable (0.34) but not Proficient (0.38) → Capable."""
+        result = evaluate_skill("spot_up_shooter", _PROFICIENT_RULE, self._blob(0.35), self._league_avgs())
+        assert result["tier"] == "Capable"
+
+    def test_below_capable_threshold_is_none(self):
+        """fg3_pct=0.30 clears nothing → None."""
+        result = evaluate_skill("spot_up_shooter", _PROFICIENT_RULE, self._blob(0.30), self._league_avgs())
+        assert result["tier"] == "None"
+
+    def test_skill_without_proficient_block_skips_to_capable(self):
+        """A rule with no 'proficient' block falls through from Elite to Capable normally.
+        Existing skills that predate this tier are unaffected."""
+        result = evaluate_skill("spot_up_shooter", _SPOT_UP_RULE, self._blob(0.38, fg3a=3.0), self._league_avgs())
+        assert result["tier"] == "Capable"
 
 
 # ===========================================================================

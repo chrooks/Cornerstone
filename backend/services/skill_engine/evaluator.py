@@ -25,8 +25,8 @@ from services.skill_engine.transforms import (
 logger = logging.getLogger(__name__)
 
 # Tier labels — order matters for comparisons (highest to lowest).
-# All-Time Great=index 0, Elite=index 1, Capable=index 2, None=index 3.
-_TIER_ORDER = ["All-Time Great", "Elite", "Capable", "None"]
+# All-Time Great=index 0, Elite=index 1, Proficient=index 2, Capable=index 3, None=index 4.
+_TIER_ORDER = ["All-Time Great", "Elite", "Proficient", "Capable", "None"]
 
 
 def evaluate_skill(
@@ -114,7 +114,7 @@ def evaluate_skill(
         raw_tier_defs = rule.get("tiers", {})
         tier_defs = {k.lower(): v for k, v in raw_tier_defs.items()}
 
-        for tier_name in ["all-time great", "elite", "capable"]:
+        for tier_name in ["all-time great", "elite", "proficient", "capable"]:
             tier_rule = tier_defs.get(tier_name)
             if not tier_rule:
                 continue
@@ -314,7 +314,7 @@ def collect_condition_results(
         _walk_block(vg, "volume_gate")
 
     tiers_lower = {k.lower(): v for k, v in rule.get("tiers", {}).items()}
-    for tier_name in ["elite", "capable"]:
+    for tier_name in ["all-time great", "elite", "proficient", "capable"]:
         tier_block = tiers_lower.get(tier_name, {})
         if tier_block:
             _walk_block(tier_block, tier_name)
@@ -375,7 +375,7 @@ def _collect_driving_stats(
             )
 
     tiers_lower = {k.lower(): v for k, v in rule.get("tiers", {}).items()}
-    for tier_name in ["elite", "capable"]:
+    for tier_name in ["all-time great", "elite", "proficient", "capable"]:
         tier_rule = tiers_lower.get(tier_name, {})
         # tier_rule is the full block; conditions are inside it
         if tier_rule.get("conditions"):
