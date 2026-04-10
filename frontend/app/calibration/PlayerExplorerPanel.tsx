@@ -224,11 +224,11 @@ export function PlayerExplorerPanel({
             Search for a player to see their stats and skill profile.
           </div>
         ) : (
-          <div className="px-4 py-3 space-y-4">
-            {/* Player header */}
-            <div className="space-y-0.5">
+          <>
+            {/* Player header — sticky so the name is always visible when scrolling through stats */}
+            <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-2">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="font-semibold text-base text-foreground">
+                <h3 className="font-semibold text-base text-foreground truncate">
                   {selectedPlayer.name}
                 </h3>
                 <button
@@ -248,6 +248,7 @@ export function PlayerExplorerPanel({
               </p>
             </div>
 
+          <div className="px-4 py-3 space-y-4">
             {/* Stabilized / Raw toggle */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Stats view:</span>
@@ -368,6 +369,7 @@ export function PlayerExplorerPanel({
               </div>
             )}
           </div>
+          </>
         )}
       </div>
     </aside>

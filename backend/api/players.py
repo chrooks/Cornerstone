@@ -158,6 +158,158 @@ def player_career(player_id: str):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/players/stats-bulk
+# ---------------------------------------------------------------------------
+
+# NOTE: All literal-segment routes (/bulk, /search, /stats-bulk) must be
+# registered BEFORE the <player_id> dynamic route so Flask doesn't swallow
+# them as UUIDs.
+
+def _flatten_stats_blob(blob: dict) -> tuple[dict, dict]:
+    """
+    Given a raw player_stats blob (keyed by section), return two dicts:
+      - flat_stats:  {"section.key": value, ...} for all sections EXCEPT
+                     "stabilized" and most of "metadata" (only allowlisted
+                     metadata keys like "weight" are included)
+      - stabilized:  the stabilized sub-dict as-is (already in "section.key"
+                     format coming out of the skill engine)
+
+    Sections like box_score, advanced, play_type, etc. each contain a flat
+    dict of {key: numeric_value}, so we just prefix them with the section name.
+    """
+    flat_stats: dict = {}
+    stabilized: dict = {}
+
+    # metadata keys to include in flat_stats (e.g. weight used by screen_setter)
+    metadata_allowlist = {"weight"}
+
+    # Sections to skip entirely — stabilized is handled separately; remaining
+    # metadata keys are selectively included via metadata_allowlist above.
+    skip_sections = {"stabilized", "metadata"}
+
+    for section, section_data in blob.items():
+        if section in skip_sections:
+            continue
+        if not isinstance(section_data, dict):
+            continue
+        # Prefix each stat key with the section name to produce "section.key" format
+        for key, value in section_data.items():
+            flat_stats[f"{section}.{key}"] = value
+
+    # Selectively include allowed metadata keys so stats like metadata.weight
+    # appear as columns in the Stat Leaders table without exposing all metadata.
+    raw_metadata = blob.get("metadata")
+    if isinstance(raw_metadata, dict):
+        for key in metadata_allowlist:
+            if key in raw_metadata:
+                flat_stats[f"metadata.{key}"] = raw_metadata[key]
+
+    # Extract stabilized separately — the blob stores it as {"section.key": value}
+    raw_stab = blob.get("stabilized")
+    if isinstance(raw_stab, dict):
+        stabilized = raw_stab
+
+    return flat_stats, stabilized
+
+
+def _fetch_stats_bulk(season: str, min_mpg: float, supabase) -> list:
+    """
+    Fetch all qualifying players with their flattened stats for the calibration
+    Stat Leaders table.
+
+    Steps:
+    1. Query the players table filtered by season + min_mpg, ordered by name
+    2. Batch-fetch player_stats rows (chunks of 100, same pattern as _fetch_bulk_players)
+    3. Flatten each stats blob into "section.key" format (excluding metadata/stabilized)
+    4. Extract the stabilized dict separately
+    5. Return list of {id, name, team, position, stats, stabilized}
+    """
+    # Step 1: Fetch qualifying player records (id + display fields only, no bloat)
+    players_rows = (
+        supabase.table("players")
+        .select("id, name, team, position")
+        .eq("season", season)
+        .gte("minutes_per_game", min_mpg)
+        .order("name")
+        .execute()
+    )
+    players_data = players_rows.data or []
+    if not players_data:
+        return []
+
+    player_ids = [p["id"] for p in players_data]
+
+    # Step 2: Batch-fetch player_stats rows in chunks of 100 (PostgREST URL limit safe)
+    _BATCH = 100
+    stats_by_player: dict = {}
+    for i in range(0, len(player_ids), _BATCH):
+        batch = player_ids[i : i + _BATCH]
+        rows = (
+            supabase.table("player_stats")
+            .select("player_id, stats, fetched_at")
+            .in_("player_id", batch)
+            .eq("season", season)
+            .order("fetched_at", desc=True)  # newest first so we keep the latest row
+            .limit(5000)                     # generous cap — insert (not upsert) means
+                                             # players with many views have many rows
+            .execute()
+        )
+        # Only keep the first (most recent) row per player
+        for row in (rows.data or []):
+            pid = row["player_id"]
+            if pid not in stats_by_player:
+                stats_by_player[pid] = row.get("stats") or {}
+
+    # Step 3+4: Build the response list, flattening each player's stats blob
+    result = []
+    for player in players_data:
+        blob = stats_by_player.get(player["id"], {})
+        flat_stats, stabilized = _flatten_stats_blob(blob)
+        result.append({
+            "id":         player["id"],
+            "name":       player["name"],
+            "team":       player.get("team"),
+            "position":   player.get("position"),
+            "stats":      flat_stats,
+            "stabilized": stabilized,
+        })
+
+    return result
+
+
+@players_bp.route("/players/stats-bulk", methods=["GET"])
+def list_players_stats_bulk():
+    """
+    Return all qualifying players with flattened stats for the calibration Stat
+    Leaders table.
+
+    Stats are returned in "section.key" format (e.g. "box_score.pts": 25.3).
+    Stabilized values (Bayesian-adjusted) are returned as a separate dict using
+    the same "section.key" keys — the frontend toggles between raw and stabilized
+    per-cell without double-fetching.
+
+    Query params:
+      ?season=2025-26   (default: current season)
+      ?min_mpg=15       (default: 15)
+
+    Response data: list of {id, name, team, position, stats, stabilized}
+    """
+    season = request.args.get("season", players_service.CURRENT_SEASON)
+    try:
+        min_mpg = float(request.args.get("min_mpg", players_service.DEFAULT_MIN_MPG))
+    except (ValueError, TypeError):
+        return _err("'min_mpg' must be a number", status=400)
+
+    try:
+        supabase = get_supabase()
+        result = _fetch_stats_bulk(season, min_mpg, supabase)
+        return _ok(result)
+    except Exception as exc:
+        logger.exception("Error in GET /api/players/stats-bulk")
+        return _err(str(exc))
+
+
+# ---------------------------------------------------------------------------
 # GET /api/players/bulk
 # ---------------------------------------------------------------------------
 

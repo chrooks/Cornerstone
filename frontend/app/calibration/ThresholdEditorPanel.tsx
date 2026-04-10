@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { saveThreshold, testThresholds } from "@/lib/api";
+import { SKILL_CATEGORIES, formatSkillName } from "@/lib/skills";
+import { ALL_STAT_KEYS, getStatLabel } from "@/lib/stat-keys";
 import type {
   ThresholdRow,
   ThresholdRule,
@@ -34,48 +36,10 @@ interface ThresholdEditorPanelProps {
   selectedPlayer: Player | null;
   onReEvaluatePlayer: () => void;
   onSkillSelect: (skillName: string) => void;
+  /** Called after a successful save so the parent can clear the unsaved-edit flag */
+  onSaved: (skillName: string, savedRule: Record<string, unknown>) => void;
   onToast: (message: string, type: "success" | "error") => void;
   leagueAverages: Record<string, number>;
-}
-
-/**
- * Skill categories for the tab bar — must match the canonical skill keys
- * defined in backend/services/claude_assessment.py.
- */
-const SKILL_CATEGORIES: Record<string, string[]> = {
-  "High Confidence": [
-    "spot_up_shooter",
-    "off_dribble_shooter",
-    "offensive_rebounder",
-    "rebounder",
-    "rim_protector",
-    "isolation_scorer",
-  ],
-  Moderate: [
-    "movement_shooter",
-    "cutter",
-    "transition_threat",
-    "pnr_ball_handler",
-    "pnr_finisher",
-    "crafty_finisher",
-    "vertical_spacer",
-    "screen_setter",
-    "passer",
-    "mid_post_player",
-    "low_post_player",
-  ],
-  "Low Confidence": [
-    "switchable_defender",
-    "point_of_attack_defender",
-    "high_flyer",
-  ],
-};
-
-function formatSkillName(name: string): string {
-  return name
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
 }
 
 /**
@@ -100,16 +64,59 @@ function updateAtPath(
   return obj;
 }
 
-/** Render a single condition row (leaf or nested OR/AND block) */
+/**
+ * Recursively strip all items and objects flagged with `_deleted: true` from
+ * a rule object before it is sent to the backend. This is the sole gatekeeper
+ * ensuring pending-delete markers never reach the API.
+ */
+function stripDeleted(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .filter(
+        (item) =>
+          !(item && typeof item === "object" && (item as Record<string, unknown>)._deleted)
+      )
+      .map(stripDeleted);
+  }
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { _deleted, ...rest } = obj;
+    return Object.fromEntries(
+      Object.entries(rest).map(([k, v]) => [k, stripDeleted(v)])
+    );
+  }
+  return value;
+}
+
+/** Operators available for condition editing */
+const OPERATORS = [">=", "<=", ">", "<", "==", "!="] as const;
+
+/** Per modifier options */
+const PER_OPTIONS = [
+  { value: "", label: "—" },
+  { value: "game", label: "game" },
+  { value: "season", label: "season" },
+] as const;
+
+/**
+ * Render a single editable condition row (leaf or nested OR/AND block).
+ * Leaf rows show fully editable stat/operator/per/value fields with hover-reveal
+ * delete control. Pending-deleted rows render struck through until saved.
+ */
 function ConditionRow({
   condition,
   path,
   onValueChange,
+  onDelete,
+  onUndoDelete,
   depth = 0,
 }: {
   condition: ConditionItem;
   path: (string | number)[];
   onValueChange: (path: (string | number)[], value: unknown) => void;
+  onDelete: (path: (string | number)[]) => void;
+  onUndoDelete: (path: (string | number)[]) => void;
   depth?: number;
 }) {
   // Nested block — render recursively with indentation
@@ -128,9 +135,11 @@ function ConditionRow({
         {condition.conditions.map((child, i) => (
           <ConditionRow
             key={i}
-            condition={child}
+            condition={child as ConditionItem}
             path={[...path, "conditions", i]}
             onValueChange={onValueChange}
+            onDelete={onDelete}
+            onUndoDelete={onUndoDelete}
             depth={depth + 1}
           />
         ))}
@@ -138,34 +147,72 @@ function ConditionRow({
     );
   }
 
-  // Leaf condition row
-  const statLabel = condition.stat
-    ?.split(".")
-    .map((part) =>
-      part
-        .split("_")
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ")
-    )
-    .join(" › ") ?? "";
+  // Pending-delete state: show struck-through row with undo button
+  if (condition._deleted) {
+    return (
+      <div className="flex items-center gap-2 py-1 text-xs opacity-50 line-through">
+        <span className="flex-1 font-mono text-[10px] text-muted-foreground truncate">
+          {getStatLabel(condition.stat ?? "")}
+        </span>
+        <span className="text-muted-foreground font-mono w-5 text-center">{condition.operator}</span>
+        <span className="font-mono w-16 text-right">{condition.value ?? 0}</span>
+        {/* Undo delete — removes line-through and restores the row */}
+        <button
+          type="button"
+          title="Undo delete"
+          onClick={() => onUndoDelete(path)}
+          className="no-underline not-italic opacity-100 text-[10px] text-blue-500 hover:text-blue-700 px-1 flex-shrink-0"
+          style={{ textDecoration: "none" }}
+        >
+          undo
+        </button>
+      </div>
+    );
+  }
 
-  const isStabilized = condition.stat?.startsWith("stabilized.");
-  const perLabel = condition.per ? ` / ${condition.per}` : "";
-
+  // Active leaf condition row — fully editable with hover-reveal delete button
   return (
-    <div className="flex items-center gap-2 py-1 text-xs">
-      <span className="flex-1 text-muted-foreground truncate font-mono text-[10px]" title={condition.stat}>
-        {statLabel}
-        {isStabilized && (
-          <span className="ml-1 text-[9px] bg-blue-100 text-blue-600 px-1 rounded">stab</span>
+    // group/ allows the hover-reveal delete button to respond to row hover
+    <div className="group/row flex items-center gap-1.5 py-1 text-xs">
+      {/* Stat key — searchable datalist input showing human label */}
+      <input
+        list="stat-keys-datalist"
+        value={condition.stat ?? ""}
+        onChange={(e) => onValueChange([...path, "stat"], e.target.value)}
+        placeholder="stat key…"
+        className={cn(
+          "flex-1 min-w-0 border border-input rounded px-1.5 py-0.5 text-[10px] font-mono",
+          "focus:outline-none focus:ring-1 focus:ring-ring bg-background truncate"
         )}
-        {perLabel && (
-          <span className="ml-1 text-[9px] text-muted-foreground">{perLabel}</span>
+        title={condition.stat}
+      />
+      {/* Operator select */}
+      <select
+        value={condition.operator ?? ">="}
+        onChange={(e) => onValueChange([...path, "operator"], e.target.value)}
+        className={cn(
+          "w-12 border border-input rounded px-1 py-0.5 text-[10px] font-mono",
+          "focus:outline-none focus:ring-1 focus:ring-ring bg-background flex-shrink-0"
         )}
-      </span>
-      <span className="text-muted-foreground font-mono w-5 text-center flex-shrink-0">
-        {condition.operator}
-      </span>
+      >
+        {OPERATORS.map((op) => (
+          <option key={op} value={op}>{op}</option>
+        ))}
+      </select>
+      {/* Per modifier select */}
+      <select
+        value={condition.per ?? ""}
+        onChange={(e) => onValueChange([...path, "per"], e.target.value || undefined)}
+        className={cn(
+          "w-16 border border-input rounded px-1 py-0.5 text-[10px]",
+          "focus:outline-none focus:ring-1 focus:ring-ring bg-background flex-shrink-0"
+        )}
+      >
+        {PER_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+      {/* Numeric value input */}
       <input
         type="number"
         step="0.01"
@@ -173,24 +220,60 @@ function ConditionRow({
         onChange={(e) => onValueChange([...path, "value"], parseFloat(e.target.value))}
         className={cn(
           "w-20 text-right border border-input rounded px-1.5 py-0.5 text-xs font-mono",
-          "focus:outline-none focus:ring-1 focus:ring-ring bg-background"
+          "focus:outline-none focus:ring-1 focus:ring-ring bg-background flex-shrink-0"
         )}
       />
+      {/* Hover-reveal delete button — visible only on row hover */}
+      <button
+        type="button"
+        title="Delete condition (staged — won't apply until Save)"
+        onClick={() => onDelete(path)}
+        className={cn(
+          "flex-shrink-0 w-5 h-5 flex items-center justify-center rounded",
+          "text-muted-foreground hover:text-red-600 hover:bg-red-50",
+          "opacity-0 group-hover/row:opacity-100 transition-opacity text-[11px] leading-none"
+        )}
+      >
+        ×
+      </button>
     </div>
   );
 }
 
-/** Render a conditions block (volume gate or tier) */
+/**
+ * Render a conditions block (volume gate or tier threshold).
+ * Includes an "+ Add condition" button for leaf-only groups.
+ */
 function ConditionsBlockEditor({
   block,
   path,
   onValueChange,
+  onDelete,
+  onUndoDelete,
 }: {
   block: ConditionsBlock;
   path: (string | number)[];
   onValueChange: (path: (string | number)[], value: unknown) => void;
+  onDelete: (path: (string | number)[]) => void;
+  onUndoDelete: (path: (string | number)[]) => void;
 }) {
   if (!block?.conditions) return <span className="text-xs text-muted-foreground">—</span>;
+
+  // Determine whether the top-level conditions are all leaf conditions (no nested blocks).
+  // Only show the "Add condition" button for flat groups to avoid complexity with nested logic.
+  const allLeaves = block.conditions.every(
+    (c) => !(c as ConditionItem).conditions
+  );
+
+  /** Append a new blank leaf condition to this group */
+  const handleAddCondition = () => {
+    const newCondition: ConditionItem = { stat: "", operator: ">=", value: 0 };
+    onValueChange(
+      [...path, "conditions", block.conditions!.length],
+      newCondition
+    );
+  };
+
   return (
     <div className="space-y-0.5">
       {block.conditions.map((cond, i) => (
@@ -199,15 +282,383 @@ function ConditionsBlockEditor({
           condition={cond as ConditionItem}
           path={[...path, "conditions", i]}
           onValueChange={onValueChange}
+          onDelete={onDelete}
+          onUndoDelete={onUndoDelete}
         />
       ))}
+      {/* Add condition button — only shown for flat (all-leaf) groups */}
+      {allLeaves && (
+        <button
+          type="button"
+          onClick={handleAddCondition}
+          className={cn(
+            "mt-1 flex items-center gap-1 text-[10px] text-muted-foreground",
+            "hover:text-primary transition-colors"
+          )}
+        >
+          <span className="text-sm leading-none">+</span>
+          <span>Add condition</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Tier options for the bump ceiling/floor picker */
+const TIER_OPTIONS = [
+  { value: "", label: "None" },
+  { value: "Capable", label: "Capable" },
+  { value: "Proficient", label: "Proficient" },
+  { value: "Elite", label: "Elite" },
+  { value: "All-Time Great", label: "All-Time Great" },
+];
+
+/** Effect options for new tier bumps */
+const BUMP_EFFECT_OPTIONS = [
+  { value: "bump_up_one_tier", label: "Bump up one tier" },
+  { value: "bump_down_one_tier", label: "Bump down one tier" },
+];
+
+/**
+ * Inline form for adding a new tier bump.
+ * Rendered below the existing bumps list, hidden behind a "+ Add bump" toggle.
+ */
+function AddBumpForm({
+  onAdd,
+}: {
+  onAdd: (bump: {
+    condition: ConditionItem;
+    effect: string;
+    max_tier?: string;
+    min_tier?: string;
+  }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [effect, setEffect] = useState("bump_up_one_tier");
+  const [tierValue, setTierValue] = useState("");
+  const [stat, setStat] = useState("");
+  const [operator, setOperator] = useState(">=");
+  const [value, setValue] = useState(0);
+
+  const tierLabel = effect === "bump_up_one_tier" ? "Max tier (ceiling)" : "Min tier (floor)";
+
+  const handleAdd = () => {
+    if (!stat) return;
+    const bump: {
+      condition: ConditionItem;
+      effect: string;
+      max_tier?: string;
+      min_tier?: string;
+    } = {
+      condition: { stat, operator, value },
+      effect,
+    };
+    if (effect === "bump_up_one_tier" && tierValue) bump.max_tier = tierValue;
+    if (effect === "bump_down_one_tier" && tierValue) bump.min_tier = tierValue;
+    onAdd(bump);
+    // Reset form
+    setStat("");
+    setOperator(">=");
+    setValue(0);
+    setTierValue("");
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+      >
+        <span className="text-sm leading-none">+</span>
+        <span>Add bump</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 border border-dashed border-border rounded p-2 space-y-2 bg-muted/10">
+      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+        New Tier Bump
+      </div>
+      {/* Effect picker */}
+      <div className="flex items-center gap-2">
+        <label className="text-[10px] text-muted-foreground w-20 flex-shrink-0">Effect</label>
+        <select
+          value={effect}
+          onChange={(e) => setEffect(e.target.value)}
+          className="flex-1 border border-input rounded px-1.5 py-0.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          {BUMP_EFFECT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+      {/* Ceiling / floor tier picker */}
+      <div className="flex items-center gap-2">
+        <label className="text-[10px] text-muted-foreground w-20 flex-shrink-0">{tierLabel}</label>
+        <select
+          value={tierValue}
+          onChange={(e) => setTierValue(e.target.value)}
+          className="flex-1 border border-input rounded px-1.5 py-0.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          {TIER_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+      {/* Condition fields */}
+      <div className="space-y-1">
+        <div className="text-[10px] text-muted-foreground font-medium">Condition</div>
+        <div className="flex items-center gap-1.5">
+          <input
+            list="stat-keys-datalist"
+            value={stat}
+            onChange={(e) => setStat(e.target.value)}
+            placeholder="stat key…"
+            className="flex-1 min-w-0 border border-input rounded px-1.5 py-0.5 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background"
+          />
+          <select
+            value={operator}
+            onChange={(e) => setOperator(e.target.value)}
+            className="w-12 border border-input rounded px-1 py-0.5 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background flex-shrink-0"
+          >
+            {OPERATORS.map((op) => (
+              <option key={op} value={op}>{op}</option>
+            ))}
+          </select>
+          <input
+            type="number"
+            step="0.01"
+            value={value}
+            onChange={(e) => setValue(parseFloat(e.target.value))}
+            className="w-20 text-right border border-input rounded px-1.5 py-0.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background flex-shrink-0"
+          />
+        </div>
+      </div>
+      {/* Action buttons */}
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          onClick={handleAdd}
+          disabled={!stat}
+          className="text-xs px-2.5 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          Add
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="text-xs px-2.5 py-1 rounded border border-border hover:bg-muted transition-colors text-muted-foreground"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Editor for the tier_bumps array. Supports viewing and editing existing bumps
+ * (both leaf and AND/OR block conditions), deleting with pending-delete staging,
+ * and adding new bumps via inline form.
+ */
+function TierBumpEditor({
+  bumps,
+  basePath,
+  onValueChange,
+  onDeleteBump,
+  onUndoDeleteBump,
+  onAddBump,
+}: {
+  bumps: Array<{
+    condition: ConditionItem;
+    effect: string;
+    max_tier?: string;
+    min_tier?: string;
+    _deleted?: boolean;
+  }>;
+  basePath: (string | number)[];
+  onValueChange: (path: (string | number)[], value: unknown) => void;
+  onDeleteBump: (index: number) => void;
+  onUndoDeleteBump: (index: number) => void;
+  onAddBump: (bump: {
+    condition: ConditionItem;
+    effect: string;
+    max_tier?: string;
+    min_tier?: string;
+  }) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {bumps.map((bump, i) => {
+        const cond = bump.condition as ConditionItem;
+        if (!cond) return null;
+
+        // Pending-delete state: show struck-through with undo
+        if (bump._deleted) {
+          return (
+            <div key={i} className="flex items-center gap-2 text-xs opacity-50 line-through">
+              <span className="flex-1 font-mono text-[10px] text-muted-foreground truncate">
+                {cond.stat ?? "(block condition)"}
+              </span>
+              <span className="text-[10px] text-muted-foreground">{bump.effect}</span>
+              <button
+                type="button"
+                onClick={() => onUndoDeleteBump(i)}
+                className="no-underline not-italic opacity-100 text-[10px] text-blue-500 hover:text-blue-700 px-1 flex-shrink-0"
+                style={{ textDecoration: "none" }}
+              >
+                undo
+              </button>
+            </div>
+          );
+        }
+
+        // AND/OR block condition — render each leaf as editable
+        if (cond.conditions) {
+          return (
+            <div key={i} className="group/bump space-y-1 rounded border border-border/50 px-2 py-1.5 bg-muted/5">
+              {/* Block header with effect label and hover-delete */}
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span className="font-semibold uppercase">{cond.logic ?? "AND"}</span>
+                {bump.effect === "bump_down_one_tier"
+                  ? <span className="text-orange-500">↓ floor: {bump.min_tier ?? "—"}</span>
+                  : <span>→ ceiling: {bump.max_tier ?? "—"}</span>
+                }
+                <span className="ml-auto text-[9px] bg-muted px-1 rounded">{bump.effect}</span>
+                {/* Hover-reveal delete for the whole bump */}
+                <button
+                  type="button"
+                  title="Delete this tier bump (staged)"
+                  onClick={() => onDeleteBump(i)}
+                  className={cn(
+                    "w-5 h-5 flex items-center justify-center rounded flex-shrink-0",
+                    "text-muted-foreground hover:text-red-600 hover:bg-red-50",
+                    "opacity-0 group-hover/bump:opacity-100 transition-opacity text-[11px]"
+                  )}
+                >
+                  ×
+                </button>
+              </div>
+              {/* Leaf conditions within the block — each fully editable */}
+              {(cond.conditions as ConditionItem[]).map((leaf, j) => (
+                <div key={j} className="flex items-center gap-1.5 pl-3 border-l border-border">
+                  <input
+                    list="stat-keys-datalist"
+                    value={leaf.stat ?? ""}
+                    onChange={(e) =>
+                      onValueChange(
+                        [...basePath, i, "condition", "conditions", j, "stat"],
+                        e.target.value
+                      )
+                    }
+                    placeholder="stat key…"
+                    className="flex-1 min-w-0 border border-input rounded px-1.5 py-0.5 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background"
+                    title={leaf.stat}
+                  />
+                  <select
+                    value={leaf.operator ?? ">="}
+                    onChange={(e) =>
+                      onValueChange(
+                        [...basePath, i, "condition", "conditions", j, "operator"],
+                        e.target.value
+                      )
+                    }
+                    className="w-12 border border-input rounded px-1 py-0.5 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background flex-shrink-0"
+                  >
+                    {OPERATORS.map((op) => (
+                      <option key={op} value={op}>{op}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={leaf.value ?? 0}
+                    onChange={(e) =>
+                      onValueChange(
+                        [...basePath, i, "condition", "conditions", j, "value"],
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    className="w-20 text-right border border-input rounded px-1.5 py-0.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background flex-shrink-0"
+                  />
+                </div>
+              ))}
+            </div>
+          );
+        }
+
+        // Leaf condition bump — single stat, fully editable with hover-delete
+        if (!cond.stat && cond.stat !== "") return null;
+        return (
+          <div key={i} className="group/bump flex items-center gap-1.5 text-xs py-0.5">
+            {/* Stat key */}
+            <input
+              list="stat-keys-datalist"
+              value={cond.stat ?? ""}
+              onChange={(e) =>
+                onValueChange([...basePath, i, "condition", "stat"], e.target.value)
+              }
+              placeholder="stat key…"
+              className="flex-1 min-w-0 border border-input rounded px-1.5 py-0.5 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background"
+              title={cond.stat}
+            />
+            {/* Operator */}
+            <select
+              value={cond.operator ?? ">="}
+              onChange={(e) =>
+                onValueChange([...basePath, i, "condition", "operator"], e.target.value)
+              }
+              className="w-12 border border-input rounded px-1 py-0.5 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background flex-shrink-0"
+            >
+              {OPERATORS.map((op) => (
+                <option key={op} value={op}>{op}</option>
+              ))}
+            </select>
+            {/* Value */}
+            <input
+              type="number"
+              step="0.01"
+              value={cond.value ?? 0}
+              onChange={(e) =>
+                onValueChange([...basePath, i, "condition", "value"], parseFloat(e.target.value))
+              }
+              className="w-20 text-right border border-input rounded px-1.5 py-0.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background flex-shrink-0"
+            />
+            {/* Effect / tier label */}
+            {bump.effect === "bump_down_one_tier"
+              ? <span className="text-[10px] text-orange-500 flex-shrink-0">↓ floor: {bump.min_tier ?? "—"}</span>
+              : <span className="text-[10px] text-muted-foreground flex-shrink-0">↑ ceil: {bump.max_tier ?? "—"}</span>
+            }
+            {/* Hover-reveal delete button */}
+            <button
+              type="button"
+              title="Delete this tier bump (staged)"
+              onClick={() => onDeleteBump(i)}
+              className={cn(
+                "flex-shrink-0 w-5 h-5 flex items-center justify-center rounded",
+                "text-muted-foreground hover:text-red-600 hover:bg-red-50",
+                "opacity-0 group-hover/bump:opacity-100 transition-opacity text-[11px] leading-none"
+              )}
+            >
+              ×
+            </button>
+          </div>
+        );
+      })}
+      {/* Add bump inline form */}
+      <AddBumpForm onAdd={onAddBump} />
     </div>
   );
 }
 
 const SECTION_LABELS_TEST: Record<string, string> = {
   volume_gate: "Volume Gate",
+  "all-time great": "All-Time Great",
   elite: "Elite",
+  proficient: "Proficient",
   capable: "Capable",
   tier_bump: "Tier Bump",
 };
@@ -215,17 +666,25 @@ const SECTION_LABELS_TEST: Record<string, string> = {
 /** Expandable per-condition breakdown for a single anchor player */
 function AnchorConditionBreakdown({
   conditions,
-  forceOpen,
+  nudge,
 }: {
   conditions: ConditionResult[];
-  forceOpen?: boolean;
+  /** Version-stamped nudge from the parent "Expand/Collapse all" buttons.
+   *  When the version changes, local open state is synced to nudge.open,
+   *  then individual toggling works normally again. */
+  nudge?: { open: boolean; v: number };
 }) {
   const [localOpen, setLocalOpen] = useState(false);
-  // forceOpen overrides local toggle when set
-  const open = forceOpen !== undefined ? forceOpen : localOpen;
+  // When a new nudge arrives (version changes), snap local state to match —
+  // after that individual toggling is fully independent.
+  useEffect(() => {
+    if (nudge !== undefined) setLocalOpen(nudge.open);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nudge?.v]);
+  const open = localOpen;
 
   // Group by section in display order
-  const sectionOrder = ["volume_gate", "elite", "capable", "tier_bump"] as const;
+  const sectionOrder = ["volume_gate", "all-time great", "elite", "proficient", "capable", "tier_bump"] as const;
   const grouped = sectionOrder
     .map((s) => ({ section: s, items: conditions.filter((c) => c.section === s) }))
     .filter((g) => g.items.length > 0);
@@ -332,28 +791,46 @@ function AnchorConditionBreakdown({
 
 /** Anchor test result inline display */
 function TestResultDisplay({ result }: { result: SkillTestResult }) {
-  // null = each breakdown controls itself; true/false = all forced open/closed
-  const [allOpen, setAllOpen] = useState<boolean | null>(null);
+  // Version-stamped nudge — when version increments all breakdowns sync their
+  // local open state, then individual toggling is fully independent again.
+  const [allNudge, setAllNudge] = useState<{ open: boolean; v: number } | null>(null);
 
   return (
-    <div className="mt-3 space-y-2">
-      <div className="flex items-center gap-3 text-xs">
+    <div className="space-y-2">
+      {/* Sticky header row — stays visible while scrolling through long anchor result lists.
+          top-[-0.75rem] compensates for the scroll container's py-3 (0.75rem) top padding so the
+          bar sticks flush against the editor header above with no gap. */}
+      <div className="sticky top-[-0.75rem] z-10 bg-background -mx-4 px-4 py-1.5 border-b border-border flex items-center gap-3 text-xs">
         <span className="font-medium">{result.anchors_tested} anchors tested</span>
         <span className="text-emerald-600">{result.passed} passed</span>
         {result.failed > 0 && <span className="text-red-600">{result.failed} failed</span>}
-        <button
-          type="button"
-          onClick={() => setAllOpen((v) => (v === true ? false : true))}
-          className="ml-auto text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {allOpen === true ? "Collapse all" : "Expand all"}
-        </button>
+        {/* Both expand/collapse buttons are always visible so you can batch-toggle
+            at any time, then independently toggle individual breakdowns after. */}
+        <div className="ml-auto flex items-center gap-2 text-[10px] text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setAllNudge((n) => ({ open: true, v: (n?.v ?? 0) + 1 }))}
+            className="hover:text-foreground transition-colors"
+          >
+            Expand all
+          </button>
+          <span>·</span>
+          <button
+            type="button"
+            onClick={() => setAllNudge((n) => ({ open: false, v: (n?.v ?? 0) + 1 }))}
+            className="hover:text-foreground transition-colors"
+          >
+            Collapse all
+          </button>
+        </div>
       </div>
       {[...result.results]
         .sort((a, b) => {
-          // Sort by expected tier: Elite (0) → Capable (1) → None (2)
-          const tierOrder: Record<string, number> = { Elite: 0, Capable: 1, None: 2 };
-          return (tierOrder[a.expected_tier] ?? 3) - (tierOrder[b.expected_tier] ?? 3);
+          // Sort by expected tier highest-first using SKILL_TIERS index
+          const tierOrder: Record<string, number> = {
+            "All-Time Great": 0, Elite: 1, Proficient: 2, Capable: 3, None: 4,
+          };
+          return (tierOrder[a.expected_tier] ?? 5) - (tierOrder[b.expected_tier] ?? 5);
         })
         .map((r) => (
         <div
@@ -383,7 +860,7 @@ function TestResultDisplay({ result }: { result: SkillTestResult }) {
           {r.condition_results?.length > 0 && (
             <AnchorConditionBreakdown
               conditions={r.condition_results}
-              forceOpen={allOpen ?? undefined}
+              nudge={allNudge ?? undefined}
             />
           )}
         </div>
@@ -408,6 +885,7 @@ export function ThresholdEditorPanel({
   selectedPlayer,
   onReEvaluatePlayer,
   onSkillSelect,
+  onSaved,
   onToast,
   leagueAverages,
 }: ThresholdEditorPanelProps) {
@@ -450,6 +928,52 @@ export function ThresholdEditorPanel({
     [currentRule, selectedSkill, onThresholdChange]
   );
 
+  /** Stage a condition for deletion by setting _deleted: true at the given path */
+  const handleDeleteCondition = useCallback(
+    (path: (string | number)[]) => {
+      const updated = updateAtPath(currentRule, [...path, "_deleted"], true) as Record<string, unknown>;
+      onThresholdChange(selectedSkill, updated);
+    },
+    [currentRule, selectedSkill, onThresholdChange]
+  );
+
+  /** Undo a pending condition deletion by removing the _deleted flag */
+  const handleUndoDelete = useCallback(
+    (path: (string | number)[]) => {
+      const updated = updateAtPath(currentRule, [...path, "_deleted"], undefined) as Record<string, unknown>;
+      onThresholdChange(selectedSkill, updated);
+    },
+    [currentRule, selectedSkill, onThresholdChange]
+  );
+
+  /** Stage a tier bump for deletion by setting _deleted: true on the bump object */
+  const handleDeleteBump = useCallback(
+    (index: number) => {
+      const updated = updateAtPath(currentRule, ["tier_bumps", index, "_deleted"], true) as Record<string, unknown>;
+      onThresholdChange(selectedSkill, updated);
+    },
+    [currentRule, selectedSkill, onThresholdChange]
+  );
+
+  /** Undo a pending tier bump deletion */
+  const handleUndoDeleteBump = useCallback(
+    (index: number) => {
+      const updated = updateAtPath(currentRule, ["tier_bumps", index, "_deleted"], undefined) as Record<string, unknown>;
+      onThresholdChange(selectedSkill, updated);
+    },
+    [currentRule, selectedSkill, onThresholdChange]
+  );
+
+  /** Append a new tier bump to the tier_bumps array */
+  const handleAddBump = useCallback(
+    (bump: { condition: ConditionItem; effect: string; max_tier?: string; min_tier?: string }) => {
+      const existing = (currentRule.tier_bumps as unknown[] | undefined) ?? [];
+      const updated = updateAtPath(currentRule, ["tier_bumps"], [...existing, bump]) as Record<string, unknown>;
+      onThresholdChange(selectedSkill, updated);
+    },
+    [currentRule, selectedSkill, onThresholdChange]
+  );
+
   const handleJsonChange = (val: string | undefined) => {
     const text = val ?? "";
     setJsonText(text);
@@ -474,9 +998,14 @@ export function ThresholdEditorPanel({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await saveThreshold(selectedSkill, currentRule as ThresholdRule);
+      // Strip pending-delete markers before sending to the API — _deleted items
+      // must never reach the backend. stripDeleted is the sole gatekeeper.
+      const cleanRule = stripDeleted(currentRule) as ThresholdRule;
+      const res = await saveThreshold(selectedSkill, cleanRule);
       if (res.success) {
         onToast("Threshold saved", "success");
+        // Clear the unsaved-edit flag for this skill in the parent (use clean rule)
+        onSaved(selectedSkill, cleanRule as Record<string, unknown>);
       } else {
         onToast(res.error ?? "Failed to save", "error");
       }
@@ -490,10 +1019,11 @@ export function ThresholdEditorPanel({
   const handleTest = async () => {
     setTesting(true);
     try {
-      // Build override map for the current skill if it has unsaved edits
+      // Build override map for the current skill if it has unsaved edits.
+      // Strip _deleted markers so the test engine sees the same rule as the save path.
       const overrides =
         editedThresholds[selectedSkill]
-          ? { [selectedSkill]: editedThresholds[selectedSkill] as ThresholdRule }
+          ? { [selectedSkill]: stripDeleted(editedThresholds[selectedSkill]) as ThresholdRule }
           : undefined;
 
       const res = await testThresholds(selectedSkill, overrides);
@@ -512,9 +1042,12 @@ export function ThresholdEditorPanel({
   const handleTestAll = async () => {
     setTestingAll(true);
     try {
+      // Strip _deleted markers from all edited skills before sending to the test engine.
       const overrides =
         Object.keys(editedThresholds).length > 0
-          ? (editedThresholds as Record<string, ThresholdRule>)
+          ? Object.fromEntries(
+              Object.entries(editedThresholds).map(([k, v]) => [k, stripDeleted(v) as ThresholdRule])
+            )
           : undefined;
       const res = await testThresholds("all", overrides);
       if (res.success && res.data && Array.isArray(res.data)) {
@@ -551,7 +1084,8 @@ export function ThresholdEditorPanel({
   const tierBumps = (rule.tier_bumps ?? []) as Array<{
     condition: ConditionItem;
     effect: string;
-    max_tier: string;
+    max_tier?: string;
+    min_tier?: string;
   }>;
   const autoPromotions = (rule.auto_promotions ?? []) as Array<{
     if_tier_gte: string;
@@ -706,6 +1240,13 @@ export function ThresholdEditorPanel({
         ) : (
           /* Default structured form view */
           <div className="space-y-4">
+            {/* Shared datalist rendered once — referenced by all stat key inputs across the panel */}
+            <datalist id="stat-keys-datalist">
+              {ALL_STAT_KEYS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </datalist>
+
             {/* Volume Gate */}
             {rule.volume_gate && (
               <Section title="Volume Gate" subtitle="Minimum usage required for evaluation">
@@ -713,31 +1254,35 @@ export function ThresholdEditorPanel({
                   block={rule.volume_gate as ConditionsBlock}
                   path={["volume_gate"]}
                   onValueChange={handleValueChange}
+                  onDelete={handleDeleteCondition}
+                  onUndoDelete={handleUndoDelete}
                 />
               </Section>
             )}
 
             {/* Tier Thresholds */}
-            {["Elite", "Capable"].map((tierName) => {
+            {["Elite", "Proficient", "Capable"].map((tierName) => {
               // Resolve the actual key from the data — JSONB may store "elite" or "Elite"
               const actualKey =
                 tiers[tierName] !== undefined ? tierName : tierName.toLowerCase();
               const tierBlock = tiers[actualKey];
               if (!tierBlock) return null;
+              const titleColor =
+                tierName === "Elite"      ? "text-emerald-700" :
+                tierName === "Proficient" ? "text-sky-700"     :
+                                            "text-amber-700";
               return (
                 <Section
                   key={tierName}
                   title={`${tierName} Threshold`}
-                  titleClassName={
-                    tierName === "Elite"
-                      ? "text-emerald-700"
-                      : "text-amber-700"
-                  }
+                  titleClassName={titleColor}
                 >
                   <ConditionsBlockEditor
                     block={tierBlock}
                     path={["tiers", actualKey]}
                     onValueChange={handleValueChange}
+                    onDelete={handleDeleteCondition}
+                    onUndoDelete={handleUndoDelete}
                   />
                 </Section>
               );
@@ -785,75 +1330,23 @@ export function ThresholdEditorPanel({
               </Section>
             )}
 
-            {/* Tier Bumps */}
-            {tierBumps.length > 0 && (
-              <Section title="Tier Bumps" subtitle="Promote tier when condition(s) met">
-                <div className="space-y-2">
-                  {tierBumps.map((bump, i) => {
-                    const cond = bump.condition as ConditionItem;
-                    if (!cond) return null;
-
-                    // AND/OR block condition — render each leaf inside the block
-                    if (cond.conditions) {
-                      return (
-                        <div key={i} className="space-y-1">
-                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                            <span className="font-semibold uppercase">{cond.logic ?? "AND"}</span>
-                            <span>→ {bump.max_tier}</span>
-                          </div>
-                          {(cond.conditions as ConditionItem[]).map((leaf, j) => (
-                            <div key={j} className="flex items-center gap-2 text-xs py-0.5 pl-3 border-l border-border">
-                              <span className="flex-1 font-mono text-[10px] text-muted-foreground truncate">
-                                {leaf.stat}
-                              </span>
-                              <span className="text-muted-foreground font-mono w-5">{leaf.operator}</span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={leaf.value ?? 0}
-                                onChange={(e) =>
-                                  handleValueChange(
-                                    ["tier_bumps", i, "condition", "conditions", j, "value"],
-                                    parseFloat(e.target.value)
-                                  )
-                                }
-                                className="w-20 text-right border border-input rounded px-1 py-0.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    }
-
-                    // Leaf condition — single stat
-                    if (!cond.stat) return null;
-                    return (
-                      <div key={i} className="flex items-center gap-2 text-xs py-0.5">
-                        <span className="flex-1 font-mono text-[10px] text-muted-foreground truncate">
-                          {cond.stat}
-                        </span>
-                        <span className="text-muted-foreground font-mono w-5">{cond.operator}</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={cond.value ?? 0}
-                          onChange={(e) =>
-                            handleValueChange(
-                              ["tier_bumps", i, "condition", "value"],
-                              parseFloat(e.target.value)
-                            )
-                          }
-                          className="w-20 text-right border border-input rounded px-1 py-0.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring bg-background"
-                        />
-                        <span className="text-[10px] text-muted-foreground">
-                          → {bump.max_tier}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Section>
-            )}
+            {/* Tier Bumps — supports edit, delete (pending), undo, and add new */}
+            <Section title="Tier Bumps" subtitle="Promote or demote tier when condition(s) met">
+              <TierBumpEditor
+                bumps={tierBumps as Array<{
+                  condition: ConditionItem;
+                  effect: string;
+                  max_tier?: string;
+                  min_tier?: string;
+                  _deleted?: boolean;
+                }>}
+                basePath={["tier_bumps"]}
+                onValueChange={handleValueChange}
+                onDeleteBump={handleDeleteBump}
+                onUndoDeleteBump={handleUndoDeleteBump}
+                onAddBump={handleAddBump}
+              />
+            </Section>
 
             {/* Auto-Promotions (read-only) */}
             {autoPromotions.length > 0 && (

@@ -6,6 +6,7 @@ import { deleteAnchor, createAnchor } from "@/lib/api";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { SkillTierSelector } from "@/components/SkillTierSelector";
 import type { Anchor, AnchorsBySkill, SkillTestResult, Player, SkillTier } from "@/lib/types";
+import { SKILL_TIERS } from "@/lib/tiers";
 
 interface AnchorSidebarPanelProps {
   selectedSkill: string;
@@ -17,7 +18,7 @@ interface AnchorSidebarPanelProps {
   onToast: (message: string, type: "success" | "error") => void;
 }
 
-const TIER_ORDER: SkillTier[] = ["All-Time Great", "Elite", "Capable", "None"];
+// SKILL_TIERS imported from @/lib/tiers
 
 /** Pass/fail status dot shown next to each anchor after running Test Against Anchors */
 function PassFailBadge({ passed }: { passed: boolean | null }) {
@@ -65,13 +66,10 @@ export function AnchorSidebarPanel({
     }
   }
 
-  // Group anchors by expected tier (all four tiers must be present for Record<SkillTier, ...>)
-  const grouped: Record<SkillTier, Anchor[]> = {
-    "All-Time Great": skillAnchors.filter((a) => a.expected_tier === "All-Time Great"),
-    Elite: skillAnchors.filter((a) => a.expected_tier === "Elite"),
-    Capable: skillAnchors.filter((a) => a.expected_tier === "Capable"),
-    None: skillAnchors.filter((a) => a.expected_tier === "None"),
-  };
+  // Group anchors by expected tier — built from SKILL_TIERS so new tiers are included automatically
+  const grouped = Object.fromEntries(
+    SKILL_TIERS.map((tier) => [tier, skillAnchors.filter((a) => a.expected_tier === tier)])
+  ) as Record<SkillTier, Anchor[]>;
 
   // Compute summary stats for the anchor summary header
   const totalAnchors = skillAnchors.length;
@@ -235,7 +233,7 @@ export function AnchorSidebarPanel({
 
       {/* Anchor list grouped by tier */}
       <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
-        {TIER_ORDER.map((tier) => {
+        {SKILL_TIERS.map((tier) => {
           const tierAnchors = grouped[tier];
           if (!tierAnchors || tierAnchors.length === 0) return null;
 

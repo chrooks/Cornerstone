@@ -8,6 +8,7 @@ import type {
   ApiResponse,
   Player,
   PlayerWithSkills,
+  PlayerStatRow,
   StatsBlob,
   PlayerSkills,
   ThresholdRow,
@@ -98,6 +99,20 @@ export async function listPlayersWithSkills(
   if (minMpg != null) params.set("min_mpg", String(minMpg));
   const qs = params.toString() ? `?${params}` : "";
   return apiFetch<PlayerWithSkills[]>(`/api/players/bulk${qs}`);
+}
+
+/**
+ * Fetch all qualifying players with flattened stats for the calibration Stat Leaders table.
+ * Stats are in "section.key" format; stabilized values returned as a separate dict.
+ * This is a potentially large payload (~400 players × all stat sections).
+ */
+export async function listPlayersStatsBulk(
+  season?: string,
+): Promise<ApiResponse<PlayerStatRow[]>> {
+  const params = new URLSearchParams();
+  if (season) params.set("season", season);
+  const qs = params.toString() ? `?${params}` : "";
+  return apiFetch<PlayerStatRow[]>(`/api/players/stats-bulk${qs}`);
 }
 
 /** Get the full stats blob for a player. Pass refresh=true to bypass the cache. */

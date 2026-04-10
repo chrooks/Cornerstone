@@ -7,10 +7,12 @@ import { getAllThresholds, getAnchors, getPlayerSkills } from "@/lib/api";
 import { PlayerExplorerPanel } from "./PlayerExplorerPanel";
 import { ThresholdEditorPanel } from "./ThresholdEditorPanel";
 import { AnchorSidebarPanel } from "./AnchorSidebarPanel";
+import { StatLeadersPanel } from "./StatLeadersPanel";
 import type {
   Player,
   PlayerSkills,
   ThresholdRow,
+  ThresholdRule,
   AnchorsBySkill,
   Anchor,
   SkillTestResult,
@@ -36,6 +38,9 @@ export default function CalibrationPage() {
   const [leagueAverages, setLeagueAverages] = useState<Record<string, number>>({});
   // Per-skill edited (unsaved) threshold JSON — replaces saved rule for that skill
   const [editedThresholds, setEditedThresholds] = useState<Record<string, Record<string, unknown>>>({});
+
+  // Toggle state for swapping the center panel between Threshold Editor and Stat Leaders table
+  const [showStatLeaders, setShowStatLeaders] = useState(false);
 
   const [loadingThresholds, setLoadingThresholds] = useState(true);
   const [loadingAnchors, setLoadingAnchors] = useState(true);
@@ -91,6 +96,25 @@ export default function CalibrationPage() {
   const handleThresholdChange = useCallback(
     (skillName: string, rule: Record<string, unknown>) => {
       setEditedThresholds((prev) => ({ ...prev, [skillName]: rule }));
+    },
+    []
+  );
+
+  const handleThresholdSaved = useCallback(
+    (skillName: string, savedRule: Record<string, unknown>) => {
+      // Remove the skill from editedThresholds so hasUnsavedChanges clears
+      setEditedThresholds((prev) => {
+        const { [skillName]: _removed, ...rest } = prev;
+        return rest;
+      });
+      // Update the source-of-truth thresholds array so thresholdRow.thresholds stays current
+      setThresholds((prev) =>
+        prev.map((t) =>
+          t.skill_name === skillName
+            ? { ...t, thresholds: savedRule as ThresholdRule }
+            : t
+        )
+      );
     },
     []
   );
@@ -232,7 +256,7 @@ export default function CalibrationPage() {
         toastOptions={{ duration: 4000 }}
       />
 
-      <div className="flex flex-col h-screen overflow-hidden bg-background">
+      <div className="flex flex-col h-[calc(100vh-3rem)] overflow-hidden bg-background">
         {/* Top bar */}
         <header className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-border bg-background z-10">
           <div className="flex items-center gap-3">
@@ -247,14 +271,27 @@ export default function CalibrationPage() {
               Threshold Calibration
             </h1>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3">
+            {/* Data-loaded indicator dot */}
             <span
               className={cn(
                 "inline-block size-1.5 rounded-full",
                 !loadingAnchors ? "bg-emerald-500" : "bg-amber-400 animate-pulse"
               )}
             />
-            {thresholds.length} skills loaded
+            {/* Toggle button: swaps center panel between Threshold Editor and Stat Leaders */}
+            <button
+              type="button"
+              onClick={() => setShowStatLeaders((v) => !v)}
+              className={cn(
+                "text-xs px-3 py-1.5 rounded-md border transition-colors",
+                showStatLeaders
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border hover:bg-muted text-muted-foreground"
+              )}
+            >
+              {showStatLeaders ? "← Threshold Editor" : "Stat Leaders →"}
+            </button>
           </div>
         </header>
 
@@ -277,23 +314,35 @@ export default function CalibrationPage() {
             />
           </div>
 
-          {/* Center panel — Threshold Editor (flexible) */}
+          {/* Center panel — conditionally shows Threshold Editor or Stat Leaders table */}
           <div className="flex-1 min-w-0 overflow-hidden border-r border-border">
-            <ThresholdEditorPanel
-              selectedSkill={selectedSkill}
-              thresholds={thresholds}
-              editedThresholds={editedThresholds}
-              onThresholdChange={handleThresholdChange}
-              anchors={anchors}
-              testResults={testResults}
-              onTestResult={handleTestResult}
-              onTestAllResults={handleTestAllResults}
-              selectedPlayer={selectedPlayer}
-              onReEvaluatePlayer={handleReEvaluatePlayer}
-              onSkillSelect={handleSkillClick}
-              onToast={handleToast}
-              leagueAverages={leagueAverages}
-            />
+            {showStatLeaders ? (
+              /* Stat Leaders table — replaces the editor when the toggle is active */
+              <StatLeadersPanel
+                thresholds={thresholds}
+                editedThresholds={editedThresholds}
+                initialSkill={selectedSkill}
+                onSkillSelect={handleSkillClick}
+              />
+            ) : (
+              /* Threshold Editor — the default center panel */
+              <ThresholdEditorPanel
+                selectedSkill={selectedSkill}
+                thresholds={thresholds}
+                editedThresholds={editedThresholds}
+                onThresholdChange={handleThresholdChange}
+                onSaved={handleThresholdSaved}
+                anchors={anchors}
+                testResults={testResults}
+                onTestResult={handleTestResult}
+                onTestAllResults={handleTestAllResults}
+                selectedPlayer={selectedPlayer}
+                onReEvaluatePlayer={handleReEvaluatePlayer}
+                onSkillSelect={handleSkillClick}
+                onToast={handleToast}
+                leagueAverages={leagueAverages}
+              />
+            )}
           </div>
 
           {/* Right panel — Anchor Sidebar (~300px) */}
