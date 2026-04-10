@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { listPlayersWithSkills, manualOverrideSkill } from "@/lib/api";
 import { FilterBar } from "@/components/players/FilterBar";
@@ -23,6 +24,7 @@ import {
   evalFilterEntries,
   tierToNum,
   parseHeight,
+  AVAILABLE_FILTERS,
   type FilterEntry,
   type FilterConnector,
   type PlayerFilterType,
@@ -57,10 +59,14 @@ function compareByKey(a: PlayerWithSkills, b: PlayerWithSkills, key: SortKey): n
       case "weight":           return p.weight;
       case "salary":           return p.salary;
       case "minutes_per_game": return p.minutes_per_game;
+      case "capable_plus_count":
+        return p.skills ? Object.values(p.skills).filter((t) => tierToNum(t) >= 1).length : 0;
+      case "proficient_plus_count":
+        return p.skills ? Object.values(p.skills).filter((t) => tierToNum(t) >= 2).length : 0;
       case "elite_plus_count":
-        return p.skills
-          ? Object.values(p.skills).filter((t) => tierToNum(t) >= 2).length
-          : 0;
+        return p.skills ? Object.values(p.skills).filter((t) => tierToNum(t) >= 3).length : 0;
+      case "alltime_plus_count":
+        return p.skills ? Object.values(p.skills).filter((t) => tierToNum(t) >= 4).length : 0;
       default:
         // Skill column — sort by tier numeric value
         return p.skills ? tierToNum(p.skills[key.field]) : 0;
@@ -106,13 +112,29 @@ function nextFilterId(): string {
 // ---------------------------------------------------------------------------
 
 export default function PlayersPage() {
+  const searchParams = useSearchParams();
+
   // ── Data ──────────────────────────────────────────────────────────────────
   const [players, setPlayers] = useState<PlayerWithSkills[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // ── Filter state ──────────────────────────────────────────────────────────
-  const [filterEntries, setFilterEntries] = useState<FilterEntry[]>([]);
+  // Pre-seed from URL: /players?team=LAL opens with that team filter active
+  const [filterEntries, setFilterEntries] = useState<FilterEntry[]>(() => {
+    const teamParam = searchParams.get("team");
+    if (!teamParam) return [];
+    const teamFilter = AVAILABLE_FILTERS.find((f) => f.label === "Team");
+    if (!teamFilter) return [];
+    const entry: ActiveFilter = {
+      id: crypto.randomUUID(),
+      filter: teamFilter,
+      value: teamParam,
+      connector: "AND",
+      negated: false,
+    };
+    return [entry];
+  });
   const [nextConnector, setNextConnector] = useState<FilterConnector>("AND");
 
   // ── Sort state ────────────────────────────────────────────────────────────

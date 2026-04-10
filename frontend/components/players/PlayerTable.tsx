@@ -14,10 +14,12 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { formatSalary, formatHeight, parseHeight, SKILL_LABELS } from "./playerFilters";
 import { SKILL_TIERS, tierToNum, TIER_CONTEXT_COLORS, TIER_CONTEXT_ACTIVE } from "@/lib/tiers";
+import { SKILL_ABBREV, ALL_SKILL_NAMES } from "@/lib/skills";
 import type { SortKey } from "./SortControls";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SkillTier } from "@/lib/types";
@@ -33,31 +35,7 @@ export const DEFAULT_PAGE_SIZE = 25;
 // Column definitions
 // ---------------------------------------------------------------------------
 
-const SKILL_ABBREV: Record<string, string> = {
-  spot_up_shooter:         "Spot Up",
-  off_dribble_shooter:     "Off Drib",
-  offensive_rebounder:     "Off Reb",
-  rebounder:               "Reb",
-  rim_protector:           "Rim Prot",
-  isolation_scorer:        "Iso",
-  movement_shooter:        "Move Shoot",
-  cutter:                  "Cutter",
-  transition_threat:       "Trans",
-  pnr_ball_handler:        "PnR BH",
-  pnr_finisher:            "PnR Fin",
-  crafty_finisher:         "Crafty",
-  vertical_spacer:         "V-Space",
-  screen_setter:           "Screener",
-  passer:                  "Passer",
-  mid_post_player:         "Mid Post",
-  low_post_player:         "Lo Post",
-  switchable_defender:     "Switch Def",
-  point_of_attack_defender:"POA Def",
-  high_flyer:              "Hi Fly",
-};
-
-// Ordered skill columns (mirrors SKILL_CATEGORIES in the player profile page)
-const SKILL_COLUMN_KEYS = Object.keys(SKILL_ABBREV);
+// SKILL_ABBREV and ALL_SKILL_NAMES imported from @/lib/skills
 
 interface ColDef {
   key: string;
@@ -69,17 +47,20 @@ interface ColDef {
 
 // Non-skill columns (left side of table)
 const META_COLUMNS: ColDef[] = [
-  { key: "name",             label: "Name",     defaultWidth: 160, minWidth: 120, sticky: true },
-  { key: "team",             label: "Team",     defaultWidth: 100, minWidth: 70 },
-  { key: "position",        label: "Pos",      defaultWidth: 70,  minWidth: 50 },
-  { key: "age",              label: "Age",      defaultWidth: 60,  minWidth: 50 },
-  { key: "height",           label: "Ht",       defaultWidth: 70,  minWidth: 55 },
-  { key: "weight",           label: "Wt",       defaultWidth: 70,  minWidth: 55 },
-  { key: "salary",           label: "Salary",   defaultWidth: 90,  minWidth: 70 },
-  { key: "elite_plus_count", label: "Elite+",   defaultWidth: 70,  minWidth: 55 },
+  { key: "name",              label: "Name",       defaultWidth: 160, minWidth: 120, sticky: true },
+  { key: "team",              label: "Team",       defaultWidth: 100, minWidth: 70 },
+  { key: "position",         label: "Pos",        defaultWidth: 70,  minWidth: 50 },
+  { key: "age",               label: "Age",        defaultWidth: 60,  minWidth: 50 },
+  { key: "height",            label: "Ht",         defaultWidth: 70,  minWidth: 55 },
+  { key: "weight",            label: "Wt",         defaultWidth: 70,  minWidth: 55 },
+  { key: "salary",            label: "Salary",     defaultWidth: 90,  minWidth: 70 },
+  { key: "capable_plus_count",    label: "Cap+",   defaultWidth: 65,  minWidth: 50 },
+  { key: "proficient_plus_count", label: "Pro+",   defaultWidth: 65,  minWidth: 50 },
+  { key: "elite_plus_count",      label: "Elite+", defaultWidth: 65,  minWidth: 50 },
+  { key: "alltime_plus_count",    label: "ATG+",   defaultWidth: 65,  minWidth: 50 },
 ];
 
-const SKILL_COLUMNS: ColDef[] = SKILL_COLUMN_KEYS.map((key) => ({
+const SKILL_COLUMNS: ColDef[] = ALL_SKILL_NAMES.map((key) => ({
   key,
   label: SKILL_ABBREV[key],
   defaultWidth: 90,
@@ -116,10 +97,10 @@ const CLOSED_MENU: ContextMenuState = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function elitePlusCount(player: PlayerWithSkills): number {
+// Tier thresholds: None=0, Capable=1, Proficient=2, Elite=3, All-Time Great=4
+function skillCountAtOrAbove(player: PlayerWithSkills, minTier: number): number {
   if (!player.skills) return 0;
-  // >= 3 = Elite or better (Proficient=2, Elite=3, All-Time Great=4)
-  return Object.values(player.skills).filter((t) => tierToNum(t) >= 3).length;
+  return Object.values(player.skills).filter((t) => tierToNum(t) >= minTier).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +295,13 @@ export function PlayerTable({
     switch (col.key) {
       case "name":
         return (
-          <span className="font-medium text-foreground hover:underline">{player.name}</span>
+          <Link
+            href={`/players/${player.id}`}
+            onClick={(e) => e.stopPropagation()} // prevent row onClick from firing a second navigation
+            className="font-medium text-foreground hover:underline"
+          >
+            {player.name}
+          </Link>
         );
       case "team":
         return <span className="text-muted-foreground">{player.team ?? "—"}</span>;
@@ -328,10 +315,34 @@ export function PlayerTable({
         return <span>{player.weight != null ? `${player.weight}` : "—"}</span>;
       case "salary":
         return <span className="tabular-nums">{formatSalary(player.salary)}</span>;
+      case "capable_plus_count": {
+        const count = skillCountAtOrAbove(player, 1);
+        return (
+          <span className={cn("font-medium tabular-nums", count > 0 ? "text-sky-700" : "text-muted-foreground")}>
+            {count}
+          </span>
+        );
+      }
+      case "proficient_plus_count": {
+        const count = skillCountAtOrAbove(player, 2);
+        return (
+          <span className={cn("font-medium tabular-nums", count > 0 ? "text-blue-700" : "text-muted-foreground")}>
+            {count}
+          </span>
+        );
+      }
       case "elite_plus_count": {
-        const count = elitePlusCount(player);
+        const count = skillCountAtOrAbove(player, 3);
         return (
           <span className={cn("font-medium tabular-nums", count > 0 ? "text-emerald-700" : "text-muted-foreground")}>
+            {count}
+          </span>
+        );
+      }
+      case "alltime_plus_count": {
+        const count = skillCountAtOrAbove(player, 4);
+        return (
+          <span className={cn("font-medium tabular-nums", count > 0 ? "text-amber-600" : "text-muted-foreground")}>
             {count}
           </span>
         );
@@ -452,11 +463,18 @@ export function PlayerTable({
               players.map((player) => (
                 <tr
                   key={player.id}
-                  onClick={() => router.push(`/players/${player.id}`)}
+                  onClick={(e) => {
+                    // Cmd/Ctrl+click → open in new tab (native browser behavior)
+                    if (e.metaKey || e.ctrlKey) {
+                      window.open(`/players/${player.id}`, "_blank");
+                      return;
+                    }
+                    router.push(`/players/${player.id}`);
+                  }}
                   className="border-b border-border hover:bg-muted/40 cursor-pointer transition-colors group"
                 >
                   {visibleColumns.map((col) => {
-                    const isSkillCol = SKILL_COLUMN_KEYS.includes(col.key);
+                    const isSkillCol = ALL_SKILL_NAMES.includes(col.key);
                     return (
                       <td
                         key={col.key}

@@ -10,45 +10,9 @@ import { StatConfidenceIndicator } from "@/components/StatConfidenceIndicator";
 import { ConditionBreakdown } from "@/components/ConditionBreakdown";
 import type { PlayerProfile, CompositeSkillResult, SkillTier, StatConfidence, ConditionResult } from "@/lib/types";
 import { SKILL_TIERS, TIER_PICKER_ACTIVE_CLASS } from "@/lib/tiers";
+import { SKILL_CATEGORIES, formatSkillName } from "@/lib/skills";
 
 const CURRENT_SEASON = "2025-26";
-
-// Skill categories — same layout as SkillProfileCard and calibration page
-const SKILL_CATEGORIES: Record<string, string[]> = {
-  "High Confidence": [
-    "spot_up_shooter",
-    "off_dribble_shooter",
-    "offensive_rebounder",
-    "rebounder",
-    "rim_protector",
-    "isolation_scorer",
-  ],
-  Moderate: [
-    "movement_shooter",
-    "cutter",
-    "transition_threat",
-    "pnr_ball_handler",
-    "pnr_finisher",
-    "crafty_finisher",
-    "vertical_spacer",
-    "screen_setter",
-    "passer",
-    "mid_post_player",
-    "low_post_player",
-  ],
-  "Low Confidence": [
-    "switchable_defender",
-    "point_of_attack_defender",
-    "high_flyer",
-  ],
-};
-
-function formatSkillName(name: string): string {
-  return name
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
 
 /** Source badge for how the final tier was determined. */
 function SourceBadge({ source }: { source: string }) {
@@ -325,8 +289,18 @@ export default function PlayerProfilePage() {
       <div className="space-y-1">
         <h1 className="text-xl font-bold text-foreground">{player.name}</h1>
         <p className="text-sm text-muted-foreground">
+          {player.team && (
+            <>
+              <Link
+                href={`/players?team=${encodeURIComponent(player.team)}`}
+                className="hover:underline hover:text-foreground transition-colors"
+              >
+                {player.team}
+              </Link>
+              {" · "}
+            </>
+          )}
           {[
-            player.team,
             player.position,
             player.age ? `Age ${player.age}` : null,
             player.height ?? null,

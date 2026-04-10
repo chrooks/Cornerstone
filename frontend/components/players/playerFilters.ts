@@ -9,9 +9,13 @@
 
 import type { PlayerWithSkills } from "@/lib/types";
 import { SKILL_TIERS, tierToNum } from "@/lib/tiers";
+import { ALL_SKILL_NAMES, SKILL_LABELS } from "@/lib/skills";
 
-// Re-export so existing imports from this file keep working.
-export { SKILL_TIERS, tierToNum };
+// Re-export tierToNum so existing imports from this file keep working.
+export { tierToNum };
+
+// Re-export skill metadata from the centralized source of truth.
+export { ALL_SKILL_NAMES, SKILL_LABELS };
 
 // ---------------------------------------------------------------------------
 // Developer-configurable constants
@@ -19,54 +23,6 @@ export { SKILL_TIERS, tierToNum };
 
 /** Maximum number of active filter entries (including parens) allowed at once. */
 export const MAX_ACTIVE_FILTERS = 10;
-
-/** All skill names in the composite profile. */
-export const ALL_SKILL_NAMES = [
-  "spot_up_shooter",
-  "off_dribble_shooter",
-  "offensive_rebounder",
-  "rebounder",
-  "rim_protector",
-  "isolation_scorer",
-  "movement_shooter",
-  "cutter",
-  "transition_threat",
-  "pnr_ball_handler",
-  "pnr_finisher",
-  "crafty_finisher",
-  "vertical_spacer",
-  "screen_setter",
-  "passer",
-  "mid_post_player",
-  "low_post_player",
-  "switchable_defender",
-  "point_of_attack_defender",
-  "high_flyer",
-] as const;
-
-/** Human-readable labels for skill names. */
-export const SKILL_LABELS: Record<string, string> = {
-  spot_up_shooter: "Spot Up Shooter",
-  off_dribble_shooter: "Off-Dribble Shooter",
-  offensive_rebounder: "Offensive Rebounder",
-  rebounder: "Rebounder",
-  rim_protector: "Rim Protector",
-  isolation_scorer: "Isolation Scorer",
-  movement_shooter: "Movement Shooter",
-  cutter: "Cutter",
-  transition_threat: "Transition Threat",
-  pnr_ball_handler: "PnR Ball Handler",
-  pnr_finisher: "PnR Finisher",
-  crafty_finisher: "Crafty Finisher",
-  vertical_spacer: "Vertical Spacer",
-  screen_setter: "Screen Setter",
-  passer: "Passer",
-  mid_post_player: "Mid-Post Player",
-  low_post_player: "Low-Post Player",
-  switchable_defender: "Switchable Defender",
-  point_of_attack_defender: "POA Defender",
-  high_flyer: "High Flyer",
-};
 
 /**
  * Parse a height string like "6-5" (feet-inches) into total inches.

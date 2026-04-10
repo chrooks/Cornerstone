@@ -17,7 +17,7 @@ import { ALL_SKILL_NAMES, SKILL_LABELS } from "./playerFilters";
 // ---------------------------------------------------------------------------
 
 /** Maximum number of simultaneous sort keys. */
-export const MAX_SORT_KEYS = 3;
+const MAX_SORT_KEYS = 3;
 
 // ---------------------------------------------------------------------------
 // Sort key type
@@ -42,7 +42,10 @@ const FIELD_LABELS: Record<string, string> = {
   weight: "Weight",
   salary: "Salary",
   minutes_per_game: "MPG",
-  elite_plus_count: "Elite+ Count",
+  capable_plus_count:    "Capable+ Count",
+  proficient_plus_count: "Proficient+ Count",
+  elite_plus_count:      "Elite+ Count",
+  alltime_plus_count:    "All-Time Great+ Count",
   // Skill fields are added dynamically below
   ...Object.fromEntries(ALL_SKILL_NAMES.map((s) => [s, SKILL_LABELS[s] ?? s])),
 };
@@ -57,7 +60,10 @@ const SORT_FIELD_OPTIONS: string[] = [
   "weight",
   "salary",
   "minutes_per_game",
+  "capable_plus_count",
+  "proficient_plus_count",
   "elite_plus_count",
+  "alltime_plus_count",
   ...ALL_SKILL_NAMES,
 ];
 

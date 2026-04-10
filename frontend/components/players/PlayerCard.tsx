@@ -16,38 +16,7 @@ import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { formatSalary, formatHeight, tierToNum, SKILL_LABELS } from "./playerFilters";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SkillTier } from "@/lib/types";
-
-// ---------------------------------------------------------------------------
-// Developer-configurable skill type priority map.
-// Skills shown first on cards when a player has more than TOP_SKILL_COUNT
-// non-None skills. Lower number = higher priority.
-// ---------------------------------------------------------------------------
-
-const SKILL_TYPE_PRIORITY: Record<string, number> = {
-  // ── Additive (0) — always valuable to have multiples on a team ──────────
-  spot_up_shooter:         0,
-  movement_shooter:        0,
-  rebounder:               0,
-  offensive_rebounder:     0,
-  rim_protector:           0,
-  vertical_spacer:         0,
-  screen_setter:           0,
-  switchable_defender:     0,
-  cutter:                  0,
-  // ── Threshold (1) — valuable when at least one player excels ───────────
-  off_dribble_shooter:     1,
-  crafty_finisher:         1,
-  pnr_finisher:            1,
-  passer:                  1,
-  mid_post_player:         1,
-  low_post_player:         1,
-  high_flyer:              1,
-  point_of_attack_defender:1,
-  // ── Zero-sum (2) — team typically needs just one at a high level ────────
-  isolation_scorer:        2,
-  pnr_ball_handler:        2,
-  transition_threat:       2,
-};
+import { SKILL_TYPE_PRIORITY } from "@/lib/skills";
 
 /** Default number of skills to show before the "expand" button appears. */
 const TOP_SKILL_COUNT = 6;
@@ -129,7 +98,13 @@ export function PlayerCard({ player }: PlayerCardProps) {
 
   return (
     <div
-      onClick={() => router.push(`/players/${player.id}`)}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey) {
+          window.open(`/players/${player.id}`, "_blank");
+          return;
+        }
+        router.push(`/players/${player.id}`);
+      }}
       className="group cursor-pointer rounded-lg border border-border bg-card hover:border-foreground/20 hover:shadow-sm transition-all p-4 flex flex-col gap-3"
     >
       {/* ── Header: silhouette + identity ── */}
