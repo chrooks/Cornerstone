@@ -31,6 +31,7 @@ import {
   type ActiveFilter,
   type ParenMarker,
   MAX_ACTIVE_FILTERS,
+  POSITION_ORDER,
 } from "@/components/players/playerFilters";
 
 // ---------------------------------------------------------------------------
@@ -79,7 +80,9 @@ function compareByKey(a: PlayerWithSkills, b: PlayerWithSkills, key: SortKey): n
     switch (key.field) {
       case "name":             return p.name;
       case "team":             return p.team ?? "";
-      case "position":         return p.position ?? "";
+      // Use numeric order so PG < G < SG < GF < SF < F < PF < FC < C.
+      // Unknown positions sort last (99).
+      case "position":         return POSITION_ORDER[p.position ?? ""] ?? 99;
       case "age":              return p.age;
       case "height":           return parseHeight(p.height);
       case "weight":           return p.weight;

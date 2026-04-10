@@ -442,23 +442,14 @@ def update_legend_attributes(legend_id: str):
             return _err(f"Legend {legend_id} not found", status=404)
 
         # Apply update
-        updated = (
+        (
             supabase.table("legends")
             .update(update)
             .eq("id", legend_id)
-            .select()
             .execute()
         )
-        row = updated.data[0] if updated.data else {}
 
-        return _ok({
-            "age":       row.get("age"),
-            "height":    row.get("height"),
-            "weight":    row.get("weight"),
-            "peak_year": row.get("peak_year"),
-            "team":      row.get("team"),
-            "position":  row.get("position"),
-        })
+        return _ok(update)
 
     except Exception:
         logger.exception("Error in PUT /api/legends/%s/attributes", legend_id)

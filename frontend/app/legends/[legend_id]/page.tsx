@@ -17,44 +17,16 @@ import { SKILL_GROUPS, TOTAL_SKILLS, formatSkillName } from "@/lib/skills";
 
 // SKILL_TIERS and TIER_SELECTOR_STYLES imported from @/lib/tiers
 
-// All 30 current NBA franchises plus notable historical teams legends played for
+// All 30 current NBA franchise abbreviations.
+// Historical teams are mapped to their modern successor:
+//   NJN/NJN → BKN, CIN/KCK → SAC, BUF → LAC, SEA → OKC, WSB → WAS
 const NBA_TEAMS = [
-  "Atlanta Hawks",
-  "Boston Celtics",
-  "Brooklyn Nets",
-  "Buffalo Braves",
-  "Charlotte Hornets",
-  "Chicago Bulls",
-  "Cincinnati Royals",
-  "Cleveland Cavaliers",
-  "Dallas Mavericks",
-  "Denver Nuggets",
-  "Detroit Pistons",
-  "Golden State Warriors",
-  "Houston Rockets",
-  "Indiana Pacers",
-  "Kansas City Kings",
-  "Los Angeles Clippers",
-  "Los Angeles Lakers",
-  "Memphis Grizzlies",
-  "Miami Heat",
-  "Milwaukee Bucks",
-  "Minnesota Timberwolves",
-  "New Jersey Nets",
-  "New Orleans Pelicans",
-  "New York Knicks",
-  "Oklahoma City Thunder",
-  "Orlando Magic",
-  "Philadelphia 76ers",
-  "Phoenix Suns",
-  "Portland Trail Blazers",
-  "Sacramento Kings",
-  "San Antonio Spurs",
-  "Seattle SuperSonics",
-  "Toronto Raptors",
-  "Utah Jazz",
-  "Washington Bullets",
-  "Washington Wizards",
+  "ATL", "BOS", "BKN", "CHA", "CHI",
+  "CLE", "DAL", "DEN", "DET", "GSW",
+  "HOU", "IND", "LAC", "LAL", "MEM",
+  "MIA", "MIL", "MIN", "NOP", "NYK",
+  "OKC", "ORL", "PHI", "PHX", "POR",
+  "SAC", "SAS", "TOR", "UTA", "WAS",
 ];
 
 /** Count how many skills have been deliberately rated (any non-null value). */
@@ -556,14 +528,14 @@ export default function LegendEditorPage() {
                 >
                   <option value="">— Select —</option>
                   <option value="PG">PG</option>
+                  <option value="G">G</option>
                   <option value="SG">SG</option>
+                  <option value="GF">GF</option>
                   <option value="SF">SF</option>
+                  <option value="F">F</option>
                   <option value="PF">PF</option>
+                  <option value="FC">FC</option>
                   <option value="C">C</option>
-                  <option value="PG-SG">PG-SG</option>
-                  <option value="SG-SF">SG-SF</option>
-                  <option value="SF-PF">SF-PF</option>
-                  <option value="PF-C">PF-C</option>
                 </select>
               </div>
               <div>

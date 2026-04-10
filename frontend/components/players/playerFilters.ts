@@ -205,6 +205,24 @@ function minTierNum(option: string): number {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Position ordering — used for both sorting and the inclusive "Plays" filter.
+// Hybrid positions (G, GF, F, FC) sit between the two pure positions they span.
+// ---------------------------------------------------------------------------
+
+/** Numeric sort value for each position. Hybrids fall between their neighbors. */
+export const POSITION_ORDER: Record<string, number> = {
+  PG: 1,
+  G:  1.5,
+  SG: 2,
+  GF: 2.5,
+  SF: 3,
+  F:  3.5,
+  PF: 4,
+  FC: 4.5,
+  C:  5,
+};
+
 export const AVAILABLE_FILTERS: PlayerFilterType[] = [
   // ── Text filters ──────────────────────────────────────────────────────────
 
@@ -229,10 +247,26 @@ export const AVAILABLE_FILTERS: PlayerFilterType[] = [
   {
     label: "Position",
     inputMethod: "select",
-    inputValues: ["PG", "SG", "SF", "PF", "C"],
-    apply: (player, value) =>
-      // Position can be a combo like "SG-SF" — check if it includes the selected value
-      (player.position ?? "").includes(value),
+    // All 9 positions ordered from guard to center
+    inputValues: ["PG", "G", "SG", "GF", "SF", "F", "PF", "FC", "C"],
+    // Exact match — only players whose listed position is exactly this value
+    apply: (player, value) => (player.position ?? "") === value,
+  },
+
+  {
+    label: "Plays",
+    inputMethod: "select",
+    inputValues: ["PG", "G", "SG", "GF", "SF", "F", "PF", "FC", "C"],
+    // Inclusive match — a player "plays" a position if their listed position is
+    // adjacent to it in the PG→C spectrum (i.e. within ±0.5 of its sort number).
+    // E.g. "Plays PF" returns players with position F, PF, or FC.
+    apply: (player, value) => {
+      const playerPos = player.position ?? "";
+      const targetOrder = POSITION_ORDER[value];
+      const playerOrder = POSITION_ORDER[playerPos];
+      if (targetOrder == null || playerOrder == null) return false;
+      return Math.abs(playerOrder - targetOrder) <= 0.5;
+    },
   },
 
   // ── Numeric comparison filters ────────────────────────────────────────────
