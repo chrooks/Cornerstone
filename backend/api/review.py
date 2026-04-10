@@ -380,18 +380,21 @@ def resolve_flag(player_id: str):
         profile_id   = profile_row.data[0]["id"]
         profile_data = profile_row.data[0]["profile"] or {}
 
-        # Find the specific flag for this skill
+        # Find the unresolved flag for this skill — prefer resolution IS NULL so that
+        # duplicate flags (e.g. one manual_override + one auto-flagged) don't cause the
+        # already-resolved row to be targeted, leaving the real unresolved flag stuck.
         flag_row = (
             supabase.table("skill_flags")
             .select("id, stat_rating, claude_rating, resolution")
             .eq("skill_profile_id", profile_id)
             .eq("skill_name", skill_name)
+            .is_("resolution", "null")
             .limit(1)
             .execute()
         )
         if not flag_row.data:
             return _err(
-                f"No flag found for skill '{skill_name}' on player {player_id}", status=404
+                f"No unresolved flag found for skill '{skill_name}' on player {player_id}", status=404
             )
         flag    = flag_row.data[0]
         flag_id = flag["id"]
