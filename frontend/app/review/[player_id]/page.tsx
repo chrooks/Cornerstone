@@ -17,39 +17,9 @@ import type {
   FlaggedPlayerSummary,
 } from "@/lib/types";
 import { SKILL_TIERS, TIER_PICKER_ACTIVE_CLASS } from "@/lib/tiers";
+import { ALL_SKILL_NAMES, formatSkillName } from "@/lib/skills";
 
 const CURRENT_SEASON = "2025-26";
-
-// Ordered skill list — same canonical order as SkillProfileCard
-const ALL_SKILLS: string[] = [
-  "spot_up_shooter",
-  "off_dribble_shooter",
-  "offensive_rebounder",
-  "rebounder",
-  "rim_protector",
-  "isolation_scorer",
-  "movement_shooter",
-  "cutter",
-  "transition_threat",
-  "pnr_ball_handler",
-  "pnr_finisher",
-  "crafty_finisher",
-  "vertical_spacer",
-  "screen_setter",
-  "passer",
-  "mid_post_player",
-  "low_post_player",
-  "switchable_defender",
-  "point_of_attack_defender",
-  "high_flyer",
-];
-
-function formatSkillName(name: string): string {
-  return name
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
 
 // Human-readable flag reason labels
 const FLAG_REASON_LABELS: Record<string, string> = {
@@ -688,8 +658,18 @@ export default function PlayerReviewPage() {
               </button>
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">
+              {player.team && (
+                <>
+                  <Link
+                    href={`/players?team=${encodeURIComponent(player.team)}`}
+                    className="hover:underline hover:text-foreground transition-colors"
+                  >
+                    {player.team}
+                  </Link>
+                  {" · "}
+                </>
+              )}
               {[
-                player.team,
                 player.position,
                 player.age ? `Age ${player.age}` : null,
                 player.height ?? null,
@@ -855,7 +835,7 @@ export default function PlayerReviewPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ALL_SKILLS.filter((skill) => skill in profiles.composite).map((skill) => {
+                  {ALL_SKILL_NAMES.filter((skill) => skill in profiles.composite).map((skill) => {
                     const composite = profiles.composite[skill];
                     const isOverriding = overridingSkill === skill;
 

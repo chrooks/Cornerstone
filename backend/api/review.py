@@ -273,12 +273,31 @@ def player_flags(player_id: str):
             ))
             flags = flag_rows.data or []
 
+        # Normalize stats/claude profiles to {skill: tier_string} format.
+        # The stored profile may have evolved to store full dicts per skill
+        # (e.g. {tier, auto_promoted, stat_confidence, ...}), so we extract
+        # just the tier string so the frontend always receives a flat map.
+        def _extract_tier(val) -> str | None:
+            if val is None:
+                return None
+            if isinstance(val, str):
+                return val
+            if isinstance(val, dict):
+                return val.get("tier") or val.get("final_tier") or "None"
+            return "None"
+
+        raw_stats  = profiles_by_source.get("stats", {}) or {}
+        raw_claude = profiles_by_source.get("claude", {}) or {}
+
+        normalized_stats  = {k: _extract_tier(v) for k, v in raw_stats.items()}
+        normalized_claude = {k: _extract_tier(v) for k, v in raw_claude.items()}
+
         return _ok({
             "player":   player,
             "flags":    flags,
             "profiles": {
-                "stats":     profiles_by_source.get("stats", {}),
-                "claude":    profiles_by_source.get("claude", {}),
+                "stats":     normalized_stats,
+                "claude":    normalized_claude,
                 "composite": profiles_by_source.get("composite", {}),
             },
         })
