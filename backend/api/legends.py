@@ -121,7 +121,7 @@ def list_legends():
         # Fetch all legends ordered by name
         legends_res = (
             supabase.table("legends")
-            .select("id, name, peak_era, notes, age, height, weight, peak_year, team, position")
+            .select("id, name, peak_era, notes, age, height, weight, peak_year, team, position, nba_api_id")
             .order("name")
             .execute()
         )
@@ -163,6 +163,7 @@ def list_legends():
                 "peak_year":      legend.get("peak_year"),
                 "team":           legend.get("team"),
                 "position":       legend.get("position"),
+                "nba_api_id":     legend.get("nba_api_id"),
                 "completion":     rated,
                 "completion_pct": round(rated / _TOTAL_SKILLS * 100, 1),
             })
@@ -198,7 +199,7 @@ def get_legend(legend_id: str):
         # Fetch legend metadata
         legend_res = (
             supabase.table("legends")
-            .select("id, name, peak_era, notes, age, height, weight, peak_year, team, position")
+            .select("id, name, peak_era, notes, age, height, weight, peak_year, team, position, nba_api_id")
             .eq("id", legend_id)
             .limit(1)
             .execute()
@@ -238,6 +239,7 @@ def get_legend(legend_id: str):
             "peak_year":      legend.get("peak_year"),
             "team":           legend.get("team"),
             "position":       legend.get("position"),
+            "nba_api_id":     legend.get("nba_api_id"),
             "profile":        profile,
             "completion":     rated,
             "completion_pct": round(rated / _TOTAL_SKILLS * 100, 1),

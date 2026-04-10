@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getLegend, listLegends, updateLegendSkills, getLegendClaudeSuggestion, updateLegendAttributes } from "@/lib/api";
+import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import type {
   LegendDetail,
   LegendSummary,
@@ -505,9 +506,12 @@ export default function LegendEditorPage() {
         {/* Left Column — Legend context */}
         <div className="space-y-4">
           {/* Header */}
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{legend.name}</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">{legend.peak_era}</p>
+          <div className="flex items-start gap-4">
+            <PlayerHeadshot nba_api_id={legend.nba_api_id} size={72} name={legend.name} />
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">{legend.name}</h1>
+              <p className="text-muted-foreground text-sm mt-0.5">{legend.peak_era}</p>
+            </div>
           </div>
 
           {/* Physical attributes */}

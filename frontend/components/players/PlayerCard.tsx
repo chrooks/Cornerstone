@@ -14,6 +14,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
+import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { formatSalary, formatHeight, tierToNum, SKILL_LABELS } from "./playerFilters";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SkillTier } from "@/lib/types";
@@ -42,33 +43,6 @@ function getTopSkills(skills: Record<string, string>): SkillEntry[] {
       return (SKILL_TYPE_PRIORITY[nameA] ?? 1) - (SKILL_TYPE_PRIORITY[nameB] ?? 1);
     })
     .map(([name, tier]) => ({ name, tier }));
-}
-
-// ---------------------------------------------------------------------------
-// Silhouette icon — inline SVG so no external asset required
-// ---------------------------------------------------------------------------
-
-function Silhouette() {
-  return (
-    <svg
-      viewBox="0 0 80 80"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="w-full h-full"
-      aria-hidden="true"
-    >
-      {/* Background */}
-      <rect width="80" height="80" rx="8" fill="currentColor" className="text-muted/60" />
-      {/* Head */}
-      <circle cx="40" cy="28" r="12" fill="currentColor" className="text-muted-foreground/30" />
-      {/* Body */}
-      <path
-        d="M16 72c0-13.255 10.745-24 24-24s24 10.745 24 24"
-        fill="currentColor"
-        className="text-muted-foreground/30"
-      />
-    </svg>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,9 +91,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
     >
       {/* ── Header: silhouette + identity ── */}
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 flex-shrink-0 rounded-md overflow-hidden">
-          <Silhouette />
-        </div>
+        <PlayerHeadshot nba_api_id={player.nba_api_id} size={48} name={player.name} />
         <div className="min-w-0 flex-1">
           <p className={cn("font-semibold text-sm text-foreground truncate", !isLegend && "group-hover:underline")}>
             {isLegend && <span className="text-amber-500 mr-1" aria-label="Legend">★</span>}

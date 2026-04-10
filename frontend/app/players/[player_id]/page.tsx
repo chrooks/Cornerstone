@@ -6,6 +6,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getPlayerProfile, getSkillBreakdown, getPlayerStats, manualOverrideSkill } from "@/lib/api";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
+import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { StatConfidenceIndicator } from "@/components/StatConfidenceIndicator";
 import { ConditionBreakdown } from "@/components/ConditionBreakdown";
 import type { PlayerProfile, CompositeSkillResult, SkillTier, StatConfidence, ConditionResult } from "@/lib/types";
@@ -286,50 +287,53 @@ export default function PlayerProfilePage() {
   return (
     <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
       {/* Player header */}
-      <div className="space-y-1">
-        <h1 className="text-xl font-bold text-foreground">{player.name}</h1>
-        <p className="text-sm text-muted-foreground">
-          {player.team && (
-            <>
-              <Link
-                href={`/players?team=${encodeURIComponent(player.team)}`}
-                className="hover:underline hover:text-foreground transition-colors"
-              >
-                {player.team}
-              </Link>
-              {" · "}
-            </>
-          )}
-          {[
-            player.position,
-            player.age ? `Age ${player.age}` : null,
-            player.height ?? null,
-            player.weight ? `${player.weight} lbs` : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-          {player.games_played != null && (
-            <span> · {player.games_played} GP · {player.minutes_per_game?.toFixed(1)} MPG</span>
-          )}
-          {player.salary != null && (
-            <span> · {formatSalary(player.salary)}</span>
-          )}
-        </p>
-        {boxStats && (
-          <p className="text-xs text-muted-foreground font-mono tabular-nums">
+      <div className="flex items-start gap-4">
+        <PlayerHeadshot nba_api_id={player.nba_api_id} size={72} name={player.name} />
+        <div className="space-y-1 min-w-0 flex-1">
+          <h1 className="text-xl font-bold text-foreground">{player.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            {player.team && (
+              <>
+                <Link
+                  href={`/players?team=${encodeURIComponent(player.team)}`}
+                  className="hover:underline hover:text-foreground transition-colors"
+                >
+                  {player.team}
+                </Link>
+                {" · "}
+              </>
+            )}
             {[
-              boxStats.pts    != null ? `${boxStats.pts.toFixed(1)} Pts`    : null,
-              boxStats.reb    != null ? `${boxStats.reb.toFixed(1)} Reb`    : null,
-              boxStats.ast    != null ? `${boxStats.ast.toFixed(1)} Ast`    : null,
-              boxStats.stl    != null ? `${boxStats.stl.toFixed(1)} Stl`    : null,
-              boxStats.blk    != null ? `${boxStats.blk.toFixed(1)} Blk`    : null,
-              boxStats.fg_pct  != null ? `${(boxStats.fg_pct * 100).toFixed(1)}% FG`  : null,
-              boxStats.fg3_pct != null ? `${(boxStats.fg3_pct * 100).toFixed(1)}% 3P` : null,
+              player.position,
+              player.age ? `Age ${player.age}` : null,
+              player.height ?? null,
+              player.weight ? `${player.weight} lbs` : null,
             ]
               .filter(Boolean)
               .join(" · ")}
+            {player.games_played != null && (
+              <span> · {player.games_played} GP · {player.minutes_per_game?.toFixed(1)} MPG</span>
+            )}
+            {player.salary != null && (
+              <span> · {formatSalary(player.salary)}</span>
+            )}
           </p>
-        )}
+          {boxStats && (
+            <p className="text-xs text-muted-foreground font-mono tabular-nums">
+              {[
+                boxStats.pts    != null ? `${boxStats.pts.toFixed(1)} Pts`    : null,
+                boxStats.reb    != null ? `${boxStats.reb.toFixed(1)} Reb`    : null,
+                boxStats.ast    != null ? `${boxStats.ast.toFixed(1)} Ast`    : null,
+                boxStats.stl    != null ? `${boxStats.stl.toFixed(1)} Stl`    : null,
+                boxStats.blk    != null ? `${boxStats.blk.toFixed(1)} Blk`    : null,
+                boxStats.fg_pct  != null ? `${(boxStats.fg_pct * 100).toFixed(1)}% FG`  : null,
+                boxStats.fg3_pct != null ? `${(boxStats.fg3_pct * 100).toFixed(1)}% 3P` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Flag summary + review link */}

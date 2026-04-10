@@ -7,6 +7,7 @@ import { Toaster, toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getPlayerFlags, resolveFlag, bulkResolveFlags, getSkillBreakdown, manualOverrideSkill, getPlayerStats, getReviewQueue } from "@/lib/api";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
+import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { ConditionBreakdown } from "@/components/ConditionBreakdown";
 import type {
   PlayerReviewDetail,
@@ -642,7 +643,9 @@ export default function PlayerReviewPage() {
           ← Review Queue
         </Link>
         <div className="mt-2 flex items-start justify-between gap-4">
-          <div>
+          <div className="flex items-start gap-3">
+            <PlayerHeadshot nba_api_id={player.nba_api_id} size={72} name={player.name} />
+            <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-foreground">
                 {player.name}
@@ -698,6 +701,7 @@ export default function PlayerReviewPage() {
                   .join(" · ")}
               </p>
             )}
+            </div>
           </div>
           {/* Link to canonical profile */}
           <Link

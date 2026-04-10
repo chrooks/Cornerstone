@@ -337,7 +337,7 @@ def _fetch_legends_for_bulk() -> list:
     # Fetch all legends with their physical attributes
     legends_res = (
         supabase.table("legends")
-        .select("id, name, team, position, age, height, weight, peak_year")
+        .select("id, name, team, position, age, height, weight, peak_year, nba_api_id")
         .order("name")
         .execute()
     )
@@ -392,6 +392,7 @@ def _fetch_legends_for_bulk() -> list:
             "season":           "Legends",
             "is_legend":        True,
             "peak_year":        legend.get("peak_year"),
+            "nba_api_id":       legend.get("nba_api_id"),
             "skills":           skills,
             "flag_summary":     {"total": 0, "unresolved": 0},
         })
@@ -415,7 +416,7 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
         supabase.table("players")
         .select(
             "id, name, team, position, age, height, weight, salary, "
-            "games_played, minutes_per_game, season"
+            "games_played, minutes_per_game, season, nba_api_id"
         )
         .eq("season", season)
         .gte("minutes_per_game", min_mpg)
@@ -669,7 +670,7 @@ def player_profile(player_id: str):
             supabase.table("players")
             .select(
                 "id, name, team, position, age, games_played, "
-                "minutes_per_game, salary, height, weight, season"
+                "minutes_per_game, salary, height, weight, season, nba_api_id"
             )
             .eq("id", player_id)
             .eq("season", season)

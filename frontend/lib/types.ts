@@ -273,6 +273,7 @@ export interface PlayerReviewDetail {
     minutes_per_game: number | null;
     height: string | null;
     weight: number | null;
+    nba_api_id?: number | null;
   };
   flags: SkillFlag[];
   profiles: {
@@ -302,6 +303,7 @@ export interface PlayerProfile {
     height: string | null;
     weight: number | null;
     season: string;
+    nba_api_id?: number | null;
   };
   skills: Record<string, CompositeSkillResult> | null;
   flag_summary: FlagSummary;
@@ -358,6 +360,8 @@ export interface PlayerWithSkills {
   is_legend?: boolean;
   /** Peak season start year — present only for legend rows. */
   peak_year?: number | null;
+  /** NBA.com player ID — used to construct headshot URLs. */
+  nba_api_id?: number | null;
   /** Composite skill profile condensed to final_tier per skill, or null if no profile exists yet. */
   skills: PlayerSkillMap | null;
   /** Aggregate flag status — used to surface review badges in the explorer. */
@@ -380,6 +384,7 @@ export interface LegendSummary {
   peak_year: number | null;
   team: string | null;
   position: string | null;
+  nba_api_id?: number | null;
   /** Number of the 20 skills that have been deliberately rated (even "None" counts) */
   completion: number;
   completion_pct: number;
