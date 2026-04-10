@@ -24,10 +24,12 @@ from services.compositing import (
     composite_skill,
     composite_profile,
 )
-from services.claude_assessment import (
+from services.skills import (
     HIGH_CONFIDENCE_SKILLS,
     MODERATE_CONFIDENCE_SKILLS,
     LOW_CONFIDENCE_SKILLS,
+)
+from services.claude_assessment import (
     _format_stat_section,
     _build_blind_section,
     build_claude_prompt,

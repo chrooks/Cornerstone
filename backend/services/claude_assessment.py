@@ -30,95 +30,45 @@ from typing import Any
 import anthropic
 from supabase import Client
 
+from services.skills import (
+    HIGH_CONFIDENCE_SKILLS,
+    LOW_CONFIDENCE_SKILLS,
+    MODERATE_CONFIDENCE_SKILLS,
+    SKILL_DEFINITIONS as _ALL_SKILL_DEFINITIONS,
+)
+
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Skill confidence classification (fixed per spec, not dynamic from DB)
-# ---------------------------------------------------------------------------
-
-# Skills where stat pipeline is reliable — Claude is NOT called
-HIGH_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
-    "rim_protector",
-    "spot_up_shooter",
-    "off_dribble_shooter",
-    "rebounder",
-    "offensive_rebounder",
-    "isolation_scorer",
-})
-
-# Skills where Claude runs blind (sees stats but NOT the stat tier)
-MODERATE_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
-    "cutter",
-    "movement_shooter",
-    "passer",
-    "crafty_finisher",
-    "driver",
-    "mid_post_player",
-    "low_post_player",
-    "screen_setter",
-    "vertical_spacer",
-    "transition_threat",
-    "pnr_ball_handler",
-    "pnr_finisher",
-})
-
-# Skills where Claude runs informed (sees stats AND stat tier + confidence)
-LOW_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
-    "versatile_defender",
-    "perimeter_disruptor",
-    "high_flyer",
-})
+# Re-export so existing callers that import these from here continue to work.
+__all__ = [
+    "HIGH_CONFIDENCE_SKILLS",
+    "MODERATE_CONFIDENCE_SKILLS",
+    "LOW_CONFIDENCE_SKILLS",
+]
 
 # Human-readable names for the prompt (used in Section 3)
 _SKILL_DISPLAY_NAMES: dict[str, str] = {
-    "cutter":                   "Cutter",
-    "movement_shooter":         "Movement Shooter",
-    "passer":                   "Passer",
-    "crafty_finisher":          "Crafty Finisher",
-    "driver":                   "Driver",
-    "mid_post_player":          "Mid Post Player",
-    "low_post_player":          "Low Post Player",
-    "screen_setter":            "Screen Setter",
-    "vertical_spacer":           "Vertical Spacer",
-    "transition_threat":        "Transition Threat",
-    "pnr_ball_handler":         "PnR Ball Handler",
-    "pnr_finisher":             "PnR Finisher",
-    "versatile_defender":       "Versatile Defender",
+    "cutter":             "Cutter",
+    "movement_shooter":   "Movement Shooter",
+    "passer":             "Passer",
+    "crafty_finisher":    "Crafty Finisher",
+    "driver":             "Driver",
+    "mid_post_player":    "Mid Post Player",
+    "low_post_player":    "Low Post Player",
+    "screen_setter":      "Screen Setter",
+    "vertical_spacer":    "Vertical Spacer",
+    "transition_threat":  "Transition Threat",
+    "pnr_ball_handler":   "PnR Ball Handler",
+    "pnr_finisher":       "PnR Finisher",
+    "versatile_defender": "Versatile Defender",
     "perimeter_disruptor": "Perimeter Disruptor",
-    "high_flyer":               "High Flyer",
+    "high_flyer":         "High Flyer",
 }
 
-# One-sentence definitions used in the blind assessment section
+# Definitions scoped to the skills Claude actually evaluates (moderate + low)
 _SKILL_DEFINITIONS: dict[str, str] = {
-    "cutter":
-        "Scores effectively by cutting to the basket off-ball typically from the perimeter.",
-    "movement_shooter":
-        "Hits shots while relocating off screens and handoffs (not just standing still).",
-    "passer":
-        "Creates quality shot opportunities for teammates through vision and passing skill.",
-    "crafty_finisher":
-        "Scores at the rim and in the short midrange using touch, body control, and "
-        "foul-drawing ability rather than pure athleticism.",
-    "driver":
-        "Consistently attacks the paint from the perimeter off the dribble, generating "
-        "driving lane pressure and paint touches regardless of finishing ability.",
-    "mid_post_player":
-        "Scores effectively from the mid-post/elbow area using face-up moves and "
-        "mid-range shooting.",
-    "low_post_player":
-        "Scores effectively with back-to-basket moves in the low post.",
-    "screen_setter":
-        "Sets quality screens that free teammates for open shots.",
-    "vertical_spacer":
-        "Threatens vertically as a lob target and above-the-rim finisher, creating "
-        "driving lanes for teammates. Ususally in pick and roll situations",
-    "transition_threat":
-        "Scores effectively in the open court on fast breaks.",
-    "pnr_ball_handler":
-        "Initiates and scores/creates effectively as the ball handler in pick-and-roll actions.",
-    "pnr_finisher":
-        "Scores effectively as the screener in pick-and-roll actions, whether rolling, "
-        "popping, or slipping.",
+    k: v for k, v in _ALL_SKILL_DEFINITIONS.items()
+    if k in MODERATE_CONFIDENCE_SKILLS | LOW_CONFIDENCE_SKILLS
 }
 
 # API configuration

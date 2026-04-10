@@ -38,7 +38,7 @@ from typing import Any
 
 from supabase import Client
 
-from services.claude_assessment import (
+from services.skills import (
     HIGH_CONFIDENCE_SKILLS,
     LOW_CONFIDENCE_SKILLS,
     MODERATE_CONFIDENCE_SKILLS,

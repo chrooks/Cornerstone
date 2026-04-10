@@ -7,7 +7,7 @@
  *   3. Add its abbreviation to SKILL_ABBREV
  *   4. Add its type priority to SKILL_TYPE_PRIORITY
  *   5. Add it to the appropriate SKILL_GROUPS entry (legends page)
- *   6. Mirror the change in backend/services/claude_assessment.py
+ *   6. Mirror the change in backend/services/claude_assessment.py (ALL_SKILLS in legends.py and compositing.py derive from it automatically)
  */
 
 // ---------------------------------------------------------------------------
