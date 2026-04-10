@@ -320,6 +320,14 @@ export const AVAILABLE_FILTERS: PlayerFilterType[] = [
     },
   },
 
+  {
+    label: "Legend",
+    inputMethod: "select",
+    inputValues: ["Yes", "No"],
+    apply: (player, value) =>
+      value === "Yes" ? player.is_legend === true : player.is_legend !== true,
+  },
+
   // ── Skill-tier filter — two-dropdown input (skill + min tier) ─────────────
 
   {

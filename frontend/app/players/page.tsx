@@ -32,6 +32,32 @@ import {
   type ParenMarker,
   MAX_ACTIVE_FILTERS,
 } from "@/components/players/playerFilters";
+
+// ---------------------------------------------------------------------------
+// Legends toggle helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true if the filter entries contain a Legend=No pill,
+ * which means legends are being actively excluded.
+ */
+function hasLegendsExcludeFilter(entries: FilterEntry[]): boolean {
+  return entries.some(
+    (e) => "filter" in e && e.filter.label === "Legend" && e.value === "No",
+  );
+}
+
+/** Build a Legend=No filter entry to hide legends. */
+function makeLegendsExcludeFilter(connector: FilterConnector): ActiveFilter {
+  const legendFilter = AVAILABLE_FILTERS.find((f) => f.label === "Legend")!;
+  return {
+    id: crypto.randomUUID(),
+    filter: legendFilter,
+    value: "No",
+    connector,
+    negated: false,
+  };
+}
 import type { SortKey } from "@/components/players/SortControls";
 import type { PlayerWithSkills, SkillTier } from "@/lib/types";
 
@@ -67,6 +93,8 @@ function compareByKey(a: PlayerWithSkills, b: PlayerWithSkills, key: SortKey): n
         return p.skills ? Object.values(p.skills).filter((t) => tierToNum(t) >= 3).length : 0;
       case "alltime_plus_count":
         return p.skills ? Object.values(p.skills).filter((t) => tierToNum(t) >= 4).length : 0;
+      case "peak_year":
+        return p.peak_year ?? null;
       default:
         // Skill column — sort by tier numeric value
         return p.skills ? tierToNum(p.skills[key.field]) : 0;
@@ -137,6 +165,26 @@ export default function PlayersPage() {
   });
   const [nextConnector, setNextConnector] = useState<FilterConnector>("AND");
 
+  // Legends are visible when no NOT-team=Legends filter is active.
+  // This is derived from filterEntries so the switch always reflects filter state.
+  const legendsVisible = !hasLegendsExcludeFilter(filterEntries);
+
+  const handleToggleLegends = useCallback(() => {
+    if (legendsVisible) {
+      // Hide legends: add NOT-team=Legends pill
+      if (filterEntries.length < MAX_ACTIVE_FILTERS) {
+        setFilterEntries((prev) => [...prev, makeLegendsExcludeFilter(nextConnector)]);
+      }
+    } else {
+      // Show legends: remove all Legend=No pills
+      setFilterEntries((prev) =>
+        prev.filter(
+          (e) => !("filter" in e && e.filter.label === "Legend" && e.value === "No"),
+        ),
+      );
+    }
+  }, [legendsVisible, filterEntries, nextConnector]);
+
   // ── Sort state ────────────────────────────────────────────────────────────
   const [sortKeys, setSortKeys] = useState<SortKey[]>([{ field: "name", direction: "asc" }]);
 
@@ -171,10 +219,8 @@ export default function PlayersPage() {
   //        onSkillOverride={isAdmin ? handleSkillOverride : undefined}
   const handleSkillOverride = useCallback(
     async (playerId: string, skillKey: string, tier: SkillTier) => {
-      console.log("[SkillOverride] API call start", { playerId, skillKey, tier });
       const res = await manualOverrideSkill(playerId, { skill_name: skillKey, resolved_value: tier });
-      console.log("[SkillOverride] API response", res);
-      if (!res.success) { console.error("[SkillOverride] API error:", res.error); return; }
+      if (!res.success) return;
       setPlayers((prev) =>
         prev.map((p) =>
           p.id !== playerId
@@ -296,6 +342,31 @@ export default function PlayersPage() {
             </p>
           )}
         </div>
+
+        {/* Legends toggle */}
+        <button
+          id="legends-toggle"
+          type="button"
+          role="switch"
+          aria-checked={legendsVisible}
+          onClick={handleToggleLegends}
+          className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <span
+            className={cn(
+              "relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200",
+              legendsVisible ? "bg-foreground" : "bg-muted-foreground/30",
+            )}
+          >
+            <span
+              className={cn(
+                "inline-block h-4 w-4 transform rounded-full bg-background shadow transition-transform duration-200",
+                legendsVisible ? "translate-x-4" : "translate-x-0",
+              )}
+            />
+          </span>
+          Legends
+        </button>
 
         {/* View mode toggle — hidden until localStorage is read to avoid hydration flash */}
         {viewModeReady && (

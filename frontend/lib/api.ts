@@ -97,8 +97,8 @@ export async function listPlayersWithSkills(
   const params = new URLSearchParams();
   if (season) params.set("season", season);
   if (minMpg != null) params.set("min_mpg", String(minMpg));
-  const qs = params.toString() ? `?${params}` : "";
-  return apiFetch<PlayerWithSkills[]>(`/api/players/bulk${qs}`);
+  params.set("include_legends", "true");
+  return apiFetch<PlayerWithSkills[]>(`/api/players/bulk?${params}`);
 }
 
 /**
@@ -417,6 +417,20 @@ export async function updateLegendSkills(
   params: { profile?: Partial<LegendProfile>; notes?: string }
 ): Promise<ApiResponse<{ completion: number; completion_pct: number; updated_skills: string[] }>> {
   return apiFetch(`/api/legends/${encodeURIComponent(legendId)}/skills`, {
+    method: "PUT",
+    body: JSON.stringify(params),
+  });
+}
+
+/**
+ * Update physical attributes for a legend (age, height, weight, peak_year).
+ * Partial updates supported — only pass the fields that changed.
+ */
+export async function updateLegendAttributes(
+  legendId: string,
+  params: { age?: number | null; height?: string | null; weight?: number | null; peak_year?: number | null; team?: string | null; position?: string | null }
+): Promise<ApiResponse<{ age: number | null; height: string | null; weight: number | null; peak_year: number | null; team: string | null; position: string | null }>> {
+  return apiFetch(`/api/legends/${encodeURIComponent(legendId)}/attributes`, {
     method: "PUT",
     body: JSON.stringify(params),
   });

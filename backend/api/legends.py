@@ -24,6 +24,10 @@ from typing import Any
 import anthropic
 from flask import Blueprint, jsonify, request
 
+from services.skills import (
+    ALL_SKILLS as _ALL_SKILLS_FROM_MODULE,
+    SKILL_DEFINITIONS as _SKILL_DEFINITIONS_FROM_MODULE,
+)
 from services.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -31,60 +35,12 @@ logger = logging.getLogger(__name__)
 legends_bp = Blueprint("legends", __name__, url_prefix="/api")
 
 # ---------------------------------------------------------------------------
-# Skill taxonomy — the 20 skills used throughout the system
-# Matches SKILL_CATEGORIES in frontend/components/SkillProfileCard.tsx
+# Skill taxonomy — imported from services/skills.py (single source of truth).
+# To add a skill, update the appropriate frozenset in services/skills.py.
 # ---------------------------------------------------------------------------
 
-# All 20 skill keys the legend profile tracks
-ALL_SKILLS: list[str] = [
-    # Additive skills (12)
-    "spot_up_shooter",
-    "off_dribble_shooter",
-    "isolation_scorer",
-    "movement_shooter",
-    "cutter",
-    "transition_threat",
-    "pnr_ball_handler",
-    "pnr_finisher",
-    "crafty_finisher",
-    "passer",
-    "offensive_rebounder",
-    "vertical_spacer",
-    # Threshold-based skills (5)
-    "rebounder",
-    "rim_protector",
-    "screen_setter",
-    "mid_post_player",
-    "low_post_player",
-    # Zero-sum skills (3)
-    "versatile_defender",
-    "perimeter_disruptor",
-    "high_flyer",
-]
-
-# One-sentence definitions for each skill (used in the Claude legend prompt)
-_SKILL_DEFINITIONS: dict[str, str] = {
-    "spot_up_shooter":           "Hits catch-and-shoot three-pointers and mid-range shots from set positions.",
-    "off_dribble_shooter":       "Creates and converts shots off the dribble, including pull-ups and step-backs.",
-    "isolation_scorer":          "Beats defenders one-on-one in isolation situations through dribble moves and athleticism.",
-    "movement_shooter":          "Hits shots while relocating off screens and handoffs (not just standing still).",
-    "cutter":                    "Scores effectively by cutting to the basket off-ball.",
-    "transition_threat":         "Scores effectively in the open court on fast breaks.",
-    "pnr_ball_handler":          "Initiates and scores/creates effectively as the ball handler in pick-and-roll actions.",
-    "pnr_finisher":              "Scores effectively as the screener in pick-and-roll actions, whether rolling, popping, or slipping.",
-    "crafty_finisher":           "Scores at the rim using touch, body control, and foul-drawing ability rather than pure athleticism.",
-    "passer":                    "Creates quality shot opportunities for teammates through vision and passing skill.",
-    "offensive_rebounder":       "Consistently crashes offensive boards and converts second-chance opportunities.",
-    "vertical_spacer":           "Threatens vertically as a lob target and above-the-rim finisher, creating driving lanes for teammates.",
-    "rebounder":                 "Consistently grabs defensive and offensive boards through positioning and effort.",
-    "rim_protector":             "Deters and blocks shots at the rim, altering opponent finishing attempts.",
-    "screen_setter":             "Sets quality screens that free teammates for open shots.",
-    "mid_post_player":           "Scores effectively from the mid-post/elbow area using face-up moves and mid-range shooting.",
-    "low_post_player":           "Scores effectively with back-to-basket moves in the low post.",
-    "versatile_defender":        "Can guard multiple positional groups effectively when switched.",
-    "perimeter_disruptor":       "Disrupts ball handlers through active hands, pressure, and contest at the point of attack.",
-    "high_flyer":                "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, and transition finishes.",
-}
+ALL_SKILLS: list[str] = _ALL_SKILLS_FROM_MODULE
+_SKILL_DEFINITIONS: dict[str, str] = _SKILL_DEFINITIONS_FROM_MODULE
 
 # Number of skills to count as "fully profiled"
 _TOTAL_SKILLS = len(ALL_SKILLS)
@@ -165,7 +121,7 @@ def list_legends():
         # Fetch all legends ordered by name
         legends_res = (
             supabase.table("legends")
-            .select("id, name, peak_era, notes")
+            .select("id, name, peak_era, notes, age, height, weight, peak_year, team, position")
             .order("name")
             .execute()
         )
@@ -201,6 +157,12 @@ def list_legends():
                 "name":           legend["name"],
                 "peak_era":       legend["peak_era"],
                 "notes":          legend.get("notes"),
+                "age":            legend.get("age"),
+                "height":         legend.get("height"),
+                "weight":         legend.get("weight"),
+                "peak_year":      legend.get("peak_year"),
+                "team":           legend.get("team"),
+                "position":       legend.get("position"),
                 "completion":     rated,
                 "completion_pct": round(rated / _TOTAL_SKILLS * 100, 1),
             })
@@ -236,7 +198,7 @@ def get_legend(legend_id: str):
         # Fetch legend metadata
         legend_res = (
             supabase.table("legends")
-            .select("id, name, peak_era, notes")
+            .select("id, name, peak_era, notes, age, height, weight, peak_year, team, position")
             .eq("id", legend_id)
             .limit(1)
             .execute()
@@ -270,6 +232,12 @@ def get_legend(legend_id: str):
             "name":           legend["name"],
             "peak_era":       legend["peak_era"],
             "notes":          legend.get("notes"),
+            "age":            legend.get("age"),
+            "height":         legend.get("height"),
+            "weight":         legend.get("weight"),
+            "peak_year":      legend.get("peak_year"),
+            "team":           legend.get("team"),
+            "position":       legend.get("position"),
             "profile":        profile,
             "completion":     rated,
             "completion_pct": round(rated / _TOTAL_SKILLS * 100, 1),
@@ -393,6 +361,107 @@ def update_legend_skills(legend_id: str):
 
     except Exception:
         logger.exception("Error in PUT /api/legends/%s/skills", legend_id)
+        return _err("Internal server error")
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/legends/<legend_id>/attributes
+# ---------------------------------------------------------------------------
+
+
+@legends_bp.route("/legends/<legend_id>/attributes", methods=["PUT"])
+def update_legend_attributes(legend_id: str):
+    """
+    Update the physical attributes for a legend: age, height, weight, peak_year.
+
+    All fields are optional — pass only what changed (supports partial updates).
+
+    Request body:
+      {
+        "age":       27,
+        "height":    "6-6",
+        "weight":    212,
+        "peak_year": 2006
+      }
+
+    Response data: { age, height, weight, peak_year }
+    """
+    if not _validate_uuid(legend_id):
+        return _err("Invalid legend_id — must be a UUID", status=400)
+
+    body = request.get_json(silent=True) or {}
+
+    # Build update dict from whichever fields were provided
+    update: dict = {}
+    if "age" in body:
+        val = body["age"]
+        if val is not None and not isinstance(val, int):
+            return _err("'age' must be an integer or null", status=400)
+        update["age"] = val
+    if "height" in body:
+        val = body["height"]
+        if val is not None and not isinstance(val, str):
+            return _err("'height' must be a string or null", status=400)
+        update["height"] = val
+    if "weight" in body:
+        val = body["weight"]
+        if val is not None and not isinstance(val, int):
+            return _err("'weight' must be an integer or null", status=400)
+        update["weight"] = val
+    if "peak_year" in body:
+        val = body["peak_year"]
+        if val is not None and not isinstance(val, int):
+            return _err("'peak_year' must be an integer or null", status=400)
+        update["peak_year"] = val
+    if "team" in body:
+        val = body["team"]
+        if val is not None and not isinstance(val, str):
+            return _err("'team' must be a string or null", status=400)
+        update["team"] = val
+    if "position" in body:
+        val = body["position"]
+        if val is not None and not isinstance(val, str):
+            return _err("'position' must be a string or null", status=400)
+        update["position"] = val
+
+    if not update:
+        return _err("No valid fields provided", status=400)
+
+    try:
+        supabase = get_supabase()
+
+        # Verify the legend exists
+        legend_res = (
+            supabase.table("legends")
+            .select("id")
+            .eq("id", legend_id)
+            .limit(1)
+            .execute()
+        )
+        if not legend_res.data:
+            return _err(f"Legend {legend_id} not found", status=404)
+
+        # Apply update
+        updated = (
+            supabase.table("legends")
+            .update(update)
+            .eq("id", legend_id)
+            .select()
+            .execute()
+        )
+        row = updated.data[0] if updated.data else {}
+
+        return _ok({
+            "age":       row.get("age"),
+            "height":    row.get("height"),
+            "weight":    row.get("weight"),
+            "peak_year": row.get("peak_year"),
+            "team":      row.get("team"),
+            "position":  row.get("position"),
+        })
+
+    except Exception:
+        logger.exception("Error in PUT /api/legends/%s/attributes", legend_id)
         return _err("Internal server error")
 
 

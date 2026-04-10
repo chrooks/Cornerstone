@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getLegend, listLegends, updateLegendSkills, getLegendClaudeSuggestion } from "@/lib/api";
+import { getLegend, listLegends, updateLegendSkills, getLegendClaudeSuggestion, updateLegendAttributes } from "@/lib/api";
 import type {
   LegendDetail,
   LegendSummary,
@@ -16,6 +16,46 @@ import { SKILL_TIERS, TIER_SELECTOR_STYLES } from "@/lib/tiers";
 import { SKILL_GROUPS, TOTAL_SKILLS, formatSkillName } from "@/lib/skills";
 
 // SKILL_TIERS and TIER_SELECTOR_STYLES imported from @/lib/tiers
+
+// All 30 current NBA franchises plus notable historical teams legends played for
+const NBA_TEAMS = [
+  "Atlanta Hawks",
+  "Boston Celtics",
+  "Brooklyn Nets",
+  "Buffalo Braves",
+  "Charlotte Hornets",
+  "Chicago Bulls",
+  "Cincinnati Royals",
+  "Cleveland Cavaliers",
+  "Dallas Mavericks",
+  "Denver Nuggets",
+  "Detroit Pistons",
+  "Golden State Warriors",
+  "Houston Rockets",
+  "Indiana Pacers",
+  "Kansas City Kings",
+  "Los Angeles Clippers",
+  "Los Angeles Lakers",
+  "Memphis Grizzlies",
+  "Miami Heat",
+  "Milwaukee Bucks",
+  "Minnesota Timberwolves",
+  "New Jersey Nets",
+  "New Orleans Pelicans",
+  "New York Knicks",
+  "Oklahoma City Thunder",
+  "Orlando Magic",
+  "Philadelphia 76ers",
+  "Phoenix Suns",
+  "Portland Trail Blazers",
+  "Sacramento Kings",
+  "San Antonio Spurs",
+  "Seattle SuperSonics",
+  "Toronto Raptors",
+  "Utah Jazz",
+  "Washington Bullets",
+  "Washington Wizards",
+];
 
 /** Count how many skills have been deliberately rated (any non-null value). */
 function countRated(profile: LegendProfile): number {
@@ -159,6 +199,14 @@ export default function LegendEditorPage() {
   // Notes field
   const [notes, setNotes] = useState("");
 
+  // Physical attributes
+  const [attrAge, setAttrAge] = useState<string>("");
+  const [attrHeight, setAttrHeight] = useState<string>("");
+  const [attrWeight, setAttrWeight] = useState<string>("");
+  const [attrPeakYear, setAttrPeakYear] = useState<string>("");
+  const [attrTeam, setAttrTeam] = useState<string>("");
+  const [attrPosition, setAttrPosition] = useState<string>("");
+
   // Save state
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -193,6 +241,13 @@ export default function LegendEditorPage() {
         setNotes(initialNotes);
         // Seed the saved-notes ref so the first blur guard works correctly
         savedNotesRef.current = initialNotes;
+        // Seed physical attribute fields
+        setAttrAge(legendRes.data.age != null ? String(legendRes.data.age) : "");
+        setAttrHeight(legendRes.data.height ?? "");
+        setAttrWeight(legendRes.data.weight != null ? String(legendRes.data.weight) : "");
+        setAttrPeakYear(legendRes.data.peak_year != null ? String(legendRes.data.peak_year) : "");
+        setAttrTeam(legendRes.data.team ?? "");
+        setAttrPosition(legendRes.data.position ?? "");
       } else {
         setError(legendRes.error ?? "Failed to load legend");
       }
@@ -291,6 +346,29 @@ export default function LegendEditorPage() {
       setTimeout(() => setSaveToast(null), 3000);
     }
   }, [legendId, notes]);
+
+  // Auto-save physical attributes on blur — saves only the changed field.
+  const handleAttrBlur = useCallback(async (
+    field: "age" | "height" | "weight" | "peak_year" | "team" | "position",
+    rawValue: string
+  ) => {
+    // Parse numeric fields; leave string fields as-is
+    let parsed: number | string | null = null;
+    if (field === "height" || field === "team" || field === "position") {
+      parsed = rawValue.trim() || null;
+    } else {
+      const n = parseInt(rawValue, 10);
+      parsed = isNaN(n) ? null : n;
+    }
+    const res = await updateLegendAttributes(legendId, { [field]: parsed });
+    if (res.success) {
+      setSaveToast("Saved");
+      setTimeout(() => setSaveToast(null), 1500);
+    } else {
+      setSaveToast("Save failed — please retry");
+      setTimeout(() => setSaveToast(null), 3000);
+    }
+  }, [legendId]);
 
   // Get Claude's suggestions
   const handleClaudeSuggestion = useCallback(async () => {
@@ -458,6 +536,113 @@ export default function LegendEditorPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{legend.name}</h1>
             <p className="text-muted-foreground text-sm mt-0.5">{legend.peak_era}</p>
+          </div>
+
+          {/* Physical attributes */}
+          <div className="rounded-md border border-border p-3 space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Physical Attributes</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label id="attr-position-label" className="block text-xs text-muted-foreground mb-0.5">Position</label>
+                <select
+                  id="attr-position"
+                  aria-labelledby="attr-position-label"
+                  value={attrPosition}
+                  onChange={(e) => {
+                    setAttrPosition(e.target.value);
+                    handleAttrBlur("position", e.target.value);
+                  }}
+                  className="w-full text-sm rounded border border-border bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">— Select —</option>
+                  <option value="PG">PG</option>
+                  <option value="SG">SG</option>
+                  <option value="SF">SF</option>
+                  <option value="PF">PF</option>
+                  <option value="C">C</option>
+                  <option value="PG-SG">PG-SG</option>
+                  <option value="SG-SF">SG-SF</option>
+                  <option value="SF-PF">SF-PF</option>
+                  <option value="PF-C">PF-C</option>
+                </select>
+              </div>
+              <div>
+                <label id="attr-age-label" className="block text-xs text-muted-foreground mb-0.5">Age (at peak)</label>
+                <input
+                  id="attr-age"
+                  type="number"
+                  min={18}
+                  max={50}
+                  aria-labelledby="attr-age-label"
+                  value={attrAge}
+                  onChange={(e) => setAttrAge(e.target.value)}
+                  onBlur={() => handleAttrBlur("age", attrAge)}
+                  placeholder="e.g. 27"
+                  className="w-full text-sm rounded border border-border bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label id="attr-peak-year-label" className="block text-xs text-muted-foreground mb-0.5">Peak Year</label>
+                <input
+                  id="attr-peak-year"
+                  type="number"
+                  min={1940}
+                  max={2030}
+                  aria-labelledby="attr-peak-year-label"
+                  value={attrPeakYear}
+                  onChange={(e) => setAttrPeakYear(e.target.value)}
+                  onBlur={() => handleAttrBlur("peak_year", attrPeakYear)}
+                  placeholder="e.g. 2006"
+                  className="w-full text-sm rounded border border-border bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label id="attr-height-label" className="block text-xs text-muted-foreground mb-0.5">Height</label>
+                <input
+                  id="attr-height"
+                  type="text"
+                  aria-labelledby="attr-height-label"
+                  value={attrHeight}
+                  onChange={(e) => setAttrHeight(e.target.value)}
+                  onBlur={() => handleAttrBlur("height", attrHeight)}
+                  placeholder='e.g. 6-6'
+                  className="w-full text-sm rounded border border-border bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label id="attr-weight-label" className="block text-xs text-muted-foreground mb-0.5">Weight (lbs)</label>
+                <input
+                  id="attr-weight"
+                  type="number"
+                  min={100}
+                  max={400}
+                  aria-labelledby="attr-weight-label"
+                  value={attrWeight}
+                  onChange={(e) => setAttrWeight(e.target.value)}
+                  onBlur={() => handleAttrBlur("weight", attrWeight)}
+                  placeholder="e.g. 212"
+                  className="w-full text-sm rounded border border-border bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <div>
+              <label id="attr-team-label" className="block text-xs text-muted-foreground mb-0.5">Team</label>
+              <select
+                id="attr-team"
+                aria-labelledby="attr-team-label"
+                value={attrTeam}
+                onChange={(e) => {
+                  setAttrTeam(e.target.value);
+                  handleAttrBlur("team", e.target.value);
+                }}
+                className="w-full text-sm rounded border border-border bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">— Select team —</option>
+                {NBA_TEAMS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Notes textarea */}

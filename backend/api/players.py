@@ -316,6 +316,89 @@ def list_players_stats_bulk():
 # NOTE: All literal-segment routes (/bulk, /search) must be registered BEFORE
 # the <player_id> dynamic route so Flask doesn't swallow them as UUIDs.
 
+_LEGEND_SALARY = 54_000_000  # Supermax per project_document.md Rule 1
+
+
+def _has_any_rated_skill(profile: dict) -> bool:
+    """Return True if the legend profile has at least one non-null skill rating."""
+    return any(v is not None for v in profile.values())
+
+
+def _fetch_legends_for_bulk() -> list:
+    """
+    Return legends that have at least one rated skill, shaped as PlayerWithSkills dicts.
+
+    Legends are identified by is_legend=True, source='manual' in skill_profiles.
+    Skills are condensed to { skill_name: tier_string } — same shape as current players.
+    Nulls (unrated skills) are omitted; 'None' tiers are kept to match current-player parity.
+    """
+    supabase = get_supabase()
+
+    # Fetch all legends with their physical attributes
+    legends_res = (
+        supabase.table("legends")
+        .select("id, name, team, position, age, height, weight, peak_year")
+        .order("name")
+        .execute()
+    )
+    legends = legends_res.data or []
+    if not legends:
+        return []
+
+    legend_ids = [lg["id"] for lg in legends]
+
+    # Fetch manual skill profiles for all legends in one query
+    profiles_res = (
+        supabase.table("skill_profiles")
+        .select("legend_id, profile")
+        .in_("legend_id", legend_ids)
+        .eq("is_legend", True)
+        .eq("source", "manual")
+        .execute()
+    )
+    profile_by_legend: dict = {
+        row["legend_id"]: row.get("profile") or {}
+        for row in (profiles_res.data or [])
+        if row.get("legend_id")
+    }
+
+    result = []
+    for legend in legends:
+        lid = legend["id"]
+        raw_profile = profile_by_legend.get(lid, {})
+
+        # Skip legends with no rated skills
+        if not _has_any_rated_skill(raw_profile):
+            continue
+
+        # Condense profile: omit null (unrated) keys, keep deliberate 'None' tier values
+        skills = {
+            skill: tier
+            for skill, tier in raw_profile.items()
+            if tier is not None
+        }
+
+        result.append({
+            "id":               lid,
+            "name":             legend["name"],
+            "team":             legend.get("team"),
+            "position":         legend.get("position"),
+            "age":              legend.get("age"),
+            "height":           legend.get("height"),
+            "weight":           legend.get("weight"),
+            "salary":           _LEGEND_SALARY,
+            "games_played":     None,
+            "minutes_per_game": None,
+            "season":           "Legends",
+            "is_legend":        True,
+            "peak_year":        legend.get("peak_year"),
+            "skills":           skills,
+            "flag_summary":     {"total": 0, "unresolved": 0},
+        })
+
+    return result
+
+
 def _fetch_bulk_players(season: str, min_mpg: float) -> list:
     """
     Execute all three Supabase queries needed for the bulk players response
@@ -442,13 +525,18 @@ def list_players_bulk():
     Response data: list of player objects, each containing:
       { id, name, team, position, age, height, weight, salary,
         games_played, minutes_per_game, season,
+        is_legend: bool,
         skills: { skill_name: final_tier_string, ... } | null,
         flag_summary: { total: int, unresolved: int } }
 
     Skills are condensed to just final_tier per skill — full composite details
     are available via GET /api/players/<id>/profile.
+
+    Query params:
+      ?include_legends=true  (default: false) — append legends with ≥1 rated skill
     """
     season = request.args.get("season", players_service.CURRENT_SEASON)
+    include_legends = request.args.get("include_legends", "false").lower() == "true"
 
     # Validate min_mpg before entering the try block so we can return a proper 400
     try:
@@ -458,6 +546,8 @@ def list_players_bulk():
 
     try:
         result = _fetch_bulk_players(season, min_mpg)
+        if include_legends:
+            result = result + _fetch_legends_for_bulk()
         return _ok(result)
     except (httpx.ReadError, httpx.RemoteProtocolError) as exc:
         # Supabase PostgREST closes HTTP/2 connections after ~34 streams
@@ -470,6 +560,8 @@ def list_players_bulk():
         reset_client()
         try:
             result = _fetch_bulk_players(season, min_mpg)
+            if include_legends:
+                result = result + _fetch_legends_for_bulk()
             return _ok(result)
         except Exception as retry_exc:
             logger.exception("Error in GET /api/players/bulk (retry also failed)")

@@ -54,6 +54,7 @@ const META_COLUMNS: ColDef[] = [
   { key: "height",            label: "Ht",         defaultWidth: 70,  minWidth: 55 },
   { key: "weight",            label: "Wt",         defaultWidth: 70,  minWidth: 55 },
   { key: "salary",            label: "Salary",     defaultWidth: 90,  minWidth: 70 },
+  { key: "peak_year",              label: "Era",    defaultWidth: 65,  minWidth: 50 },
   { key: "capable_plus_count",    label: "Cap+",   defaultWidth: 65,  minWidth: 50 },
   { key: "proficient_plus_count", label: "Pro+",   defaultWidth: 65,  minWidth: 50 },
   { key: "elite_plus_count",      label: "Elite+", defaultWidth: 65,  minWidth: 50 },
@@ -163,6 +164,8 @@ export function PlayerTable({
   // Right-click handler for skill cells — opens the tier edit menu
   const handleSkillContextMenu = useCallback(
     (e: React.MouseEvent, player: PlayerWithSkills, skillKey: string) => {
+      // Legend rows have no player profile — skill overrides are not supported for them
+      if (player.is_legend) return;
       if (!onSkillOverride) return; // feature disabled when prop is not provided
       e.preventDefault();
       e.stopPropagation();
@@ -172,7 +175,7 @@ export function PlayerTable({
       const x = Math.min(e.clientX, window.innerWidth - 210);
       const y = Math.min(e.clientY, window.innerHeight - 195);
 
-      const next = {
+      setContextMenu({
         open: true,
         x, y,
         playerId: player.id,
@@ -181,9 +184,7 @@ export function PlayerTable({
         skillLabel: SKILL_LABELS[skillKey] ?? skillKey,
         currentTier: (player.skills?.[skillKey] as SkillTier) ?? undefined,
         saving: false,
-      };
-      console.log("[SkillMenu] opening context menu", next);
-      setContextMenu(next);
+      });
     },
     [onSkillOverride],
   );
@@ -191,18 +192,15 @@ export function PlayerTable({
   // Called when the user picks a tier from the context menu
   const handleTierSelect = useCallback(
     async (tier: SkillTier) => {
-      console.log("[SkillMenu] handleTierSelect called", { tier, contextMenu, hasOverride: !!onSkillOverride });
-      if (!onSkillOverride) { console.warn("[SkillMenu] onSkillOverride is not set — aborting"); return; }
-      if (contextMenu.saving) { console.warn("[SkillMenu] already saving — aborting"); return; }
+      if (!onSkillOverride) return;
+      if (contextMenu.saving) return;
       const { playerId, skillKey } = contextMenu;
-      if (!playerId || !skillKey) { console.warn("[SkillMenu] empty playerId or skillKey — aborting", { playerId, skillKey }); return; }
+      if (!playerId || !skillKey) return;
       setContextMenu((prev) => ({ ...prev, saving: true }));
       try {
-        console.log("[SkillMenu] calling onSkillOverride", { playerId, skillKey, tier });
         await onSkillOverride(playerId, skillKey, tier);
-        console.log("[SkillMenu] onSkillOverride resolved OK");
-      } catch (err) {
-        console.error("[SkillMenu] onSkillOverride threw", err);
+      } catch {
+        // onSkillOverride is responsible for surfacing errors to the user
       } finally {
         setContextMenu(CLOSED_MENU);
       }
@@ -294,6 +292,14 @@ export function PlayerTable({
   const renderCell = (player: PlayerWithSkills, col: ColDef) => {
     switch (col.key) {
       case "name":
+        if (player.is_legend) {
+          return (
+            <span className="font-medium text-foreground">
+              <span className="text-amber-500 mr-1" aria-label="Legend">★</span>
+              {player.name}
+            </span>
+          );
+        }
         return (
           <Link
             href={`/players/${player.id}`}
@@ -302,6 +308,12 @@ export function PlayerTable({
           >
             {player.name}
           </Link>
+        );
+      case "peak_year":
+        return (
+          <span className="text-muted-foreground tabular-nums">
+            {player.peak_year ?? "—"}
+          </span>
         );
       case "team":
         return <span className="text-muted-foreground">{player.team ?? "—"}</span>;
@@ -460,10 +472,12 @@ export function PlayerTable({
                 </td>
               </tr>
             ) : (
-              players.map((player) => (
+              players.map((player) => {
+                const isLegend = player.is_legend === true;
+                return (
                 <tr
                   key={player.id}
-                  onClick={(e) => {
+                  onClick={isLegend ? undefined : (e) => {
                     // Cmd/Ctrl+click → open in new tab (native browser behavior)
                     if (e.metaKey || e.ctrlKey) {
                       window.open(`/players/${player.id}`, "_blank");
@@ -471,7 +485,12 @@ export function PlayerTable({
                     }
                     router.push(`/players/${player.id}`);
                   }}
-                  className="border-b border-border hover:bg-muted/40 cursor-pointer transition-colors group"
+                  className={cn(
+                    "border-b border-border transition-colors group",
+                    isLegend
+                      ? "bg-amber-50/30 dark:bg-amber-950/10 cursor-default"
+                      : "hover:bg-muted/40 cursor-pointer",
+                  )}
                 >
                   {visibleColumns.map((col) => {
                     const isSkillCol = ALL_SKILL_NAMES.includes(col.key);
@@ -495,7 +514,8 @@ export function PlayerTable({
                     );
                   })}
                 </tr>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>

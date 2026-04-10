@@ -12,6 +12,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { formatSalary, formatHeight, tierToNum, SKILL_LABELS } from "./playerFilters";
 import type { PlayerWithSkills } from "@/lib/types";
@@ -29,16 +30,16 @@ interface SkillEntry { name: string; tier: string; }
 
 /**
  * Return the top non-None skills for card display, sorted by:
- *  1. Skill type priority (additive < threshold < zero-sum)
- *  2. Tier level (All-Time Great > Elite > Capable)
+ *  1. Tier level (All-Time Great > Elite > Capable)
+ *  2. Skill type priority (additive < threshold < zero-sum) as tiebreaker
  */
 function getTopSkills(skills: Record<string, string>): SkillEntry[] {
   return Object.entries(skills)
     .filter(([, tier]) => tier !== "None")
     .sort(([nameA, tierA], [nameB, tierB]) => {
-      const priDiff = (SKILL_TYPE_PRIORITY[nameA] ?? 1) - (SKILL_TYPE_PRIORITY[nameB] ?? 1);
-      if (priDiff !== 0) return priDiff;
-      return tierToNum(tierB) - tierToNum(tierA); // higher tier first within same priority
+      const tierDiff = tierToNum(tierB) - tierToNum(tierA); // higher tier first
+      if (tierDiff !== 0) return tierDiff;
+      return (SKILL_TYPE_PRIORITY[nameA] ?? 1) - (SKILL_TYPE_PRIORITY[nameB] ?? 1);
     })
     .map(([name, tier]) => ({ name, tier }));
 }
@@ -96,16 +97,23 @@ export function PlayerCard({ player }: PlayerCardProps) {
     .filter(Boolean)
     .join(" · ");
 
+  const isLegend = player.is_legend === true;
+
   return (
     <div
-      onClick={(e) => {
+      onClick={isLegend ? undefined : (e) => {
         if (e.metaKey || e.ctrlKey) {
           window.open(`/players/${player.id}`, "_blank");
           return;
         }
         router.push(`/players/${player.id}`);
       }}
-      className="group cursor-pointer rounded-lg border border-border bg-card hover:border-foreground/20 hover:shadow-sm transition-all p-4 flex flex-col gap-3"
+      className={cn(
+        "group rounded-lg border border-border bg-card transition-all p-4 flex flex-col gap-3",
+        isLegend
+          ? "cursor-default border-amber-200/60 bg-amber-50/30 dark:bg-amber-950/10"
+          : "cursor-pointer hover:border-foreground/20 hover:shadow-sm",
+      )}
     >
       {/* ── Header: silhouette + identity ── */}
       <div className="flex items-center gap-3">
@@ -113,7 +121,8 @@ export function PlayerCard({ player }: PlayerCardProps) {
           <Silhouette />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-sm text-foreground truncate group-hover:underline">
+          <p className={cn("font-semibold text-sm text-foreground truncate", !isLegend && "group-hover:underline")}>
+            {isLegend && <span className="text-amber-500 mr-1" aria-label="Legend">★</span>}
             {player.name}
           </p>
           <p className="text-xs text-muted-foreground truncate">

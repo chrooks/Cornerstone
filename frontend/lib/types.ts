@@ -354,6 +354,10 @@ export interface PlayerWithSkills {
   games_played: number | null;
   minutes_per_game: number | null;
   season: string;
+  /** True for legend rows merged in via ?include_legends=true. */
+  is_legend?: boolean;
+  /** Peak season start year — present only for legend rows. */
+  peak_year?: number | null;
   /** Composite skill profile condensed to final_tier per skill, or null if no profile exists yet. */
   skills: PlayerSkillMap | null;
   /** Aggregate flag status — used to surface review badges in the explorer. */
@@ -370,6 +374,12 @@ export interface LegendSummary {
   name: string;
   peak_era: string;
   notes: string | null;
+  age: number | null;
+  height: string | null;
+  weight: number | null;
+  peak_year: number | null;
+  team: string | null;
+  position: string | null;
   /** Number of the 20 skills that have been deliberately rated (even "None" counts) */
   completion: number;
   completion_pct: number;
