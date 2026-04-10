@@ -112,7 +112,7 @@ Before running any prompts, apply the backport patches to Prompts 1 and 2 and th
 - Volume gates with per-game and per-season modes
 - Tier bumps for borderline cases
 - Pre-adjustments (Screen Setter's box-out modifier)
-- Computed stats (Passer composite, POA Defender composite)
+- Computed stats (Passer composite, perimeter disruptor composite)
 - Auto-promotions (Movement Shooter → Spot-up Shooter)
 - Confidence flags (high/moderate/low) and always_flag_for_review
 
@@ -257,7 +257,7 @@ Plus: notability 0–39 flags all non-high-confidence skills. Claude self-report
 
 **ESPN salary scraping fragility.** ESPN's roster pages are undocumented — the embedded JSON structure could change without warning. The scraper should fail gracefully (null salaries, not crashes). If ESPN breaks, Basketball Reference is the fallback: use `basketball-reference-scraper` (`pip install basketball-reference-scraper`) which also provides annual salary data, but respect the 20 requests/minute rate limit.
 
-**Matchup defense data quality.** The `LeagueSeasonMatchups` endpoint is the weakest data source. The positional diversity index is a useful filter but not a reliable classifier. Expect Switchable Defender to be flagged for nearly every player — this is by design.
+**Matchup defense data quality.** The `LeagueSeasonMatchups` endpoint is the weakest data source. The positional diversity index is a useful filter but not a reliable classifier. Expect Versatile Defender to be flagged for nearly every player — this is by design.
 
 **Claude assessment cost at scale.** 300 players × ~3000 tokens per call ≈ $1–4 per full league run. Not expensive, but it adds up during iterative development. Use the "Skip Claude" checkbox during calibration to avoid unnecessary API spend.
 

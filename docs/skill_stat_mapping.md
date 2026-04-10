@@ -169,7 +169,7 @@ Sources:
 
 ---
 
-### 3. Switchable Defender
+### 3. Versatile Defender
 
 **Justification:** Matchup data from `LeagueSeasonMatchups` reveals which positional groups a player actually guards and how effective they are across those matchups, providing the most direct available measurement of defensive versatility.
 
@@ -661,7 +661,7 @@ This table summarizes how much the stat pipeline should be trusted versus deferr
 |---|---|---|
 | **High** | Rim Protector, Spot-up Shooter, Off-Dribble Shooter, Rebounder, Offensive Rebounder, Ball Dominator | Stats drive classification. Claude serves as sanity check. Auto-accept one-tier disagreements (default to stats). |
 | **Moderate** | Cutter, Movement Shooter, Passer, Crafty Finisher, Mid Post Player, Low Post Player, Screen Setter, Vertical Spacer, Transition Threat, PnR Ball Handler, PnR Finisher | Stats propose a tier. Claude has tiebreaker authority on one-tier disagreements. Flag two-tier disagreements for manual review. |
-| **Low** | Switchable Defender, Point of Attack Defender, High Flyer | Claude leads classification. Stats provide supporting evidence only. Flag all cases for review regardless of agreement level. |
+| **Low** | Versatile Defender, Point of Attack Defender, High Flyer | Claude leads classification. Stats provide supporting evidence only. Flag all cases for review regardless of agreement level. |
 
 ---
 
@@ -673,7 +673,7 @@ Use these archetypes to validate thresholds during calibration. If a threshold s
 |---|---|---|---|
 | Spot-up Shooter | Klay Thompson, Duncan Robinson | Khris Middleton | Russell Westbrook |
 | Movement Shooter | Steph Curry, Klay Thompson | Buddy Hield | Ben Simmons |
-| Switchable Defender | Bam Adebayo, OG Anunoby | Derrick White | Trae Young |
+| Versatile Defender | Bam Adebayo, OG Anunoby | Derrick White | Trae Young |
 | Cutter | Bam Adebayo, Zach Collins | Draymond Green | James Harden |
 | Screen Setter | Clint Capela, Domantas Sabonis | Brook Lopez | Steph Curry |
 | Transition Threat | Ja Morant, Anthony Edwards | LeBron James | Nikola Jokic |

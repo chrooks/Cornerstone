@@ -40,7 +40,7 @@ The `SynergyPlayTypes` endpoint with `PlayType='Spotup'` returns **PPP, POSS_PCT
 
 **Limitation:** Sample sizes for OffScreen possessions can be small even for starters (~100–200 per season). Handoff possessions are rarer still. This skill benefits strongly from multi-season aggregation.
 
-### 3. Switchable Defender
+### 3. Versatile Defender
 
 **Current mapping acknowledges this is hard to measure, and that acknowledgment is correct.** However, more can be done with available data than the current approach suggests.
 
@@ -150,7 +150,7 @@ The `LeagueSeasonMatchups` endpoint is the key tool. Query by `DefPlayerID` to r
 
 **Thresholds:** Elite: STL% > **2.0%** AND Deflections/G > **3.0** AND high Contested 3PT Shots/G, with negative DFG_PCT_PLUSMINUS across categories (Jrue Holiday, Alex Caruso, Derrick White, Dyson Daniels archetype). Capable: STL% **1.2–2.0%** or Deflections/G **1.5–3.0**. None: STL% < 1.2% and Deflections/G < 1.5.
 
-**Limitation:** Steals can reward gambling (the "Monta Ellis effect"). Deflections don't distinguish successful disruptions from risky reach-ins. The Ringer's survey rated public defensive metrics just **3.6 out of 10**. Screen navigation, communication, and recovery—critical POA defender skills—are invisible in all public data. **Confidence: LOW-MODERATE.** Supplement heavily with Claude assessment.
+**Limitation:** Steals can reward gambling (the "Monta Ellis effect"). Deflections don't distinguish successful disruptions from risky reach-ins. The Ringer's survey rated public defensive metrics just **3.6 out of 10**. Screen navigation, communication, and recovery—critical perimeter disruptor skills—are invisible in all public data. **Confidence: LOW-MODERATE.** Supplement heavily with Claude assessment.
 
 ### 14. Crafty Finisher
 
@@ -228,7 +228,7 @@ This table maps every skill to its primary and supplementary `nba_api` endpoints
 |---|---|---|---|
 | Spot-up Shooter | `SynergyPlayTypes` + `LeagueDashPtStats` | `PlayType='Spotup'` / `PtMeasureType='CatchShoot'` | `LeagueDashPlayerPtShot` (TouchTimeRange) |
 | Movement Shooter | `SynergyPlayTypes` (×2) | `PlayType='OffScreen'` + `PlayType='Handoff'` | — |
-| Switchable Defender | `LeagueSeasonMatchups` + `LeagueDashPtDefend` | `DefPlayerID` / multiple DefenseCategory values | `CommonPlayerInfo` (for positions) |
+| Versatile Defender | `LeagueSeasonMatchups` + `LeagueDashPtDefend` | `DefPlayerID` / multiple DefenseCategory values | `CommonPlayerInfo` (for positions) |
 | Cutter | `SynergyPlayTypes` | `PlayType='Cut'` | `LeagueDashPtStats` (`PaintTouch`, `SpeedDistance`) |
 | Screen Setter | `LeagueHustleStatsPlayer` | `PerMode='PerGame'` | `SynergyPlayTypes` (`PRRollman`) |
 | Transition Threat | `SynergyPlayTypes` + `LeagueDashPtStats` | `PlayType='Transition'` / `PtMeasureType='SpeedDistance'` | — |
@@ -238,7 +238,7 @@ This table maps every skill to its primary and supplementary `nba_api` endpoints
 | Rim Protector | `LeagueDashPtDefend` + `LeagueDashPlayerStats` | `DefenseCategory='Less Than 6Ft'` / `MeasureType='Advanced'` (BLK%) | `LeagueHustleStatsPlayer` (CONTESTED_SHOTS_2PT) |
 | Rebounder | `LeagueDashPlayerStats` + `LeagueDashPtStats` | `MeasureType='Advanced'` (TRB%) / `PtMeasureType='Rebounding'` | `LeagueHustleStatsPlayer` (BOX_OUTS) |
 | Offensive Rebounder | `LeagueDashPlayerStats` + `LeagueDashPtStats` | `MeasureType='Advanced'` (ORB%) / `PtMeasureType='Rebounding'` | `SynergyPlayTypes` (`OffRebound`) |
-| POA Defender | `LeagueHustleStatsPlayer` + `LeagueDashPtDefend` + `LeagueDashPlayerStats` | Deflections, Contested 3PT / `DefenseCategory='3 Pointers'` / STL% | — |
+| perimeter disruptor | `LeagueHustleStatsPlayer` + `LeagueDashPtDefend` + `LeagueDashPlayerStats` | Deflections, Contested 3PT / `DefenseCategory='3 Pointers'` / STL% | — |
 | Crafty Finisher | `LeagueDashPtStats` + `ShotChartDetail` | `PtMeasureType='Drives'`+`'PaintTouch'` / ACTION_TYPE='Floating Jump shot' | `LeagueDashPlayerShotLocations` (Mid-Range) |
 | Mid Post Player | `SynergyPlayTypes` + `LeagueDashPtStats` + `LeagueDashPlayerShotLocations` | `PlayType='Postup'` / `PtMeasureType='ElbowTouch'` / Mid-Range zone | — |
 | Low Post Player | `SynergyPlayTypes` + `LeagueDashPtStats` + `LeagueDashPlayerShotLocations` | `PlayType='Postup'` / `PtMeasureType='PostTouch'` / Restricted Area | — |
@@ -257,7 +257,7 @@ Not all skills are created equal from a measurement standpoint. Based on the ana
 
 **Moderate confidence (stats as primary with Claude as tiebreaker):** Cutter, Movement Shooter, Passer, Crafty Finisher, Mid Post Player, Low Post Player, Screen Setter, Vertical Spacer. These have usable metrics but suffer from sample-size issues, missing dimensions (passing from play types), or ambiguous classification boundaries. The stat pipeline should propose a tier, but the Claude pass should have authority to override with reasoning.
 
-**Low confidence (Claude should lead, stats as input):** Switchable Defender, Point of Attack Defender, High Flyer. These skills are fundamentally difficult to measure with public data. Switchable defense requires understanding scheme, body type, and film-based assessments. POA defense statistics explain only a fraction of actual defensive impact. High Flyer is an athleticism assessment that tracking data barely approximates. For these three, the Claude pass should be the primary classifier, using stats as supporting evidence rather than deterministic thresholds.
+**Low confidence (Claude should lead, stats as input):** Versatile Defender, Point of Attack Defender, High Flyer. These skills are fundamentally difficult to measure with public data. Switchable defense requires understanding scheme, body type, and film-based assessments. POA defense statistics explain only a fraction of actual defensive impact. High Flyer is an athleticism assessment that tracking data barely approximates. For these three, the Claude pass should be the primary classifier, using stats as supporting evidence rather than deterministic thresholds.
 
 ---
 

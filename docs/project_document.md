@@ -38,7 +38,7 @@ Every player (including the superstar) is rated on 19 skills across three tiers:
 
 - Spot-up Shooter
 - Movement Shooter
-- Switchable Defender
+- Versatile Defender
 - Cutter
 - Screen Setter
 - Transition Threat

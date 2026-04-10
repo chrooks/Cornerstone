@@ -22,3 +22,8 @@ TODO.md
 .vscode
 .claude
 prompts/
+
+feature_requests/
+2025-26.NBA.Roster.json
+backend/salary_unmatched.txt
+backend/.next/trace*
