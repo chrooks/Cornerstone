@@ -13,55 +13,9 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SKILL_TIERS, TIER_SELECTOR_STYLES } from "@/lib/tiers";
-
-// Total skills in the legend profile — must match backend ALL_SKILLS
-const TOTAL_SKILLS = 20;
-
-// Skill categories matching backend ALL_SKILLS grouping
-const SKILL_GROUPS: { label: string; skills: string[] }[] = [
-  {
-    label: "Additive Skills",
-    skills: [
-      "spot_up_shooter",
-      "off_dribble_shooter",
-      "isolation_scorer",
-      "movement_shooter",
-      "cutter",
-      "transition_threat",
-      "pnr_ball_handler",
-      "pnr_finisher",
-      "crafty_finisher",
-      "passer",
-      "offensive_rebounder",
-      "vertical_spacer",
-    ],
-  },
-  {
-    label: "Threshold-Based Skills",
-    skills: [
-      "rebounder",
-      "rim_protector",
-      "screen_setter",
-      "mid_post_player",
-      "low_post_player",
-    ],
-  },
-  {
-    label: "Zero-Sum Skills",
-    skills: [
-      "switchable_defender",
-      "point_of_attack_defender",
-      "high_flyer",
-    ],
-  },
-];
+import { SKILL_GROUPS, TOTAL_SKILLS, formatSkillName } from "@/lib/skills";
 
 // SKILL_TIERS and TIER_SELECTOR_STYLES imported from @/lib/tiers
-
-/** Format a snake_case skill key to Title Case display name. */
-function formatSkillName(key: string): string {
-  return key.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-}
 
 /** Count how many skills have been deliberately rated (any non-null value). */
 function countRated(profile: LegendProfile): number {

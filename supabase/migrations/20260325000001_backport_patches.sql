@@ -154,8 +154,8 @@ INSERT INTO skill_thresholds (skill_name, thresholds) VALUES
   ]
 }'),
 
-('switchable_defender', '{
-  "skill_name": "switchable_defender",
+('versatile_defender', '{
+  "skill_name": "versatile_defender",
   "skill_category": "additive",
   "stat_confidence": "low",
   "always_flag_for_review": true,
@@ -533,14 +533,14 @@ INSERT INTO skill_thresholds (skill_name, thresholds) VALUES
 -- THRESHOLD-BASED SKILLS
 -- ---------------------------------------------------------------------------
 
-('point_of_attack_defender', '{
-  "skill_name": "point_of_attack_defender",
+('perimeter_disruptor', '{
+  "skill_name": "perimeter_disruptor",
   "skill_category": "threshold",
   "stat_confidence": "low",
   "always_flag_for_review": true,
   "computed_stats": [
     {
-      "name": "poa_defender_composite",
+      "name": "perim_disruptor_composite",
       "formula": "sum",
       "components": [
         {"stat": "advanced.stl_pct", "weight": 10.0},
@@ -560,7 +560,7 @@ INSERT INTO skill_thresholds (skill_name, thresholds) VALUES
   "tiers": {
     "elite": {
       "conditions": [
-        {"stat": "computed.poa_defender_composite", "operator": ">=", "value": 28},
+        {"stat": "computed.perim_disruptor_composite", "operator": ">=", "value": 28},
         {"stat": "advanced.stl_pct", "operator": ">=", "value": 0.02},
         {"stat": "tracking_defense.deflections", "operator": ">=", "value": 3.0}
       ],
@@ -568,7 +568,7 @@ INSERT INTO skill_thresholds (skill_name, thresholds) VALUES
     },
     "capable": {
       "conditions": [
-        {"stat": "computed.poa_defender_composite", "operator": ">=", "value": 18},
+        {"stat": "computed.perim_disruptor_composite", "operator": ">=", "value": 18},
         {"stat": "advanced.stl_pct", "operator": ">=", "value": 0.012},
         {"stat": "tracking_defense.deflections", "operator": ">=", "value": 1.5}
       ],

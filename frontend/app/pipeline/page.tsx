@@ -55,6 +55,7 @@ function StepCard({
   lastResult,
   onRun,
   disabled,
+  headerExtra,
 }: {
   step: number;
   title: string;
@@ -63,6 +64,8 @@ function StepCard({
   lastResult: React.ReactNode | null;
   onRun: () => void;
   disabled?: boolean;
+  /** Optional controls rendered to the left of the Run button (e.g. checkboxes). */
+  headerExtra?: React.ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -75,6 +78,7 @@ function StepCard({
           <p className="font-semibold text-sm text-foreground">{title}</p>
           <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
         </div>
+        {headerExtra}
         <button
           type="button"
           onClick={onRun}
@@ -112,8 +116,10 @@ export default function PipelinePage() {
   const [statusLoading, setStatusLoading] = useState(true);
 
   // Step 0: Fetch Player Stats
-  const [step0Running, setStep0Running] = useState(false);
-  const [step0Result, setStep0Result]   = useState<React.ReactNode | null>(null);
+  const [step0Running, setStep0Running]         = useState(false);
+  const [step0Result, setStep0Result]           = useState<React.ReactNode | null>(null);
+  // When true, bypass the 24-hour cache and re-fetch all stats from nba_api.
+  const [step0ForceRefresh, setStep0ForceRefresh] = useState(false);
 
   // Step 1: Skill Mapping
   const [step1Running, setStep1Running] = useState(false);
@@ -142,7 +148,7 @@ export default function PipelinePage() {
     setStep0Running(true);
     setStep0Result(null);
     try {
-      const res = await runStatsFetch(CURRENT_SEASON);
+      const res = await runStatsFetch(CURRENT_SEASON, step0ForceRefresh);
       if (res.success && res.data) {
         const d = res.data;
         setStep0Result(
@@ -175,7 +181,7 @@ export default function PipelinePage() {
       setStep0Running(false);
       await refreshStatus();
     }
-  }, [refreshStatus]);
+  }, [refreshStatus, step0ForceRefresh]);
 
   // Run Step 1: stat skill mapping batch
   const handleRunStep1 = useCallback(async () => {
@@ -352,6 +358,19 @@ export default function PipelinePage() {
           lastResult={step0Result}
           onRun={handleRunStep0}
           disabled={step1Running || step2Running}
+          headerExtra={
+            /* Force refresh bypasses the 24-hour cache — use after fixing the assembler */
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none flex-shrink-0">
+              <input
+                type="checkbox"
+                checked={step0ForceRefresh}
+                onChange={(e) => setStep0ForceRefresh(e.target.checked)}
+                className="rounded"
+                disabled={step0Running}
+              />
+              Force refresh
+            </label>
+          }
         />
 
         <StepCard

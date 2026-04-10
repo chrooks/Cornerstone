@@ -110,7 +110,7 @@ def compute_derived_stats(rule: dict, stats_map: dict) -> dict:
       - "ratio": numerator / denominator
           { "formula": "ratio", "components": [{"role": "numerator", "stat": "..."}, ...] }
       - "expression": hardcoded composite expression identified by name
-          { "formula": "expression", "name": "poa_defender_composite" }
+          { "formula": "expression", "name": "perim_disruptor_composite" }
 
     Derived stats are added as stats_map["computed"]["stat_name"].
     """
@@ -182,8 +182,8 @@ def compute_derived_stats(rule: dict, stats_map: dict) -> dict:
             # in the spec. These are the only hardcoded logic in the service.
             expr_name = derived.get("name", "")
 
-            if expr_name == "poa_defender_composite":
-                # POA Defender composite formula (per spec):
+            if expr_name == "perim_disruptor_composite":
+                # perimeter disruptor composite formula (per spec):
                 #   (stl_pct × 1000) + deflections + (contested_shots_3pt × 0.5)
                 # stl_pct is stored as a decimal fraction (e.g., 0.02 for 2%),
                 # so multiply by 1000 to scale it to the same magnitude as the other terms.

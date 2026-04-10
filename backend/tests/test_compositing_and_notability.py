@@ -390,19 +390,19 @@ class TestCompositeLowConfidence:
                 "justification": "test", "claude_failed": False}
 
     def test_exact_agreement_auto_accepted(self):
-        result = composite_skill("switchable_defender", self._stat("Capable"), self._claude("Capable"), 60)
+        result = composite_skill("versatile_defender", self._stat("Capable"), self._claude("Capable"), 60)
         assert result["source"] == "auto_accepted"
         assert result["flagged"] is False
 
     def test_one_tier_disagreement_flagged(self):
         # Elite/Proficient is 1-tier apart; low-confidence skills flag even 1-tier disagreements
-        result = composite_skill("switchable_defender", self._stat("Elite"), self._claude("Proficient"), 60)
+        result = composite_skill("versatile_defender", self._stat("Elite"), self._claude("Proficient"), 60)
         assert result["source"] == "flagged"
         assert result["flagged"] is True
         assert result["flag_reason"] == "one_tier_low_confidence"
 
     def test_two_tier_disagreement_flagged(self):
-        result = composite_skill("switchable_defender", self._stat("Elite"), self._claude("None"), 60)
+        result = composite_skill("versatile_defender", self._stat("Elite"), self._claude("None"), 60)
         assert result["source"] == "flagged"
         assert result["flagged"] is True
         assert result["flag_reason"] == "two_tier_disagreement"
@@ -580,11 +580,11 @@ class TestPromptConstruction:
     def _stat_skills(self):
         """Minimal stat skills result for low-confidence skills."""
         return {
-            "switchable_defender": {
+            "versatile_defender": {
                 "tier": "Capable", "stat_confidence": "low",
                 "driving_stats": {"matchup_defense.cross_group_fg_diff": 0.02},
             },
-            "point_of_attack_defender": {
+            "perimeter_disruptor": {
                 "tier": "None", "stat_confidence": "low",
                 "driving_stats": {"hustle.stl_pct": 0.015},
             },
@@ -640,8 +640,8 @@ class TestPromptConstruction:
         prompt = build_claude_prompt(
             self._player_info(), self._stats_blob(), self._stat_skills()
         )
-        # The switchable_defender stat tier should appear in the prompt
-        assert "Capable" in prompt  # switchable_defender stat tier
+        # The versatile_defender stat tier should appear in the prompt
+        assert "Capable" in prompt  # versatile_defender stat tier
 
 
 # ===========================================================================

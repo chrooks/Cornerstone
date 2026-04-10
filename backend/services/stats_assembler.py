@@ -131,8 +131,28 @@ def assemble_stats_blob(
             "catch_shoot_pts":     _v(cs, "CATCH_SHOOT_PTS"),
             "pullup_fg3_pct":      _v(pu, "PULL_UP_FG3_PCT"),
             "pullup_fg3a":         _v(pu, "PULL_UP_FG3A"),
-            "pullup_fg2_pct":      _v(pu, "PULL_UP_FG2_PCT"),
-            "pullup_fg2a":         _v(pu, "PULL_UP_FG2A"),
+            # PULL_UP_FG2A and PULL_UP_FG2_PCT don't exist in the NBA API response —
+            # derive them from FGA/FGM/FG3A/FG3M which are returned.
+            "pullup_fg2a":         (
+                round(_v(pu, "PULL_UP_FGA") - _v(pu, "PULL_UP_FG3A"), 4)
+                if _v(pu, "PULL_UP_FGA") is not None and _v(pu, "PULL_UP_FG3A") is not None
+                else None
+            ),
+            "pullup_fg2_pct":      (
+                round(
+                    (_v(pu, "PULL_UP_FGM") - _v(pu, "PULL_UP_FG3M"))
+                    / (_v(pu, "PULL_UP_FGA") - _v(pu, "PULL_UP_FG3A")),
+                    4,
+                )
+                if (
+                    _v(pu, "PULL_UP_FGM") is not None
+                    and _v(pu, "PULL_UP_FG3M") is not None
+                    and _v(pu, "PULL_UP_FGA") is not None
+                    and _v(pu, "PULL_UP_FG3A") is not None
+                    and (_v(pu, "PULL_UP_FGA") - _v(pu, "PULL_UP_FG3A")) > 0
+                )
+                else None
+            ),
             "pullup_fga":          _v(pu, "PULL_UP_FGA"),
             "pullup_fg_pct":       _v(pu, "PULL_UP_FG_PCT"),
             "pullup_pts":          _v(pu, "PULL_UP_PTS"),
@@ -610,14 +630,18 @@ def _compute_per48_pct(stat: Any, minutes: Any) -> float | None:
 
 
 def _v(row: dict, key: str) -> Any:
-    """Safe row value accessor — returns None (not KeyError) for missing keys."""
+    """Safe row value accessor — returns None for missing keys and NaN values."""
+    import math
     val = row.get(key)
     if val is None:
         return None
     # Convert numpy/pandas scalars to plain Python types
     try:
         if hasattr(val, "item"):
-            return val.item()
+            val = val.item()
     except Exception:
         pass
+    # Treat NaN as missing — pandas rows use NaN for absent numeric fields
+    if isinstance(val, float) and math.isnan(val):
+        return None
     return val

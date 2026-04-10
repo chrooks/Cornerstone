@@ -6,6 +6,7 @@ import { getPlayerSkills } from "@/lib/api";
 import { SkillTierBadge } from "./SkillTierBadge";
 import { StatConfidenceIndicator } from "./StatConfidenceIndicator";
 import type { PlayerSkills, SkillResult } from "@/lib/types";
+import { SKILL_CATEGORIES, formatSkillName } from "@/lib/skills";
 
 interface SkillProfileCardProps {
   playerId: string;
@@ -17,44 +18,6 @@ interface SkillProfileCardProps {
   /** Skills from a previous evaluation — used to highlight changed tiers */
   previousSkills?: PlayerSkills;
   className?: string;
-}
-
-/** Skill categories matching the 19-skill schema */
-// Canonical skill keys — must stay in sync with backend/services/claude_assessment.py
-const SKILL_CATEGORIES: Record<string, string[]> = {
-  "High Confidence": [
-    "spot_up_shooter",
-    "off_dribble_shooter",
-    "offensive_rebounder",
-    "rebounder",
-    "rim_protector",
-    "isolation_scorer",
-  ],
-  Moderate: [
-    "movement_shooter",
-    "cutter",
-    "transition_threat",
-    "pnr_ball_handler",
-    "pnr_finisher",
-    "crafty_finisher",
-    "vertical_spacer",
-    "screen_setter",
-    "passer",
-    "mid_post_player",
-    "low_post_player",
-  ],
-  "Low Confidence": [
-    "switchable_defender",
-    "point_of_attack_defender",
-    "high_flyer",
-  ],
-};
-
-function formatSkillName(name: string): string {
-  return name
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
 }
 
 function SkillRow({

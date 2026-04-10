@@ -57,8 +57,8 @@ ALL_SKILLS: list[str] = [
     "mid_post_player",
     "low_post_player",
     # Zero-sum skills (3)
-    "switchable_defender",
-    "point_of_attack_defender",
+    "versatile_defender",
+    "perimeter_disruptor",
     "high_flyer",
 ]
 
@@ -81,8 +81,8 @@ _SKILL_DEFINITIONS: dict[str, str] = {
     "screen_setter":             "Sets quality screens that free teammates for open shots.",
     "mid_post_player":           "Scores effectively from the mid-post/elbow area using face-up moves and mid-range shooting.",
     "low_post_player":           "Scores effectively with back-to-basket moves in the low post.",
-    "switchable_defender":       "Can guard multiple positional groups effectively when switched.",
-    "point_of_attack_defender":  "Disrupts ball handlers through active hands, pressure, and contest at the point of attack.",
+    "versatile_defender":        "Can guard multiple positional groups effectively when switched.",
+    "perimeter_disruptor":       "Disrupts ball handlers through active hands, pressure, and contest at the point of attack.",
     "high_flyer":                "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, and transition finishes.",
 }
 

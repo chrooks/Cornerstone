@@ -7,6 +7,7 @@ import type { ConditionResult } from "@/lib/types";
 const SECTION_LABELS: Record<string, string> = {
   volume_gate: "Volume Gate",
   elite:       "Elite",
+  proficient:  "Proficient",
   capable:     "Capable",
   tier_bump:   "Tier Bump",
 };
@@ -49,8 +50,14 @@ export function ConditionBreakdown({
   // forceOpen from parent overrides local toggle when defined
   const open = forceOpen !== undefined ? forceOpen : localOpen;
 
-  // Group conditions by section in display order
-  const sectionOrder = ["volume_gate", "elite", "capable", "tier_bump"] as const;
+  // Group conditions by section in display order.
+  // Known sections appear first in priority order; any unrecognised sections
+  // (future tiers) are appended after in the order they appear in the data.
+  const knownOrder = Object.keys(SECTION_LABELS);
+  const unknownSections = [...new Set(conditions.map((c) => c.section))].filter(
+    (s) => !knownOrder.includes(s)
+  );
+  const sectionOrder = [...knownOrder, ...unknownSections];
   const grouped = sectionOrder
     .map((s) => ({ section: s, items: conditions.filter((c) => c.section === s) }))
     .filter((g) => g.items.length > 0);

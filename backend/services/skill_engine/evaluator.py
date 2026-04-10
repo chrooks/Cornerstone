@@ -114,6 +114,14 @@ def evaluate_skill(
         raw_tier_defs = rule.get("tiers", {})
         tier_defs = {k.lower(): v for k, v in raw_tier_defs.items()}
 
+        # Lookup table avoids str.capitalize() which breaks "all-time great" → "All-time great"
+        _TIER_DISPLAY = {
+            "all-time great": "All-Time Great",
+            "elite":          "Elite",
+            "proficient":     "Proficient",
+            "capable":        "Capable",
+        }
+
         for tier_name in ["all-time great", "elite", "proficient", "capable"]:
             tier_rule = tier_defs.get(tier_name)
             if not tier_rule:
@@ -124,18 +132,23 @@ def evaluate_skill(
             result = evaluate_conditions_block(tier_rule, stats_map, games_played)
 
             if result is True:
-                # Capitalize for consistent output ("Elite", "Capable")
-                tier = tier_name.capitalize()
+                tier = _TIER_DISPLAY[tier_name]
                 break  # Stop at first passing tier
             elif result is None:
                 # Missing data for this tier's conditions — flag it
                 data_missing = True
 
         # --- Step 6: Check top-level tier_bumps ---
-        # Bumps promote by exactly one tier (None→Capable, Capable→Elite, Elite→All-Time Great),
-        # subject to each bump's max_tier ceiling. Runs whenever not already at the top tier.
+        # Bumps promote or demote by exactly one tier, subject to ceiling/floor constraints.
+        # bump_up_one_tier:   None→Capable, Capable→Proficient, ..., subject to max_tier ceiling.
+        # bump_down_one_tier: Elite→Proficient, Proficient→Capable, ..., subject to min_tier floor.
+        # Bump-ups run first so a subsequent bump-down can override a promotion (e.g. a player
+        # who would get a bump-up but has a disqualifying weakness gets the bump-down applied last).
+        bumps = rule.get("tier_bumps", [])
+
+        # Apply bump-ups first (lower index = higher tier in _TIER_ORDER), skipping if at top
         if tier != "All-Time Great":
-            for bump in rule.get("tier_bumps", []):
+            for bump in bumps:
                 effect = bump.get("effect", "")
                 max_tier = bump.get("max_tier", "Elite")
                 bump_condition = bump.get("condition", {})
@@ -166,7 +179,45 @@ def evaluate_skill(
                     )
                     tier = bumped_tier
                     tier_bump_applied = True
-                    break  # Only one bump can apply per evaluation pass
+                    break  # Only one bump-up per evaluation pass
+
+        # Apply bump-downs last so they can override a bump-up when a player has a disqualifying
+        # weakness (e.g. elite mid-range but poor 3pt pull-up shooting).
+        for bump in bumps:
+            effect = bump.get("effect", "")
+            if effect != "bump_down_one_tier":
+                continue
+
+            # min_tier is the lowest tier this bump is allowed to reach (default: Capable).
+            # e.g. min_tier="Proficient": demoting Elite→Proficient is allowed,
+            #   but demoting Proficient→Capable via this bump is not.
+            min_tier = bump.get("min_tier", "Capable")
+            bump_condition = bump.get("condition", {})
+
+            # Can only demote if currently above None (i.e., there is a lower tier to fall to)
+            current_idx = _TIER_ORDER.index(tier)
+            if current_idx >= len(_TIER_ORDER) - 1:
+                continue  # Already at None — nothing lower to bump down to
+
+            demoted_tier = _TIER_ORDER[current_idx + 1]
+
+            # Respect min_tier floor — skip if the demoted tier would fall below it.
+            if _TIER_ORDER.index(demoted_tier) > _TIER_ORDER.index(min_tier):
+                continue  # Would go below min_tier floor — skip
+
+            # Evaluate the bump condition
+            if "conditions" in bump_condition or "logic" in bump_condition:
+                bump_result = evaluate_conditions_block(bump_condition, stats_map, games_played)
+            else:
+                bump_result = evaluate_condition(bump_condition, stats_map, games_played)
+
+            if bump_result is True:
+                logger.debug(
+                    "Tier bump down applied: %s → %s (rule: %s)", tier, demoted_tier, skill_name
+                )
+                tier = demoted_tier
+                tier_bump_applied = True
+                break  # Only one bump-down per evaluation pass
 
         # --- Step 7: Collect driving stats (key stats referenced in the rule) ---
         driving_stats = _collect_driving_stats(rule, stats_map, stabilized_vals)
@@ -255,6 +306,12 @@ def collect_condition_results(
                 actual = resolve_stat(stats_map, stat_path)
         else:
             actual = resolve_stat(stats_map, stat_path)
+
+        # Apply default_value when the stat is null (mirrors evaluate_condition logic)
+        if actual is None:
+            default_value = condition.get("default_value")
+            if default_value is not None:
+                actual = float(default_value)
 
         # Scale per-season conditions the same way evaluate_condition does.
         # play_type._poss values are stored per-game, so they must also be multiplied.

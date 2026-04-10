@@ -5,9 +5,7 @@ import Link from "next/link";
 import { listLegends } from "@/lib/api";
 import type { LegendSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-// Total skill count — must match backend ALL_SKILLS list
-const TOTAL_SKILLS = 20;
+import { TOTAL_SKILLS } from "@/lib/skills";
 
 // Sort options
 type SortKey = "alpha" | "completion" | "era";

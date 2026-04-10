@@ -10,12 +10,6 @@ export interface ApiResponse<T> {
   error: string | null;
 }
 
-/** Health check response from GET /api/health */
-export interface HealthResponse {
-  status: string;
-  message: string;
-}
-
 /** A player record from the players table */
 export interface Player {
   id: string;
@@ -97,6 +91,8 @@ export interface ConditionItem {
   per?: "game" | "season";
   logic?: "AND" | "OR";
   conditions?: ConditionItem[];
+  /** Pending-delete flag set in the calibration UI. Stripped by stripDeleted() before save. */
+  _deleted?: boolean;
 }
 
 /** Stabilization config for a single stat */
@@ -111,7 +107,12 @@ export interface StabilizationConfig {
 export interface TierBump {
   condition: ConditionItem;
   effect: string;
-  max_tier: SkillTier;
+  /** Ceiling for bump_up_one_tier — bump cannot promote above this tier */
+  max_tier?: SkillTier;
+  /** Floor for bump_down_one_tier — bump cannot demote below this tier */
+  min_tier?: SkillTier;
+  /** Pending-delete flag set in the calibration UI. Stripped by stripDeleted() before save. */
+  _deleted?: boolean;
 }
 
 /** Auto-promotion rule — links one skill's achievement to another skill's minimum tier */
@@ -308,6 +309,26 @@ export interface PlayerProfile {
 
 /** Valid resolution choices for a skill flag */
 export type FlagResolution = "trust_stats" | "trust_claude" | "manual_override";
+
+// ---------------------------------------------------------------------------
+// Calibration — Stat Leaders table
+// ---------------------------------------------------------------------------
+
+/**
+ * A single player row returned by GET /api/players/stats-bulk.
+ * Stats are flattened to "section.key" format (e.g. "box_score.pts": 25.3).
+ * Stabilized values are a subset in the same "section.key" format.
+ */
+export interface PlayerStatRow {
+  id: string;
+  name: string;
+  team: string | null;
+  position: string | null;
+  /** Raw stat values keyed by "section.key" format. Value may be null for missing data. */
+  stats: Record<string, number | null>;
+  /** Bayesian-stabilized values for a subset of stats, keyed by "section.key" format. */
+  stabilized: Record<string, number>;
+}
 
 // ---------------------------------------------------------------------------
 // Players Explorer — bulk list with embedded skills

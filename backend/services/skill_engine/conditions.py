@@ -99,7 +99,14 @@ def evaluate_condition(
         raw_val = resolve_stat(stats_map, stat_path)
 
     if raw_val is None:
-        return None  # Signal data is missing for this stat
+        # If the rule specifies a default_value, use it instead of treating as missing.
+        # Useful for stats like pr_roll_man_freq where null means 0 (player is simply
+        # not a roll man), which should satisfy a "<= 0.15" guard condition.
+        default_value = condition.get("default_value")
+        if default_value is not None:
+            raw_val = float(default_value)
+        else:
+            return None  # Signal data is missing for this stat
 
     # Scale per-game stats to season totals when per="season".
     # play_type._poss values are stored per-game (Synergy uses per_mode_simple="PerGame"),

@@ -24,11 +24,11 @@ export function SkillTierSelector({
 }: SkillTierSelectorProps) {
   return (
     <div
-      className={cn("inline-flex rounded-md border border-border overflow-hidden", className)}
+      className={cn("flex flex-wrap gap-1", className)}
       role="radiogroup"
       aria-label="Skill tier"
     >
-      {SKILL_TIERS.map((tier, i) => {
+      {SKILL_TIERS.map((tier) => {
         const isActive = value === tier;
         const styles = TIER_SELECTOR_STYLES[tier];
         return (
@@ -40,11 +40,9 @@ export function SkillTierSelector({
             disabled={disabled}
             onClick={() => onChange(tier)}
             className={cn(
-              "px-3 py-1.5 text-sm border-r last:border-r-0 transition-colors",
+              "px-3 py-1.5 text-sm rounded-md border transition-colors",
               isActive ? styles.active : styles.base,
-              disabled && "opacity-50 cursor-not-allowed",
-              i === 0 && "rounded-l-md",
-              i === SKILL_TIERS.length - 1 && "rounded-r-md"
+              disabled && "opacity-50 cursor-not-allowed"
             )}
           >
             {tier}

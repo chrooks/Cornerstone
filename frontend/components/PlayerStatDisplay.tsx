@@ -323,9 +323,9 @@ function StatRow({
     return (
       <div className={cn(
         "flex items-center justify-between py-0.5 px-1 rounded text-sm",
-        highlighted && "bg-primary/8"
+        highlighted && "bg-amber-50 border-l-2 border-amber-400 pl-1.5"
       )}>
-        <span className={cn("text-xs", highlighted ? "text-foreground font-medium" : "text-muted-foreground")}>{label}</span>
+        <span className={cn("text-xs", highlighted ? "text-foreground font-semibold" : "text-muted-foreground")}>{label}</span>
         <span className="text-muted-foreground text-xs">—</span>
       </div>
     );
@@ -334,9 +334,9 @@ function StatRow({
   return (
     <div className={cn(
       "flex items-center justify-between py-0.5 px-1 rounded text-sm",
-      highlighted && "bg-primary/8"
+      highlighted && "bg-amber-50 border-l-2 border-amber-400 pl-1.5"
     )}>
-      <span className={cn("text-xs", highlighted ? "text-foreground font-medium" : "text-muted-foreground")}>{label}</span>
+      <span className={cn("text-xs", highlighted ? "text-foreground font-semibold" : "text-muted-foreground")}>{label}</span>
       <span
         className={cn(
           "font-medium tabular-nums text-xs",

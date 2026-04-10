@@ -52,6 +52,7 @@ MODERATE_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
     "movement_shooter",
     "passer",
     "crafty_finisher",
+    "driver",
     "mid_post_player",
     "low_post_player",
     "screen_setter",
@@ -63,8 +64,8 @@ MODERATE_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
 
 # Skills where Claude runs informed (sees stats AND stat tier + confidence)
 LOW_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
-    "switchable_defender",
-    "point_of_attack_defender",
+    "versatile_defender",
+    "perimeter_disruptor",
     "high_flyer",
 })
 
@@ -74,6 +75,7 @@ _SKILL_DISPLAY_NAMES: dict[str, str] = {
     "movement_shooter":         "Movement Shooter",
     "passer":                   "Passer",
     "crafty_finisher":          "Crafty Finisher",
+    "driver":                   "Driver",
     "mid_post_player":          "Mid Post Player",
     "low_post_player":          "Low Post Player",
     "screen_setter":            "Screen Setter",
@@ -81,15 +83,15 @@ _SKILL_DISPLAY_NAMES: dict[str, str] = {
     "transition_threat":        "Transition Threat",
     "pnr_ball_handler":         "PnR Ball Handler",
     "pnr_finisher":             "PnR Finisher",
-    "switchable_defender":      "Switchable Defender",
-    "point_of_attack_defender": "Point of Attack Defender",
+    "versatile_defender":       "Versatile Defender",
+    "perimeter_disruptor": "Perimeter Disruptor",
     "high_flyer":               "High Flyer",
 }
 
 # One-sentence definitions used in the blind assessment section
 _SKILL_DEFINITIONS: dict[str, str] = {
     "cutter":
-        "Scores effectively by cutting to the basket off-ball.",
+        "Scores effectively by cutting to the basket off-ball typically from the perimeter.",
     "movement_shooter":
         "Hits shots while relocating off screens and handoffs (not just standing still).",
     "passer":
@@ -97,6 +99,9 @@ _SKILL_DEFINITIONS: dict[str, str] = {
     "crafty_finisher":
         "Scores at the rim and in the short midrange using touch, body control, and "
         "foul-drawing ability rather than pure athleticism.",
+    "driver":
+        "Consistently attacks the paint from the perimeter off the dribble, generating "
+        "driving lane pressure and paint touches regardless of finishing ability.",
     "mid_post_player":
         "Scores effectively from the mid-post/elbow area using face-up moves and "
         "mid-range shooting.",
@@ -106,7 +111,7 @@ _SKILL_DEFINITIONS: dict[str, str] = {
         "Sets quality screens that free teammates for open shots.",
     "vertical_spacer":
         "Threatens vertically as a lob target and above-the-rim finisher, creating "
-        "driving lanes for teammates.",
+        "driving lanes for teammates. Ususally in pick and roll situations",
     "transition_threat":
         "Scores effectively in the open court on fast breaks.",
     "pnr_ball_handler":
@@ -279,31 +284,31 @@ def _build_informed_section(stat_skills_result: dict) -> str:
         "",
     ]
 
-    # switchable_defender
-    sw = stat_skills_result.get("switchable_defender", {})
-    sw_tier = sw.get("tier", "None")
-    sw_driving = sw.get("driving_stats", {})
-    sw_stats_str = _format_driving_stats_inline(sw_driving)
+    # versatile_defender
+    vd = stat_skills_result.get("versatile_defender", {})
+    vd_tier = vd.get("tier", "None")
+    vd_driving = vd.get("driving_stats", {})
+    vd_stats_str = _format_driving_stats_inline(vd_driving)
     lines += [
-        "### switchable_defender (Switchable Defender)",
+        "### versatile_defender (Versatile Defender)",
         "Can guard multiple positional groups effectively when switched.",
-        f"The stat pipeline computed the following metrics: {sw_stats_str}",
-        f"The stat-based rating is **{sw_tier}** with LOW confidence.",
+        f"The stat pipeline computed the following metrics: {vd_stats_str}",
+        f"The stat-based rating is **{vd_tier}** with LOW confidence.",
         "Your assessment of this player's defensive versatility based on body type, "
         "lateral movement, and known defensive reputation should override the stats if they conflict.",
         "",
     ]
 
-    # point_of_attack_defender
-    poa = stat_skills_result.get("point_of_attack_defender", {})
-    poa_tier = poa.get("tier", "None")
-    poa_driving = poa.get("driving_stats", {})
-    poa_stats_str = _format_driving_stats_inline(poa_driving)
+    # perimeter_disruptor
+    perim = stat_skills_result.get("perimeter_disruptor", {})
+    perim_tier = perim.get("tier", "None")
+    perim_driving = perim.get("driving_stats", {})
+    perim_stats_str = _format_driving_stats_inline(perim_driving)
     lines += [
-        "### point_of_attack_defender (Point of Attack Defender)",
+        "### perimeter_disruptor (Perimeter Disruptor)",
         "Disrupts ball handlers through active hands, pressure, and contest.",
-        f"The stats show: {poa_stats_str}",
-        f"The stat-based rating is **{poa_tier}** with LOW confidence.",
+        f"The stats show: {perim_stats_str}",
+        f"The stat-based rating is **{perim_tier}** with LOW confidence.",
         "Screen navigation, recovery speed, and overall defensive IQ are invisible in "
         "these stats — weight your knowledge accordingly.",
         "",

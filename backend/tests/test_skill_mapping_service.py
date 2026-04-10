@@ -672,7 +672,7 @@ class TestComputeDerivedStats:
         result = compute_derived_stats(rule, blob)
         assert result["computed"]["combined_freq"] == pytest.approx(0.13)
 
-    def test_expression_poa_defender_composite(self):
+    def test_expression_perim_disruptor_composite(self):
         """AC: stl_pct 0.02 × 1000 + deflections 3.5 + contested_3pt 2.0 × 0.5 = 24.5."""
         blob = _make_stats_blob(
             advanced__stl_pct=0.02,  # stored as decimal fraction (0.02 = 2%)
@@ -682,13 +682,13 @@ class TestComputeDerivedStats:
         rule = {
             "computed_stats": [
                 {
-                    "name": "poa_defender_composite",
+                    "name": "perim_disruptor_composite",
                     "formula": "expression",
                 }
             ]
         }
         result = compute_derived_stats(rule, blob)
-        assert result["computed"]["poa_defender_composite"] == pytest.approx(24.5)
+        assert result["computed"]["perim_disruptor_composite"] == pytest.approx(24.5)
 
     def test_weighted_average_formula(self):
         """Weighted average PPP by possession count."""
@@ -1291,3 +1291,224 @@ class TestEvaluateAllSkills:
         # Movement Shooter is Capable → promotes Spot-up from None to at least Capable
         assert final["spot_up_shooter"]["tier"] == "Capable"
         assert final["spot_up_shooter"]["auto_promoted"] is True
+
+
+# ===========================================================================
+# 11. TestDriverSkill — unit tests for the "driver" threshold rule
+# ===========================================================================
+
+# In-memory fixture for the driver rule — mirrors the migration JSONB exactly.
+# Using title-case tier keys to match _TIER_ORDER in the evaluator.
+_DRIVER_RULE = {
+    "skill_name": "driver",
+    "skill_category": "threshold",
+    "stat_confidence": "moderate",
+    "always_flag_for_review": True,
+    "stabilization": [
+        {
+            "stat": "tracking_drives.drive_fg_pct",
+            "K": 50,
+            "league_avg_key": "tracking_drives.drive_fg_pct",
+        }
+    ],
+    "volume_gate": {
+        "conditions": [
+            {
+                "stat": "tracking_drives.drives_per_game",
+                "operator": ">=",
+                "value": 4.0,
+            }
+        ],
+        "logic": "AND",
+        "fail_tier": "None",
+    },
+    "tiers": {
+        "All-Time Great": {
+            "conditions": [
+                {"stat": "tracking_drives.drives_per_game", "operator": ">=", "value": 12.0},
+                {"stat": "tracking_paint_touch.paint_touches", "operator": ">=", "value": 15.0},
+            ],
+            "logic": "AND",
+        },
+        "Elite": {
+            "conditions": [
+                {"stat": "tracking_drives.drives_per_game", "operator": ">=", "value": 9.0},
+                {"stat": "tracking_paint_touch.paint_touches", "operator": ">=", "value": 12.0},
+            ],
+            "logic": "AND",
+        },
+        "Proficient": {
+            "conditions": [
+                {"stat": "tracking_drives.drives_per_game", "operator": ">=", "value": 7.0},
+                {"stat": "tracking_paint_touch.paint_touches", "operator": ">=", "value": 9.0},
+            ],
+            "logic": "AND",
+        },
+        "Capable": {
+            "conditions": [
+                {"stat": "tracking_drives.drives_per_game", "operator": ">=", "value": 5.0},
+                {"stat": "tracking_paint_touch.paint_touches", "operator": ">=", "value": 6.0},
+            ],
+            "logic": "AND",
+        },
+    },
+    "tier_bumps": [
+        {
+            "condition": {
+                "stat": "tracking_drives.drive_fg_pct",
+                "operator": ">=",
+                "value": 0.53,
+                "stabilized": True,
+            },
+            "effect": "bump_up_one_tier",
+            "max_tier": "Elite",
+        }
+    ],
+    "auto_promotions": [
+        {
+            "if_tier_gte": "All-Time Great",
+            "then_set_skill": "crafty_finisher",
+            "to_minimum_tier": "Proficient",
+        },
+        {
+            "if_tier_gte": "Elite",
+            "then_set_skill": "crafty_finisher",
+            "to_minimum_tier": "Capable",
+        },
+    ],
+}
+
+# Minimal crafty_finisher rule for auto-promotion tests — no tiers needed, just a
+# placeholder so apply_auto_promotions knows the skill exists in the thresholds dict.
+_CRAFTY_FINISHER_STUB_RULE = {
+    "skill_name": "crafty_finisher",
+    "skill_category": "threshold",
+    "stat_confidence": "moderate",
+    "always_flag_for_review": False,
+    "tiers": {},
+    "tier_bumps": [],
+}
+
+# League average for drive_fg_pct stabilization (used by evaluate_skill).
+_DRIVER_LEAGUE_AVGS = {"tracking_drives.drive_fg_pct": 0.44}
+
+
+def _make_driver_blob(
+    drives_per_game: float,
+    paint_touches: float,
+    drive_fg_pct: float = 0.44,
+) -> dict:
+    """
+    Build a stats blob pre-populated with the three driver-relevant stats.
+    Falls back to the default _make_stats_blob baseline for all other sections.
+    """
+    blob = _make_stats_blob(
+        tracking_drives__drives_per_game=drives_per_game,
+        tracking_drives__drive_fg_pct=drive_fg_pct,
+    )
+    # paint_touches lives in tracking_paint_touch — set it directly since
+    # _make_stats_blob's default only includes paint_touch_fg_pct, not paint_touches.
+    blob["tracking_paint_touch"]["paint_touches"] = paint_touches
+    blob["metadata"]["games_played"] = 65
+    return blob
+
+
+class TestDriverSkill:
+    """Unit tests for the driver threshold skill rule (in-memory, no DB required)."""
+
+    def test_driver_volume_gate_blocks_low_volume_player(self):
+        """A player with only 3.5 drives/game is below the 4.0 volume gate → None."""
+        blob = _make_driver_blob(drives_per_game=3.5, paint_touches=10.0)
+        result = evaluate_skill("driver", _DRIVER_RULE, blob, _DRIVER_LEAGUE_AVGS)
+        assert result["tier"] == "None"
+        assert result["volume_gate_passed"] is False
+
+    def test_driver_capable_tier(self):
+        """Player meeting Capable thresholds (5.5 drives, 7.0 paint touches) → Capable."""
+        blob = _make_driver_blob(drives_per_game=5.5, paint_touches=7.0)
+        result = evaluate_skill("driver", _DRIVER_RULE, blob, _DRIVER_LEAGUE_AVGS)
+        assert result["tier"] == "Capable"
+
+    def test_driver_proficient_tier(self):
+        """Player meeting Proficient thresholds (7.5 drives, 10.0 paint touches) → Proficient."""
+        blob = _make_driver_blob(drives_per_game=7.5, paint_touches=10.0)
+        result = evaluate_skill("driver", _DRIVER_RULE, blob, _DRIVER_LEAGUE_AVGS)
+        assert result["tier"] == "Proficient"
+
+    def test_driver_elite_tier(self):
+        """Player meeting Elite thresholds (10.0 drives, 13.0 paint touches) → Elite."""
+        blob = _make_driver_blob(drives_per_game=10.0, paint_touches=13.0)
+        result = evaluate_skill("driver", _DRIVER_RULE, blob, _DRIVER_LEAGUE_AVGS)
+        assert result["tier"] == "Elite"
+
+    def test_driver_paint_touches_gate(self):
+        """Player with high drives_per_game (10.0) but low paint_touches (4.0) →
+        volume gate passes, but no tier condition satisfied → None."""
+        blob = _make_driver_blob(drives_per_game=10.0, paint_touches=4.0)
+        result = evaluate_skill("driver", _DRIVER_RULE, blob, _DRIVER_LEAGUE_AVGS)
+        assert result["tier"] == "None"
+        assert result["volume_gate_passed"] is True
+
+    def test_driver_tier_bump_capable_to_proficient(self):
+        """Capable driver (5.5 drives, 7.0 paint touches) with drive_fg_pct=0.55 (above
+        stabilized 0.53 bump threshold) is bumped up one tier → Proficient."""
+        # Use a high drive_fg_pct so that after Bayesian stabilization with K=50 and
+        # league_avg=0.44 the result still clears the 0.53 threshold.
+        # Stabilized value ≈ (0.55 * 65 + 0.44 * 50) / (65 + 50) ≈ 0.503 — this is
+        # below 0.53, so use a higher raw value to ensure the stabilized result clears.
+        # With drive_fg_pct=0.65: stabilized ≈ (0.65*65 + 0.44*50) / 115 ≈ 0.559 → passes.
+        blob = _make_driver_blob(drives_per_game=5.5, paint_touches=7.0, drive_fg_pct=0.65)
+        result = evaluate_skill("driver", _DRIVER_RULE, blob, _DRIVER_LEAGUE_AVGS)
+        assert result["tier"] == "Proficient"
+
+    def test_driver_tier_bump_max_is_elite(self):
+        """Proficient driver with drive_fg_pct=0.65 → bumped up one tier = Elite.
+        The bump max_tier is Elite, so the player cannot be bumped beyond Elite."""
+        blob = _make_driver_blob(drives_per_game=7.5, paint_touches=10.0, drive_fg_pct=0.65)
+        result = evaluate_skill("driver", _DRIVER_RULE, blob, _DRIVER_LEAGUE_AVGS)
+        assert result["tier"] == "Elite"
+
+    def test_driver_auto_promotion_elite_to_crafty_finisher_capable(self):
+        """An Elite Driver triggers auto-promotion: crafty_finisher must be at least Capable."""
+        # Build skills_result with driver=Elite and crafty_finisher=None
+        skills = {
+            "driver": {
+                "tier": "Elite",
+                "auto_promoted": False,
+                "stat_confidence": "moderate",
+            },
+            "crafty_finisher": {
+                "tier": "None",
+                "auto_promoted": False,
+                "stat_confidence": "moderate",
+            },
+        }
+        thresholds = {
+            "driver": _DRIVER_RULE,
+            "crafty_finisher": _CRAFTY_FINISHER_STUB_RULE,
+        }
+        result = apply_auto_promotions(skills, thresholds)
+        assert result["crafty_finisher"]["tier"] == "Capable"
+        assert result["crafty_finisher"]["auto_promoted"] is True
+
+    def test_driver_auto_promotion_atg_to_crafty_finisher_proficient(self):
+        """An All-Time Great Driver triggers auto-promotion: crafty_finisher must be at least Proficient."""
+        skills = {
+            "driver": {
+                "tier": "All-Time Great",
+                "auto_promoted": False,
+                "stat_confidence": "moderate",
+            },
+            "crafty_finisher": {
+                "tier": "None",
+                "auto_promoted": False,
+                "stat_confidence": "moderate",
+            },
+        }
+        thresholds = {
+            "driver": _DRIVER_RULE,
+            "crafty_finisher": _CRAFTY_FINISHER_STUB_RULE,
+        }
+        result = apply_auto_promotions(skills, thresholds)
+        assert result["crafty_finisher"]["tier"] == "Proficient"
+        assert result["crafty_finisher"]["auto_promoted"] is True

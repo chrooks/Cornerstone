@@ -175,8 +175,10 @@ def batch_evaluate_skills(
             skills_result = evaluate_all_skills(stats_blob, thresholds, league_avgs)
             skills_result = apply_auto_promotions(skills_result, thresholds)
 
-            # Persist to skill_profiles — upsert on (player_id, season, source)
-            _upsert_skill_profile(player_id, season, skills_result, supabase)
+            # Persist to skill_profiles — upsert on (player_id, season, source).
+            # Low-confidence skills are preserved from the existing profile so that
+            # hand-tuned or manually reviewed values aren't blown away on every run.
+            _upsert_skill_profile(player_id, season, skills_result, supabase, thresholds)
 
             results[player_id] = skills_result
 
@@ -194,6 +196,7 @@ def _upsert_skill_profile(
     season: str,
     skills_result: dict,
     supabase: Client,
+    thresholds: dict | None = None,
 ) -> None:
     """
     Upsert a skill profile record into the skill_profiles table.
@@ -201,7 +204,41 @@ def _upsert_skill_profile(
     Unique constraint: (player_id, season, source). If a row already exists
     for this combination, it is updated in-place (profile and timestamps).
     source is always "stats" for automated pipeline runs.
+
+    If thresholds are provided, skills marked stat_confidence="low" are preserved
+    from the existing profile rather than overwritten. This protects hand-tuned
+    low-confidence skills (e.g. high_flyer) from being reset on every pipeline run.
     """
+    # Merge low-confidence skill results from existing profile when thresholds are available
+    if thresholds:
+        low_confidence_skills = {
+            skill_name
+            for skill_name, rule in thresholds.items()
+            if rule.get("stat_confidence") == "low"
+        }
+
+        if low_confidence_skills:
+            existing_row = (
+                supabase.table("skill_profiles")
+                .select("profile")
+                .eq("player_id", player_id)
+                .eq("season", season)
+                .eq("source", "stats")
+                .maybe_single()
+                .execute()
+            )
+            existing_profile = (
+                (existing_row.data or {}).get("profile") or {}
+                if existing_row.data
+                else {}
+            )
+
+            # Preserve existing low-confidence skill entries; fall back to newly computed
+            # value only when no existing entry is found (e.g. first-ever run).
+            for skill_name in low_confidence_skills:
+                if skill_name in existing_profile:
+                    skills_result[skill_name] = existing_profile[skill_name]
+
     # Determine review_required: True if any skill has review_recommended=True
     review_required = any(
         v.get("review_recommended", False) for v in skills_result.values()
