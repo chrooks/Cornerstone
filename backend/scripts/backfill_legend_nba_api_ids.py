@@ -56,7 +56,17 @@ def main(dry_run: bool = False) -> None:
         lookup_name = _NAME_OVERRIDES.get(name, name)
         results = nba_static_players.find_players_by_full_name(lookup_name)
         if results:
-            nba_api_id = results[0]["id"]
+            # find_players_by_full_name does a regex search, so "Karl Malone" may also
+            # match "Karl Malone Jr." — prefer an exact case-insensitive match when
+            # multiple results are returned to avoid silently picking the wrong player.
+            exact = [r for r in results if r["full_name"].lower() == lookup_name.lower()]
+            if len(results) > 1 and not exact:
+                logger.warning(
+                    "  AMBIGUOUS %-30s → %d results, taking first: %s",
+                    name, len(results), results[0]["full_name"],
+                )
+            best = exact[0] if exact else results[0]
+            nba_api_id = best["id"]
             matched.append((name, nba_api_id))
             if not dry_run:
                 supabase.table("legends").update({"nba_api_id": nba_api_id}).eq("id", lid).execute()

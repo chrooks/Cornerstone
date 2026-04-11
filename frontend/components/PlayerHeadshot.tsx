@@ -54,7 +54,6 @@ export function PlayerHeadshot({ nba_api_id, size = 48, name, className }: Playe
 
   return (
     <div
-      id={`player-headshot-${nba_api_id}`}
       style={{ width: size, height: size }}
       className={cn("flex-shrink-0 overflow-hidden rounded-lg", className)}
     >
