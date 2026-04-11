@@ -288,7 +288,7 @@ export default function PlayerProfilePage() {
     <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
       {/* Player header */}
       <div className="flex items-start gap-4">
-        <PlayerHeadshot nba_api_id={player.nba_api_id} size={72} name={player.name} />
+        <PlayerHeadshot nba_api_id={player.nba_api_id} size={96} name={player.name} />
         <div className="space-y-1 min-w-0 flex-1">
           <h1 className="text-xl font-bold text-foreground">{player.name}</h1>
           <p className="text-sm text-muted-foreground">
