@@ -389,11 +389,12 @@ export function PlayerTable({
   const endRow = Math.min(page * pageSize, totalCount);
 
   return (
-    <div className="space-y-2">
+    <div id="player-table-root" className="space-y-2">
       {/* Columns toggle button */}
       <div className="flex justify-end">
         <div className="relative">
           <button
+            id="player-table-columns-btn"
             type="button"
             onClick={() => setColumnsOpen((v) => !v)}
             className="flex items-center gap-1.5 text-xs rounded border border-input px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
@@ -402,7 +403,7 @@ export function PlayerTable({
           </button>
 
           {columnsOpen && (
-            <div className="absolute right-0 top-full mt-1 z-50 w-52 max-h-80 overflow-y-auto rounded-md border border-border bg-background shadow-md p-2 space-y-1">
+            <div id="player-table-columns-panel" className="absolute right-0 top-full mt-1 z-50 w-52 max-h-80 overflow-y-auto rounded-md border border-border bg-background shadow-md p-2 space-y-1">
               <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 px-1">
                 Toggle Columns
               </div>
@@ -426,8 +427,8 @@ export function PlayerTable({
       </div>
 
       {/* Table wrapper with horizontal scroll */}
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="border-collapse text-xs" style={{ tableLayout: "fixed", minWidth: "max-content" }}>
+      <div id="player-table-wrapper" className="overflow-x-auto rounded-lg border border-border">
+        <table id="player-table" className="border-collapse text-xs" style={{ tableLayout: "fixed", minWidth: "max-content" }}>
           <thead>
             <tr className="bg-muted/60 border-b border-border">
               {visibleColumns.map((col) => {
@@ -522,8 +523,8 @@ export function PlayerTable({
       </div>
 
       {/* Pagination bar */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>
+      <div id="player-table-pagination" className="flex items-center justify-between text-xs text-muted-foreground">
+        <span id="player-table-pagination-info">
           {totalCount === 0
             ? "No results"
             : `Showing ${startRow}–${endRow} of ${totalCount}`}
@@ -534,6 +535,7 @@ export function PlayerTable({
           <label className="flex items-center gap-1">
             <span>Rows:</span>
             <select
+              id="player-table-page-size"
               className="rounded border border-input bg-background px-1 py-0.5 text-foreground focus:outline-none"
               value={pageSize}
               onChange={(e) => {
@@ -552,6 +554,7 @@ export function PlayerTable({
           {/* Prev / page indicator / Next */}
           <div className="flex items-center gap-1">
             <button
+              id="player-table-prev-btn"
               type="button"
               onClick={() => onPageChange(Math.max(1, page - 1))}
               disabled={page === 1}
@@ -559,10 +562,11 @@ export function PlayerTable({
             >
               ‹
             </button>
-            <span className="tabular-nums">
+            <span id="player-table-page-indicator" className="tabular-nums">
               {page} / {totalPages}
             </span>
             <button
+              id="player-table-next-btn"
               type="button"
               onClick={() => onPageChange(Math.min(totalPages, page + 1))}
               disabled={page === totalPages}
@@ -584,6 +588,7 @@ export function PlayerTable({
             onMouseDown={() => setContextMenu(CLOSED_MENU)}
           />
         <div
+          id="player-table-context-menu"
           role="menu"
           aria-label={`Edit ${contextMenu.skillLabel} tier for ${contextMenu.playerName}`}
           style={{ left: contextMenu.x, top: contextMenu.y }}

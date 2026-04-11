@@ -428,13 +428,13 @@ export default function PlayersPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <main className="max-w-screen-2xl mx-auto px-4 py-6 space-y-4">
+    <main id="players-page" className="max-w-screen-2xl mx-auto px-4 py-6 space-y-4">
       {/* ── Page header ── */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Players</h1>
+      <div id="players-header" className="flex items-center justify-between gap-4 flex-wrap">
+        <div id="players-header-left">
+          <h1 id="players-title" className="text-xl font-bold text-foreground">Players</h1>
           {!loading && (
-            <p className="text-sm text-muted-foreground">
+            <p id="players-count" className="text-sm text-muted-foreground">
               {filteredPlayers.length === players.length
                 ? `${players.length} players`
                 : `${filteredPlayers.length} of ${players.length} players`}
@@ -469,8 +469,9 @@ export default function PlayersPage() {
 
         {/* View mode toggle — hidden until localStorage is read to avoid hydration flash */}
         {viewModeReady && (
-          <div className="flex rounded-md border border-border overflow-hidden text-xs font-medium">
+          <div id="players-view-toggle" className="flex rounded-md border border-border overflow-hidden text-xs font-medium">
             <button
+              id="players-view-table-btn"
               type="button"
               onClick={() => handleViewModeChange("table")}
               className={cn(
@@ -483,6 +484,7 @@ export default function PlayersPage() {
               Table
             </button>
             <button
+              id="players-view-cards-btn"
               type="button"
               onClick={() => handleViewModeChange("cards")}
               className={cn(
@@ -500,7 +502,7 @@ export default function PlayersPage() {
 
       {/* ── Loading / error states ── */}
       {loading && (
-        <div className="space-y-3 animate-pulse">
+        <div id="players-loading" className="space-y-3 animate-pulse">
           <div className="h-10 bg-muted rounded-lg" />
           <div className="h-8 bg-muted rounded-lg w-1/2" />
           <div className="h-64 bg-muted rounded-lg" />
@@ -508,7 +510,7 @@ export default function PlayersPage() {
       )}
 
       {!loading && error && (
-        <div className="rounded-md border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
+        <div id="players-error" className="rounded-md border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -549,7 +551,7 @@ export default function PlayersPage() {
           ) : (
             <>
               {/* Card grid — auto-fill responsive columns */}
-              <div className="grid grid-cols-[repeat(auto-fill,_minmax(280px,_1fr))] gap-4">
+              <div id="players-cards-grid" className="grid grid-cols-[repeat(auto-fill,_minmax(280px,_1fr))] gap-4">
                 {paginatedPlayers.map((player) => (
                   <PlayerCard key={player.id} player={player} />
                 ))}
@@ -561,8 +563,8 @@ export default function PlayersPage() {
               </div>
 
               {/* Pagination for cards view */}
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>
+              <div id="players-cards-pagination" className="flex items-center justify-between text-xs text-muted-foreground">
+                <span id="players-cards-pagination-info">
                   {sortedPlayers.length === 0
                     ? "No results"
                     : `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, sortedPlayers.length)} of ${sortedPlayers.length}`}
@@ -571,6 +573,7 @@ export default function PlayersPage() {
                   <label className="flex items-center gap-1">
                     <span>Per page:</span>
                     <select
+                      id="players-cards-per-page"
                       className="rounded border border-input bg-background px-1 py-0.5 text-foreground focus:outline-none"
                       value={pageSize}
                       onChange={(e) => {
@@ -585,6 +588,7 @@ export default function PlayersPage() {
                   </label>
                   <div className="flex items-center gap-1">
                     <button
+                      id="players-cards-prev-btn"
                       type="button"
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                       disabled={page === 1}
@@ -592,10 +596,11 @@ export default function PlayersPage() {
                     >
                       ‹
                     </button>
-                    <span className="tabular-nums">
+                    <span id="players-cards-page-indicator" className="tabular-nums">
                       {page} / {Math.max(1, Math.ceil(sortedPlayers.length / pageSize))}
                     </span>
                     <button
+                      id="players-cards-next-btn"
                       type="button"
                       onClick={() => setPage((p) => Math.min(Math.ceil(sortedPlayers.length / pageSize), p + 1))}
                       disabled={page >= Math.ceil(sortedPlayers.length / pageSize)}

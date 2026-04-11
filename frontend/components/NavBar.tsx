@@ -81,10 +81,11 @@ export function NavBar() {
   ];
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <nav id="navbar" className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="max-w-screen-2xl mx-auto px-4 flex h-12 items-center gap-6">
         {/* App name / home link — "Cornerstone" links to the hub dashboard */}
         <Link
+          id="navbar-home-link"
           href="/"
           className="font-semibold text-sm text-foreground hover:text-foreground/80 transition-colors mr-2"
         >
@@ -92,28 +93,31 @@ export function NavBar() {
         </Link>
 
         {/* Nav links */}
-        {navItems.map(({ href, label, badge }) => {
-          const isActive = pathname === href || pathname.startsWith(`${href}/`);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "relative flex items-center gap-1.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {label}
-              {badge}
-              {/* Active underline indicator */}
-              {isActive && (
-                <span className="absolute -bottom-[calc(0.75rem+1px)] left-0 right-0 h-0.5 bg-foreground rounded-t-full" />
-              )}
-            </Link>
-          );
-        })}
+        <div id="navbar-links" className="flex items-center gap-6">
+          {navItems.map(({ href, label, badge }) => {
+            const isActive = pathname === href || pathname.startsWith(`${href}/`);
+            return (
+              <Link
+                key={href}
+                id={`navbar-link-${href.replace("/", "")}`}
+                href={href}
+                className={cn(
+                  "relative flex items-center gap-1.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {label}
+                {badge}
+                {/* Active underline indicator */}
+                {isActive && (
+                  <span className="absolute -bottom-[calc(0.75rem+1px)] left-0 right-0 h-0.5 bg-foreground rounded-t-full" />
+                )}
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </nav>
   );

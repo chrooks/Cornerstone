@@ -283,11 +283,12 @@ export function FilterBar({
       : [];
 
   return (
-    <div className="w-full rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+    <div id="filter-bar" className="w-full rounded-lg border border-border bg-muted/30 p-3 space-y-2">
       {/* ── Top row: filter controls ── */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div id="filter-controls-row" className="flex flex-wrap items-center gap-2">
         {/* Filter type selector */}
         <select
+          id="filter-type-select"
           className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           value={currentFilter.label}
           onChange={(e) => {
@@ -310,6 +311,7 @@ export function FilterBar({
           <>
             {/* Skill name dropdown */}
             <select
+              id="filter-skill-name-select"
               className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               value={skillName}
               onChange={(e) => setSkillName(e.target.value)}
@@ -322,6 +324,7 @@ export function FilterBar({
             </select>
             {/* Tier minimum dropdown */}
             <select
+              id="filter-tier-option-select"
               className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               value={tierOption}
               onChange={(e) => setTierOption(e.target.value)}
@@ -335,6 +338,7 @@ export function FilterBar({
           </>
         ) : currentFilter.inputMethod === "select" ? (
           <select
+            id="filter-value-select"
             className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             value={localValue}
             onChange={(e) => setLocalValue(e.target.value)}
@@ -348,6 +352,7 @@ export function FilterBar({
           </select>
         ) : (
           <input
+            id="filter-value-input"
             type="text"
             className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground w-28 focus:outline-none focus:ring-1 focus:ring-ring"
             value={localValue}
@@ -360,6 +365,7 @@ export function FilterBar({
         {/* AND/OR toggle — only shown when at least one filter is already active */}
         {filters.length > 0 && (
           <button
+            id="filter-connector-toggle"
             type="button"
             onClick={() => onSetNextConnector(nextConnector === "AND" ? "OR" : "AND")}
             title="Toggle AND / OR for the next filter"
@@ -376,6 +382,7 @@ export function FilterBar({
 
         {/* Add filter button */}
         <button
+          id="filter-add-btn"
           type="button"
           onClick={handleAdd}
           disabled={atMax}
@@ -387,6 +394,7 @@ export function FilterBar({
 
         {/* Parenthesis inserter */}
         <button
+          id="filter-add-parens-btn"
           type="button"
           onClick={onAddParens}
           disabled={atMax}
@@ -398,6 +406,7 @@ export function FilterBar({
 
         {/* Clear all */}
         <button
+          id="filter-clear-btn"
           type="button"
           onClick={onClearFilters}
           disabled={filters.length === 0}
@@ -408,7 +417,7 @@ export function FilterBar({
 
         {/* Filter count indicator */}
         {filters.length > 0 && (
-          <span className="text-[10px] text-muted-foreground">
+          <span id="filter-count" className="text-[10px] text-muted-foreground">
             {filters.length}/{MAX_ACTIVE_FILTERS} filters
           </span>
         )}
@@ -418,7 +427,7 @@ export function FilterBar({
       {filters.length > 0 && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={filters.map((f) => f.id)} strategy={horizontalListSortingStrategy}>
-            <div className="flex flex-wrap gap-2 items-center min-h-[2rem]">
+            <div id="filter-pills-row" className="flex flex-wrap gap-2 items-center min-h-[2rem]">
               {filters.map((entry, index) =>
                 isParenMarker(entry) ? (
                   <SortableParenPill

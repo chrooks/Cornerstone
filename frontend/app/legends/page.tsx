@@ -175,25 +175,26 @@ export default function LegendsPage() {
   }
 
   return (
-    <main className="max-w-5xl mx-auto px-4 py-8">
+    <main id="legends-page" className="max-w-5xl mx-auto px-4 py-8">
       {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Legends</h1>
-        <p className="text-muted-foreground text-sm mt-1">
+      <div id="legends-header" className="mb-6">
+        <h1 id="legends-title" className="text-2xl font-bold tracking-tight">Legends</h1>
+        <p id="legends-subtitle" className="text-muted-foreground text-sm mt-1">
           Manually profile all-time greats using historical knowledge and Claude's assessment.
         </p>
       </div>
 
       {/* Overall progress bar */}
-      <div className="mb-6 p-4 rounded-lg border bg-card">
+      <div id="legends-progress-bar" className="mb-6 p-4 rounded-lg border bg-card">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium">
+          <span id="legends-progress-label" className="text-sm font-medium">
             {totalProfiled} / {totalLegends} legends profiled
           </span>
-          <span className="text-sm text-muted-foreground">{overallPct}%</span>
+          <span id="legends-progress-pct" className="text-sm text-muted-foreground">{overallPct}%</span>
         </div>
         <div className="h-2 bg-muted rounded-full overflow-hidden">
           <div
+            id="legends-progress-fill"
             className="h-full bg-emerald-500 rounded-full transition-all"
             style={{ width: `${overallPct}%` }}
           />
@@ -201,11 +202,12 @@ export default function LegendsPage() {
       </div>
 
       {/* Sort + filter controls */}
-      <div className="flex flex-wrap gap-3 mb-6">
+      <div id="legends-controls" className="flex flex-wrap gap-3 mb-6">
         {/* Sort */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-muted-foreground font-medium">Sort:</label>
+        <div id="legends-sort-controls" className="flex items-center gap-2">
+          <label htmlFor="legends-sort-select" className="text-xs text-muted-foreground font-medium">Sort:</label>
           <select
+            id="legends-sort-select"
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
             className="text-xs rounded border border-border bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
@@ -217,11 +219,12 @@ export default function LegendsPage() {
         </div>
 
         {/* Filter */}
-        <div className="flex items-center gap-2">
+        <div id="legends-filter-controls" className="flex items-center gap-2">
           <label className="text-xs text-muted-foreground font-medium">Filter:</label>
           {(["all", "complete", "in_progress", "not_started"] as FilterKey[]).map((key) => (
             <button
               key={key}
+              id={`legends-filter-${key}`}
               onClick={() => setFilterKey(key)}
               className={cn(
                 "text-xs px-2 py-1 rounded border transition-colors",
@@ -238,9 +241,9 @@ export default function LegendsPage() {
 
       {/* Legend grid */}
       {displayLegends.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No legends match this filter.</p>
+        <p id="legends-empty-message" className="text-muted-foreground text-sm">No legends match this filter.</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div id="legends-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {displayLegends.map((legend) => (
             <LegendCard key={legend.id} legend={legend} />
           ))}

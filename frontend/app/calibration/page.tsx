@@ -258,22 +258,24 @@ export default function CalibrationPage() {
 
       <div className="flex flex-col h-[calc(100vh-3rem)] overflow-hidden bg-background">
         {/* Top bar */}
-        <header className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-border bg-background z-10">
+        <header id="calibration-header" className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-border bg-background z-10">
           <div className="flex items-center gap-3">
             <a
+              id="calibration-back-link"
               href="/"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               ← Cornerstone
             </a>
             <span className="text-muted-foreground/30">/</span>
-            <h1 className="text-sm font-semibold text-foreground">
+            <h1 id="calibration-title" className="text-sm font-semibold text-foreground">
               Threshold Calibration
             </h1>
           </div>
           <div className="flex items-center gap-3">
             {/* Data-loaded indicator dot */}
             <span
+              id="calibration-status-dot"
               className={cn(
                 "inline-block size-1.5 rounded-full",
                 !loadingAnchors ? "bg-emerald-500" : "bg-amber-400 animate-pulse"
@@ -281,6 +283,7 @@ export default function CalibrationPage() {
             />
             {/* Toggle button: swaps center panel between Threshold Editor and Stat Leaders */}
             <button
+              id="calibration-stat-leaders-toggle-btn"
               type="button"
               onClick={() => setShowStatLeaders((v) => !v)}
               className={cn(
@@ -296,9 +299,9 @@ export default function CalibrationPage() {
         </header>
 
         {/* Three-panel layout */}
-        <div className="flex-1 overflow-hidden flex">
+        <div id="calibration-panels" className="flex-1 overflow-hidden flex">
           {/* Left panel — Player Explorer (~400px) */}
-          <div className="w-[380px] flex-shrink-0 overflow-hidden">
+          <div id="calibration-left-panel" className="w-[380px] flex-shrink-0 overflow-hidden">
             <PlayerExplorerPanel
               selectedPlayer={selectedPlayer}
               playerSkills={playerSkills}
@@ -315,7 +318,7 @@ export default function CalibrationPage() {
           </div>
 
           {/* Center panel — conditionally shows Threshold Editor or Stat Leaders table */}
-          <div className="flex-1 min-w-0 overflow-hidden border-r border-border">
+          <div id="calibration-center-panel" className="flex-1 min-w-0 overflow-hidden border-r border-border">
             {showStatLeaders ? (
               /* Stat Leaders table — replaces the editor when the toggle is active */
               <StatLeadersPanel
@@ -346,7 +349,7 @@ export default function CalibrationPage() {
           </div>
 
           {/* Right panel — Anchor Sidebar (~300px) */}
-          <div className="w-[300px] flex-shrink-0 overflow-hidden">
+          <div id="calibration-right-panel" className="w-[300px] flex-shrink-0 overflow-hidden">
             <AnchorSidebarPanel
               selectedSkill={selectedSkill}
               anchors={anchors}

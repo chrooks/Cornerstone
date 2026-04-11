@@ -285,12 +285,12 @@ export default function PlayerProfilePage() {
   const { player, skills, flag_summary } = profile;
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+    <main id="player-profile-page" className="max-w-3xl mx-auto px-4 py-8 space-y-6">
       {/* Player header */}
-      <div className="flex items-start gap-4">
+      <div id="player-profile-header" className="flex items-start gap-4">
         <PlayerHeadshot nba_api_id={player.nba_api_id} size={96} name={player.name} />
         <div className="space-y-1 min-w-0 flex-1">
-          <h1 className="text-xl font-bold text-foreground">{player.name}</h1>
+          <h1 id="player-profile-name" className="text-xl font-bold text-foreground">{player.name}</h1>
           <p className="text-sm text-muted-foreground">
             {player.team && (
               <>
@@ -339,6 +339,7 @@ export default function PlayerProfilePage() {
       {/* Flag summary + review link */}
       {flag_summary.total > 0 && (
         <div
+          id="player-profile-flag-summary"
           className={cn(
             "flex items-center justify-between rounded-lg border px-4 py-3",
             flag_summary.unresolved > 0
@@ -373,7 +374,7 @@ export default function PlayerProfilePage() {
 
       {/* Skill profile */}
       {skills ? (
-        <div className="space-y-3">
+        <div id="player-profile-skills" className="space-y-3">
           {/* Legend */}
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
             <span className="font-semibold">Source key:</span>

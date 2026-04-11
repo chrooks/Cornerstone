@@ -593,12 +593,13 @@ export default function PlayerReviewPage() {
   const resolvedFlags   = flags.filter((f) => f.resolution != null);
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+    <main id="player-review-page" className="max-w-3xl mx-auto px-4 py-8 space-y-6">
       <Toaster position="top-right" richColors />
 
       {/* Prev/next navigation — fixed in the left and right margins */}
       {prevEntry && (
         <button
+          id="review-prev-btn"
           type="button"
           onClick={() => router.push(`/review/${prevEntry.player_id}`)}
           title={`← ${prevEntry.player_name}`}
@@ -617,6 +618,7 @@ export default function PlayerReviewPage() {
       )}
       {nextEntry && (
         <button
+          id="review-next-btn"
           type="button"
           onClick={() => router.push(`/review/${nextEntry.player_id}`)}
           title={`${nextEntry.player_name} →`}
@@ -635,8 +637,9 @@ export default function PlayerReviewPage() {
       )}
 
       {/* Back link + player header */}
-      <div>
+      <div id="review-player-header">
         <Link
+          id="review-back-link"
           href="/review"
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -647,10 +650,11 @@ export default function PlayerReviewPage() {
             <PlayerHeadshot nba_api_id={player.nba_api_id} size={72} name={player.name} />
             <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-foreground">
+              <h1 id="review-player-name" className="text-xl font-bold text-foreground">
                 {player.name}
               </h1>
               <button
+                id="review-refresh-btn"
                 type="button"
                 onClick={handleRefresh}
                 disabled={refreshing}
@@ -705,6 +709,7 @@ export default function PlayerReviewPage() {
           </div>
           {/* Link to canonical profile */}
           <Link
+            id="review-view-profile-link"
             href={`/players/${player_id}`}
             className="text-xs text-muted-foreground hover:text-foreground underline transition-colors flex-shrink-0"
           >
@@ -714,16 +719,17 @@ export default function PlayerReviewPage() {
       </div>
 
       {/* Summary + bulk actions */}
-      <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3">
-        <div className="text-sm">
+      <div id="review-summary-bar" className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3">
+        <div id="review-summary-counts" className="text-sm">
           <span className="font-semibold text-foreground">{unresolvedFlags.length}</span>
           <span className="text-muted-foreground"> unresolved · </span>
           <span className="font-semibold text-foreground">{resolvedFlags.length}</span>
           <span className="text-muted-foreground"> resolved of {flags.length} flags</span>
         </div>
         {unresolvedFlags.length > 0 && (
-          <div className="flex gap-2">
+          <div id="review-bulk-actions" className="flex gap-2">
             <button
+              id="review-bulk-trust-stats-btn"
               type="button"
               disabled={bulkSaving}
               onClick={() => handleBulkResolve("trust_stats")}
@@ -732,6 +738,7 @@ export default function PlayerReviewPage() {
               Trust All Stats
             </button>
             <button
+              id="review-bulk-trust-claude-btn"
               type="button"
               disabled={bulkSaving}
               onClick={() => handleBulkResolve("trust_claude")}
@@ -754,7 +761,7 @@ export default function PlayerReviewPage() {
 
       {/* Unresolved flags */}
       {unresolvedFlags.length > 0 && (
-        <section className="space-y-3">
+        <section id="review-unresolved-section" className="space-y-3">
           <h2 className="text-sm font-semibold text-foreground">
             Unresolved ({unresolvedFlags.length})
           </h2>
@@ -785,7 +792,7 @@ export default function PlayerReviewPage() {
 
       {/* Resolved flags (collapsed by default if there are unresolved) */}
       {resolvedFlags.length > 0 && (
-        <section className="space-y-3">
+        <section id="review-resolved-section" className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground">
             Resolved ({resolvedFlags.length})
           </h2>
@@ -816,8 +823,9 @@ export default function PlayerReviewPage() {
 
       {/* All Skills — manual override for any skill regardless of flag status */}
       {Object.keys(profiles.composite).length > 0 && (
-        <section>
+        <section id="review-all-skills-section">
           <button
+            id="review-all-skills-toggle-btn"
             type="button"
             onClick={() => setAllSkillsOpen((v) => !v)}
             className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
@@ -829,7 +837,7 @@ export default function PlayerReviewPage() {
 
           {allSkillsOpen && (
             <div className="mt-3 rounded-lg border border-border overflow-hidden">
-              <table className="w-full text-xs">
+              <table id="review-all-skills-table" className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground">Skill</th>

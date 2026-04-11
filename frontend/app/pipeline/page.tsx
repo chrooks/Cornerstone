@@ -256,23 +256,24 @@ export default function PipelinePage() {
   const totalPlayers = status?.total_qualifying_players ?? null;
 
   return (
-    <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+    <main id="pipeline-page" className="max-w-4xl mx-auto px-4 py-8 space-y-8">
       <Toaster position="top-right" richColors />
 
       {/* Page header */}
-      <div>
-        <h1 className="text-xl font-bold text-foreground">Pipeline</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+      <div id="pipeline-header">
+        <h1 id="pipeline-title" className="text-xl font-bold text-foreground">Pipeline</h1>
+        <p id="pipeline-subtitle" className="text-sm text-muted-foreground mt-1">
           Run the two-step stat → composite pipeline for all qualifying players
           ({CURRENT_SEASON}).
         </p>
       </div>
 
       {/* Status dashboard */}
-      <section>
+      <section id="pipeline-status-section">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-foreground">Current Status</h2>
           <button
+            id="pipeline-refresh-btn"
             type="button"
             onClick={refreshStatus}
             disabled={statusLoading}
@@ -282,7 +283,7 @@ export default function PipelinePage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div id="pipeline-status-grid" className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatTile
             label="Qualifying Players"
             value={status?.total_qualifying_players ?? null}
@@ -306,8 +307,8 @@ export default function PipelinePage() {
 
         {/* Flag summary row */}
         {status && (
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div className="rounded-lg border border-border bg-card px-4 py-3 flex items-center gap-3">
+          <div id="pipeline-flags-row" className="mt-3 grid grid-cols-2 gap-3">
+            <div id="pipeline-unresolved-card" className="rounded-lg border border-border bg-card px-4 py-3 flex items-center gap-3">
               <div
                 className={cn(
                   "w-2 h-2 rounded-full flex-shrink-0",
@@ -326,7 +327,7 @@ export default function PipelinePage() {
                 </p>
               </div>
             </div>
-            <div className="rounded-lg border border-border bg-card px-4 py-3 flex items-center gap-3">
+            <div id="pipeline-flagged-players-card" className="rounded-lg border border-border bg-card px-4 py-3 flex items-center gap-3">
               <div
                 className={cn(
                   "w-2 h-2 rounded-full flex-shrink-0",
@@ -343,13 +344,14 @@ export default function PipelinePage() {
       </section>
 
       {/* Pipeline steps */}
-      <section className="space-y-4">
+      <section id="pipeline-run-section" className="space-y-4">
         <h2 className="text-sm font-semibold text-foreground">Run Pipeline</h2>
         <p className="text-xs text-muted-foreground -mt-2">
           Run all three steps in order. Step 0 fetches raw NBA stats and can take
           30–60 min for a full league sweep. Steps 1 and 2 are much faster.
         </p>
 
+        <div id="pipeline-step-0">
         <StepCard
           step={0}
           title="Fetch Player Stats"
@@ -360,8 +362,9 @@ export default function PipelinePage() {
           disabled={step1Running || step2Running}
           headerExtra={
             /* Force refresh bypasses the 24-hour cache — use after fixing the assembler */
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none flex-shrink-0">
+            <label id="pipeline-step-0-force-refresh-label" className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none flex-shrink-0">
               <input
+                id="pipeline-step-0-force-refresh"
                 type="checkbox"
                 checked={step0ForceRefresh}
                 onChange={(e) => setStep0ForceRefresh(e.target.checked)}
@@ -372,7 +375,9 @@ export default function PipelinePage() {
             </label>
           }
         />
+        </div>
 
+        <div id="pipeline-step-1">
         <StepCard
           step={1}
           title="Stat Skill Mapping"
@@ -382,7 +387,9 @@ export default function PipelinePage() {
           onRun={handleRunStep1}
           disabled={step0Running || step2Running}
         />
+        </div>
 
+        <div id="pipeline-step-2">
         <StepCard
           step={2}
           title="Claude Assessment & Composite"
@@ -392,6 +399,7 @@ export default function PipelinePage() {
           onRun={handleRunStep2}
           disabled={step0Running || step1Running}
         />
+        </div>
       </section>
     </main>
   );

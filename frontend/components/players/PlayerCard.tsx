@@ -75,6 +75,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
 
   return (
     <div
+      id={`player-card-${player.id}`}
       onClick={isLegend ? undefined : (e) => {
         if (e.metaKey || e.ctrlKey) {
           window.open(`/players/${player.id}`, "_blank");
@@ -93,7 +94,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
       <div className="flex items-center gap-3">
         <PlayerHeadshot nba_api_id={player.nba_api_id} size={48} name={player.name} />
         <div className="min-w-0 flex-1">
-          <p className={cn("font-semibold text-sm text-foreground truncate", !isLegend && "group-hover:underline")}>
+          <p id={`player-card-name-${player.id}`} className={cn("font-semibold text-sm text-foreground truncate", !isLegend && "group-hover:underline")}>
             {isLegend && <span className="text-amber-500 mr-1" aria-label="Legend">★</span>}
             {player.name}
           </p>
@@ -104,7 +105,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
 
         {/* Unresolved flags badge */}
         {player.flag_summary.unresolved > 0 && (
-          <span className="flex-shrink-0 inline-flex items-center rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+          <span id={`player-card-flags-${player.id}`} className="flex-shrink-0 inline-flex items-center rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
             {player.flag_summary.unresolved} flag{player.flag_summary.unresolved !== 1 ? "s" : ""}
           </span>
         )}
@@ -136,6 +137,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
           {/* Expand / collapse toggle */}
           {hasMore && (
             <button
+              id={`player-card-expand-${player.id}`}
               type="button"
               onClick={(e) => {
                 e.stopPropagation(); // don't navigate on expand click

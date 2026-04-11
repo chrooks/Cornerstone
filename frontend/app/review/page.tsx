@@ -127,17 +127,17 @@ export default function ReviewQueuePage() {
   ).sort();
 
   return (
-    <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <main id="review-queue-page" className="max-w-5xl mx-auto px-4 py-8 space-y-6">
       {/* Page header */}
-      <div>
-        <h1 className="text-xl font-bold text-foreground">Review Queue</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+      <div id="review-queue-header">
+        <h1 id="review-queue-title" className="text-xl font-bold text-foreground">Review Queue</h1>
+        <p id="review-queue-subtitle" className="text-sm text-muted-foreground mt-1">
           Players with at least one unresolved skill flag requiring human review.
         </p>
       </div>
 
       {/* Direct player lookup — navigate to any player's review card, flagged or not */}
-      <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
+      <div id="review-player-lookup" className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
         <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Open player</span>
         <PlayerSearchCombobox
           placeholder="Search any player…"
@@ -148,13 +148,15 @@ export default function ReviewQueuePage() {
 
       {/* Filters */}
       <form
+        id="review-filters-form"
         onSubmit={handleSearch}
         className="flex flex-wrap gap-2 items-end"
       >
         {/* Search */}
         <div className="flex-1 min-w-[180px]">
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Player Name</label>
+          <label htmlFor="review-search-input" className="text-xs font-medium text-muted-foreground block mb-1">Player Name</label>
           <input
+            id="review-search-input"
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -165,8 +167,9 @@ export default function ReviewQueuePage() {
 
         {/* Team dropdown */}
         <div className="min-w-[110px]">
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Team</label>
+          <label htmlFor="review-team-select" className="text-xs font-medium text-muted-foreground block mb-1">Team</label>
           <select
+            id="review-team-select"
             value={teamFilter}
             onChange={(e) => setTeamFilter(e.target.value)}
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -180,8 +183,9 @@ export default function ReviewQueuePage() {
 
         {/* Position dropdown */}
         <div className="min-w-[110px]">
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Position</label>
+          <label htmlFor="review-position-select" className="text-xs font-medium text-muted-foreground block mb-1">Position</label>
           <select
+            id="review-position-select"
             value={posFilter}
             onChange={(e) => setPosFilter(e.target.value)}
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -195,8 +199,9 @@ export default function ReviewQueuePage() {
 
         {/* Flag reason dropdown */}
         <div className="min-w-[160px]">
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Flag Reason</label>
+          <label htmlFor="review-reason-select" className="text-xs font-medium text-muted-foreground block mb-1">Flag Reason</label>
           <select
+            id="review-reason-select"
             value={reasonFilter}
             onChange={(e) => setReasonFilter(e.target.value)}
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -209,6 +214,7 @@ export default function ReviewQueuePage() {
         </div>
 
         <button
+          id="review-filter-btn"
           type="submit"
           className="px-4 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
         >
@@ -218,6 +224,7 @@ export default function ReviewQueuePage() {
         {/* Clear filters — refetches from API to avoid showing stale resolved players */}
         {(search || teamFilter || posFilter || reasonFilter) && (
           <button
+            id="review-clear-btn"
             type="button"
             onClick={handleClear}
             className="px-3 py-1.5 rounded-md border border-input text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -229,7 +236,7 @@ export default function ReviewQueuePage() {
 
       {/* Queue count */}
       {!loading && !error && (
-        <p className="text-xs text-muted-foreground">
+        <p id="review-queue-count" className="text-xs text-muted-foreground">
           {players.length === 0
             ? "No players in queue."
             : `${players.length} player${players.length !== 1 ? "s" : ""} in queue`}
@@ -252,9 +259,9 @@ export default function ReviewQueuePage() {
 
       {/* Player table */}
       {!loading && !error && players.length > 0 && (
-        <div className="rounded-lg border border-border overflow-hidden">
+        <div id="review-player-table" className="rounded-lg border border-border overflow-hidden">
           {/* Table header */}
-          <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-4 py-2 bg-muted/40 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          <div id="review-player-table-header" className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-4 py-2 bg-muted/40 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             <span>Player</span>
             <span className="text-right">Team</span>
             <span className="text-right">Pos</span>

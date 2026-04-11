@@ -118,7 +118,7 @@ export function SortControls({ sortKeys, onSortKeysChange }: SortControlsProps) 
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div id="sort-controls" className="flex flex-wrap items-center gap-2">
       <span className="text-xs font-medium text-muted-foreground">Sort:</span>
 
       {/* Active sort key chips */}
@@ -160,6 +160,7 @@ export function SortControls({ sortKeys, onSortKeysChange }: SortControlsProps) 
       {!atMax && (
         <div ref={dropdownRef} className="relative">
           <button
+            id="sort-add-btn"
             type="button"
             onClick={() => setDropdownOpen((v) => !v)}
             className="flex items-center gap-1 text-xs rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground px-2 py-1 transition-colors"
@@ -168,7 +169,7 @@ export function SortControls({ sortKeys, onSortKeysChange }: SortControlsProps) 
           </button>
 
           {dropdownOpen && (
-            <div className="absolute top-full left-0 mt-1 z-50 w-52 max-h-60 overflow-y-auto rounded-md border border-border bg-background shadow-md">
+            <div id="sort-dropdown" className="absolute top-full left-0 mt-1 z-50 w-52 max-h-60 overflow-y-auto rounded-md border border-border bg-background shadow-md">
               {SORT_FIELD_OPTIONS.filter((f) => !activeFieldSet.has(f)).map((field) => (
                 <button
                   key={field}
@@ -191,6 +192,7 @@ export function SortControls({ sortKeys, onSortKeysChange }: SortControlsProps) 
       {/* Clear sorts */}
       {sortKeys.length > 0 && (
         <button
+          id="sort-clear-btn"
           type="button"
           onClick={() => onSortKeysChange([])}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"

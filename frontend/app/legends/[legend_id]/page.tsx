@@ -467,13 +467,13 @@ export default function LegendEditorPage() {
   const isDiffMode = claudeSuggestions !== null && !isPreFillMode;
 
   return (
-    <main className="max-w-6xl mx-auto px-4 py-8">
+    <main id="legend-editor-page" className="max-w-6xl mx-auto px-4 py-8">
       {/* Navigation row */}
-      <div className="flex items-center justify-between mb-6">
-        <Link href="/legends" className="text-sm text-muted-foreground hover:underline">
+      <div id="legend-nav-row" className="flex items-center justify-between mb-6">
+        <Link id="legend-back-link" href="/legends" className="text-sm text-muted-foreground hover:underline">
           ← Back to Legends
         </Link>
-        <div className="flex items-center gap-4">
+        <div id="legend-nav-arrows" className="flex items-center gap-4">
           {prevLegend && (
             <Link
               href={`/legends/${prevLegend.id}`}
@@ -501,10 +501,10 @@ export default function LegendEditorPage() {
       )}
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 md:grid-cols-[35%_65%] gap-6">
+      <div id="legend-editor-layout" className="grid grid-cols-1 md:grid-cols-[35%_65%] gap-6">
 
         {/* Left Column — Legend context */}
-        <div className="space-y-4">
+        <div id="legend-left-column" className="space-y-4">
           {/* Header */}
           <div className="flex items-start gap-4">
             <PlayerHeadshot nba_api_id={legend.nba_api_id} size={72} name={legend.name} />
@@ -623,8 +623,9 @@ export default function LegendEditorPage() {
 
           {/* Notes textarea */}
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+            <label htmlFor="legend-notes" className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
             <textarea
+              id="legend-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               onBlur={handleNotesBlur}
@@ -637,6 +638,7 @@ export default function LegendEditorPage() {
           {/* Get Claude's Take button */}
           <div>
             <button
+              id="legend-claude-btn"
               onClick={handleClaudeSuggestion}
               disabled={claudeLoading}
               className="w-full flex items-center justify-center gap-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
@@ -657,9 +659,9 @@ export default function LegendEditorPage() {
         </div>
 
         {/* Right Column — Skill editor */}
-        <div className="space-y-4">
+        <div id="legend-right-column" className="space-y-4">
           {/* Completion progress */}
-          <div className="rounded-md border bg-card px-4 py-3">
+          <div id="legend-completion-progress" className="rounded-md border bg-card px-4 py-3">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-sm font-medium">{ratedCount} / {TOTAL_SKILLS} skills rated</span>
               <span className="text-xs text-muted-foreground">{completionPct}%</span>
@@ -677,7 +679,7 @@ export default function LegendEditorPage() {
 
           {/* Diff view header (shown when Claude suggestions exist with existing ratings) */}
           {isDiffMode && diffSummary && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+            <div id="legend-diff-header" className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-sm font-medium text-amber-800">
                 Claude agrees on {diffSummary.agrees} skills, disagrees on {diffSummary.disagrees},
                 {diffSummary.unrated > 0 && ` ${diffSummary.unrated} unrated`}
@@ -685,6 +687,7 @@ export default function LegendEditorPage() {
               <div className="flex gap-2 mt-2">
                 {diffSummary.disagrees + diffSummary.unrated > 0 && (
                   <button
+                    id="legend-accept-all-btn"
                     onClick={() => setShowAcceptAllDialog(true)}
                     className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded transition-colors"
                   >
@@ -692,6 +695,7 @@ export default function LegendEditorPage() {
                   </button>
                 )}
                 <button
+                  id="legend-dismiss-suggestions-btn"
                   onClick={() => setClaudeSuggestions(null)}
                   className="text-xs border border-amber-400 text-amber-700 hover:bg-amber-100 px-3 py-1 rounded transition-colors"
                 >
@@ -794,8 +798,8 @@ export default function LegendEditorPage() {
 
       {/* Accept All Disagreements confirmation dialog */}
       {showAcceptAllDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-background rounded-lg border shadow-xl p-6 max-w-sm w-full mx-4">
+        <div id="legend-accept-dialog-backdrop" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div id="legend-accept-dialog" className="bg-background rounded-lg border shadow-xl p-6 max-w-sm w-full mx-4">
             <h2 className="text-base font-semibold mb-2">Accept All Disagreements?</h2>
             <p className="text-sm text-muted-foreground mb-4">
               This will apply Claude's suggested tier to every skill where Claude disagrees with
@@ -804,12 +808,14 @@ export default function LegendEditorPage() {
             </p>
             <div className="flex justify-end gap-2">
               <button
+                id="legend-accept-dialog-cancel"
                 onClick={() => setShowAcceptAllDialog(false)}
                 className="text-sm px-3 py-1.5 rounded border border-border hover:bg-muted transition-colors"
               >
                 Cancel
               </button>
               <button
+                id="legend-accept-dialog-confirm"
                 onClick={acceptAllDisagreements}
                 className="text-sm px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white transition-colors"
               >

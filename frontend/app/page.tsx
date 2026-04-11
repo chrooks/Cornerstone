@@ -284,98 +284,112 @@ export default function HubPage() {
     : 0;
 
   return (
-    <main className="max-w-5xl mx-auto px-4 py-10">
+    <main id="hub-page" className="max-w-5xl mx-auto px-4 py-10">
       {/* Page header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Cornerstone</h1>
-        <p className="text-muted-foreground mt-1">
+      <div id="hub-header" className="mb-8">
+        <h1 id="hub-title" className="text-3xl font-bold tracking-tight">Cornerstone</h1>
+        <p id="hub-subtitle" className="text-muted-foreground mt-1">
           Internal tool for building NBA player skill profiles.
         </p>
       </div>
 
       {/* Row 1 — Navigation cards (4 across) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <NavCard
-          href="/pipeline"
-          title="Pipeline"
-          description="Run stat mapping and Claude assessment"
-          icon="▶"
-          badge={pipelineBadge}
-        />
-        <NavCard
-          href="/review"
-          title="Review Queue"
-          description="Resolve flagged skill assessments"
-          icon="📋"
-          badge={reviewBadge}
-        />
-        <NavCard
-          href="/calibration"
-          title="Calibration"
-          description="Tune skill classification thresholds"
-          icon="⚙"
-          badge={anchorBadge}
-        />
-        <NavCard
-          href="/legends"
-          title="Legends"
-          description="Profile all-time greats"
-          icon="★"
-          badge={legendsBadge}
-        />
+      <div id="hub-nav-cards" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div id="hub-card-pipeline">
+          <NavCard
+            href="/pipeline"
+            title="Pipeline"
+            description="Run stat mapping and Claude assessment"
+            icon="▶"
+            badge={pipelineBadge}
+          />
+        </div>
+        <div id="hub-card-review">
+          <NavCard
+            href="/review"
+            title="Review Queue"
+            description="Resolve flagged skill assessments"
+            icon="📋"
+            badge={reviewBadge}
+          />
+        </div>
+        <div id="hub-card-calibration">
+          <NavCard
+            href="/calibration"
+            title="Calibration"
+            description="Tune skill classification thresholds"
+            icon="⚙"
+            badge={anchorBadge}
+          />
+        </div>
+        <div id="hub-card-legends">
+          <NavCard
+            href="/legends"
+            title="Legends"
+            description="Profile all-time greats"
+            icon="★"
+            badge={legendsBadge}
+          />
+        </div>
       </div>
 
       {/* Row 2 — Status summary (3 stat blocks) */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <StatBlock
-          label="Current Players"
-          value={
-            pipelineLoading ? (
-              <Spinner />
-            ) : (
-              `${totalComposite} / ${totalQualifying} profiles complete`
-            )
-          }
-          detail={pipelineLoading ? undefined : `${playerCompletePct}%`}
-          progress={pipelineLoading ? null : playerCompletePct}
-        />
+      <div id="hub-stats-row" className="flex flex-col sm:flex-row gap-4">
+        <div id="hub-stat-players">
+          <StatBlock
+            label="Current Players"
+            value={
+              pipelineLoading ? (
+                <Spinner />
+              ) : (
+                `${totalComposite} / ${totalQualifying} profiles complete`
+              )
+            }
+            detail={pipelineLoading ? undefined : `${playerCompletePct}%`}
+            progress={pipelineLoading ? null : playerCompletePct}
+          />
+        </div>
 
-        <StatBlock
-          label="Legends"
-          value={
-            legendsLoading ? (
-              <Spinner />
-            ) : (
-              `${stats.legendsComplete} / ${stats.legendsTotal} profiled`
-            )
-          }
-          detail={legendsLoading ? undefined : `${legendCompletePct}%`}
-          progress={legendsLoading ? null : legendCompletePct}
-        />
+        <div id="hub-stat-legends">
+          <StatBlock
+            label="Legends"
+            value={
+              legendsLoading ? (
+                <Spinner />
+              ) : (
+                `${stats.legendsComplete} / ${stats.legendsTotal} profiled`
+              )
+            }
+            detail={legendsLoading ? undefined : `${legendCompletePct}%`}
+            progress={legendsLoading ? null : legendCompletePct}
+          />
+        </div>
 
-        <StatBlock
-          label="Review Queue"
-          value={
-            reviewLoading || pipelineLoading ? (
-              <Spinner />
-            ) : (
-              `${stats.pendingReview ?? "—"} pending`
-            )
-          }
-          detail={
-            !pipelineLoading && pipelineStatus
-              ? (() => {
-                  const autoAccepted = stats.autoAccepted ?? 0;
-                  // Errors = flags that are neither pending nor auto-accepted
-                  const errors = Math.max(
-                    0,
-                    pipelineStatus.total_flags - (pipelineStatus.unresolved_flags ?? 0) - autoAccepted
-                  );
-                  return `${autoAccepted} auto-accepted · ${errors} errors`;
-                })()
-              : undefined
-          }
-        />
+        <div id="hub-stat-review">
+          <StatBlock
+            label="Review Queue"
+            value={
+              reviewLoading || pipelineLoading ? (
+                <Spinner />
+              ) : (
+                `${stats.pendingReview ?? "—"} pending`
+              )
+            }
+            detail={
+              !pipelineLoading && pipelineStatus
+                ? (() => {
+                    const autoAccepted = stats.autoAccepted ?? 0;
+                    // Errors = flags that are neither pending nor auto-accepted
+                    const errors = Math.max(
+                      0,
+                      pipelineStatus.total_flags - (pipelineStatus.unresolved_flags ?? 0) - autoAccepted
+                    );
+                    return `${autoAccepted} auto-accepted · ${errors} errors`;
+                  })()
+                : undefined
+            }
+          />
+        </div>
       </div>
     </main>
   );

@@ -18,10 +18,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="font-sans antialiased">
+      <body id="app-body" className="font-sans antialiased">
         {/* Global navigation — shown on all pages */}
         <NavBar />
-        {children}
+        <div id="page-content">{children}</div>
       </body>
     </html>
   );
