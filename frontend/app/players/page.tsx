@@ -12,8 +12,8 @@
  *  - View mode (table/cards) persisted to localStorage
  */
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { listPlayersWithSkills, manualOverrideSkill } from "@/lib/api";
 import { FilterBar } from "@/components/players/FilterBar";
@@ -139,33 +139,114 @@ function nextFilterId(): string {
 }
 
 // ---------------------------------------------------------------------------
+// URL serialization / deserialization helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Encode a FilterEntry into a single URL param value.
+ * Active filters: "Label|value|connector|negated"
+ * Paren markers:  "(|connector" or ")|connector"
+ */
+function encodeFilterEntry(entry: FilterEntry): string {
+  if ("paren" in entry) {
+    return `${entry.paren}|${entry.connector}`;
+  }
+  return [
+    entry.filter.label,
+    entry.value,
+    entry.connector,
+    entry.negated ? "1" : "0",
+  ].join("|");
+}
+
+/**
+ * Decode a "f" param value back into a FilterEntry.
+ * Returns null when the label is unrecognized or the format is invalid.
+ */
+function decodeFilterEntry(raw: string): FilterEntry | null {
+  const parts = raw.split("|");
+  // Paren markers have 2 parts
+  if (parts.length === 2 && (parts[0] === "(" || parts[0] === ")")) {
+    const connector = parts[1] === "OR" ? "OR" : "AND";
+    return { id: crypto.randomUUID(), paren: parts[0] as "(" | ")", connector };
+  }
+  // Active filters have 4 parts
+  if (parts.length < 4) return null;
+  const [label, value, connRaw, negRaw] = parts;
+  const filter = AVAILABLE_FILTERS.find((f) => f.label === label);
+  if (!filter) return null;
+  const connector: FilterConnector = connRaw === "OR" ? "OR" : "AND";
+  return {
+    id: crypto.randomUUID(),
+    filter,
+    value,
+    connector,
+    negated: negRaw === "1",
+  };
+}
+
+/** Build a URLSearchParams from current filter + sort state. */
+function buildSearchParams(entries: FilterEntry[], keys: SortKey[]): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const entry of entries) {
+    params.append("f", encodeFilterEntry(entry));
+  }
+  for (const key of keys) {
+    params.append("s", `${key.field}|${key.direction}`);
+  }
+  return params;
+}
+
+/** Parse initial FilterEntry[] from URLSearchParams, with legacy ?team= fallback. */
+function parseFiltersFromUrl(searchParams: URLSearchParams): FilterEntry[] {
+  const fParams = searchParams.getAll("f");
+  if (fParams.length > 0) {
+    return fParams.flatMap((raw) => {
+      const entry = decodeFilterEntry(raw);
+      return entry ? [entry] : [];
+    });
+  }
+  // Backward-compat: legacy ?team=DEN links used before URL sync was added
+  const teamParam = searchParams.get("team");
+  if (teamParam) {
+    const teamFilter = AVAILABLE_FILTERS.find((f) => f.label === "Team");
+    if (teamFilter) {
+      return [{ id: crypto.randomUUID(), filter: teamFilter, value: teamParam, connector: "AND", negated: false }];
+    }
+  }
+  return [];
+}
+
+/** Parse initial SortKey[] from URLSearchParams. */
+function parseSortFromUrl(searchParams: URLSearchParams): SortKey[] {
+  const sParams = searchParams.getAll("s");
+  if (sParams.length === 0) return [{ field: "name", direction: "asc" }];
+  const keys: SortKey[] = sParams.flatMap((raw) => {
+    const [field, dir] = raw.split("|");
+    if (!field) return [];
+    return [{ field, direction: dir === "desc" ? "desc" : "asc" } as SortKey];
+  });
+  return keys.length > 0 ? keys : [{ field: "name", direction: "asc" }];
+}
+
+// ---------------------------------------------------------------------------
 // PlayersPage
 // ---------------------------------------------------------------------------
 
 export default function PlayersPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const [players, setPlayers] = useState<PlayerWithSkills[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Filter state ──────────────────────────────────────────────────────────
-  // Pre-seed from URL: /players?team=LAL opens with that team filter active
-  const [filterEntries, setFilterEntries] = useState<FilterEntry[]>(() => {
-    const teamParam = searchParams.get("team");
-    if (!teamParam) return [];
-    const teamFilter = AVAILABLE_FILTERS.find((f) => f.label === "Team");
-    if (!teamFilter) return [];
-    const entry: ActiveFilter = {
-      id: crypto.randomUUID(),
-      filter: teamFilter,
-      value: teamParam,
-      connector: "AND",
-      negated: false,
-    };
-    return [entry];
-  });
+  // ── Filter state — seeded from URL on first render ────────────────────────
+  const [filterEntries, setFilterEntries] = useState<FilterEntry[]>(() =>
+    parseFiltersFromUrl(searchParams),
+  );
   const [nextConnector, setNextConnector] = useState<FilterConnector>("AND");
 
   // Legends are visible when no NOT-team=Legends filter is active.
@@ -188,8 +269,23 @@ export default function PlayersPage() {
     }
   }, [legendsVisible, filterEntries, nextConnector]);
 
-  // ── Sort state ────────────────────────────────────────────────────────────
-  const [sortKeys, setSortKeys] = useState<SortKey[]>([{ field: "name", direction: "asc" }]);
+  // ── Sort state — seeded from URL on first render ──────────────────────────
+  const [sortKeys, setSortKeys] = useState<SortKey[]>(() =>
+    parseSortFromUrl(searchParams),
+  );
+
+  // ── Sync filter + sort state → URL (replace, not push, to avoid history bloat) ──
+  // Skip the very first render to avoid overwriting the seed URL params.
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const params = buildSearchParams(filterEntries, sortKeys);
+    const qs = params.toString();
+    router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+  }, [filterEntries, sortKeys, pathname, router]);
 
   // ── View state ────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<ViewMode>("table");
