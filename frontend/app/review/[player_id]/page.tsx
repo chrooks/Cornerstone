@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Toaster, toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getPlayerFlags, resolveFlag, bulkResolveFlags, getSkillBreakdown, manualOverrideSkill, getPlayerStats, getReviewQueue } from "@/lib/api";
+import { getPlayerFlags, resolveFlag, bulkResolveFlags, getSkillBreakdown, manualOverrideSkill, getPlayerStats, getReviewQueue, deletePlayer } from "@/lib/api";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { ConditionBreakdown } from "@/components/ConditionBreakdown";
@@ -324,6 +324,28 @@ export default function PlayerReviewPage() {
 
   const [refreshing, setRefreshing] = useState(false);
 
+  // Delete confirmation modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting]               = useState(false);
+  const [deleteError, setDeleteError]         = useState<string | null>(null);
+
+  const handleDeleteConfirm = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await deletePlayer(player_id);
+      if (res.success) {
+        router.push("/review");
+      } else {
+        setDeleteError(res.error ?? "Delete failed");
+        setDeleting(false);
+      }
+    } catch {
+      setDeleteError("Request failed");
+      setDeleting(false);
+    }
+  };
+
   // Manual override state for the "All Skills" section
   const [overridingSkill, setOverridingSkill] = useState<string | null>(null);
   const [overrideTier, setOverrideTier]       = useState<SkillTier | "">("");
@@ -596,6 +618,52 @@ export default function PlayerReviewPage() {
     <main id="player-review-page" className="max-w-3xl mx-auto px-4 py-8 space-y-6">
       <Toaster position="top-right" richColors />
 
+      {/* Delete confirmation modal */}
+      {deleteModalOpen && (
+        <div
+          id="review-delete-modal-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => { if (!deleting) setDeleteModalOpen(false); }}
+        >
+          <div
+            id="review-delete-modal"
+            className="bg-background border border-border rounded-lg shadow-lg p-6 w-full max-w-sm mx-4 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="review-delete-modal-title" className="text-base font-semibold text-foreground">
+              Delete {player.name}?
+            </h2>
+            <p id="review-delete-modal-body" className="text-sm text-muted-foreground">
+              This will permanently remove the player and all associated stats, skill profiles,
+              and flags. This action cannot be undone.
+            </p>
+            {deleteError && (
+              <p id="review-delete-modal-error" className="text-sm text-destructive">{deleteError}</p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button
+                id="review-delete-modal-cancel"
+                type="button"
+                disabled={deleting}
+                onClick={() => { setDeleteModalOpen(false); setDeleteError(null); }}
+                className="text-sm px-3 py-1.5 rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                id="review-delete-modal-confirm"
+                type="button"
+                disabled={deleting}
+                onClick={handleDeleteConfirm}
+                className="text-sm px-3 py-1.5 rounded bg-destructive text-destructive-foreground font-medium hover:opacity-80 disabled:opacity-40 transition-opacity"
+              >
+                {deleting ? "Deleting…" : "Delete Player"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Prev/next navigation — fixed in the left and right margins */}
       {prevEntry && (
         <button
@@ -707,14 +775,24 @@ export default function PlayerReviewPage() {
             )}
             </div>
           </div>
-          {/* Link to canonical profile */}
-          <Link
-            id="review-view-profile-link"
-            href={`/players/${player_id}`}
-            className="text-xs text-muted-foreground hover:text-foreground underline transition-colors flex-shrink-0"
-          >
-            View Profile →
-          </Link>
+          {/* Top-right actions: profile link + delete */}
+          <div className="flex flex-col items-end gap-2 flex-shrink-0">
+            <Link
+              id="review-view-profile-link"
+              href={`/players/${player_id}`}
+              className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+            >
+              View Profile →
+            </Link>
+            <button
+              id="review-delete-btn"
+              type="button"
+              onClick={() => { setDeleteError(null); setDeleteModalOpen(true); }}
+              className="text-xs px-2 py-1 rounded border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              Delete
+            </button>
+          </div>
         </div>
       </div>
 

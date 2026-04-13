@@ -380,18 +380,22 @@ def resolve_flag(player_id: str):
         profile_id   = profile_row.data[0]["id"]
         profile_data = profile_row.data[0]["profile"] or {}
 
-        # Find the specific flag for this skill
+        # Find the unresolved flag for this skill — filter by resolution IS NULL so that
+        # duplicate flags (e.g. one manual_override + one auto-flagged, or a prior
+        # resolved row alongside a new proficient_tier_review flag) don't cause the
+        # already-resolved row to be targeted, leaving the real unresolved flag stuck.
         flag_row = (
             supabase.table("skill_flags")
             .select("id, stat_rating, claude_rating, resolution")
             .eq("skill_profile_id", profile_id)
             .eq("skill_name", skill_name)
+            .is_("resolution", "null")
             .limit(1)
             .execute()
         )
         if not flag_row.data:
             return _err(
-                f"No flag found for skill '{skill_name}' on player {player_id}", status=404
+                f"No unresolved flag found for skill '{skill_name}' on player {player_id}", status=404
             )
         flag    = flag_row.data[0]
         flag_id = flag["id"]
@@ -655,11 +659,32 @@ def manual_override_skill(player_id: str):
             .execute()
         )
         if not profile_row.data:
-            return _err(
-                f"No composite profile for player {player_id} season {season}", status=404
+            # No composite profile yet — create one pre-filled with all skills
+            # set to "None" so the profile page renders every skill row editable.
+            _ALL_SKILLS = [
+                "spot_up_shooter", "off_dribble_shooter", "offensive_rebounder",
+                "rebounder", "rim_protector", "isolation_scorer",
+                "movement_shooter", "cutter", "transition_threat", "pnr_ball_handler",
+                "pnr_finisher", "crafty_finisher", "driver", "vertical_spacer",
+                "screen_setter", "passer", "mid_post_player", "low_post_player",
+                "versatile_defender", "perimeter_disruptor", "high_flyer",
+            ]
+            _empty_skill = {"final_tier": "None", "stat_tier": None, "claude_tier": None, "source": "manual_override", "flagged": False}
+            profile_data = {skill: dict(_empty_skill) for skill in _ALL_SKILLS}
+            new_profile_row = (
+                supabase.table("skill_profiles")
+                .insert({
+                    "player_id": player_id,
+                    "season":    season,
+                    "source":    "composite",
+                    "profile":   profile_data,
+                })
+                .execute()
             )
-        profile_id   = profile_row.data[0]["id"]
-        profile_data = profile_row.data[0]["profile"] or {}
+            profile_id = new_profile_row.data[0]["id"]
+        else:
+            profile_id   = profile_row.data[0]["id"]
+            profile_data = profile_row.data[0]["profile"] or {}
 
         resolved_at = datetime.now(timezone.utc).isoformat()
 

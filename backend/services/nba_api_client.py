@@ -448,6 +448,71 @@ def get_player_awards(nba_api_id: int) -> pd.DataFrame | None:
     )
 
 
+def search_players_static(query: str) -> list[dict]:
+    """
+    Search the nba_api static player roster by full name (no API call).
+    Returns up to 20 matches as [{nba_api_id, full_name, is_active}].
+    Used by the manual-include search flow to find players who haven't
+    played this season and aren't yet in the players table.
+    """
+    from nba_api.stats.static import players as nba_players
+
+    # find_players_by_full_name does a case-insensitive substring match
+    results = nba_players.find_players_by_full_name(query)
+    return [
+        {
+            "nba_api_id": p["id"],
+            "full_name":  p["full_name"],
+            "is_active":  p.get("is_active", False),
+        }
+        for p in results[:20]
+    ]
+
+
+def get_player_info(nba_api_id: int) -> dict | None:
+    """
+    Fetch current player metadata via CommonPlayerInfo.
+    Returns {name, team, position, height, weight, age} or None on failure.
+    Used when manually adding a player who has no stats row this season.
+    """
+    from nba_api.stats.endpoints import CommonPlayerInfo
+    from datetime import date as _date
+
+    _sleep()
+    try:
+        info = CommonPlayerInfo(player_id=nba_api_id, headers=_NBA_HEADERS, timeout=_REQUEST_TIMEOUT)
+        df = info.get_data_frames()[0]
+        if df.empty:
+            return None
+
+        row = df.iloc[0]
+
+        # Derive age from birthdate (BIRTHDATE is an ISO string like "1999-02-29T00:00:00")
+        age: int | None = None
+        bd_raw = str(row.get("BIRTHDATE") or "").split("T")[0]
+        if bd_raw:
+            try:
+                bd = _date.fromisoformat(bd_raw)
+                today = _date.today()
+                age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+            except ValueError:
+                pass
+
+        weight_raw = row.get("WEIGHT")
+        return {
+            "name":     str(row.get("DISPLAY_FIRST_LAST") or "").strip() or None,
+            "team":     str(row.get("TEAM_ABBREVIATION") or "").strip() or None,
+            "position": str(row.get("POSITION") or "").strip() or None,
+            "height":   str(row.get("HEIGHT") or "").strip() or None,
+            "weight":   int(weight_raw) if weight_raw and str(weight_raw).strip().isdigit() else None,
+            "age":      age,
+        }
+
+    except Exception as exc:
+        logger.warning("CommonPlayerInfo failed for %d: %s", nba_api_id, exc)
+        return None
+
+
 def get_player_position(nba_api_id: int) -> str | None:
     """
     Look up a player's position via CommonPlayerInfo and map to a

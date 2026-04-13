@@ -54,6 +54,7 @@ const META_COLUMNS: ColDef[] = [
   { key: "height",            label: "Ht",         defaultWidth: 70,  minWidth: 55 },
   { key: "weight",            label: "Wt",         defaultWidth: 70,  minWidth: 55 },
   { key: "salary",            label: "Salary",     defaultWidth: 90,  minWidth: 70 },
+  { key: "games_played",      label: "GP",         defaultWidth: 60,  minWidth: 50 },
   { key: "peak_year",              label: "Era",    defaultWidth: 65,  minWidth: 50 },
   { key: "capable_plus_count",    label: "Cap+",   defaultWidth: 65,  minWidth: 50 },
   { key: "proficient_plus_count", label: "Pro+",   defaultWidth: 65,  minWidth: 50 },
@@ -126,6 +127,8 @@ interface PlayerTableProps {
    * TODO: gate this behind an admin mode check in the parent before passing the prop.
    */
   onSkillOverride?: (playerId: string, skillKey: string, tier: SkillTier) => Promise<void>;
+  /** When provided, manually-included players show a remove button next to their name. */
+  onRemoveManualPlayer?: (playerId: string) => void;
 }
 
 export function PlayerTable({
@@ -138,6 +141,7 @@ export function PlayerTable({
   onPageChange,
   onPageSizeChange,
   onSkillOverride,
+  onRemoveManualPlayer,
 }: PlayerTableProps) {
   const router = useRouter();
 
@@ -301,13 +305,27 @@ export function PlayerTable({
           );
         }
         return (
-          <Link
-            href={`/players/${player.id}`}
-            onClick={(e) => e.stopPropagation()} // prevent row onClick from firing a second navigation
-            className="font-medium text-foreground hover:underline"
-          >
-            {player.name}
-          </Link>
+          <span className="flex items-center gap-1.5">
+            <Link
+              href={`/players/${player.id}`}
+              onClick={(e) => e.stopPropagation()} // prevent row onClick from firing a second navigation
+              className="font-medium text-foreground hover:underline"
+            >
+              {player.name}
+            </Link>
+            {/* Remove button for manually-included players (0 games, forced into pool) */}
+            {player.manually_included && onRemoveManualPlayer && (
+              <button
+                id={`remove-manual-player-${player.id}`}
+                type="button"
+                title="Remove from player pool"
+                onClick={(e) => { e.stopPropagation(); onRemoveManualPlayer(player.id); }}
+                className="text-muted-foreground/50 hover:text-destructive transition-colors text-[10px] leading-none"
+              >
+                ✕
+              </button>
+            )}
+          </span>
         );
       case "peak_year":
         return (
@@ -327,6 +345,8 @@ export function PlayerTable({
         return <span>{player.weight != null ? `${player.weight}` : "—"}</span>;
       case "salary":
         return <span className="tabular-nums">{formatSalary(player.salary)}</span>;
+      case "games_played":
+        return <span className="tabular-nums text-muted-foreground">{player.games_played ?? "—"}</span>;
       case "capable_plus_count": {
         const count = skillCountAtOrAbove(player, 1);
         return (

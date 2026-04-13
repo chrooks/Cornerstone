@@ -304,6 +304,7 @@ export interface PlayerProfile {
     weight: number | null;
     season: string;
     nba_api_id?: number | null;
+    manually_included?: boolean;
   };
   skills: Record<string, CompositeSkillResult> | null;
   flag_summary: FlagSummary;
@@ -358,6 +359,8 @@ export interface PlayerWithSkills {
   season: string;
   /** True for legend rows merged in via ?include_legends=true. */
   is_legend?: boolean;
+  /** True when a player was manually added to the pool (e.g. injured with 0 games). */
+  manually_included?: boolean;
   /** Peak season start year — present only for legend rows. */
   peak_year?: number | null;
   /** NBA.com player ID — used to construct headshot URLs. */

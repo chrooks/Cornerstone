@@ -86,7 +86,51 @@ type SkillTierFilter = BaseFilter & {
   tierOptions: readonly string[];
 };
 
-export type PlayerFilterType = TextFilter | SelectFilter | SkillTierFilter;
+/**
+ * Numeric filter — renders an operator dropdown (≥ ≤ = > <) + a number input.
+ * Value is encoded as "op|number" (e.g. "≥|25").
+ * `unit` is an optional display hint for the placeholder (e.g. "$M", "in", "lbs").
+ */
+type NumericFilter = BaseFilter & {
+  inputMethod: "numeric";
+  unit?: string;
+};
+
+/**
+ * Skill-count filter — counts how many skills are at or above a chosen tier,
+ * then compares the count with an operator.
+ * Renders: tier dropdown + operator dropdown + count input.
+ * Value is encoded as "tier|op|count" (e.g. "Elite or higher|≥|3").
+ */
+type SkillCountFilter = BaseFilter & {
+  inputMethod: "skill_count";
+  tierOptions: readonly string[];
+};
+
+export type PlayerFilterType = TextFilter | SelectFilter | SkillTierFilter | NumericFilter | SkillCountFilter;
+
+// ---------------------------------------------------------------------------
+// Numeric operator helpers — shared by NumericFilter and SkillCountFilter
+// ---------------------------------------------------------------------------
+
+/** The five comparison operators available in numeric and skill-count filters. */
+export const NUMERIC_OPERATORS = ["≥", "≤", "=", ">", "<"] as const;
+export type NumericOperator = typeof NUMERIC_OPERATORS[number];
+
+/**
+ * Apply a comparison operator between a player value and a threshold.
+ * Handles all five operators; returns false for unrecognised strings.
+ */
+function applyNumericOp(playerVal: number, op: string, threshold: number): boolean {
+  switch (op) {
+    case "≥": return playerVal >= threshold;
+    case "≤": return playerVal <= threshold;
+    case "=": return playerVal === threshold;
+    case ">": return playerVal > threshold;
+    case "<": return playerVal < threshold;
+    default:  return false;
+  }
+}
 
 /** Connector indicating how an active filter joins the one before it. */
 export type FilterConnector = "AND" | "OR";
@@ -269,88 +313,94 @@ export const AVAILABLE_FILTERS: PlayerFilterType[] = [
     },
   },
 
-  // ── Numeric comparison filters ────────────────────────────────────────────
+  // ── Numeric comparison filters — operator + value encoded as "op|n" ────────
 
   {
-    label: "Age ≤",
-    inputMethod: "text",
+    label: "Age",
+    inputMethod: "numeric",
     apply: (player, value) => {
-      const n = parseFloat(value);
-      return !isNaN(n) && player.age != null && player.age <= n;
-    },
-  },
-  {
-    label: "Age ≥",
-    inputMethod: "text",
-    apply: (player, value) => {
-      const n = parseFloat(value);
-      return !isNaN(n) && player.age != null && player.age >= n;
+      const [op, raw] = value.split("|");
+      const n = parseFloat(raw);
+      return !isNaN(n) && player.age != null && applyNumericOp(player.age, op, n);
     },
   },
 
   {
-    label: "Height ≤ (in)",
-    inputMethod: "text",
+    label: "Height",
+    inputMethod: "numeric",
+    unit: "in",
     apply: (player, value) => {
-      const n = parseFloat(value);
+      const [op, raw] = value.split("|");
+      const n = parseFloat(raw);
       const h = parseHeight(player.height);
-      return !isNaN(n) && h != null && h <= n;
-    },
-  },
-  {
-    label: "Height ≥ (in)",
-    inputMethod: "text",
-    apply: (player, value) => {
-      const n = parseFloat(value);
-      const h = parseHeight(player.height);
-      return !isNaN(n) && h != null && h >= n;
+      return !isNaN(n) && h != null && applyNumericOp(h, op, n);
     },
   },
 
   {
-    label: "Weight ≤ (lbs)",
-    inputMethod: "text",
+    label: "Weight",
+    inputMethod: "numeric",
+    unit: "lbs",
     apply: (player, value) => {
-      const n = parseFloat(value);
-      return !isNaN(n) && player.weight != null && player.weight <= n;
-    },
-  },
-  {
-    label: "Weight ≥ (lbs)",
-    inputMethod: "text",
-    apply: (player, value) => {
-      const n = parseFloat(value);
-      return !isNaN(n) && player.weight != null && player.weight >= n;
+      const [op, raw] = value.split("|");
+      const n = parseFloat(raw);
+      return !isNaN(n) && player.weight != null && applyNumericOp(player.weight, op, n);
     },
   },
 
   {
-    label: "Salary ≤ ($M)",
-    inputMethod: "text",
+    label: "Salary",
+    inputMethod: "numeric",
+    unit: "$M",
     apply: (player, value) => {
-      const n = parseFloat(value) * 1_000_000;
-      return !isNaN(n) && player.salary != null && player.salary <= n;
-    },
-  },
-  {
-    label: "Salary ≥ ($M)",
-    inputMethod: "text",
-    apply: (player, value) => {
-      const n = parseFloat(value) * 1_000_000;
-      return !isNaN(n) && player.salary != null && player.salary >= n;
+      const [op, raw] = value.split("|");
+      const n = parseFloat(raw) * 1_000_000;
+      return !isNaN(n) && player.salary != null && applyNumericOp(player.salary, op, n);
     },
   },
 
   {
-    label: "Elite+ Skills ≥",
-    inputMethod: "text",
+    label: "MPG",
+    inputMethod: "numeric",
     apply: (player, value) => {
-      const n = parseFloat(value);
+      const [op, raw] = value.split("|");
+      const n = parseFloat(raw);
+      return !isNaN(n) && player.minutes_per_game != null && applyNumericOp(player.minutes_per_game, op, n);
+    },
+  },
+
+  {
+    label: "Games Played",
+    inputMethod: "numeric",
+    apply: (player, value) => {
+      const [op, raw] = value.split("|");
+      const n = parseFloat(raw);
+      return !isNaN(n) && player.games_played != null && applyNumericOp(player.games_played, op, n);
+    },
+  },
+
+  // ── Skill-count filter — tier + operator + count encoded as "tier|op|n" ───
+
+  {
+    label: "Skill Count",
+    inputMethod: "skill_count",
+    tierOptions: TIER_OPTIONS,
+    /**
+     * Value is encoded as "tier|op|count", e.g. "Elite or higher|≥|3".
+     * Counts how many of the player's skills are at or above the chosen tier,
+     * then applies the operator to compare against the target count.
+     */
+    apply: (player, value) => {
+      const parts = value.split("|");
+      if (parts.length < 3) return false;
+      // Tier is everything before the last two segments (op and count)
+      const tier  = parts.slice(0, -2).join("|");
+      const op    = parts[parts.length - 2];
+      const n     = parseFloat(parts[parts.length - 1]);
       if (isNaN(n) || !player.skills) return false;
-      const count = Object.values(player.skills).filter(
-        (t) => tierToNum(t) >= 3,
-      ).length;
-      return count >= n;
+      const minNum = minTierNum(tier);
+      const count  = Object.values(player.skills).filter((t) => tierToNum(t) >= minNum).length;
+      return applyNumericOp(count, op, n);
     },
   },
 

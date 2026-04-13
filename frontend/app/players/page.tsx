@@ -15,7 +15,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { listPlayersWithSkills, manualOverrideSkill } from "@/lib/api";
+import { listPlayersWithSkills, manualOverrideSkill, searchNbaPlayers, manuallyIncludePlayer, removeManualInclude } from "@/lib/api";
+import type { NbaPlayerSearchResult } from "@/lib/api";
 import { FilterBar } from "@/components/players/FilterBar";
 import { SortControls } from "@/components/players/SortControls";
 import { PlayerTable, DEFAULT_PAGE_SIZE } from "@/components/players/PlayerTable";
@@ -87,6 +88,7 @@ function compareByKey(a: PlayerWithSkills, b: PlayerWithSkills, key: SortKey): n
       case "height":           return parseHeight(p.height);
       case "weight":           return p.weight;
       case "salary":           return p.salary;
+      case "games_played":      return p.games_played;
       case "minutes_per_game": return p.minutes_per_game;
       case "capable_plus_count":
         return p.skills ? Object.values(p.skills).filter((t) => tierToNum(t) >= 1).length : 0;
@@ -331,6 +333,78 @@ export default function PlayersPage() {
     [],
   );
 
+  // ── Add player (manual include) state ────────────────────────────────────
+
+  const [addPlayerOpen, setAddPlayerOpen] = useState(false);
+  const [addPlayerQuery, setAddPlayerQuery] = useState("");
+  const [addPlayerResults, setAddPlayerResults] = useState<NbaPlayerSearchResult[]>([]);
+  const [addPlayerLoading, setAddPlayerLoading] = useState(false);
+  const [addPlayerError, setAddPlayerError] = useState<string | null>(null);
+  const addPlayerRef = useRef<HTMLDivElement>(null);
+
+  // Debounce the name search so we don't fire on every keystroke
+  useEffect(() => {
+    if (addPlayerQuery.length < 2) {
+      setAddPlayerResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setAddPlayerLoading(true);
+      setAddPlayerError(null);
+      try {
+        const res = await searchNbaPlayers(addPlayerQuery);
+        if (res.success && res.data) {
+          setAddPlayerResults(res.data);
+          if (res.data.length === 0) setAddPlayerError("No players found");
+        } else {
+          setAddPlayerError(res.error ?? "Search failed");
+        }
+      } catch (e) {
+        setAddPlayerError(e instanceof Error ? e.message : "Search failed");
+      }
+      setAddPlayerLoading(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [addPlayerQuery]);
+
+  // Close the add-player dropdown when clicking outside
+  useEffect(() => {
+    if (!addPlayerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (addPlayerRef.current && !addPlayerRef.current.contains(e.target as Node)) {
+        setAddPlayerOpen(false);
+        setAddPlayerQuery("");
+        setAddPlayerResults([]);
+        setAddPlayerError(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [addPlayerOpen]);
+
+  const handleAddPlayer = useCallback(async (result: NbaPlayerSearchResult) => {
+    // Insert/update the player row and merge into the local state immediately
+    const res = await manuallyIncludePlayer(result.nba_api_id);
+    if (!res.success || !res.data) return;
+    const newPlayer = res.data;
+    setPlayers((prev) => {
+      // If the player is already in the list (e.g. they had stats), update their record
+      const exists = prev.some((p) => p.id === newPlayer.id);
+      if (exists) return prev.map((p) => (p.id === newPlayer.id ? { ...p, ...newPlayer } : p));
+      return [...prev, newPlayer];
+    });
+    setAddPlayerOpen(false);
+    setAddPlayerQuery("");
+    setAddPlayerResults([]);
+  }, []);
+
+  const handleRemoveManualPlayer = useCallback(async (playerId: string) => {
+    const res = await removeManualInclude(playerId);
+    if (!res.success) return;
+    // Remove the player from local state — they no longer meet the MPG threshold
+    setPlayers((prev) => prev.filter((p) => p.id !== playerId));
+  }, []);
+
   // ── Restore view mode from localStorage (client-only) ────────────────────
   useEffect(() => {
     const stored = localStorage.getItem(VIEW_MODE_KEY);
@@ -442,6 +516,69 @@ export default function PlayersPage() {
           )}
         </div>
 
+        {/* Add player (manual include) — compact inline search */}
+        <div id="add-player-control" ref={addPlayerRef} className="relative">
+          {!addPlayerOpen ? (
+            <button
+              id="add-player-btn"
+              type="button"
+              onClick={() => setAddPlayerOpen(true)}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors border border-dashed border-border rounded px-2 py-1"
+            >
+              + Add player
+            </button>
+          ) : (
+            <div id="add-player-search" className="flex items-center gap-1">
+              <input
+                id="add-player-input"
+                type="text"
+                autoFocus
+                placeholder="Search player name…"
+                value={addPlayerQuery}
+                onChange={(e) => setAddPlayerQuery(e.target.value)}
+                className="text-xs rounded border border-input bg-background px-2 py-1 w-44 focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <button
+                id="add-player-cancel-btn"
+                type="button"
+                onClick={() => { setAddPlayerOpen(false); setAddPlayerQuery(""); setAddPlayerResults([]); setAddPlayerError(null); }}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Dropdown results */}
+          {addPlayerOpen && (addPlayerResults.length > 0 || addPlayerLoading || addPlayerError) && (
+            <div
+              id="add-player-dropdown"
+              className="absolute top-full left-0 mt-1 w-64 rounded-md border border-border bg-popover shadow-md z-50 overflow-hidden"
+            >
+              {addPlayerLoading && (
+                <div className="px-3 py-2 text-xs text-muted-foreground">Searching…</div>
+              )}
+              {!addPlayerLoading && addPlayerError && (
+                <div className="px-3 py-2 text-xs text-muted-foreground">{addPlayerError}</div>
+              )}
+              {!addPlayerLoading && !addPlayerError && addPlayerResults.map((r) => (
+                <button
+                  key={r.nba_api_id}
+                  id={`add-player-result-${r.nba_api_id}`}
+                  type="button"
+                  onClick={() => handleAddPlayer(r)}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors flex items-center justify-between gap-2"
+                >
+                  <span>{r.full_name}</span>
+                  {!r.is_active && (
+                    <span className="text-muted-foreground/60 shrink-0">inactive</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Legends toggle */}
         <button
           id="legends-toggle"
@@ -547,6 +684,7 @@ export default function PlayersPage() {
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
               onSkillOverride={handleSkillOverride}
+              onRemoveManualPlayer={handleRemoveManualPlayer}
             />
           ) : (
             <>

@@ -101,6 +101,55 @@ export async function listPlayersWithSkills(
   return apiFetch<PlayerWithSkills[]>(`/api/players/bulk?${params}`);
 }
 
+// ---------------------------------------------------------------------------
+// Manual player include
+// ---------------------------------------------------------------------------
+
+/** Result shape from GET /api/players/nba-search */
+export interface NbaPlayerSearchResult {
+  nba_api_id: number;
+  full_name: string;
+  is_active: boolean;
+}
+
+/**
+ * Search the NBA static player roster by name — returns players even if they
+ * haven't played this season (e.g. injured players).
+ */
+export async function searchNbaPlayers(
+  query: string,
+): Promise<ApiResponse<NbaPlayerSearchResult[]>> {
+  const params = new URLSearchParams({ q: query });
+  return apiFetch<NbaPlayerSearchResult[]>(`/api/players/nba-search?${params}`);
+}
+
+/**
+ * Manually add a player to the current season's pool.
+ * The player is inserted with games_played=0, minutes_per_game=0, manually_included=true
+ * so they bypass the MPG filter in the bulk endpoint.
+ */
+export async function manuallyIncludePlayer(
+  nbaApiId: number,
+  season?: string,
+): Promise<ApiResponse<PlayerWithSkills>> {
+  return apiFetch<PlayerWithSkills>("/api/players/manual-include", {
+    method: "POST",
+    body: JSON.stringify({ nba_api_id: nbaApiId, season }),
+  });
+}
+
+/**
+ * Remove a player from the manual include list by clearing the manually_included flag.
+ * The player will no longer appear in the pool unless they meet the MPG threshold.
+ */
+export async function removeManualInclude(
+  playerId: string,
+): Promise<ApiResponse<{ removed: boolean }>> {
+  return apiFetch<{ removed: boolean }>(`/api/players/${playerId}/manual-include`, {
+    method: "DELETE",
+  });
+}
+
 /**
  * Fetch all qualifying players with flattened stats for the calibration Stat Leaders table.
  * Stats are in "section.key" format; stabilized values returned as a separate dict.
@@ -373,6 +422,37 @@ export async function bulkResolveFlags(
 // ---------------------------------------------------------------------------
 // Player Profile (Prompt 7)
 // ---------------------------------------------------------------------------
+
+/**
+ * Permanently delete a player and all associated data (skill_profiles, skill_flags, player_stats).
+ * This is irreversible.
+ */
+export async function deletePlayer(
+  playerId: string,
+): Promise<ApiResponse<{ deleted: boolean; player_id: string }>> {
+  return apiFetch(`/api/players/${playerId}`, { method: "DELETE" });
+}
+
+/**
+ * Update bio fields for a manually-included player.
+ * Only allowed when the player's manually_included flag is true.
+ * Salary should be passed as full dollars (e.g. 9500000 for $9.5M).
+ */
+export async function updatePlayerBio(
+  playerId: string,
+  fields: {
+    team?: string | null;
+    position?: string | null;
+    height?: string | null;
+    weight?: number | null;
+    salary?: number | null;
+  }
+): Promise<ApiResponse<{ updated: boolean; fields: string[] }>> {
+  return apiFetch(`/api/players/${playerId}/bio`, {
+    method: "PATCH",
+    body: JSON.stringify(fields),
+  });
+}
 
 /** Get the canonical player profile (player metadata + composite skills + flag summary). */
 export async function getPlayerProfile(

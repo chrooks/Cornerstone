@@ -37,6 +37,7 @@ import {
   AVAILABLE_FILTERS,
   SKILL_LABELS,
   MAX_ACTIVE_FILTERS,
+  NUMERIC_OPERATORS,
 } from "./playerFilters";
 import type { PlayerWithSkills } from "@/lib/types";
 
@@ -66,14 +67,30 @@ function SortableFilterPill({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // Format the displayed value: for skill_tier entries decode the "skill|tier" encoding
+  // Format the displayed value based on input method / value encoding
   let displayValue = entry.value;
   if (entry.filter.inputMethod === "skill_tier") {
+    // Encoded as "skill_name|tier_option"
     const sep = entry.value.indexOf("|");
     if (sep !== -1) {
-      const skillName = entry.value.slice(0, sep);
+      const skillName  = entry.value.slice(0, sep);
       const tierOption = entry.value.slice(sep + 1);
       displayValue = `${SKILL_LABELS[skillName] ?? skillName}: ${tierOption}`;
+    }
+  } else if (entry.filter.inputMethod === "numeric") {
+    // Encoded as "op|number", e.g. "≥|25" → display "≥ 25"
+    const [op, raw] = entry.value.split("|");
+    displayValue = `${op} ${raw}`;
+  } else if (entry.filter.inputMethod === "skill_count") {
+    // Encoded as "tier|op|count", e.g. "Elite or higher|≥|3"
+    const parts = entry.value.split("|");
+    if (parts.length >= 3) {
+      const tier  = parts.slice(0, -2).join("|");
+      const op    = parts[parts.length - 2];
+      const count = parts[parts.length - 1];
+      // Shorten tier label: "Elite or higher" → "Elite+"
+      const shortTier = tier.replace(" or higher", "+");
+      displayValue = `${shortTier} ${op} ${count}`;
     }
   } else {
     displayValue = `"${entry.value}"`;
@@ -239,10 +256,13 @@ export function FilterBar({
   onAddParens,
 }: FilterBarProps) {
   const [currentFilter, setCurrentFilter] = useState<PlayerFilterType>(AVAILABLE_FILTERS[0]);
-  // Text/number value for non-skill-tier filters
+  // Text/number value for text, numeric, and skill_count filters
   const [localValue, setLocalValue] = useState("");
+  // Operator for numeric and skill_count filters (default ≥)
+  const [numericOp, setNumericOp] = useState<string>("≥");
   // Two-part values for skill_tier filters
   const [skillName, setSkillName] = useState<string>("spot_up_shooter");
+  // Tier dropdown shared by skill_tier and skill_count filters
   const [tierOption, setTierOption] = useState<string>("Elite or higher");
 
   // Configure dnd-kit pointer sensor — stops propagation so remove/NOT buttons still work
@@ -255,8 +275,17 @@ export function FilterBar({
 
     if (currentFilter.inputMethod === "skill_tier") {
       // Encode as "skill_name|tier_option"
-      const value = `${skillName}|${tierOption}`;
-      onAddFilter(currentFilter, value);
+      onAddFilter(currentFilter, `${skillName}|${tierOption}`);
+    } else if (currentFilter.inputMethod === "numeric") {
+      // Encode as "op|number"
+      if (!localValue.trim()) return;
+      onAddFilter(currentFilter, `${numericOp}|${localValue.trim()}`);
+      setLocalValue("");
+    } else if (currentFilter.inputMethod === "skill_count") {
+      // Encode as "tier|op|count"
+      if (!localValue.trim()) return;
+      onAddFilter(currentFilter, `${tierOption}|${numericOp}|${localValue.trim()}`);
+      setLocalValue("");
     } else {
       if (!localValue.trim()) return;
       onAddFilter(currentFilter, localValue.trim());
@@ -335,6 +364,65 @@ export function FilterBar({
                 </option>
               ))}
             </select>
+          </>
+        ) : currentFilter.inputMethod === "numeric" ? (
+          <>
+            {/* Comparison operator dropdown */}
+            <select
+              id="filter-numeric-op-select"
+              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              value={numericOp}
+              onChange={(e) => setNumericOp(e.target.value)}
+            >
+              {NUMERIC_OPERATORS.map((op) => (
+                <option key={op} value={op}>{op}</option>
+              ))}
+            </select>
+            {/* Numeric value input */}
+            <input
+              id="filter-numeric-value-input"
+              type="text"
+              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground w-24 focus:outline-none focus:ring-1 focus:ring-ring"
+              value={localValue}
+              placeholder={currentFilter.unit ?? "Value…"}
+              onChange={(e) => setLocalValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+            />
+          </>
+        ) : currentFilter.inputMethod === "skill_count" ? (
+          <>
+            {/* Tier to count from */}
+            <select
+              id="filter-skill-count-tier-select"
+              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              value={tierOption}
+              onChange={(e) => setTierOption(e.target.value)}
+            >
+              {currentFilter.tierOptions.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            {/* Comparison operator */}
+            <select
+              id="filter-skill-count-op-select"
+              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              value={numericOp}
+              onChange={(e) => setNumericOp(e.target.value)}
+            >
+              {NUMERIC_OPERATORS.map((op) => (
+                <option key={op} value={op}>{op}</option>
+              ))}
+            </select>
+            {/* Target count */}
+            <input
+              id="filter-skill-count-value-input"
+              type="text"
+              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground w-20 focus:outline-none focus:ring-1 focus:ring-ring"
+              value={localValue}
+              placeholder="Count…"
+              onChange={(e) => setLocalValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+            />
           </>
         ) : currentFilter.inputMethod === "select" ? (
           <select

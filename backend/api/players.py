@@ -20,7 +20,7 @@ import httpx
 from flask import Blueprint, jsonify, request
 
 from services.supabase_client import get_supabase, reset_client
-from services import players_service
+from services import players_service, nba_api_client
 from services.players_service import CURRENT_SEASON
 
 
@@ -310,6 +310,133 @@ def list_players_stats_bulk():
 
 
 # ---------------------------------------------------------------------------
+# GET /api/players/nba-search
+# POST /api/players/manual-include
+# DELETE /api/players/<player_id>/manual-include
+#
+# Manual include — lets users add injured/inactive players to the pool.
+# ---------------------------------------------------------------------------
+
+@players_bp.route("/players/nba-search", methods=["GET"])
+def nba_search_players():
+    """
+    Search the nba_api static player roster by name (no live API call).
+    Used by the frontend "Add player" flow to find players not in the current
+    season's players table (e.g. injured players with 0 games played).
+
+    Query params:
+      ?q=name    — search term (min 2 chars)
+
+    Response data: list of {nba_api_id, full_name, is_active}
+    """
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return _ok([])
+
+    try:
+        results = nba_api_client.search_players_static(q)
+        return _ok(results)
+    except Exception as exc:
+        logger.exception("Error in GET /api/players/nba-search")
+        return _err(str(exc))
+
+
+@players_bp.route("/players/manual-include", methods=["POST"])
+def manual_include_player():
+    """
+    Manually add a player to the current season's player pool.
+
+    Fetches the player's metadata from NBA API via CommonPlayerInfo and upserts
+    a row into the players table with manually_included=True, games_played=0,
+    and minutes_per_game=0 so they bypass the MPG filter.
+
+    Request body (JSON):
+      { "nba_api_id": 1630169, "season": "2025-26" }
+
+    Response data: the upserted player row {id, name, team, ...}
+    """
+    body = request.get_json(silent=True) or {}
+    nba_api_id = body.get("nba_api_id")
+    season = body.get("season", players_service.CURRENT_SEASON)
+
+    if not nba_api_id:
+        return _err("'nba_api_id' is required", status=400)
+    try:
+        nba_api_id = int(nba_api_id)
+    except (ValueError, TypeError):
+        return _err("'nba_api_id' must be an integer", status=400)
+
+    try:
+        # Fetch current player info from NBA API (name, team, position, etc.)
+        info = nba_api_client.get_player_info(nba_api_id)
+        if not info or not info.get("name"):
+            return _err(f"Player {nba_api_id} not found in NBA API", status=404)
+
+        supabase = get_supabase()
+
+        # Upsert on nba_api_id — creates the row if missing, updates if present.
+        # We set manually_included=True and zero out games/minutes so the bulk
+        # query's OR condition picks them up regardless of MPG threshold.
+        upsert_row = {
+            "nba_api_id":        nba_api_id,
+            "name":              info["name"],
+            "team":              info.get("team") or "",
+            "position":          info.get("position") or "",
+            "height":            info.get("height"),
+            "weight":            info.get("weight"),
+            "age":               info.get("age"),
+            "games_played":      0,
+            "minutes_per_game":  0.0,
+            "season":            season,
+            "manually_included": True,
+        }
+        supabase.table("players").upsert(upsert_row, on_conflict="nba_api_id").execute()
+
+        # Re-fetch the row to get its Supabase UUID
+        result = (
+            supabase.table("players")
+            .select("id, name, team, position, age, height, weight, salary, "
+                    "games_played, minutes_per_game, season, nba_api_id, manually_included")
+            .eq("nba_api_id", nba_api_id)
+            .eq("season", season)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return _err("Player was inserted but could not be re-fetched", status=500)
+
+        logger.info("Manually included player %s (nba_api_id=%d) for season %s",
+                    info["name"], nba_api_id, season)
+        return _ok(result.data[0])
+
+    except Exception as exc:
+        logger.exception("Error in POST /api/players/manual-include")
+        return _err(str(exc))
+
+
+@players_bp.route("/players/<player_id>/manual-include", methods=["DELETE"])
+def remove_manual_include(player_id: str):
+    """
+    Remove a player from the manual include list by setting manually_included=False.
+    The player will no longer appear in the bulk pool unless they meet the MPG threshold.
+
+    Path params:
+      player_id — Supabase UUID
+    """
+    if not _validate_uuid(player_id):
+        return _err("Invalid player_id — must be a UUID", status=400)
+
+    try:
+        supabase = get_supabase()
+        supabase.table("players").update({"manually_included": False}).eq("id", player_id).execute()
+        logger.info("Removed manual include for player %s", player_id)
+        return _ok({"removed": True})
+    except Exception as exc:
+        logger.exception("Error in DELETE /api/players/%s/manual-include", player_id)
+        return _err(str(exc))
+
+
+# ---------------------------------------------------------------------------
 # GET /api/players/bulk
 # ---------------------------------------------------------------------------
 
@@ -411,15 +538,17 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
     """
     supabase = get_supabase()
 
-    # 1. Fetch all qualifying players for this season
+    # 1. Fetch all qualifying players for this season.
+    # Include players that meet the MPG threshold OR were manually added
+    # (e.g. injured players with 0 games who we still want in the pool).
     players_rows = (
         supabase.table("players")
         .select(
             "id, name, team, position, age, height, weight, salary, "
-            "games_played, minutes_per_game, season, nba_api_id"
+            "games_played, minutes_per_game, season, nba_api_id, manually_included"
         )
         .eq("season", season)
-        .gte("minutes_per_game", min_mpg)
+        .or_(f"minutes_per_game.gte.{min_mpg},manually_included.eq.true")
         .order("name")
         .execute()
     )
@@ -626,6 +755,127 @@ def search_players():
 
 
 # ---------------------------------------------------------------------------
+# DELETE /api/players/<player_id>
+# ---------------------------------------------------------------------------
+
+@players_bp.route("/players/<player_id>", methods=["DELETE"])
+def delete_player(player_id: str):
+    """
+    Permanently delete a player and ALL of their associated data:
+      1. skill_flags  — rows linked via skill_profiles
+      2. skill_profiles — composite and stat profiles for this player
+      3. player_stats — cached stat blobs for this player
+      4. players      — the player record itself
+
+    This is irreversible. The endpoint does not check manually_included —
+    it will delete any player regardless of how they were added.
+
+    Path params:
+      player_id — Supabase UUID
+    """
+    if not _validate_uuid(player_id):
+        return _err("Invalid player_id — must be a UUID", status=400)
+
+    try:
+        supabase = get_supabase()
+
+        # Step 1: Find all skill_profile IDs for this player so we can delete
+        # their associated flags (FK: skill_flags.skill_profile_id → skill_profiles.id)
+        profiles_res = (
+            supabase.table("skill_profiles")
+            .select("id")
+            .eq("player_id", player_id)
+            .execute()
+        )
+        profile_ids = [row["id"] for row in (profiles_res.data or [])]
+
+        # Step 2: Delete skill_flags linked to those profiles
+        if profile_ids:
+            supabase.table("skill_flags").delete().in_("skill_profile_id", profile_ids).execute()
+
+        # Step 3: Delete skill_profiles for this player
+        supabase.table("skill_profiles").delete().eq("player_id", player_id).execute()
+
+        # Step 4: Delete cached player_stats rows
+        supabase.table("player_stats").delete().eq("player_id", player_id).execute()
+
+        # Step 5: Delete the player record itself
+        supabase.table("players").delete().eq("id", player_id).execute()
+
+        logger.info("Deleted player %s and all associated data", player_id)
+        return _ok({"deleted": True, "player_id": player_id})
+
+    except Exception as exc:
+        logger.exception("Error in DELETE /api/players/%s", player_id)
+        return _err(str(exc))
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/players/<player_id>/bio
+# ---------------------------------------------------------------------------
+
+@players_bp.route("/players/<player_id>/bio", methods=["PATCH"])
+def update_player_bio(player_id: str):
+    """
+    Update bio fields for a manually-included player.
+
+    Only allowed when manually_included=True — stats-pipeline players have
+    their metadata refreshed from NBA API automatically, so manual edits
+    would be overwritten on the next pipeline run anyway.
+
+    Request body (all fields optional):
+      {
+        "team":     string,
+        "position": string,
+        "height":   string,   e.g. "6-9"
+        "weight":   integer,  e.g. 215
+        "salary":   integer   e.g. 9500000 (full dollars, not millions)
+      }
+
+    Path params:
+      player_id — Supabase UUID
+    """
+    if not _validate_uuid(player_id):
+        return _err("Invalid player_id — must be a UUID", status=400)
+
+    body = request.get_json(silent=True) or {}
+
+    # Only accept the bio fields we actually want to allow editing
+    allowed_fields = {"team", "position", "height", "weight", "salary"}
+    updates = {k: v for k, v in body.items() if k in allowed_fields}
+
+    if not updates:
+        return _err("No valid fields provided. Allowed: team, position, height, weight, salary", status=400)
+
+    try:
+        supabase = get_supabase()
+
+        # Verify the player exists and is manually included before allowing edits
+        player_row = (
+            supabase.table("players")
+            .select("id, manually_included")
+            .eq("id", player_id)
+            .limit(1)
+            .execute()
+        )
+        if not player_row.data:
+            return _err(f"Player {player_id} not found", status=404)
+
+        if not player_row.data[0].get("manually_included"):
+            return _err("Bio editing is only allowed for manually included players", status=403)
+
+        # Apply the bio updates
+        supabase.table("players").update(updates).eq("id", player_id).execute()
+
+        logger.info("Updated bio fields for manually-included player %s: %s", player_id, list(updates.keys()))
+        return _ok({"updated": True, "fields": list(updates.keys())})
+
+    except Exception as exc:
+        logger.exception("Error in PATCH /api/players/%s/bio", player_id)
+        return _err(str(exc))
+
+
+# ---------------------------------------------------------------------------
 # GET /api/players/<player_id>/profile
 # ---------------------------------------------------------------------------
 
@@ -670,7 +920,7 @@ def player_profile(player_id: str):
             supabase.table("players")
             .select(
                 "id, name, team, position, age, games_played, "
-                "minutes_per_game, salary, height, weight, season, nba_api_id"
+                "minutes_per_game, salary, height, weight, season, nba_api_id, manually_included"
             )
             .eq("id", player_id)
             .eq("season", season)

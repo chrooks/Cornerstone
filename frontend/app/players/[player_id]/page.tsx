@@ -1,17 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { getPlayerProfile, getSkillBreakdown, getPlayerStats, manualOverrideSkill } from "@/lib/api";
+import { getPlayerProfile, getSkillBreakdown, getPlayerStats, manualOverrideSkill, deletePlayer, updatePlayerBio } from "@/lib/api";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { StatConfidenceIndicator } from "@/components/StatConfidenceIndicator";
 import { ConditionBreakdown } from "@/components/ConditionBreakdown";
 import type { PlayerProfile, CompositeSkillResult, SkillTier, StatConfidence, ConditionResult } from "@/lib/types";
 import { SKILL_TIERS, TIER_PICKER_ACTIVE_CLASS } from "@/lib/tiers";
-import { SKILL_CATEGORIES, formatSkillName } from "@/lib/skills";
+import { SKILL_CATEGORIES, formatSkillName, ALL_SKILL_NAMES } from "@/lib/skills";
 
 const CURRENT_SEASON = "2025-26";
 
@@ -212,11 +212,100 @@ function formatSalary(salary: number | null): string {
 
 export default function PlayerProfilePage() {
   const { player_id } = useParams<{ player_id: string }>();
+  const router = useRouter();
 
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
   const [boxStats, setBoxStats] = useState<Record<string, number | null> | null>(null);
+
+  // Delete confirmation modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting]               = useState(false);
+  const [deleteError, setDeleteError]         = useState<string | null>(null);
+
+  // Inline bio edit state — only shown for manually_included players
+  const [bioEditOpen, setBioEditOpen]   = useState(false);
+  const [bioFields, setBioFields]       = useState({ team: "", position: "", height: "", weight: "", salary: "" });
+  const [bioSaving, setBioSaving]       = useState(false);
+  const [bioSaveError, setBioSaveError] = useState<string | null>(null);
+
+  /** Open the bio edit form, pre-populating fields from current profile. */
+  const handleOpenBioEdit = () => {
+    if (!profile) return;
+    const { player } = profile;
+    setBioFields({
+      team:     player.team     ?? "",
+      position: player.position ?? "",
+      height:   player.height   ?? "",
+      weight:   player.weight   != null ? String(player.weight)   : "",
+      // Display salary in millions so the user types "9.5" instead of "9500000"
+      salary:   player.salary   != null ? String(player.salary / 1_000_000) : "",
+    });
+    setBioSaveError(null);
+    setBioEditOpen(true);
+  };
+
+  /** Save bio changes to the backend and update local state. */
+  const handleSaveBio = async () => {
+    if (!profile) return;
+    setBioSaving(true);
+    setBioSaveError(null);
+    try {
+      // Build the update payload — only send fields that have a value
+      const updates: Record<string, string | number | null> = {};
+      if (bioFields.team.trim()     !== "") updates.team     = bioFields.team.trim();
+      if (bioFields.position.trim() !== "") updates.position = bioFields.position.trim();
+      if (bioFields.height.trim()   !== "") updates.height   = bioFields.height.trim();
+      if (bioFields.weight.trim()   !== "") updates.weight   = Number(bioFields.weight);
+      // Convert millions back to full dollars before sending
+      if (bioFields.salary.trim()   !== "") updates.salary   = Math.round(parseFloat(bioFields.salary) * 1_000_000);
+
+      const res = await updatePlayerBio(player_id, updates);
+      if (res.success) {
+        // Optimistically apply the changes to local profile state
+        setProfile((p) => {
+          if (!p) return p;
+          return {
+            ...p,
+            player: {
+              ...p.player,
+              team:     (updates.team     as string)  ?? p.player.team,
+              position: (updates.position as string)  ?? p.player.position,
+              height:   (updates.height   as string)  ?? p.player.height,
+              weight:   (updates.weight   as number)  ?? p.player.weight,
+              salary:   (updates.salary   as number)  ?? p.player.salary,
+            },
+          };
+        });
+        setBioEditOpen(false);
+      } else {
+        setBioSaveError(res.error ?? "Save failed");
+      }
+    } catch {
+      setBioSaveError("Request failed");
+    } finally {
+      setBioSaving(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await deletePlayer(player_id);
+      if (res.success) {
+        // Navigate back to the players list after successful deletion
+        router.push("/players");
+      } else {
+        setDeleteError(res.error ?? "Delete failed");
+        setDeleting(false);
+      }
+    } catch {
+      setDeleteError("Request failed");
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     if (!player_id) return;
@@ -244,12 +333,14 @@ export default function PlayerProfilePage() {
   // Update a single skill's tier and source in local state after a manual override
   const handleOverride = (skillName: string, tier: SkillTier) => {
     setProfile((p) => {
-      if (!p?.skills) return p;
-      const existing = p.skills[skillName] ?? {};
+      if (!p) return p;
+      // Use existing skills or fall back to the synthesized empty profile
+      const base = p.skills ?? {};
+      const existing = base[skillName] ?? { final_tier: "None", stat_tier: null, claude_tier: null, source: "manual_override", flagged: false, stat_confidence: null };
       return {
         ...p,
         skills: {
-          ...p.skills,
+          ...base,
           [skillName]: {
             ...existing,
             final_tier: tier,
@@ -282,42 +373,219 @@ export default function PlayerProfilePage() {
     );
   }
 
-  const { player, skills, flag_summary } = profile;
+  const { player, flag_summary } = profile;
+
+  // For manually-included players with no composite profile yet, synthesize an
+  // empty profile so every skill row renders and is immediately editable.
+  const skills: Record<string, CompositeSkillResult> | null =
+    profile.skills ??
+    (player.manually_included
+      ? Object.fromEntries(
+          ALL_SKILL_NAMES.map((name) => [
+            name,
+            { final_tier: "None", stat_tier: null, claude_tier: null, source: "manual_override", flagged: false, stat_confidence: null },
+          ])
+        )
+      : null);
 
   return (
     <main id="player-profile-page" className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      {/* Delete confirmation modal */}
+      {deleteModalOpen && (
+        <div
+          id="player-delete-modal-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => { if (!deleting) setDeleteModalOpen(false); }}
+        >
+          {/* Stop clicks inside the modal from closing it */}
+          <div
+            id="player-delete-modal"
+            className="bg-background border border-border rounded-lg shadow-lg p-6 w-full max-w-sm mx-4 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="player-delete-modal-title" className="text-base font-semibold text-foreground">
+              Delete {profile?.player.name}?
+            </h2>
+            <p id="player-delete-modal-body" className="text-sm text-muted-foreground">
+              This will permanently remove the player and all associated stats, skill profiles,
+              and flags. This action cannot be undone.
+            </p>
+            {deleteError && (
+              <p id="player-delete-modal-error" className="text-sm text-destructive">{deleteError}</p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button
+                id="player-delete-modal-cancel"
+                type="button"
+                disabled={deleting}
+                onClick={() => { setDeleteModalOpen(false); setDeleteError(null); }}
+                className="text-sm px-3 py-1.5 rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                id="player-delete-modal-confirm"
+                type="button"
+                disabled={deleting}
+                onClick={handleDeleteConfirm}
+                className="text-sm px-3 py-1.5 rounded bg-destructive text-destructive-foreground font-medium hover:opacity-80 disabled:opacity-40 transition-opacity"
+              >
+                {deleting ? "Deleting…" : "Delete Player"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Player header */}
       <div id="player-profile-header" className="flex items-start gap-4">
         <PlayerHeadshot nba_api_id={player.nba_api_id} size={96} name={player.name} />
         <div className="space-y-1 min-w-0 flex-1">
-          <h1 id="player-profile-name" className="text-xl font-bold text-foreground">{player.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {player.team && (
-              <>
-                <Link
-                  href={`/players?team=${encodeURIComponent(player.team)}`}
-                  className="hover:underline hover:text-foreground transition-colors"
+          <div className="flex items-center justify-between gap-2">
+            <h1 id="player-profile-name" className="text-xl font-bold text-foreground">{player.name}</h1>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {/* Bio edit button — only shown for manually included players */}
+              {player.manually_included && !bioEditOpen && (
+                <button
+                  id="player-bio-edit-btn"
+                  type="button"
+                  onClick={handleOpenBioEdit}
+                  className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
                 >
-                  {player.team}
-                </Link>
-                {" · "}
-              </>
-            )}
-            {[
-              player.position,
-              player.age ? `Age ${player.age}` : null,
-              player.height ?? null,
-              player.weight ? `${player.weight} lbs` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-            {player.games_played != null && (
-              <span> · {player.games_played} GP · {player.minutes_per_game?.toFixed(1)} MPG</span>
-            )}
-            {player.salary != null && (
-              <span> · {formatSalary(player.salary)}</span>
-            )}
-          </p>
+                  Edit Bio
+                </button>
+              )}
+              {/* Destructive action — opens confirmation modal before deleting */}
+              <button
+                id="player-delete-btn"
+                type="button"
+                onClick={() => { setDeleteError(null); setDeleteModalOpen(true); }}
+                className="text-xs px-2 py-1 rounded border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+
+          {/* Bio display — hidden while edit form is open */}
+          {!bioEditOpen && (
+            <p id="player-profile-bio" className="text-sm text-muted-foreground">
+              {player.team && (
+                <>
+                  <Link
+                    href={`/players?team=${encodeURIComponent(player.team)}`}
+                    className="hover:underline hover:text-foreground transition-colors"
+                  >
+                    {player.team}
+                  </Link>
+                  {" · "}
+                </>
+              )}
+              {[
+                player.position,
+                player.age ? `Age ${player.age}` : null,
+                player.height ?? null,
+                player.weight ? `${player.weight} lbs` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              {player.games_played != null && (
+                <span> · {player.games_played} GP · {player.minutes_per_game?.toFixed(1)} MPG</span>
+              )}
+              {player.salary != null && (
+                <span> · {formatSalary(player.salary)}</span>
+              )}
+            </p>
+          )}
+
+          {/* Inline bio edit form — only rendered for manually_included players when edit is open */}
+          {player.manually_included && bioEditOpen && (
+            <div id="player-bio-edit-form" className="space-y-2 pt-1">
+              {/* Two-column grid for the bio fields */}
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                <div id="player-bio-team-field">
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">Team</label>
+                  <input
+                    id="player-bio-team-input"
+                    type="text"
+                    value={bioFields.team}
+                    onChange={(e) => setBioFields((f) => ({ ...f, team: e.target.value }))}
+                    placeholder="e.g. Lakers"
+                    className="w-full text-xs px-2 py-1 rounded border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+                <div id="player-bio-position-field">
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">Position</label>
+                  <input
+                    id="player-bio-position-input"
+                    type="text"
+                    value={bioFields.position}
+                    onChange={(e) => setBioFields((f) => ({ ...f, position: e.target.value }))}
+                    placeholder="e.g. PG"
+                    className="w-full text-xs px-2 py-1 rounded border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+                <div id="player-bio-height-field">
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">Height</label>
+                  <input
+                    id="player-bio-height-input"
+                    type="text"
+                    value={bioFields.height}
+                    onChange={(e) => setBioFields((f) => ({ ...f, height: e.target.value }))}
+                    placeholder="e.g. 6-9"
+                    className="w-full text-xs px-2 py-1 rounded border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+                <div id="player-bio-weight-field">
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">Weight (lbs)</label>
+                  <input
+                    id="player-bio-weight-input"
+                    type="number"
+                    value={bioFields.weight}
+                    onChange={(e) => setBioFields((f) => ({ ...f, weight: e.target.value }))}
+                    placeholder="e.g. 215"
+                    className="w-full text-xs px-2 py-1 rounded border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+                <div id="player-bio-salary-field" className="col-span-2">
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">Salary ($M)</label>
+                  <input
+                    id="player-bio-salary-input"
+                    type="number"
+                    step="0.1"
+                    value={bioFields.salary}
+                    onChange={(e) => setBioFields((f) => ({ ...f, salary: e.target.value }))}
+                    placeholder="e.g. 9.5 for $9.5M"
+                    className="w-full text-xs px-2 py-1 rounded border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+              </div>
+              {/* Save / Cancel row */}
+              <div className="flex items-center gap-2">
+                <button
+                  id="player-bio-save-btn"
+                  type="button"
+                  disabled={bioSaving}
+                  onClick={handleSaveBio}
+                  className="text-xs px-3 py-1 rounded bg-foreground text-background font-medium disabled:opacity-40 hover:opacity-80 transition-opacity"
+                >
+                  {bioSaving ? "Saving…" : "Save"}
+                </button>
+                <button
+                  id="player-bio-cancel-btn"
+                  type="button"
+                  disabled={bioSaving}
+                  onClick={() => { setBioEditOpen(false); setBioSaveError(null); }}
+                  className="text-xs px-3 py-1 rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+                >
+                  Cancel
+                </button>
+                {bioSaveError && (
+                  <span id="player-bio-save-error" className="text-[10px] text-destructive">{bioSaveError}</span>
+                )}
+              </div>
+            </div>
+          )}
           {boxStats && (
             <p className="text-xs text-muted-foreground font-mono tabular-nums">
               {[
