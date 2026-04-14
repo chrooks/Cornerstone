@@ -104,8 +104,10 @@ export default function CalibrationPage() {
     (skillName: string, savedRule: Record<string, unknown>) => {
       // Remove the skill from editedThresholds so hasUnsavedChanges clears
       setEditedThresholds((prev) => {
-        const { [skillName]: _removed, ...rest } = prev;
-        return rest;
+        // Build a copy without skillName — delete on a shallow clone is safe (no mutation of prev)
+        const next = { ...prev };
+        delete next[skillName];
+        return next;
       });
       // Update the source-of-truth thresholds array so thresholdRow.thresholds stays current
       setThresholds((prev) =>

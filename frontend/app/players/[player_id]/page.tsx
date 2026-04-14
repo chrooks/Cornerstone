@@ -383,7 +383,7 @@ export default function PlayerProfilePage() {
       ? Object.fromEntries(
           ALL_SKILL_NAMES.map((name) => [
             name,
-            { final_tier: "None", stat_tier: null, claude_tier: null, source: "manual_override", flagged: false, stat_confidence: null },
+            { final_tier: "None", stat_tier: null, claude_tier: null, source: "manual_override", flagged: false, stat_confidence: null, flag_reason: null, claude_confidence: null, agreement: null },
           ])
         )
       : null);

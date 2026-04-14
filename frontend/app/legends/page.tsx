@@ -180,7 +180,7 @@ export default function LegendsPage() {
       <div id="legends-header" className="mb-6">
         <h1 id="legends-title" className="text-2xl font-bold tracking-tight">Legends</h1>
         <p id="legends-subtitle" className="text-muted-foreground text-sm mt-1">
-          Manually profile all-time greats using historical knowledge and Claude's assessment.
+          Manually profile all-time greats using historical knowledge and Claude&apos;s assessment.
         </p>
       </div>
 

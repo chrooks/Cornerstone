@@ -40,19 +40,36 @@ const CALIBRATION_KEY =
 /**
  * Generic fetch wrapper that prepends the backend base URL.
  * Returns the full ApiResponse envelope so callers can inspect success/error.
- * Automatically injects X-Calibration-Key for write requests when configured.
+ *
+ * For write requests (POST/PUT/PATCH/DELETE):
+ *  - Injects X-Calibration-Key when configured (legacy key, kept for compat)
+ *  - Attaches Authorization: Bearer <jwt> when the user has an active Supabase session
  */
 export async function apiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<ApiResponse<T>> {
   const method = options?.method?.toUpperCase() ?? "GET";
-  const isWrite = ["PUT", "POST", "DELETE"].includes(method);
+  const isWrite = ["PUT", "POST", "DELETE", "PATCH"].includes(method);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(isWrite && CALIBRATION_KEY ? { "X-Calibration-Key": CALIBRATION_KEY } : {}),
   };
+
+  // Attach the Supabase JWT on write requests when running in the browser.
+  // Dynamic import avoids pulling the browser Supabase client into server-side bundles.
+  if (isWrite && typeof window !== "undefined") {
+    try {
+      const { getAccessToken } = await import("./supabase/client");
+      const token = await getAccessToken();
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+    } catch {
+      // No session or not in a browser context — continue without auth header
+    }
+  }
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     headers,

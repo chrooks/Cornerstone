@@ -107,8 +107,15 @@ def create_app() -> Flask:
     """Application factory — creates and configures the Flask app."""
     app = Flask(__name__)
 
-    # Allow cross-origin requests from the Next.js dev server
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # Restrict CORS to known frontend origins.
+    # FRONTEND_ORIGIN can be a comma-separated list for multi-environment setups
+    # (e.g. "http://localhost:3000,https://cornerstone.example.com").
+    # Falls back to localhost in development. A wildcard is intentionally avoided
+    # now that write endpoints carry JWTs — any origin could otherwise make
+    # credentialed cross-origin requests to the API.
+    raw_origins = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
+    allowed_origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
+    CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
 
     # Register route blueprints
     app.register_blueprint(health_bp)

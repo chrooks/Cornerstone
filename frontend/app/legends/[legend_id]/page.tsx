@@ -118,7 +118,7 @@ interface DiffRowProps {
   onAccept: () => void;
 }
 
-function DiffRow({ skillKey, currentTier, suggestion, onAccept }: DiffRowProps) {
+function DiffRow({ currentTier, suggestion, onAccept }: DiffRowProps) {
   const agrees = currentTier !== null && currentTier === suggestion.tier;
   const isUnrated = currentTier === null;
 
@@ -709,7 +709,7 @@ export default function LegendEditorPage() {
           {isPreFillMode && (
             <div className="rounded-md border border-violet-200 bg-violet-50 px-4 py-3">
               <p className="text-sm font-medium text-violet-800">
-                Claude's suggestions pre-filled. Adjust as needed, then continue.
+                Claude&apos;s suggestions pre-filled. Adjust as needed, then continue.
               </p>
               <button
                 onClick={() => {
@@ -802,7 +802,7 @@ export default function LegendEditorPage() {
           <div id="legend-accept-dialog" className="bg-background rounded-lg border shadow-xl p-6 max-w-sm w-full mx-4">
             <h2 className="text-base font-semibold mb-2">Accept All Disagreements?</h2>
             <p className="text-sm text-muted-foreground mb-4">
-              This will apply Claude's suggested tier to every skill where Claude disagrees with
+              This will apply Claude&apos;s suggested tier to every skill where Claude disagrees with
               your current rating, as well as all unrated skills. This action can be reversed by
               manually changing individual skills.
             </p>

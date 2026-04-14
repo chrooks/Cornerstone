@@ -12,7 +12,7 @@
  *  - View mode (table/cards) persisted to localStorage
  */
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { listPlayersWithSkills, manualOverrideSkill, searchNbaPlayers, manuallyIncludePlayer, removeManualInclude } from "@/lib/api";
@@ -235,7 +235,7 @@ function parseSortFromUrl(searchParams: URLSearchParams): SortKey[] {
 // PlayersPage
 // ---------------------------------------------------------------------------
 
-export default function PlayersPage() {
+function PlayersPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -754,5 +754,25 @@ export default function PlayersPage() {
         </>
       )}
     </main>
+  );
+}
+
+// Wrap in Suspense — required by Next.js App Router when useSearchParams() is used
+// in a client component, to allow static pre-rendering of the page shell.
+export default function PlayersPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="max-w-screen-2xl mx-auto px-4 py-6 space-y-4">
+          <div className="space-y-3 animate-pulse">
+            <div className="h-8 w-48 bg-muted rounded" />
+            <div className="h-10 bg-muted rounded-lg" />
+            <div className="h-64 bg-muted rounded-lg" />
+          </div>
+        </main>
+      }
+    >
+      <PlayersPageContent />
+    </Suspense>
   );
 }

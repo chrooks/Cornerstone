@@ -54,7 +54,7 @@ export function ConditionBreakdown({
   // Known sections appear first in priority order; any unrecognised sections
   // (future tiers) are appended after in the order they appear in the data.
   const knownOrder = Object.keys(SECTION_LABELS);
-  const unknownSections = [...new Set(conditions.map((c) => c.section))].filter(
+  const unknownSections = Array.from(new Set(conditions.map((c) => c.section))).filter(
     (s) => !knownOrder.includes(s)
   );
   const sectionOrder = [...knownOrder, ...unknownSections];

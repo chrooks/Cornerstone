@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
-import { formatSalary, formatHeight, parseHeight, SKILL_LABELS } from "./playerFilters";
+import { formatSalary, formatHeight, SKILL_LABELS } from "./playerFilters";
 import { SKILL_TIERS, tierToNum, TIER_CONTEXT_COLORS, TIER_CONTEXT_ACTIVE } from "@/lib/tiers";
 import { SKILL_ABBREV, ALL_SKILL_NAMES } from "@/lib/skills";
 import type { SortKey } from "./SortControls";

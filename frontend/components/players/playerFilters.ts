@@ -8,7 +8,7 @@
  */
 
 import type { PlayerWithSkills } from "@/lib/types";
-import { SKILL_TIERS, tierToNum } from "@/lib/tiers";
+import { tierToNum } from "@/lib/tiers";
 import { ALL_SKILL_NAMES, SKILL_LABELS } from "@/lib/skills";
 
 // Re-export tierToNum so existing imports from this file keep working.
