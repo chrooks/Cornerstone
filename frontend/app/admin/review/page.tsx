@@ -141,7 +141,7 @@ export default function ReviewQueuePage() {
         <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Open player</span>
         <PlayerSearchCombobox
           placeholder="Search any player…"
-          onSelect={(player) => router.push(`/review/${player.id}`)}
+          onSelect={(player) => router.push(`/admin/review/${player.id}`)}
           className="flex-1 max-w-sm"
         />
       </div>
@@ -274,7 +274,7 @@ export default function ReviewQueuePage() {
             {players.map((player) => (
               <Link
                 key={player.player_id}
-                href={`/review/${player.player_id}`}
+                href={`/admin/review/${player.player_id}`}
                 className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-4 py-3 items-center hover:bg-muted/30 transition-colors group"
               >
                 {/* Player name */}

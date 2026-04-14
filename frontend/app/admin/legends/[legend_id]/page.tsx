@@ -454,7 +454,7 @@ export default function LegendEditorPage() {
     return (
       <main className="max-w-6xl mx-auto px-4 py-8">
         <p className="text-destructive">{error ?? "Legend not found"}</p>
-        <Link href="/legends" className="text-sm text-muted-foreground hover:underline mt-2 inline-block">
+        <Link href="/admin/legends" className="text-sm text-muted-foreground hover:underline mt-2 inline-block">
           ← Back to Legends
         </Link>
       </main>
@@ -470,13 +470,13 @@ export default function LegendEditorPage() {
     <main id="legend-editor-page" className="max-w-6xl mx-auto px-4 py-8">
       {/* Navigation row */}
       <div id="legend-nav-row" className="flex items-center justify-between mb-6">
-        <Link id="legend-back-link" href="/legends" className="text-sm text-muted-foreground hover:underline">
+        <Link id="legend-back-link" href="/admin/legends" className="text-sm text-muted-foreground hover:underline">
           ← Back to Legends
         </Link>
         <div id="legend-nav-arrows" className="flex items-center gap-4">
           {prevLegend && (
             <Link
-              href={`/legends/${prevLegend.id}`}
+              href={`/admin/legends/${prevLegend.id}`}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               ← {prevLegend.name}
@@ -484,7 +484,7 @@ export default function LegendEditorPage() {
           )}
           {nextLegend && (
             <Link
-              href={`/legends/${nextLegend.id}`}
+              href={`/admin/legends/${nextLegend.id}`}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               {nextLegend.name} →

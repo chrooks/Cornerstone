@@ -55,9 +55,10 @@ export function NavBar() {
   }
 
   const navItems: NavItem[] = [
-    { href: "/pipeline",    label: "Pipeline" },
+    { href: "/players",          label: "Players" },
+    { href: "/admin/pipeline",   label: "Pipeline" },
     {
-      href: "/review",
+      href: "/admin/review",
       label: "Review",
       // Show red count badge when there are unresolved flags
       badge: flaggedPlayers != null && flaggedPlayers > 0 ? (
@@ -66,10 +67,9 @@ export function NavBar() {
         </span>
       ) : undefined,
     },
-    { href: "/calibration", label: "Calibration" },
-    { href: "/players",     label: "Players" },
+    { href: "/admin/calibration", label: "Calibration" },
     {
-      href: "/legends",
+      href: "/admin/legends",
       label: "Legends",
       // Show completion progress badge (e.g. "12/36")
       badge: legendsComplete != null ? (

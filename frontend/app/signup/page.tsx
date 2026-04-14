@@ -17,8 +17,8 @@ function SignUpForm() {
   // Redirect already-authenticated users away from the signup page
   useEffect(() => {
     const supabase = getBrowserSupabase();
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace("/");
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: unknown } }) => {
+      if (session) router.replace("/admin");
     });
   }, [router]);
 

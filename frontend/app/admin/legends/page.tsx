@@ -31,7 +31,7 @@ function LegendCard({ legend }: { legend: LegendSummary }) {
 
   return (
     <Link
-      href={`/legends/${legend.id}`}
+      href={`/admin/legends/${legend.id}`}
       className={cn(
         "block rounded-lg border bg-card p-4 hover:shadow-md transition-shadow",
         // Left border accent based on completion state

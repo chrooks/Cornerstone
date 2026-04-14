@@ -335,7 +335,7 @@ export default function PlayerReviewPage() {
     try {
       const res = await deletePlayer(player_id);
       if (res.success) {
-        router.push("/review");
+        router.push("/admin/review");
       } else {
         setDeleteError(res.error ?? "Delete failed");
         setDeleting(false);
@@ -400,9 +400,9 @@ export default function PlayerReviewPage() {
       } else if (e.key === "k" || e.key === "ArrowUp") {
         setFocusedIdx((i) => Math.max(i - 1, 0));
       } else if (e.key === "ArrowRight" && nextEntry) {
-        router.push(`/review/${nextEntry.player_id}`);
+        router.push(`/admin/review/${nextEntry.player_id}`);
       } else if (e.key === "ArrowLeft" && prevEntry) {
-        router.push(`/review/${prevEntry.player_id}`);
+        router.push(`/admin/review/${prevEntry.player_id}`);
       }
     };
     window.addEventListener("keydown", handler);
@@ -469,7 +469,7 @@ export default function PlayerReviewPage() {
             toast.success("All flags resolved — player review complete!", {
               action: {
                 label:   "Back to Queue",
-                onClick: () => router.push("/review"),
+                onClick: () => router.push("/admin/review"),
               },
             });
           }
@@ -603,7 +603,7 @@ export default function PlayerReviewPage() {
         <div className="rounded-md bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
           {error ?? "Player not found"}
         </div>
-        <Link href="/review" className="mt-4 inline-block text-sm text-muted-foreground hover:text-foreground">
+        <Link href="/admin/review" className="mt-4 inline-block text-sm text-muted-foreground hover:text-foreground">
           ← Back to queue
         </Link>
       </main>
@@ -669,7 +669,7 @@ export default function PlayerReviewPage() {
         <button
           id="review-prev-btn"
           type="button"
-          onClick={() => router.push(`/review/${prevEntry.player_id}`)}
+          onClick={() => router.push(`/admin/review/${prevEntry.player_id}`)}
           title={`← ${prevEntry.player_name}`}
           className={cn(
             "fixed left-3 top-1/2 -translate-y-1/2 z-40",
@@ -688,7 +688,7 @@ export default function PlayerReviewPage() {
         <button
           id="review-next-btn"
           type="button"
-          onClick={() => router.push(`/review/${nextEntry.player_id}`)}
+          onClick={() => router.push(`/admin/review/${nextEntry.player_id}`)}
           title={`${nextEntry.player_name} →`}
           className={cn(
             "fixed right-3 top-1/2 -translate-y-1/2 z-40",
@@ -708,7 +708,7 @@ export default function PlayerReviewPage() {
       <div id="review-player-header">
         <Link
           id="review-back-link"
-          href="/review"
+          href="/admin/review"
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           ← Review Queue
@@ -779,7 +779,7 @@ export default function PlayerReviewPage() {
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
             <Link
               id="review-view-profile-link"
-              href={`/players/${player_id}`}
+              href={`/admin/players/${player_id}`}
               className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
             >
               View Profile →
@@ -893,7 +893,7 @@ export default function PlayerReviewPage() {
       {flags.length === 0 && (
         <div className="text-center py-12 text-muted-foreground text-sm">
           No flags found for this player.{" "}
-          <Link href="/review" className="underline hover:text-foreground">
+          <Link href="/admin/review" className="underline hover:text-foreground">
             Back to queue
           </Link>
         </div>

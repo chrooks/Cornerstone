@@ -264,7 +264,7 @@ export default function CalibrationPage() {
           <div className="flex items-center gap-3">
             <a
               id="calibration-back-link"
-              href="/"
+              href="/admin"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               ← Cornerstone
