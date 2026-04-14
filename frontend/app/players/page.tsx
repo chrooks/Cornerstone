@@ -17,6 +17,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { listPlayersWithSkills, manualOverrideSkill, searchNbaPlayers, manuallyIncludePlayer, removeManualInclude } from "@/lib/api";
 import type { NbaPlayerSearchResult } from "@/lib/api";
+import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { FilterBar } from "@/components/players/FilterBar";
 import { SortControls } from "@/components/players/SortControls";
 import { PlayerTable, DEFAULT_PAGE_SIZE } from "@/components/players/PlayerTable";
@@ -239,6 +240,9 @@ function PlayersPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+
+  // ── Auth — gate admin-only controls behind role check ─────────────────────
+  const { isAdmin } = useAdminStatus();
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const [players, setPlayers] = useState<PlayerWithSkills[]>([]);
@@ -516,8 +520,8 @@ function PlayersPageContent() {
           )}
         </div>
 
-        {/* Add player (manual include) — compact inline search */}
-        <div id="add-player-control" ref={addPlayerRef} className="relative">
+        {/* Add player (manual include) — admin only */}
+        {isAdmin && <div id="add-player-control" ref={addPlayerRef} className="relative">
           {!addPlayerOpen ? (
             <button
               id="add-player-btn"
@@ -577,7 +581,7 @@ function PlayersPageContent() {
               ))}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Legends toggle */}
         <button
@@ -683,8 +687,8 @@ function PlayersPageContent() {
               pageSize={pageSize}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
-              onSkillOverride={handleSkillOverride}
-              onRemoveManualPlayer={handleRemoveManualPlayer}
+              onSkillOverride={isAdmin ? handleSkillOverride : undefined}
+              onRemoveManualPlayer={isAdmin ? handleRemoveManualPlayer : undefined}
             />
           ) : (
             <>

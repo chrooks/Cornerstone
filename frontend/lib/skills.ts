@@ -146,6 +146,22 @@ export const SKILL_TYPE_PRIORITY: Record<string, number> = {
 };
 
 // ---------------------------------------------------------------------------
+// Public player profile — 7 horizontal category columns
+// Skills within each column render in the order listed here;
+// the profile component sorts them highest tier first at render time.
+// ---------------------------------------------------------------------------
+
+export const PUBLIC_SKILL_CATEGORIES: Record<string, string[]> = {
+  "Perimeter Scoring":     ["spot_up_shooter", "movement_shooter", "off_dribble_shooter"],
+  "On-Ball Creation":      ["isolation_scorer", "pnr_ball_handler", "driver"],
+  "Off-Ball & Transition": ["cutter", "transition_threat", "pnr_finisher"],
+  "Interior Scoring":      ["crafty_finisher", "high_flyer", "vertical_spacer", "mid_post_player", "low_post_player"],
+  "Playmaking":            ["passer"],
+  "Physicality":           ["screen_setter", "offensive_rebounder", "rebounder"],
+  "Defense":               ["rim_protector", "perimeter_disruptor", "versatile_defender"],
+};
+
+// ---------------------------------------------------------------------------
 // Legends page grouping (by skill_category type, not confidence)
 // ---------------------------------------------------------------------------
 
