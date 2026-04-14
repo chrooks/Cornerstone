@@ -13,6 +13,7 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
+from api.auth import require_admin
 from services.supabase_client import get_supabase, run_query
 from services.players_service import (
     CURRENT_SEASON,
@@ -171,6 +172,7 @@ def pipeline_status():
 
 
 @pipeline_bp.route("/pipeline/fetch-stats", methods=["POST"])
+@require_admin
 def fetch_stats_batch():
     """
     Fetch and cache NBA stats for all qualifying players.

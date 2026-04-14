@@ -24,6 +24,7 @@ from typing import Any
 import anthropic
 from flask import Blueprint, jsonify, request
 
+from api.auth import require_admin
 from services.skills import (
     ALL_SKILLS as _ALL_SKILLS_FROM_MODULE,
     SKILL_DEFINITIONS as _SKILL_DEFINITIONS_FROM_MODULE,
@@ -256,6 +257,7 @@ def get_legend(legend_id: str):
 
 
 @legends_bp.route("/legends/<legend_id>/skills", methods=["PUT"])
+@require_admin
 def update_legend_skills(legend_id: str):
     """
     Upsert a partial or full skill profile for a legend.
@@ -372,6 +374,7 @@ def update_legend_skills(legend_id: str):
 
 
 @legends_bp.route("/legends/<legend_id>/attributes", methods=["PUT"])
+@require_admin
 def update_legend_attributes(legend_id: str):
     """
     Update the physical attributes for a legend: age, height, weight, peak_year.
@@ -592,6 +595,7 @@ def _parse_claude_legend_response(text: str) -> dict[str, dict] | None:
 
 
 @legends_bp.route("/legends/<legend_id>/claude-suggestion", methods=["POST"])
+@require_admin
 def claude_suggestion(legend_id: str):
     """
     Call Claude to suggest skill ratings for a legend based on historical basketball knowledge.

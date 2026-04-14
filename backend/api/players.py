@@ -22,6 +22,7 @@ from flask import Blueprint, jsonify, request
 from services.supabase_client import get_supabase, reset_client
 from services import players_service, nba_api_client
 from services.players_service import CURRENT_SEASON
+from api.auth import require_admin
 
 
 def _validate_uuid(val: str) -> bool:
@@ -342,6 +343,7 @@ def nba_search_players():
 
 
 @players_bp.route("/players/manual-include", methods=["POST"])
+@require_admin
 def manual_include_player():
     """
     Manually add a player to the current season's player pool.
@@ -415,6 +417,7 @@ def manual_include_player():
 
 
 @players_bp.route("/players/<player_id>/manual-include", methods=["DELETE"])
+@require_admin
 def remove_manual_include(player_id: str):
     """
     Remove a player from the manual include list by setting manually_included=False.
@@ -759,6 +762,7 @@ def search_players():
 # ---------------------------------------------------------------------------
 
 @players_bp.route("/players/<player_id>", methods=["DELETE"])
+@require_admin
 def delete_player(player_id: str):
     """
     Permanently delete a player and ALL of their associated data:
@@ -815,6 +819,7 @@ def delete_player(player_id: str):
 # ---------------------------------------------------------------------------
 
 @players_bp.route("/players/<player_id>/bio", methods=["PATCH"])
+@require_admin
 def update_player_bio(player_id: str):
     """
     Update bio fields for a manually-included player.

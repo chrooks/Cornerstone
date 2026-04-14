@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
+from api.auth import require_admin
 from services.supabase_client import get_supabase, run_query
 from services.players_service import CURRENT_SEASON
 from services.skill_engine.cache import get_thresholds, get_league_averages
@@ -313,6 +314,7 @@ def player_flags(player_id: str):
 
 
 @review_bp.route("/review/<player_id>/resolve", methods=["POST"])
+@require_admin
 def resolve_flag(player_id: str):
     """
     Resolve a single skill flag for a player.
@@ -469,6 +471,7 @@ def resolve_flag(player_id: str):
 
 
 @review_bp.route("/review/bulk-resolve", methods=["POST"])
+@require_admin
 def bulk_resolve():
     """
     Resolve all unresolved flags for a player in one shot.
@@ -609,6 +612,7 @@ def bulk_resolve():
 
 
 @review_bp.route("/review/<player_id>/manual-override", methods=["POST"])
+@require_admin
 def manual_override_skill(player_id: str):
     """
     Manually set the final tier for any skill, regardless of whether it was flagged.

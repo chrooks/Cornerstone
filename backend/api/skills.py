@@ -19,6 +19,7 @@ import uuid as _uuid_mod
 
 from flask import Blueprint, jsonify, request
 
+from api.auth import require_admin
 from services.supabase_client import get_supabase
 from services import skill_mapping_service
 from services.players_service import CURRENT_SEASON
@@ -130,6 +131,7 @@ def player_skills(player_id: str):
 
 
 @skills_bp.route("/skills/batch", methods=["POST"])
+@require_admin
 def batch_skills():
     """
     Batch-evaluate skills for multiple players and persist results to skill_profiles.

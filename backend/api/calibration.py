@@ -19,6 +19,7 @@ from functools import wraps
 
 from flask import Blueprint, jsonify, request
 
+from api.auth import require_admin
 from services.supabase_client import get_supabase
 from services.skill_engine.cache import get_thresholds, get_league_averages
 from services.skill_engine.evaluator import evaluate_skill, collect_condition_results
@@ -187,6 +188,7 @@ def _validate_threshold_rule(rule: dict) -> str | None:
 # ---------------------------------------------------------------------------
 
 @calibration_bp.route("/skills/thresholds", methods=["GET"])
+@require_admin
 def get_all_thresholds():
     """
     Return all skill threshold rules from the skill_thresholds table.
@@ -215,7 +217,7 @@ def get_all_thresholds():
 # ---------------------------------------------------------------------------
 
 @calibration_bp.route("/skills/thresholds/<skill_name>", methods=["PUT"])
-@require_write_key
+@require_admin
 def upsert_threshold(skill_name: str):
     """
     Upsert a threshold rule for the given skill.
@@ -263,6 +265,7 @@ def upsert_threshold(skill_name: str):
 # ---------------------------------------------------------------------------
 
 @calibration_bp.route("/skills/test-thresholds", methods=["POST"])
+@require_admin
 def test_thresholds():
     """
     Run the rule engine against anchor players and return pass/fail results.
@@ -452,6 +455,7 @@ def test_thresholds():
 # ---------------------------------------------------------------------------
 
 @calibration_bp.route("/anchors", methods=["GET"])
+@require_admin
 def get_anchors():
     """
     Return all anchor players grouped by skill name.
@@ -490,7 +494,7 @@ def get_anchors():
 # ---------------------------------------------------------------------------
 
 @calibration_bp.route("/anchors", methods=["POST"])
-@require_write_key
+@require_admin
 def create_anchor():
     """
     Create or update an anchor player entry for a given skill.
@@ -555,7 +559,7 @@ def create_anchor():
 # ---------------------------------------------------------------------------
 
 @calibration_bp.route("/anchors/<anchor_id>", methods=["DELETE"])
-@require_write_key
+@require_admin
 def delete_anchor(anchor_id: str):
     """Remove an anchor player entry by its UUID."""
     if not _validate_uuid(anchor_id):
