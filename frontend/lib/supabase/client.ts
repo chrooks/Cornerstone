@@ -23,8 +23,19 @@ export function getBrowserSupabase() {
 /**
  * Returns the current user's JWT access token, or null if not authenticated.
  * Called by apiFetch to attach an Authorization header to write requests.
+ *
+ * With @supabase/ssr's createBrowserClient, the in-memory session may not be
+ * populated yet if the page was server-rendered. getSession() reads from the
+ * in-memory cache, so we fall back to refreshSession() (which reads from
+ * cookies and re-hydrates the client) when getSession() returns nothing.
  */
 export async function getAccessToken(): Promise<string | null> {
-  const { data: { session } } = await getBrowserSupabase().auth.getSession();
-  return session?.access_token ?? null;
+  const client = getBrowserSupabase();
+  const { data: { session } } = await client.auth.getSession();
+  if (session?.access_token) {
+    return session.access_token;
+  }
+  // In-memory session not initialised yet — restore from cookies via a refresh
+  const { data: { session: refreshed } } = await client.auth.refreshSession();
+  return refreshed?.access_token ?? null;
 }

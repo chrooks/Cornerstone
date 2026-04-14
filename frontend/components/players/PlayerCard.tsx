@@ -96,7 +96,8 @@ export function PlayerCard({ player }: PlayerCardProps) {
         <div className="min-w-0 flex-1">
           <p id={`player-card-name-${player.id}`} className={cn("font-semibold text-sm text-foreground truncate", !isLegend && "group-hover:underline")}>
             {isLegend && <span className="text-amber-500 mr-1" aria-label="Legend">★</span>}
-            {player.name}
+            {/* Prepend peak year for legends, e.g. "2001 Allen Iverson" */}
+            {isLegend && player.peak_year != null ? `${player.peak_year} ` : ""}{player.name}
           </p>
           <p className="text-xs text-muted-foreground truncate">
             {[player.team, player.position].filter(Boolean).join(" · ") || "—"}
