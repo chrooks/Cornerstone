@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getPlayerProfile, getPlayerStats } from "@/lib/api";
@@ -93,6 +93,9 @@ function SkillColumn({ category, skillNames, skills }: SkillColumnProps) {
 
 export default function PublicPlayerProfilePage() {
   const { player_id } = useParams<{ player_id: string }>();
+  const searchParams = useSearchParams();
+  // When navigated from the builder (right-click → open profile), link back there
+  const fromBuilder = searchParams.get("from") === "builder";
 
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,13 +154,13 @@ export default function PublicPlayerProfilePage() {
 
   return (
     <main id="public-player-profile-page" className="max-w-screen-xl mx-auto px-4 py-8 space-y-8">
-      {/* Back link */}
+      {/* Back link — returns to builder if opened from there, otherwise players list */}
       <Link
         id="public-player-back-link"
-        href="/players"
+        href={fromBuilder ? "/builder" : "/players"}
         className="text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        ← Players
+        {fromBuilder ? "← Builder" : "← Players"}
       </Link>
 
       {/* Player header — headshot + name + bio + box stats */}

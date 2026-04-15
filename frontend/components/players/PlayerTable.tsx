@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
+import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { formatSalary, formatHeight, SKILL_LABELS } from "./playerFilters";
 import { SKILL_TIERS, tierToNum, TIER_CONTEXT_COLORS, TIER_CONTEXT_ACTIVE } from "@/lib/tiers";
 import { SKILL_ABBREV, ALL_SKILL_NAMES } from "@/lib/skills";
@@ -47,6 +48,7 @@ interface ColDef {
 
 // Non-skill columns (left side of table)
 const META_COLUMNS: ColDef[] = [
+  { key: "headshot",          label: "",           defaultWidth: 36,  minWidth: 36,  sticky: true },
   { key: "name",              label: "Name",       defaultWidth: 160, minWidth: 120, sticky: true },
   { key: "team",              label: "Team",       defaultWidth: 100, minWidth: 70 },
   { key: "position",         label: "Pos",        defaultWidth: 70,  minWidth: 50 },
@@ -129,6 +131,30 @@ interface PlayerTableProps {
   onSkillOverride?: (playerId: string, skillKey: string, tier: SkillTier) => Promise<void>;
   /** When provided, manually-included players show a remove button next to their name. */
   onRemoveManualPlayer?: (playerId: string) => void;
+  /**
+   * When provided, clicking a row calls this instead of navigating to /players/[id].
+   * Used by the builder's player picker panel to fill a roster slot.
+   */
+  onRowClick?: (player: PlayerWithSkills) => void;
+  /**
+   * When provided, rows are draggable and this is called on drag start.
+   * Used by the builder's player picker panel for drag-to-slot.
+   */
+  onRowDragStart?: (e: React.DragEvent, player: PlayerWithSkills) => void;
+  /**
+   * When provided, right-clicking a row calls this instead of the default context menu.
+   * Used by the builder's player picker panel to open the player profile page.
+   */
+  onRowContextMenu?: (e: React.MouseEvent, player: PlayerWithSkills) => void;
+  /**
+   * Player IDs that should be rendered as disabled (dimmed, unclickable).
+   * Used by the builder to mark rostered players and over-budget players.
+   */
+  disabledPlayerIds?: Set<string>;
+  /** Called on row mouseenter — used by builder picker to preview cap impact in gauge. */
+  onRowHover?: (player: PlayerWithSkills) => void;
+  /** Called on row mouseleave — clears gauge preview. */
+  onRowHoverEnd?: () => void;
 }
 
 export function PlayerTable({
@@ -142,6 +168,12 @@ export function PlayerTable({
   onPageSizeChange,
   onSkillOverride,
   onRemoveManualPlayer,
+  onRowClick,
+  onRowDragStart,
+  onRowContextMenu,
+  disabledPlayerIds,
+  onRowHover,
+  onRowHoverEnd,
 }: PlayerTableProps) {
   const router = useRouter();
 
@@ -295,6 +327,10 @@ export function PlayerTable({
 
   const renderCell = (player: PlayerWithSkills, col: ColDef) => {
     switch (col.key) {
+      case "headshot":
+        return (
+          <PlayerHeadshot nba_api_id={player.nba_api_id} size={24} name={player.name} />
+        );
       case "name":
         if (player.is_legend) {
           return (
@@ -306,13 +342,18 @@ export function PlayerTable({
         }
         return (
           <span className="flex items-center gap-1.5">
-            <Link
-              href={`/players/${player.id}`}
-              onClick={(e) => e.stopPropagation()} // prevent row onClick from firing a second navigation
-              className="font-medium text-foreground hover:underline"
-            >
-              {player.name}
-            </Link>
+            {/* In builder picker (onRowClick present), row click handles navigation — no Link needed */}
+            {onRowClick ? (
+              <span className="font-medium text-foreground">{player.name}</span>
+            ) : (
+              <Link
+                href={`/players/${player.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="font-medium text-foreground hover:underline"
+              >
+                {player.name}
+              </Link>
+            )}
             {/* Remove button for manually-included players (0 games, forced into pool) */}
             {player.manually_included && onRemoveManualPlayer && (
               <button
@@ -427,7 +468,7 @@ export function PlayerTable({
               <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 px-1">
                 Toggle Columns
               </div>
-              {ALL_COLUMNS.map((col) => (
+              {ALL_COLUMNS.filter((col) => col.key !== "headshot").map((col) => (
                 <label
                   key={col.key}
                   className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-muted cursor-pointer text-xs"
@@ -460,23 +501,25 @@ export function PlayerTable({
                     style={{ width, minWidth: col.minWidth }}
                     className={cn(
                       "relative select-none px-2 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap",
-                      "cursor-pointer hover:bg-muted transition-colors",
+                      col.key !== "headshot" && "cursor-pointer hover:bg-muted transition-colors",
                       isSorted && "text-foreground bg-muted",
                       col.sticky && "sticky left-0 z-20 bg-muted/60 border-r border-border",
                     )}
-                    onClick={(e) => handleHeaderClick(e, col.key)}
-                    title={`Sort by ${SKILL_LABELS[col.key] ?? col.label} (Shift+click for secondary sort)`}
+                    onClick={col.key !== "headshot" ? (e) => handleHeaderClick(e, col.key) : undefined}
+                    title={col.key !== "headshot" ? `Sort by ${SKILL_LABELS[col.key] ?? col.label} (Shift+click for secondary sort)` : undefined}
                   >
                     <span className="truncate">{col.label}</span>
-                    {getSortIndicator(col.key)}
+                    {col.key !== "headshot" && getSortIndicator(col.key)}
 
-                    {/* Resize handle — right edge of header */}
-                    <span
-                      className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize group flex items-center justify-center"
-                      onMouseDown={(e) => handleResizeMouseDown(e, col.key)}
-                    >
-                      <span className="h-4 w-px bg-border group-hover:bg-foreground/40 transition-colors" />
-                    </span>
+                    {/* Resize handle — right edge of header (not on headshot column) */}
+                    {col.key !== "headshot" && (
+                      <span
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize group flex items-center justify-center"
+                        onMouseDown={(e) => handleResizeMouseDown(e, col.key)}
+                      >
+                        <span className="h-4 w-px bg-border group-hover:bg-foreground/40 transition-colors" />
+                      </span>
+                    )}
                   </th>
                 );
               })}
@@ -495,20 +538,35 @@ export function PlayerTable({
             ) : (
               players.map((player) => {
                 const isLegend = player.is_legend === true;
+                const isDisabled = disabledPlayerIds?.has(player.id) ?? false;
+                // onRowClick overrides navigation (used by builder picker); blocked for disabled rows
+                const handleRowClick = onRowClick
+                  ? isDisabled ? undefined : () => onRowClick(player)
+                  : isLegend
+                  ? undefined
+                  : (e: React.MouseEvent) => {
+                      if (e.metaKey || e.ctrlKey) {
+                        window.open(`/players/${player.id}`, "_blank");
+                        return;
+                      }
+                      router.push(`/players/${player.id}`);
+                    };
                 return (
                 <tr
                   key={player.id}
-                  onClick={isLegend ? undefined : (e) => {
-                    // Cmd/Ctrl+click → open in new tab (native browser behavior)
-                    if (e.metaKey || e.ctrlKey) {
-                      window.open(`/players/${player.id}`, "_blank");
-                      return;
-                    }
-                    router.push(`/players/${player.id}`);
-                  }}
+                  draggable={!!onRowDragStart && !isDisabled}
+                  onDragStart={onRowDragStart && !isDisabled ? (e) => onRowDragStart(e, player) : undefined}
+                  onClick={handleRowClick}
+                  onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(e, player) : undefined}
+                  onMouseEnter={onRowHover ? () => onRowHover(player) : undefined}
+                  onMouseLeave={onRowHoverEnd}
                   className={cn(
                     "border-b border-border transition-colors group",
-                    isLegend
+                    isDisabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : onRowClick
+                      ? "cursor-pointer hover:bg-blue-50/60 dark:hover:bg-blue-950/20"
+                      : isLegend
                       ? "bg-amber-50/30 dark:bg-amber-950/10 cursor-default"
                       : "hover:bg-muted/40 cursor-pointer",
                   )}

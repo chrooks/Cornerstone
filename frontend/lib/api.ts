@@ -499,6 +499,14 @@ export async function listLegends(): Promise<ApiResponse<LegendSummary[]>> {
   return apiFetch<LegendSummary[]>("/api/legends");
 }
 
+/**
+ * Fetch all qualifying active players (no legends) with composite skill tiers.
+ * Used by the builder's player picker panel.
+ */
+export async function listActivePlayersWithSkills(): Promise<ApiResponse<PlayerWithSkills[]>> {
+  return apiFetch<PlayerWithSkills[]>("/api/players/bulk?include_legends=false");
+}
+
 /** Get a single legend with its full skill profile. */
 export async function getLegend(legendId: string): Promise<ApiResponse<LegendDetail>> {
   return apiFetch<LegendDetail>(`/api/legends/${encodeURIComponent(legendId)}`);
