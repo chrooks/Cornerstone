@@ -17,7 +17,7 @@
 ### Defensive Minimums
 - If you aren't at least a capable defender (Perimeter Disruptor, Versatile Defender, or Rim Protector), you better be Elite at something else. Not being capable in any of these considerably hinders a team's defense. (e.g. Lakers' subpar defense while playing Reaves and Luka)
 - The defensive impact of a smaller player at the same skill tier is less than that of a larger player. This can be slightly mitigated if the player is a High Flyer.
-- A player with no offensive threat (no shooting, no creation) gets ignored by the defense — enabling sagging and doubling your on-ball players. Great defensive players who are also offensive black holes create implicit spacing penalties that partially offset their defensive value.
+- A player with no offensive threat (no shooting, no creation) gets ignored by the defense — enabling sagging and doubling your on-ball players. Great defensive players with no shooting ability create implicit spacing penalties that partially offset their defensive value.
 - Conversely, players who contribute meaningfully on both ends are disproportionately valuable. A capable defender who can also shoot or create doesn't force a trade-off — you get both without spending two roster spots. In a salary cap context, two-way players are among the highest-value assets on a roster.
 
 ### Rebounding

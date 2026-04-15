@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 cd backend
 source venv/bin/activate
-flask run --port=5001        # Dev server at http://localhost:5001
+python -m flask run --port=5001        # Dev server at http://localhost:5001
 python -m pytest tests/      # Run all tests
 python -m pytest tests/test_skill_mapping_service.py  # Single test file
 ```
