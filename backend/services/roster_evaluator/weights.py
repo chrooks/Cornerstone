@@ -165,6 +165,31 @@ DEFENSE_THRESHOLDS: dict[str, float] = {
 }
 
 # ---------------------------------------------------------------------------
+# Perimeter compounding threshold — compound score below this is weak
+# ---------------------------------------------------------------------------
+PERIMETER_THRESHOLDS: dict[str, float] = {
+    "warning": 2.0,   # perimeter_compound_score below this → Warning
+}
+
+# ---------------------------------------------------------------------------
+# Strength thresholds — scores above these earn a "strength" note
+# ---------------------------------------------------------------------------
+STRENGTH_THRESHOLDS: dict[str, float] = {
+    "defense":         6.0,   # defense_score above this → Strength
+    "passer_compound": 5.0,   # passer_compound above this → Strength
+    # spacing strength reuses SPACING_THRESHOLDS["good"] = 8.0
+}
+
+# ---------------------------------------------------------------------------
+# Cutter activation ratio — if cutter_score / cutter_raw below this, warn.
+# The four gate floors multiply to a minimum of 0.2*0.3*0.6*0.5 = 0.018.
+# With one good enabler at each gate (e.g. one Elite passer, one movement shooter,
+# one screen setter, one scorer) the product reaches ~0.06. 0.04 is the threshold
+# that separates "truly orphaned" (no support → floor ~0.018) from "some support".
+# ---------------------------------------------------------------------------
+CUTTER_ACTIVATION_RATIO: float = 0.04
+
+# ---------------------------------------------------------------------------
 # Note priority — lower number = shown first
 # ---------------------------------------------------------------------------
 SEVERITY_ORDER: dict[str, int] = {

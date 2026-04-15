@@ -259,6 +259,10 @@ def effective_on_ball_threat(player: dict) -> ScoreTrace:
 # Boolean classifiers
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Skill-set constants — exported for use by rules.py to prevent drift
+# ---------------------------------------------------------------------------
+
 # Skills that count as "on-ball" for classification purposes.
 # crafty_finisher included because it contributes to on_ball_scoring_threat
 # and gravity — a player whose only skill is finishing at the rim in traffic
@@ -302,7 +306,8 @@ _SHOOTING_SKILLS: frozenset[str] = frozenset({
 })
 
 # Creation skills (can generate own shot or others)
-_CREATION_SKILLS: frozenset[str] = frozenset({
+# Exported: imported by rules.py — change here propagates everywhere.
+CREATION_SKILLS: frozenset[str] = frozenset({
     "driver",
     "isolation_scorer",
     "pnr_ball_handler",
@@ -310,8 +315,9 @@ _CREATION_SKILLS: frozenset[str] = frozenset({
     "low_post_player",
 })
 
-# Defensive skills
-_DEFENSIVE_SKILLS: frozenset[str] = frozenset({
+# Defensive skills (perimeter presence floor)
+# Exported: imported by rules.py — change here propagates everywhere.
+DEFENSIVE_SKILLS: frozenset[str] = frozenset({
     "perimeter_disruptor",
     "versatile_defender",
     "rim_protector",
@@ -344,7 +350,7 @@ def is_twoway(player: dict) -> bool:
         tier_weight(player, s) >= 1
         for s in (_ON_BALL_SKILLS | _OFF_BALL_SKILLS | _SHOOTING_SKILLS)
     )
-    has_defense = any(tier_weight(player, s) >= 1 for s in _DEFENSIVE_SKILLS)
+    has_defense = any(tier_weight(player, s) >= 1 for s in DEFENSIVE_SKILLS)
     return has_offense and has_defense
 
 
@@ -357,5 +363,5 @@ def is_offensive_blackhole(player: dict) -> bool:
     defensive value is real but partially offset by this implicit spacing penalty.
     """
     has_shooting = any(tier_weight(player, s) >= 1 for s in _SHOOTING_SKILLS)
-    has_creation = any(tier_weight(player, s) >= 1 for s in _CREATION_SKILLS)
+    has_creation = any(tier_weight(player, s) >= 1 for s in CREATION_SKILLS)
     return not has_shooting and not has_creation

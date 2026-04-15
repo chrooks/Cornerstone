@@ -44,6 +44,8 @@ class Note:
 
     severity: Literal["critical", "warning", "tip", "strength"]
     category: Literal["offense", "defense", "two_way", "roster_balance"]
+    # WARNING: text may contain user-supplied player names. Callers must
+    # render this as text content (not raw HTML) to prevent XSS.
     text: str
     trace_key: str
 
