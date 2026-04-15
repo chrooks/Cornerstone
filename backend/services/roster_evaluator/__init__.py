@@ -8,3 +8,7 @@ Phases:
   3 — rules.py                  (heuristic → Note)
   4 — evaluator.py              (orchestration + Flask endpoint)
 """
+
+from .evaluator import evaluate_roster
+
+__all__ = ["evaluate_roster"]

@@ -101,11 +101,16 @@ from api.pipeline import pipeline_bp
 from api.review import review_bp
 from api.legends import legends_bp
 from api.rosters import rosters_bp
+from api.builder import builder_bp
 
 
 def create_app() -> Flask:
     """Application factory — creates and configures the Flask app."""
     app = Flask(__name__)
+
+    # Hard cap on incoming request bodies — prevents oversized payload attacks.
+    # 64 KB is well above any legitimate API payload in this project.
+    app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
 
     # Restrict CORS to known frontend origins.
     # FRONTEND_ORIGIN can be a comma-separated list for multi-environment setups
@@ -128,6 +133,7 @@ def create_app() -> Flask:
     app.register_blueprint(review_bp)       # Prompt 7: review queue + flag resolution
     app.register_blueprint(legends_bp)      # Prompt 8: legends profile builder
     app.register_blueprint(rosters_bp)      # Prompt 9: roster builder persistence
+    app.register_blueprint(builder_bp)      # Phase 4: roster evaluation engine
 
     return app
 
