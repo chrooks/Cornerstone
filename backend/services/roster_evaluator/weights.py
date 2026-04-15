@@ -103,7 +103,13 @@ CROSS_ROSTER_MULTIPLIERS: dict[str, dict[str, float]] = {
     "passer_to_cutter":   {"min": 0.2, "max": 1.0, "max_input": 16.0},
     "passer_to_spacer":   {"min": 0.1, "max": 1.0, "max_input": 16.0},
 
-    # On-ball gravity of teammates opens cutting lanes
+    # Spacing quality gates cutter effectiveness (room to cut into)
+    # max_input matches approximate ceiling of effective spacing_score
+    "spacing_to_cutter":         {"min": 0.3, "max": 1.0, "max_input": 16.0},
+
+    # On-ball gravity of teammates opens cutting lanes.
+    # max_input is a roster SUM of per-player gravity values (each 0–1),
+    # not a headcount. A typical roster sums to 1–4; 6 saturates the multiplier.
     "onball_gravity_to_cutter": {"min": 0.5, "max": 1.0, "max_input": 6.0},
 
     # Rim anchor amplifies perimeter defenders
@@ -115,8 +121,29 @@ CROSS_ROSTER_MULTIPLIERS: dict[str, dict[str, float]] = {
 # ---------------------------------------------------------------------------
 COMPOUNDING_EXPONENTS: dict[str, float] = {
     "perimeter_disruptors": 1.3,   # Thunder effect — stacking is superlinear
-    "versatile_defenders":  1.15,  # compounds with perimeter, less than rim
+    "versatile_defenders":  1.15,  # reserved — versatile defenders currently contribute
+                                   # to perimeter_compound at 0.7× rather than their own
+                                   # dedicated compound function; keep for future use
     "passers":              1.2,   # two elite passers > 2× one
+}
+
+# ---------------------------------------------------------------------------
+# Spacing weights — relative value of each shooter type
+# Movement shooters are harder to guard and worth more per tier than spot-up
+# ---------------------------------------------------------------------------
+SPACING_WEIGHTS: dict[str, float] = {
+    "movement_shooter": 2.0,   # movement >> spot-up per heuristics
+    "spot_up_shooter":  1.0,
+}
+
+# ---------------------------------------------------------------------------
+# Paint touch weights — relative value of each paint-access skill
+# ---------------------------------------------------------------------------
+PAINT_TOUCH_WEIGHTS: dict[str, float] = {
+    "driver":          1.0,
+    "vertical_spacer": 0.9,   # lob threat + lane opener
+    "mid_post_player": 0.8,
+    "low_post_player": 0.8,
 }
 
 # ---------------------------------------------------------------------------
