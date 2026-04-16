@@ -430,6 +430,23 @@ def transition_active(roster: list[dict]) -> bool:
     return has_threats and has_passer
 
 
+def shooter_count(roster: list[dict], min_tier: str = "Capable") -> int:
+    """
+    Number of players who can credibly stretch the floor.
+
+    Counts players with spot_up_shooter OR movement_shooter at or above min_tier.
+    Each player counted once even if they have both skills.
+    """
+    min_weight = TIER_WEIGHTS.get(min_tier, 0)
+    if min_weight == 0:
+        return 0
+    return sum(
+        1 for p in roster
+        if tier_weight(p, "spot_up_shooter") >= min_weight
+        or tier_weight(p, "movement_shooter") >= min_weight
+    )
+
+
 def movement_orphaned(roster: list[dict]) -> bool:
     """
     True if the roster has movement shooters but no screen setters to free them.
@@ -469,4 +486,9 @@ def compute_aggregates(roster: list[dict]) -> "dict[str, ScoreTrace | bool]":
         "pnr_synergy":               pnr_synergy(roster),
         "transition_active":         transition_active(roster),
         "movement_orphaned":         movement_orphaned(roster),
+        # Shooter distribution
+        "shooter_count_proficient":  shooter_count(roster, "Proficient"),
+        "shooter_count_capable":     shooter_count(roster, "Capable"),
+        # Perimeter disruptor headcount (separate from compound score)
+        "perimeter_disruptor_count": count_at_or_above(roster, "perimeter_disruptor", "Capable"),
     }

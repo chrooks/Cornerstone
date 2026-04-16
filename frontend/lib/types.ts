@@ -414,3 +414,37 @@ export interface ClaudeSkillSuggestion {
 export interface LegendClaudeSuggestion {
   skills: Record<string, ClaudeSkillSuggestion>;
 }
+
+// ---------------------------------------------------------------------------
+// Roster Evaluator — GM Notes
+// ---------------------------------------------------------------------------
+
+export type NoteSeverity = "critical" | "warning" | "tip" | "strength";
+
+export type NoteCategory = "offense" | "defense" | "two_way" | "roster_balance";
+
+/** A single note returned by the roster rule engine */
+export interface Note {
+  severity: NoteSeverity;
+  category: NoteCategory;
+  text: string;
+  trace_key: string;
+}
+
+/** Full evaluation result from POST /api/builder/evaluate */
+export interface RosterEvaluation {
+  notes: Note[];
+  player_traces: Record<string, Record<string, unknown>> | null;
+  aggregate_traces: Record<string, unknown> | null;
+}
+
+/** Request payload for POST /api/builder/evaluate */
+export interface EvaluatePayload {
+  players: Array<{
+    name: string;
+    height: string | null;
+    skills: Record<string, string>;
+  }>;
+  mode: "live" | "final";
+  debug: boolean;
+}

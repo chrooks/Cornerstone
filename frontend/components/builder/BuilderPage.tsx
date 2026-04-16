@@ -30,6 +30,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { listPlayersWithSkills, getLegend } from "@/lib/api";
 import { SALARY_CAP, LEGEND_SALARY, MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { LegendPickerGrid } from "./LegendPickerGrid";
 import { SalaryGauge } from "./SalaryGauge";
 import { RotationSlots } from "./RotationSlots";
@@ -117,6 +118,7 @@ function SaveButton({ disabled }: { disabled?: boolean }) {
 export function BuilderPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { isAdmin } = useAdminStatus();
 
   // ── All players + legends (single fetch) ─────────────────────────────────
   const [legendRows, setLegendRows] = useState<PlayerWithSkills[]>([]);
@@ -524,8 +526,12 @@ export function BuilderPage() {
               </div>
             )}
             {leftTab === "notes" && (
-              <div id="builder-gm-notes-wrapper" className="flex-1 min-h-0 overflow-y-auto p-3">
-                <AssistantGmNotes />
+              <div id="builder-gm-notes-wrapper" className="flex-1 min-h-0 overflow-hidden p-3 flex flex-col">
+                <AssistantGmNotes
+                  allSlots={allSlots}
+                  legendDetail={legendDetail}
+                  isAdmin={isAdmin}
+                />
               </div>
             )}
           </div>

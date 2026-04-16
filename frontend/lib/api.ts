@@ -26,6 +26,8 @@ import type {
   LegendDetail,
   LegendProfile,
   LegendClaudeSuggestion,
+  EvaluatePayload,
+  RosterEvaluation,
 } from "./types";
 
 // Points to the Flask dev server by default; override via env var in production.
@@ -552,4 +554,18 @@ export async function getLegendClaudeSuggestion(
     `/api/legends/${encodeURIComponent(legendId)}/claude-suggestion`,
     { method: "POST" }
   );
+}
+
+// ---------------------------------------------------------------------------
+// Roster Evaluator
+// ---------------------------------------------------------------------------
+
+/** Evaluate a roster and return GM notes (live or final mode). */
+export async function evaluateRoster(
+  payload: EvaluatePayload,
+): Promise<ApiResponse<RosterEvaluation>> {
+  return apiFetch<RosterEvaluation>("/api/builder/evaluate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

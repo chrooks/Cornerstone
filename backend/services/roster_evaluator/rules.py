@@ -22,8 +22,10 @@ from .weights import (
     SPACING_THRESHOLDS,
     DEFENSE_THRESHOLDS,
     PERIMETER_THRESHOLDS,
+    PERIMETER_DISRUPTOR_THRESHOLDS,
     STRENGTH_THRESHOLDS,
     CUTTER_ACTIVATION_RATIO,
+    SHOOTER_DEPTH_THRESHOLDS,
 )
 from .player_scores import (
     tier_weight,
@@ -108,10 +110,59 @@ def check_perimeter_compounding(roster: list[dict], agg: dict) -> Note | None:
         category="defense",
         text=(
             "Thin perimeter defense — the compounding value of multiple "
-            "disruptors is missing."
+            "quality disruptors is missing."
         ),
         trace_key="perimeter_compound_score",
     )
+
+
+def check_perimeter_disruptor_depth(roster: list[dict], agg: dict) -> Note | None:
+    """
+    Warning if fewer than 2 perimeter disruptors; Tip if fewer than 3.
+
+    perimeter_compound_score gets inflated by versatile defenders, masking
+    the absence of dedicated on-ball disruptors. This rule checks raw headcount
+    of players who can actually lock up on the perimeter — the skill that
+    compounds most aggressively (Thunder effect). Without at least two,
+    the roster can't trap, switch, or generate pressure across possessions.
+    """
+    n = len(roster)
+    if n < PERIMETER_DISRUPTOR_THRESHOLDS["min_roster_size"]:
+        return None
+
+    count = agg["perimeter_disruptor_count"]
+
+    versatile_count = count_at_or_above(roster, "versatile_defender", "Capable")
+
+    if count < PERIMETER_DISRUPTOR_THRESHOLDS["warning_capable"]:
+        coverage = (
+            f" {versatile_count} versatile defenders provide some switching coverage,"
+            " but" if versatile_count >= 2 else " —"
+        )
+        return Note(
+            severity="warning",
+            category="defense",
+            text=(
+                f"Only {count} dedicated perimeter disruptor{'s' if count != 1 else ''} on "
+                f"a {n}-player roster.{coverage} "
+                "this defense can't generate consistent on-ball pressure or traps."
+            ),
+            trace_key="perimeter_compound_score",
+        )
+
+    if count < PERIMETER_DISRUPTOR_THRESHOLDS["tip_capable"]:
+        return Note(
+            severity="tip",
+            category="defense",
+            text=(
+                f"Thin perimeter disruption depth — only {count} dedicated "
+                "on-ball disruptors. Foul trouble or matchup problems leave "
+                "the perimeter exposed."
+            ),
+            trace_key="perimeter_compound_score",
+        )
+
+    return None
 
 
 def check_defense_blackhole(roster: list[dict], agg: dict) -> Note | None:
@@ -229,6 +280,51 @@ def check_spacing_warning(roster: list[dict], agg: dict) -> Note | None:
         ),
         trace_key="spacing_score",
     )
+
+
+def check_shooter_depth(roster: list[dict], agg: dict) -> Note | None:
+    """
+    Warning if fewer than 3 Proficient+ shooters; Tip if fewer than 4 Capable+.
+
+    spacing_score measures shooting quality but not distribution — two Elite
+    shooters surrounded by five non-shooters still scores well, but defenses
+    sag off every non-shooter and collapse the paint. This rule catches that
+    concentration problem independently of the composite spacing score.
+
+    Skipped if roster is too small to draw a meaningful conclusion.
+    """
+    n = len(roster)
+    if n < SHOOTER_DEPTH_THRESHOLDS["min_roster_size"]:
+        return None
+
+    prof_count = agg["shooter_count_proficient"]
+    cap_count  = agg["shooter_count_capable"]
+
+    if prof_count < SHOOTER_DEPTH_THRESHOLDS["warning_proficient"]:
+        return Note(
+            severity="warning",
+            category="offense",
+            text=(
+                f"Only {prof_count} reliable floor spacer{'s' if prof_count != 1 else ''} "
+                f"(Proficient+ shooter) on a {n}-player roster — "
+                "defenses will sag off every non-shooter and pack the paint."
+            ),
+            trace_key="spacing_score",
+        )
+
+    if cap_count < SHOOTER_DEPTH_THRESHOLDS["tip_capable"]:
+        return Note(
+            severity="tip",
+            category="offense",
+            text=(
+                f"Thin shooting distribution — only {cap_count} players "
+                "can credibly threaten from range. On-ball players will face "
+                "crowded paint against disciplined defenses."
+            ),
+            trace_key="spacing_score",
+        )
+
+    return None
 
 
 def check_movement_orphaned(roster: list[dict], agg: dict) -> Note | None:
@@ -562,12 +658,14 @@ ALL_RULES = [
     # Defense
     check_rim_anchor,
     check_perimeter_compounding,
+    check_perimeter_disruptor_depth,
     check_defense_blackhole,
     check_offensive_blackhole,
     check_rebounding,
     # Offense
     check_spacing_critical,
     check_spacing_warning,
+    check_shooter_depth,
     check_movement_orphaned,
     check_screen_cutter_gap,
     check_cutter_activation,

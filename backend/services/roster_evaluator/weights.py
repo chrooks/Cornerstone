@@ -168,7 +168,7 @@ DEFENSE_THRESHOLDS: dict[str, float] = {
 # Perimeter compounding threshold — compound score below this is weak
 # ---------------------------------------------------------------------------
 PERIMETER_THRESHOLDS: dict[str, float] = {
-    "warning": 2.0,   # perimeter_compound_score below this → Warning
+    "warning": 10.0,   # perimeter_compound_score below this → Warning
 }
 
 # ---------------------------------------------------------------------------
@@ -211,6 +211,34 @@ HIGH_FLEX_SKILLS: frozenset[str] = frozenset({
     "spot_up_shooter",
     "movement_shooter",
 })
+
+# ---------------------------------------------------------------------------
+# Perimeter disruptor depth thresholds — distribution check
+#
+# Separate from perimeter_compound_score, which gets inflated by versatile
+# defenders. This checks raw headcount of players who can actually lock up
+# on the perimeter — the skill that compounds most aggressively (Thunder effect).
+# ---------------------------------------------------------------------------
+PERIMETER_DISRUPTOR_THRESHOLDS: dict[str, int] = {
+    "min_roster_size":  5,   # don't warn until roster is meaningfully filled
+    "warning_capable":  2,   # < 2 Capable+ perimeter disruptors = Warning
+    "tip_capable":      3,   # < 3 Capable+ = Tip (only if no Warning)
+}
+
+# ---------------------------------------------------------------------------
+# Shooter depth thresholds — floor-spacing distribution check
+#
+# Counts players with spot_up_shooter OR movement_shooter at the given tier.
+# Two tiers checked separately so partial rosters get appropriate severity.
+#
+# Proficient+ = real floor threat (defense must guard them beyond the arc).
+# Capable only = saggable — defense can cheat off them.
+# ---------------------------------------------------------------------------
+SHOOTER_DEPTH_THRESHOLDS: dict[str, int] = {
+    "min_roster_size":       5,   # don't warn until roster is meaningfully filled
+    "warning_proficient":    3,   # < 3 Proficient+ shooters = Warning
+    "tip_capable":           4,   # < 4 Capable+ shooters = Tip (only if no Warning)
+}
 
 # ---------------------------------------------------------------------------
 # Live mode — max notes returned
