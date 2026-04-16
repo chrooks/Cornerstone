@@ -91,26 +91,19 @@ function buildAllSlotsParams(
 // BuilderPage
 // ---------------------------------------------------------------------------
 
-/** Copies the current page URL to the clipboard. Shows "Copied!" briefly. */
-function SaveButton({ disabled }: { disabled?: boolean }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleSave = useCallback(async () => {
-    await navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, []);
-
+/** Navigates to the final evaluation page for the current roster. */
+function EvaluateButton({ disabled, href }: { disabled?: boolean; href: string }) {
+  const router = useRouter();
   return (
     <button
       id="builder-save-btn"
       type="button"
-      onClick={handleSave}
+      onClick={() => router.push(href)}
       disabled={disabled}
-      title={disabled ? "Fill all 8 slots to save" : undefined}
+      title={disabled ? "Fill all 8 slots to evaluate" : undefined}
       className="text-sm font-medium rounded-md border border-border px-3 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-muted"
     >
-      {copied ? "✓ Copied!" : "Save"}
+      Evaluate Roster
     </button>
   );
 }
@@ -436,9 +429,12 @@ export function BuilderPage() {
           )}
           {cornerstone.name} Rotation
         </h1>
-        {/* Right side of header: Save button + mobile picker toggle */}
+        {/* Right side of header: Evaluate button + mobile picker toggle */}
         <div className="ml-auto flex items-center gap-2 shrink-0">
-          <SaveButton disabled={allSlots.some((p) => p === null)} />
+          <EvaluateButton
+            disabled={allSlots.some((p) => p === null)}
+            href={`/builder/evaluate?${searchParams.toString()}`}
+          />
           <button
             id="builder-picker-toggle-btn"
             type="button"
@@ -481,6 +477,7 @@ export function BuilderPage() {
               onSlotHoverEnd={() => setHoveredSlotIndex(null)}
             />
           </div>
+
 
           {/* Skill grid / GM Notes — tabbed to share space */}
           <div id="builder-grid-area" className="flex flex-col min-h-0 flex-1 overflow-hidden border border-border rounded-lg">
