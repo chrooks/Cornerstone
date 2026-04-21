@@ -25,7 +25,7 @@
  * is identified by cornerstoneId and can occupy any position in the lineup.
  */
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { listPlayersWithSkills, getLegend } from "@/lib/api";
@@ -36,8 +36,9 @@ import { SalaryGauge } from "./SalaryGauge";
 import { RotationSlots } from "./RotationSlots";
 import { SkillGrid } from "./SkillGrid";
 import { AssistantGmNotes } from "./AssistantGmNotes";
+import { ScoringBreakdown } from "./ScoringBreakdown";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
-import type { LegendDetail, PlayerWithSkills } from "@/lib/types";
+import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // URL param helpers
@@ -222,6 +223,9 @@ export function BuilderPage() {
 
   const handleSlotClick = useCallback(
     (slotIndex: number) => {
+      // Cornerstone slot is not clickable — its position is fixed
+      if (allSlots[slotIndex - 1]?.id === cornerstoneId) return;
+
       // Clicking the already-selected slot deselects it
       if (selectedSlot === slotIndex) {
         setSelectedSlot(null);
@@ -229,7 +233,6 @@ export function BuilderPage() {
       }
 
       // If a slot is already selected and we click a different filled slot → swap.
-      // The legend can be swapped just like any other filled slot.
       if (
         selectedSlot !== null &&
         allSlots[selectedSlot - 1] !== null &&
@@ -294,9 +297,14 @@ export function BuilderPage() {
     [allSlots, cornerstoneId, fillSlot],
   );
 
-  /** Swaps two slots. No restrictions — legend can be swapped with any slot. */
+  /** Swaps two slots. Cornerstone position is locked — swap is blocked if either slot holds the cornerstone. */
   const handleSwapSlots = useCallback(
     (fromSlot: number, toSlot: number) => {
+      // Block drag-drop swaps involving the cornerstone slot
+      if (
+        allSlots[fromSlot - 1]?.id === cornerstoneId ||
+        allSlots[toSlot - 1]?.id === cornerstoneId
+      ) return;
       const newSlots = [...allSlots];
       [newSlots[fromSlot - 1], newSlots[toSlot - 1]] = [
         newSlots[toSlot - 1],
@@ -362,7 +370,28 @@ export function BuilderPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // ── Left panel tab ────────────────────────────────────────────────────────
-  const [leftTab, setLeftTab] = useState<"skills" | "notes">("skills");
+  const [leftTab, setLeftTab] = useState<"skills" | "notes" | "debug">("skills");
+
+  // ── Latest evaluation — lifted from AssistantGmNotes for the Debug tab ────
+  const [latestEval, setLatestEval] = useState<RosterEvaluation | null>(null);
+
+  // ── Scroll position preservation across tab switches ──────────────────────
+  // Each scrollable panel gets a ref; positions are cached in a stable ref object.
+  const notesScrollRef = useRef<HTMLDivElement>(null);
+  const debugScrollRef = useRef<HTMLDivElement>(null);
+  const savedScrollPos = useRef<Record<"notes" | "debug", number>>({ notes: 0, debug: 0 });
+
+  // Fires synchronously after DOM mutations but before paint — restores the
+  // previously saved scroll position for the newly-active tab so there's no
+  // visible jump. The inactive panels gain `hidden` (display:none) which clears
+  // their scroll, so we must restore it here on every tab activation.
+  useLayoutEffect(() => {
+    if (leftTab === "notes" && notesScrollRef.current) {
+      notesScrollRef.current.scrollTop = savedScrollPos.current.notes;
+    } else if (leftTab === "debug" && debugScrollRef.current) {
+      debugScrollRef.current.scrollTop = savedScrollPos.current.debug;
+    }
+  }, [leftTab]);
 
   // ── Loading / error ───────────────────────────────────────────────────────
   if (dataLoading) {
@@ -509,25 +538,79 @@ export function BuilderPage() {
               >
                 GM Notes
               </button>
+              {/* Debug tab — admin only */}
+              {isAdmin && (
+                <button
+                  id="builder-tab-debug"
+                  type="button"
+                  onClick={() => setLeftTab("debug")}
+                  className={cn(
+                    "px-4 py-2 text-xs font-medium transition-colors",
+                    leftTab === "debug"
+                      ? "border-b-2 border-violet-500 text-violet-400 -mb-px"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Debug
+                </button>
+              )}
             </div>
 
-            {/* Tab panels */}
-            {leftTab === "skills" && (
-              <div id="builder-skill-grid-wrapper" className="flex-1 min-h-0 overflow-hidden">
-                <SkillGrid
-                  allSlots={allSlots}
-                  cornerstoneId={cornerstoneId}
-                  legendProfile={legendDetail?.profile ?? null}
-                  hideEmptyColumns
-                />
-              </div>
-            )}
-            {leftTab === "notes" && (
-              <div id="builder-gm-notes-wrapper" className="flex-1 min-h-0 overflow-hidden p-3 flex flex-col">
-                <AssistantGmNotes
-                  allSlots={allSlots}
-                  legendDetail={legendDetail}
-                  isAdmin={isAdmin}
+            {/* Tab panels — all three are always mounted so scroll positions are
+                preserved when switching tabs. Inactive panels get `hidden`
+                (display:none), and useLayoutEffect restores scrollTop after each
+                tab activation to prevent a visible scroll-to-top flash. */}
+
+            {/* Skills panel */}
+            <div
+              id="builder-skill-grid-wrapper"
+              className={cn("flex-1 min-h-0 overflow-hidden", leftTab !== "skills" && "hidden")}
+            >
+              <SkillGrid
+                allSlots={allSlots}
+                cornerstoneId={cornerstoneId}
+                legendProfile={legendDetail?.profile ?? null}
+                hideEmptyColumns
+              />
+            </div>
+
+            {/* GM Notes panel */}
+            <div
+              id="builder-gm-notes-wrapper"
+              ref={notesScrollRef}
+              onScroll={() => {
+                // Cache scroll position so useLayoutEffect can restore it on re-activation
+                savedScrollPos.current.notes = notesScrollRef.current?.scrollTop ?? 0;
+              }}
+              className={cn(
+                "flex-1 min-h-0 overflow-y-auto p-3 flex flex-col",
+                leftTab !== "notes" && "hidden",
+              )}
+            >
+              <AssistantGmNotes
+                allSlots={allSlots}
+                legendDetail={legendDetail}
+                isAdmin={isAdmin}
+                onEvaluation={setLatestEval}
+              />
+            </div>
+
+            {/* Debug panel — admin only; shows scoring pipeline breakdown */}
+            {isAdmin && (
+              <div
+                id="builder-debug-wrapper"
+                ref={debugScrollRef}
+                onScroll={() => {
+                  savedScrollPos.current.debug = debugScrollRef.current?.scrollTop ?? 0;
+                }}
+                className={cn(
+                  "flex-1 min-h-0 overflow-y-auto p-3",
+                  leftTab !== "debug" && "hidden",
+                )}
+              >
+                <ScoringBreakdown
+                  playerTraces={latestEval?.player_traces ?? null}
+                  aggregateTraces={latestEval?.aggregate_traces ?? null}
                 />
               </div>
             )}

@@ -9,6 +9,11 @@ Endpoint:
 
 The debug flag controls trace verbosity. The UI is responsible for
 restricting the debug flag to admin users — the backend trusts the caller.
+
+Validation enforces:
+  - Each player has a required 'slot' (integer 0–9)
+  - Each player has a required 'is_cornerstone' (boolean)
+  - Exactly one player must have is_cornerstone=True
 """
 
 from __future__ import annotations
@@ -20,7 +25,7 @@ from typing import Any
 from flask import Blueprint, jsonify, request
 
 from services.roster_evaluator.evaluator import evaluate_roster
-from services.roster_evaluator.types import RosterEvaluation, ScoreTrace
+from services.roster_evaluator.types import RosterEvaluation, Scores
 
 logger = logging.getLogger(__name__)
 
@@ -50,54 +55,13 @@ def _err(msg: str, status: int = 400) -> tuple:
 # Serialization
 # ---------------------------------------------------------------------------
 
-def _serialize_trace(trace: ScoreTrace) -> dict:
-    """Convert a ScoreTrace dataclass to a plain dict for JSON output."""
-    return {
-        "score":       trace.score,
-        "components":  trace.components,
-        "multipliers": trace.multipliers,
-        "label":       trace.label,
-    }
-
-
-def _serialize_player_traces(player_traces: dict | None) -> dict | None:
-    """
-    Convert per-player trace dict to JSON-serializable form.
-
-    Each player's traces dict contains ScoreTrace instances and booleans.
-    ScoreTrace → dict; booleans pass through unchanged.
-    """
-    if player_traces is None:
-        return None
-    result: dict = {}
-    for name, traces in player_traces.items():
-        result[name] = {
-            key: (_serialize_trace(val) if isinstance(val, ScoreTrace) else val)
-            for key, val in traces.items()
-        }
-    return result
-
-
-def _serialize_aggregate_traces(agg_traces: dict | None) -> dict | None:
-    """
-    Convert aggregate trace dict to JSON-serializable form.
-
-    Values are ScoreTrace or bool.
-    """
-    if agg_traces is None:
-        return None
-    return {
-        key: (_serialize_trace(val) if isinstance(val, ScoreTrace) else val)
-        for key, val in agg_traces.items()
-    }
-
-
 def _serialize_evaluation(evaluation: RosterEvaluation) -> dict:
-    """Serialize a RosterEvaluation to a plain dict."""
+    """Serialize a RosterEvaluation to a plain dict for JSON output."""
     return {
-        "notes": [dataclasses.asdict(note) for note in evaluation.notes],
-        "player_traces":    _serialize_player_traces(evaluation.player_traces),
-        "aggregate_traces": _serialize_aggregate_traces(evaluation.aggregate_traces),
+        "scores":           dataclasses.asdict(evaluation.scores),
+        "notes":            [dataclasses.asdict(note) for note in evaluation.notes],
+        "player_traces":    evaluation.player_traces,
+        "aggregate_traces": evaluation.aggregate_traces,
     }
 
 
@@ -106,19 +70,46 @@ def _serialize_evaluation(evaluation: RosterEvaluation) -> dict:
 # ---------------------------------------------------------------------------
 
 def _validate_player(player: Any) -> str | None:
-    """Return an error message string if the player dict is invalid, else None."""
+    """
+    Return an error message string if the player dict is invalid, else None.
+
+    New required fields vs. original API:
+      - slot: integer 0–9
+      - is_cornerstone: boolean
+    """
     if not isinstance(player, dict):
         return "each player must be an object"
+
+    # name
     name = player.get("name")
     if not isinstance(name, str) or not name:
         return "each player must have a non-empty 'name' string"
     if len(name) > _MAX_NAME_LENGTH:
         return f"player 'name' must be {_MAX_NAME_LENGTH} characters or fewer"
+
+    # slot — required, integer 0–9
+    if "slot" not in player:
+        return "each player must have a 'slot' field"
+    slot = player.get("slot")
+    if not isinstance(slot, int) or isinstance(slot, bool):
+        return "player 'slot' must be an integer"
+    if slot < 0 or slot > 9:
+        return "player 'slot' must be between 0 and 9"
+
+    # is_cornerstone — required boolean
+    if "is_cornerstone" not in player:
+        return "each player must have an 'is_cornerstone' field"
+    is_cornerstone = player.get("is_cornerstone")
+    if not isinstance(is_cornerstone, bool):
+        return "player 'is_cornerstone' must be a boolean"
+
+    # skills
     skills = player.get("skills")
     if skills is not None and not isinstance(skills, dict):
         return "player 'skills' must be an object if provided"
     if isinstance(skills, dict) and len(skills) > _MAX_SKILLS:
         return f"player 'skills' may not contain more than {_MAX_SKILLS} entries"
+
     return None
 
 
@@ -129,22 +120,29 @@ def _validate_player(player: Any) -> str | None:
 @builder_bp.route("/evaluate", methods=["POST"])
 def evaluate():
     """
-    Evaluate a roster and return GM notes.
+    Evaluate a roster and return GM notes + dimension scores.
 
     Request body:
       {
-        "players": [{ "name": str, "height": str|null, "skills": {...} }, ...],
-        "mode":    "live" | "final",   # default: "live"
-        "debug":   bool                # default: false
+        "players": [{
+          "name": str,
+          "slot": int (0–9),
+          "is_cornerstone": bool,
+          "height": str|null,
+          "skills": {...}
+        }, ...],
+        "mode":  "live" | "final",   # default: "live"
+        "debug": bool                 # default: false
       }
 
     Response:
       {
         "success": true,
         "data": {
-          "notes": [{ "severity", "category", "text", "trace_key" }, ...],
-          "player_traces":    null | { player_name: { trace_key: {...} } },
-          "aggregate_traces": null | { agg_name: {...} }
+          "scores": { "overall": 72.4, "offense": ..., ... },
+          "notes": [{ "severity", "category", "text", "trace_key", "presence_type" }, ...],
+          "player_traces":    null | { player_name: { ... } },
+          "aggregate_traces": null | { ... }
         },
         "error": null
       }
@@ -163,6 +161,17 @@ def evaluate():
         err = _validate_player(player)
         if err:
             return _err(err)
+
+    # --- validate exactly one cornerstone ---
+    cornerstone_count = sum(
+        1 for p in body["players"]
+        if isinstance(p, dict) and p.get("is_cornerstone") is True
+    )
+    if cornerstone_count != 1:
+        return _err(
+            f"exactly one player must have is_cornerstone: true "
+            f"(found {cornerstone_count})"
+        )
 
     # --- validate mode ---
     mode = body.get("mode", "live")

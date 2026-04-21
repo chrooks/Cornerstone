@@ -1,8 +1,9 @@
 """
-roster_evaluator/types.py — Core dataclasses for the roster rule engine.
+roster_evaluator/types.py — Core dataclasses for the 4-layer scoring pipeline.
 
-ScoreTrace: every calculation returns one of these — score + full breakdown.
-Note: a single GM note with severity, category, text, and a trace link.
+ScoreTrace: full audit trail for a single computed score.
+Scores: the 9-dimension output of the pipeline.
+Note: a single GM note with severity, category, text, trace link, and presence type.
 RosterEvaluation: the final output of evaluate_roster().
 """
 
@@ -32,14 +33,44 @@ class ScoreTrace:
 
 
 @dataclass(frozen=True)
+class Scores:
+    """
+    The 9 numeric dimension scores produced by the pipeline (all 0–100).
+
+    overall      — weighted composite across offense, defense, optionality, robustness
+    offense      — composite of spacing + creation + paint + transition
+    defense      — aggregate defensive skill coverage
+    spacing      — floor-spacing and shooting depth
+    creation     — on-ball threat generation
+    paint        — interior scoring and lob threat
+    transition   — fast-break opportunity generation
+    optionality  — skill redundancy and lineup flexibility
+    robustness   — depth and consistency across 5-man combinations
+    """
+
+    overall: float
+    offense: float
+    defense: float
+    spacing: float
+    creation: float
+    paint: float
+    transition: float
+    optionality: float
+    robustness: float
+
+
+@dataclass(frozen=True)
 class Note:
     """
     A single GM note surfaced to the user.
 
-    severity  — critical / warning / tip / strength
-    category  — broad bucket for grouping in the UI
-    text      — user-facing prose; names players currently on the roster
-    trace_key — which aggregate in RosterEvaluation.aggregate_traces drove this
+    severity      — critical / warning / tip / strength
+    category      — broad bucket for grouping in the UI
+    text          — user-facing prose; names players currently on the roster
+    trace_key     — which modifier or hard check produced this note
+    presence_type — "presence" fires on what IS on the roster;
+                    "absence" fires on what is MISSING (suppressed in live mode
+                    below ABSENCE_NOTE_MIN_PLAYERS supporting players)
     """
 
     severity: Literal["critical", "warning", "tip", "strength"]
@@ -48,6 +79,7 @@ class Note:
     # render this as text content (not raw HTML) to prevent XSS.
     text: str
     trace_key: str
+    presence_type: Literal["presence", "absence"] = "presence"
 
 
 @dataclass(frozen=True)
@@ -55,11 +87,13 @@ class RosterEvaluation:
     """
     Output of evaluate_roster().
 
+    scores           — the 9 numeric dimension scores (0–100 each)
     notes            — prioritized list of GM notes
     player_traces    — per-player score breakdowns (only populated when debug=True)
     aggregate_traces — cross-roster aggregate breakdowns (only when debug=True)
     """
 
+    scores: Scores
     notes: list[Note]
     player_traces: dict[str, dict] | None = field(default=None)
-    aggregate_traces: dict[str, ScoreTrace] | None = field(default=None)
+    aggregate_traces: dict[str, object] | None = field(default=None)

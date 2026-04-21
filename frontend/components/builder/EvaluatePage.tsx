@@ -6,17 +6,22 @@
  * Reads the same URL params as the builder (?cornerstone=, ?s1-s8=),
  * reconstructs the roster, and calls POST /api/builder/evaluate in final mode.
  *
- * Layout: header → roster summary → two-column (strengths | issues) → tips → debug
+ * Layout: header → roster summary → ScoreDisplay → NotesList → (admin) DebugPanel
+ *
+ * Player payload: cornerstone → slot=0, is_cornerstone=true
+ *                 supporting  → slot=index+1 (allSlots[0] = slot 1), is_cornerstone=false
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { cn } from "@/lib/utils";
 import { listPlayersWithSkills, getLegend, evaluateRoster } from "@/lib/api";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
-import type { LegendDetail, Note, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
+import { ScoreDisplay } from "./ScoreDisplay";
+import { NotesList } from "./NotesList";
+import { DebugPanel } from "./DebugPanel";
+import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,53 +48,55 @@ function readSlotsFromParams(
   return slots;
 }
 
+/**
+ * Build the player payload for POST /api/builder/evaluate.
+ *
+ * The cornerstone legend (from legendDetail) gets slot=0, is_cornerstone=true.
+ * allSlots is 0-indexed; allSlots[0] corresponds to slot 1, allSlots[1] to slot 2, etc.
+ * The legend itself occupies slot 0 in the URL params but may appear in allSlots[0] as a
+ * PlayerWithSkills entry with is_legend=true.
+ */
 function buildPlayerPayload(
   allSlots: (PlayerWithSkills | null)[],
   legendDetail: LegendDetail,
 ) {
-  return allSlots
-    .filter((p): p is PlayerWithSkills => p !== null)
-    .map((p) => {
-      if (p.is_legend) {
-        return {
-          name: legendDetail.name,
-          height: legendDetail.height,
-          skills: Object.fromEntries(
-            Object.entries(legendDetail.profile).map(([k, v]) => [k, v ?? "None"]),
-          ),
-        };
-      }
-      return {
-        name: p.name,
-        height: p.height,
-        skills: (p.skills ?? {}) as Record<string, string>,
-      };
-    });
-}
+  const result: Array<{
+    name: string;
+    slot: number;
+    is_cornerstone: boolean;
+    height: string | null;
+    skills: Record<string, string>;
+  }> = [];
 
-function badgeClass(severity: Note["severity"]): string {
-  switch (severity) {
-    case "critical": return "bg-red-500/20 text-red-400 border border-red-500/30";
-    case "warning":  return "bg-amber-500/20 text-amber-400 border border-amber-500/30";
-    case "tip":      return "bg-blue-500/20 text-blue-400 border border-blue-500/30";
-    case "strength": return "bg-green-500/20 text-green-400 border border-green-500/30";
-  }
+  // The cornerstone legend always goes as slot=0, is_cornerstone=true
+  result.push({
+    name: legendDetail.name,
+    slot: 0,
+    is_cornerstone: true,
+    height: legendDetail.height,
+    skills: Object.fromEntries(
+      Object.entries(legendDetail.profile).map(([k, v]) => [k, v ?? "None"]),
+    ),
+  });
+
+  // Supporting players from allSlots (0-indexed in the array → slot = index + 1)
+  allSlots.forEach((p, index) => {
+    if (p === null || p.is_legend) return; // skip nulls and legend entries
+    result.push({
+      name: p.name,
+      slot: index + 1,
+      is_cornerstone: false,
+      height: p.height,
+      skills: (p.skills ?? {}) as Record<string, string>,
+    });
+  });
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-function NoteCard({ note }: { note: Note }) {
-  return (
-    <div className="flex gap-2 items-start p-3 rounded-lg bg-muted/40">
-      <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0 mt-0.5", badgeClass(note.severity))}>
-        {note.severity}
-      </span>
-      <p className="text-xs text-muted-foreground leading-relaxed">{note.text}</p>
-    </div>
-  );
-}
 
 function RosterSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSkills | null)[]; cornerstoneId: string | null }) {
   return (
@@ -147,8 +154,6 @@ export function EvaluatePage() {
   const [errorMsg, setErrorMsg]   = useState<string | null>(null);
   const [dataReady, setDataReady] = useState<DataReady | null>(null);
   const [evaluation, setEvaluation] = useState<RosterEvaluation | null>(null);
-  const [debugOpen, setDebugOpen]   = useState(false);
-  const [debugCopied, setDebugCopied] = useState(false);
 
   // Capture searchParams at mount — stable ref avoids closure staleness
   const paramsRef = useRef(searchParams.toString());
@@ -199,21 +204,10 @@ export function EvaluatePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataReady, adminLoading]);
 
-  // Note buckets
-  const strengths = useMemo(() => evaluation?.notes.filter((n) => n.severity === "strength") ?? [], [evaluation]);
+  // Note buckets — split into issues, tips, strengths
   const issues    = useMemo(() => evaluation?.notes.filter((n) => n.severity === "critical" || n.severity === "warning") ?? [], [evaluation]);
   const tips      = useMemo(() => evaluation?.notes.filter((n) => n.severity === "tip") ?? [], [evaluation]);
-
-  const debugTraces = evaluation
-    ? { player: evaluation.player_traces, aggregate: evaluation.aggregate_traces }
-    : null;
-
-  const handleCopyDebug = useCallback(async () => {
-    if (!debugTraces) return;
-    await navigator.clipboard.writeText(JSON.stringify(debugTraces, null, 2));
-    setDebugCopied(true);
-    setTimeout(() => setDebugCopied(false), 2000);
-  }, [debugTraces]);
+  const strengths = useMemo(() => evaluation?.notes.filter((n) => n.severity === "strength") ?? [], [evaluation]);
 
   const isLoading = evalState === "loading" || evalState === "evaluating";
 
@@ -254,14 +248,10 @@ export function EvaluatePage() {
       {/* Loading skeleton */}
       {isLoading && (
         <div id="eval-skeleton" className="space-y-4 animate-pulse">
-          <div className="grid grid-cols-2 gap-4">
-            {[0, 1].map((col) => (
-              <div key={col} className="space-y-3">
-                <div className="h-5 w-24 bg-muted rounded" />
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-14 bg-muted rounded-lg" />
-                ))}
-              </div>
+          <div className="h-32 bg-muted rounded-xl" />
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-14 bg-muted rounded-lg" />
             ))}
           </div>
         </div>
@@ -276,51 +266,18 @@ export function EvaluatePage() {
       {evalState === "ready" && evaluation && (
         <div id="eval-results" className="space-y-6">
 
-          {/* Two columns */}
-          <div id="eval-columns" className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div id="eval-strengths">
-              <h2 id="eval-strengths-title" className="text-sm font-semibold text-green-400 mb-3">Strengths</h2>
-              {strengths.length === 0
-                ? <p className="text-xs text-muted-foreground">No standout strengths identified.</p>
-                : <div className="space-y-2">{strengths.map((n, i) => <NoteCard key={i} note={n} />)}</div>
-              }
-            </div>
-            <div id="eval-issues">
-              <h2 id="eval-issues-title" className="text-sm font-semibold text-amber-400 mb-3">Areas to Address</h2>
-              {issues.length === 0
-                ? <p className="text-xs text-muted-foreground">No critical issues found.</p>
-                : <div className="space-y-2">{issues.map((n, i) => <NoteCard key={i} note={n} />)}</div>
-              }
-            </div>
-          </div>
+          {/* Score display — all 9 dimensions */}
+          <ScoreDisplay scores={evaluation.scores} />
 
-          {/* Tips */}
-          {tips.length > 0 && (
-            <div id="eval-tips">
-              <h2 id="eval-tips-title" className="text-sm font-semibold text-blue-400 mb-3">Tips</h2>
-              <div className="space-y-2">{tips.map((n, i) => <NoteCard key={i} note={n} />)}</div>
-            </div>
-          )}
+          {/* Notes — issues, tips, strengths in collapsible sections */}
+          <NotesList issues={issues} tips={tips} strengths={strengths} />
 
-          {/* Admin debug */}
-          {isAdmin && debugTraces && (
-            <div id="eval-debug" className="border border-border rounded">
-              <div className="flex items-center justify-between px-3 py-2">
-                <button id="eval-debug-toggle" type="button" onClick={() => setDebugOpen((v) => !v)}
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors font-mono cursor-pointer">
-                  {debugOpen ? "▾" : "▸"} Debug Traces
-                </button>
-                <button id="eval-debug-copy" type="button" onClick={handleCopyDebug}
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors font-mono cursor-pointer">
-                  {debugCopied ? "✓ Copied" : "Copy"}
-                </button>
-              </div>
-              {debugOpen && (
-                <pre id="eval-debug-content" className="px-3 pb-3 text-[10px] text-muted-foreground overflow-auto max-h-96 font-mono">
-                  {JSON.stringify(debugTraces, null, 2)}
-                </pre>
-              )}
-            </div>
+          {/* Admin debug panel — only when user is admin and traces exist */}
+          {isAdmin && (evaluation.player_traces || evaluation.aggregate_traces) && (
+            <DebugPanel
+              playerTraces={evaluation.player_traces}
+              aggregateTraces={evaluation.aggregate_traces}
+            />
           )}
         </div>
       )}

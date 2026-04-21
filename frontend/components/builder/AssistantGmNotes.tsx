@@ -7,13 +7,18 @@
  * changes (add/remove). Reordering slots does NOT trigger a re-eval.
  * Debounced 500ms to avoid hammering the backend on rapid changes.
  *
- * States: idle → analyzing (skeleton) → ready (notes) | error
+ * States: idle → analyzing (skeleton) → ready (mini score bar + notes) | error
+ *
+ * Player payload: cornerstone → slot=0, is_cornerstone=true
+ *                 supporting  → slot=index+1 (allSlots array is 0-indexed)
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { evaluateRoster } from "@/lib/api";
-import type { LegendDetail, Note, PlayerWithSkills } from "@/lib/types";
+import { NotesList } from "./NotesList";
+import { DebugPanel } from "./DebugPanel";
+import type { LegendDetail, Note, PlayerWithSkills, RosterEvaluation, Scores } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,102 +30,126 @@ interface AssistantGmNotesProps {
   allSlots: (PlayerWithSkills | null)[];
   legendDetail: LegendDetail | null;
   isAdmin: boolean;
+  /** Called after every successful evaluation — used by parent to lift eval data for the Debug tab. */
+  onEvaluation?: (evaluation: RosterEvaluation) => void;
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Build the player payload with required slot and is_cornerstone fields.
+ * The legend occupies slot 0 (cornerstone); supporting players start at slot 1.
+ */
 function buildPlayerPayload(
   allSlots: (PlayerWithSkills | null)[],
   legendDetail: LegendDetail | null,
 ) {
-  return allSlots
-    .filter((p): p is PlayerWithSkills => p !== null)
-    .map((p) => {
-      if (p.is_legend && legendDetail) {
-        return {
-          name: legendDetail.name,
-          height: legendDetail.height,
-          skills: Object.fromEntries(
-            Object.entries(legendDetail.profile).map(([k, v]) => [k, v ?? "None"]),
-          ),
-        };
-      }
-      return {
-        name: p.name,
-        height: p.height,
-        skills: (p.skills ?? {}) as Record<string, string>,
-      };
+  const result: Array<{
+    name: string;
+    slot: number;
+    is_cornerstone: boolean;
+    height: string | null;
+    skills: Record<string, string>;
+  }> = [];
+
+  // Cornerstone legend — always slot=0
+  if (legendDetail) {
+    result.push({
+      name: legendDetail.name,
+      slot: 0,
+      is_cornerstone: true,
+      height: legendDetail.height,
+      skills: Object.fromEntries(
+        Object.entries(legendDetail.profile).map(([k, v]) => [k, v ?? "None"]),
+      ),
     });
-}
-
-function badgeClass(severity: Note["severity"]): string {
-  switch (severity) {
-    case "critical": return "bg-red-500/20 text-red-400 border border-red-500/30";
-    case "warning":  return "bg-amber-500/20 text-amber-400 border border-amber-500/30";
-    case "tip":      return "bg-blue-500/20 text-blue-400 border border-blue-500/30";
-    case "strength": return "bg-green-500/20 text-green-400 border border-green-500/30";
   }
+
+  // Supporting players from allSlots (0-indexed → slot = index + 1)
+  allSlots.forEach((p, index) => {
+    if (p === null || p.is_legend) return; // skip nulls and legend placeholder entries
+    result.push({
+      name: p.name,
+      slot: index + 1,
+      is_cornerstone: false,
+      height: p.height,
+      skills: (p.skills ?? {}) as Record<string, string>,
+    });
+  });
+
+  return result;
 }
 
-function SeverityBadge({ severity }: { severity: Note["severity"] }) {
+// ---------------------------------------------------------------------------
+// Mini score bar — compact 2×2 grid for live panel
+// ---------------------------------------------------------------------------
+
+function scoreColor(score: number): string {
+  if (score >= 70) return "text-green-400";
+  if (score >= 40) return "text-amber-400";
+  return "text-red-400";
+}
+
+function barColor(score: number): string {
+  if (score >= 70) return "bg-green-500";
+  if (score >= 40) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function ScoreRow({
+  id,
+  label,
+  value,
+  indent = false,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  indent?: boolean;
+}) {
+  const val = Math.round(value);
   return (
-    <span
-      className={cn(
-        "text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0 mt-0.5",
-        badgeClass(severity),
-      )}
-    >
-      {severity}
-    </span>
+    <div id={id} className={cn("flex flex-col gap-0.5", indent && "pl-3")}>
+      <div className="flex items-center justify-between gap-2">
+        <span className={cn("text-[10px]", indent ? "text-muted-foreground/60" : "text-muted-foreground")}>
+          {label}
+        </span>
+        <span className={cn("text-[10px] font-mono font-bold tabular-nums", scoreColor(val))}>
+          {val}
+        </span>
+      </div>
+      {/* Bar */}
+      <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
+        <div
+          className={cn("h-full rounded-full transition-all duration-500", barColor(val))}
+          style={{ width: `${val}%` }}
+          role="progressbar"
+          aria-valuenow={val}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={label}
+        />
+      </div>
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Debug panel
-// ---------------------------------------------------------------------------
-
-function DebugPanel({ traces }: { traces: { player: Record<string, unknown> | null; aggregate: Record<string, unknown> | null } }) {
-  const [open, setOpen]     = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const json = JSON.stringify(traces, null, 2);
-
-  const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(json);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [json]);
-
+function MiniScoreBar({ scores }: { scores: Scores }) {
   return (
-    <div id="builder-gm-notes-debug" className="mt-2 border border-border rounded flex flex-col min-h-0 flex-1">
-      <div className="flex items-center justify-between px-3 py-2 flex-shrink-0">
-        <button
-          id="builder-gm-notes-debug-toggle"
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors font-mono cursor-pointer"
-        >
-          {open ? "▾" : "▸"} Debug Traces
-        </button>
-        <button
-          id="builder-gm-notes-debug-copy"
-          type="button"
-          onClick={handleCopy}
-          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors font-mono cursor-pointer"
-        >
-          {copied ? "✓ Copied" : "Copy"}
-        </button>
-      </div>
-      {open && (
-        <pre
-          id="builder-gm-notes-debug-content"
-          className="px-3 pb-3 text-[10px] text-muted-foreground overflow-auto font-mono flex-1 min-h-0"
-        >
-          {json}
-        </pre>
-      )}
+    <div id="gm-notes-mini-scores" className="flex flex-col gap-0.5 p-2 rounded-lg bg-muted/30 border border-border/50">
+      <ScoreRow id="gm-notes-score-overall"     label="Overall"     value={scores.overall} />
+      <div className="my-0.5 border-t border-border/30" />
+      <ScoreRow id="gm-notes-score-offense"     label="Offense"     value={scores.offense} />
+      <ScoreRow id="gm-notes-score-spacing"     label="Spacing"     value={scores.spacing}    indent />
+      <ScoreRow id="gm-notes-score-creation"    label="Creation"    value={scores.creation}   indent />
+      <ScoreRow id="gm-notes-score-paint"       label="Paint"       value={scores.paint}      indent />
+      <ScoreRow id="gm-notes-score-transition"  label="Transition"  value={scores.transition} indent />
+      <div className="my-0.5 border-t border-border/30" />
+      <ScoreRow id="gm-notes-score-defense"     label="Defense"     value={scores.defense} />
+      <ScoreRow id="gm-notes-score-optionality" label="Optionality" value={scores.optionality} />
+      <ScoreRow id="gm-notes-score-robustness"  label="Robustness"  value={scores.robustness} />
     </div>
   );
 }
@@ -129,32 +158,39 @@ function DebugPanel({ traces }: { traces: { player: Record<string, unknown> | nu
 // Component
 // ---------------------------------------------------------------------------
 
-export function AssistantGmNotes({ allSlots, legendDetail, isAdmin }: AssistantGmNotesProps) {
-  const [state, setState]           = useState<GmNotesState>("idle");
-  const [notes, setNotes]           = useState<Note[]>([]);
-  const [errorMsg, setErrorMsg]     = useState<string | null>(null);
+export function AssistantGmNotes({ allSlots, legendDetail, isAdmin, onEvaluation }: AssistantGmNotesProps) {
+  const [state, setState]         = useState<GmNotesState>("idle");
+  const [notes, setNotes]         = useState<Note[]>([]);
+  const [scores, setScores]       = useState<Scores | null>(null);
+  const [errorMsg, setErrorMsg]   = useState<string | null>(null);
   const [debugTraces, setDebugTraces] = useState<{
     player: Record<string, unknown> | null;
     aggregate: Record<string, unknown> | null;
   } | null>(null);
-  const [debugOpen, setDebugOpen]   = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Stable key: changes on player add/remove, not on slot reorder
+  // Stable key: changes on player add/remove OR slot reorder, so swapping slots triggers re-eval
+  // (slot position affects slot weight, which directly affects scores)
   const rosterKey = useMemo(() => {
     return allSlots
+      .map((p, i) => (p ? `${i}:${p.id}` : null))
       .filter(Boolean)
-      .map((p) => p!.id)
-      .sort()
       .join(",");
   }, [allSlots]);
 
-  const filledCount = allSlots.filter(Boolean).length;
+  // Whether there are any supporting players (non-legend) to evaluate
+  const supportingCount = allSlots.filter((p) => p !== null && !p.is_legend).length;
 
   const runEval = useCallback(async () => {
+    // Build payload — requires both a legend (cornerstone) and at least one supporting player
+    if (!legendDetail) {
+      setState("idle");
+      return;
+    }
     const players = buildPlayerPayload(allSlots, legendDetail);
-    if (players.length === 0) {
+    // Need at least cornerstone + 1 supporting player
+    if (players.length < 2) {
       setState("idle");
       return;
     }
@@ -166,12 +202,15 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin }: AssistantG
       const res = await evaluateRoster({ players, mode: "live", debug: isAdmin });
       if (res.success && res.data) {
         setNotes(res.data.notes);
+        setScores(res.data.scores);
         if (isAdmin) {
           setDebugTraces({
             player:    res.data.player_traces,
             aggregate: res.data.aggregate_traces,
           });
         }
+        // Lift full evaluation to parent so the Debug tab can display scoring breakdown
+        onEvaluation?.(res.data);
         setState("ready");
       } else {
         setErrorMsg(res.error ?? "Evaluation failed");
@@ -186,9 +225,10 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin }: AssistantG
   }, [allSlots, legendDetail, isAdmin]);
 
   useEffect(() => {
-    if (filledCount === 0) {
+    if (supportingCount === 0) {
       setState("idle");
       setNotes([]);
+      setScores(null);
       return;
     }
 
@@ -201,6 +241,11 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin }: AssistantG
   // rosterKey captures add/remove; runEval is stable-ish via useCallback
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rosterKey]);
+
+  // Split notes into buckets for NotesList
+  const issues    = useMemo(() => notes.filter((n) => n.severity === "critical" || n.severity === "warning"), [notes]);
+  const tips      = useMemo(() => notes.filter((n) => n.severity === "tip"), [notes]);
+  const strengths = useMemo(() => notes.filter((n) => n.severity === "strength"), [notes]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -229,25 +274,20 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin }: AssistantG
         </ul>
       )}
 
-      {state === "ready" && notes.length === 0 && (
-        <p id="builder-gm-notes-empty" className="text-xs text-muted-foreground">
-          No issues found — roster looks solid.
-        </p>
-      )}
+      {state === "ready" && (
+        <>
+          {/* Mini score bar — 4 key metrics at a glance */}
+          {scores && <MiniScoreBar scores={scores} />}
 
-      {state === "ready" && notes.length > 0 && (
-        <ul id="builder-gm-notes-list" className="space-y-3">
-          {notes.map((note, i) => (
-            <li
-              key={i}
-              id={`builder-gm-note-${i + 1}`}
-              className="flex gap-2 items-start text-xs text-muted-foreground leading-relaxed"
-            >
-              <SeverityBadge severity={note.severity} />
-              <span>{note.text}</span>
-            </li>
-          ))}
-        </ul>
+          {/* Notes list — issues, tips (strengths suppressed in live mode) */}
+          {notes.length === 0 ? (
+            <p id="builder-gm-notes-empty" className="text-xs text-muted-foreground">
+              No issues found — roster looks solid.
+            </p>
+          ) : (
+            <NotesList issues={issues} tips={tips} strengths={strengths} />
+          )}
+        </>
       )}
 
       {state === "error" && (
@@ -258,7 +298,10 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin }: AssistantG
 
       {/* Admin debug panel */}
       {isAdmin && debugTraces && state === "ready" && (
-        <DebugPanel traces={debugTraces} />
+        <DebugPanel
+          playerTraces={debugTraces.player}
+          aggregateTraces={debugTraces.aggregate}
+        />
       )}
     </div>
   );

@@ -416,23 +416,43 @@ export interface LegendClaudeSuggestion {
 }
 
 // ---------------------------------------------------------------------------
-// Roster Evaluator — GM Notes
+// Roster Evaluator — Scores, GM Notes, Evaluation
 // ---------------------------------------------------------------------------
+
+/** The 9 numeric dimension scores produced by the 4-layer scoring pipeline (all 0–100) */
+export interface Scores {
+  overall: number;
+  offense: number;
+  defense: number;
+  spacing: number;
+  creation: number;
+  paint: number;
+  transition: number;
+  optionality: number;
+  robustness: number;
+}
 
 export type NoteSeverity = "critical" | "warning" | "tip" | "strength";
 
 export type NoteCategory = "offense" | "defense" | "two_way" | "roster_balance";
 
-/** A single note returned by the roster rule engine */
+/**
+ * A single note returned by the roster rule engine.
+ * WARNING: text may contain user-supplied player names — always render as text content,
+ * never as innerHTML, to prevent XSS.
+ */
 export interface Note {
   severity: NoteSeverity;
   category: NoteCategory;
   text: string;
   trace_key: string;
+  /** Whether this note fires from what IS on the roster ("presence") or what is MISSING ("absence"). */
+  presence_type: "presence" | "absence";
 }
 
 /** Full evaluation result from POST /api/builder/evaluate */
 export interface RosterEvaluation {
+  scores: Scores;
   notes: Note[];
   player_traces: Record<string, Record<string, unknown>> | null;
   aggregate_traces: Record<string, unknown> | null;
@@ -442,6 +462,10 @@ export interface RosterEvaluation {
 export interface EvaluatePayload {
   players: Array<{
     name: string;
+    /** 0 = cornerstone, 1–9 = supporting slots */
+    slot: number;
+    /** Exactly one player per roster must have this set to true */
+    is_cornerstone: boolean;
     height: string | null;
     skills: Record<string, string>;
   }>;

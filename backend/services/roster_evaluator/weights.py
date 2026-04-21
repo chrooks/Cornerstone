@@ -1,193 +1,212 @@
 """
-roster_evaluator/weights.py — All tunable numbers for the rule engine.
+roster_evaluator/weights.py — All tunable constants for the 4-layer scoring pipeline.
 
-This is the single source of truth for weights, multipliers, and thresholds.
-Adjust values here and re-run to retune the engine — no logic code changes needed.
+This is the single source of truth for tier values, slot weights, skill weights,
+dimension rollup weights, modifier deltas, redundancy ranges, and meta constants.
+Adjust values here to retune the engine — no logic code changes needed.
 
 Sections:
-  TIER_WEIGHTS              — numeric value per skill tier (0–4)
-  ON_BALL_SCORING_WEIGHTS   — per-skill contribution to on-ball scoring threat
-  OFF_BALL_GRAVITY_WEIGHTS  — per-skill contribution to off-ball defensive attention
-  SIZE_MODIFIER             — height → defensive impact scale config
-  GRAVITY_SCALE             — max_input for normalising gravity to [0, 1]
-  OFF_BALL_GRAVITY_SCALE    — max_input for normalising off-ball gravity to [0, 1]
-  CROSS_ROSTER_MULTIPLIERS  — amplification ranges for inter-skill relationships
-  SPACING_THRESHOLDS        — score cutoffs for critical/warning notes
+  TIER_VALUES               — numeric value per skill tier (0, 1, 2, 4, 8)
+  SLOT_WEIGHTS              — importance decay per roster slot (0 = cornerstone)
+  SKILL_WEIGHTS             — intra-dimension contribution per skill
+  DIMENSION_WEIGHTS         — rollup to overall score
+  OFFENSE_SUBWEIGHTS        — Spacing/Creation/Paint/Transition → Offense composite
+  MODIFIER_DELTAS           — all modifier delta magnitudes (named constants)
+  REDUNDANCY_RANGES         — (min, ceiling) per critical skill for optionality scoring
   SEVERITY_ORDER            — sort key for note prioritisation
-  HIGH_FLEX_SKILLS          — skills whose gaps warrant louder warnings
+  LIVE_NOTE_LIMIT           — max notes in live mode
+  ABSENCE_NOTE_MIN_PLAYERS  — supporting players needed before ABSENCE notes appear in live mode
 """
 
 # ---------------------------------------------------------------------------
-# Tier numeric values — used everywhere a tier string needs arithmetic
+# Tier numeric values
+# Elite=4, ATG=8 (distinct from old engine's 0-1-2-3-4 scale)
 # ---------------------------------------------------------------------------
-TIER_WEIGHTS: dict[str, int] = {
+TIER_VALUES: dict[str, int] = {
     "None": 0,
-    "Capable": 1,
-    "Proficient": 2,
-    "Elite": 3,
-    "All-Time Great": 4,
+    "Capable": 1.5,
+    "Proficient": 3,
+    "Elite": 6,
+    "All-Time Great": 10,
 }
 
 # ---------------------------------------------------------------------------
-# On-ball scoring threat — what forces defenses to respect you with the ball
+# Slot weights — Slot 0 is the cornerstone (never scored; context only).
+# Slot 1 = co-star (highest weight). Weights decay toward bench.
 # ---------------------------------------------------------------------------
-ON_BALL_SCORING_WEIGHTS: dict[str, float] = {
-    "off_dribble_shooter": 1.0,
-    "isolation_scorer":    1.0,
-    "mid_post_player":     0.8,
-    "driver":              0.8,
-    "low_post_player":     0.7,
-    "crafty_finisher":     0.5,
-    "transition_threat":   0.4,   # dual on/off-ball skill
+SLOT_WEIGHTS: dict[int, float] = {
+    0: 0.0,   # cornerstone — context only, not aggregated
+    1: 1.0,   # co-star
+    2: 0.9,   # third best starter
+    3: 0.75,  # fourth best starter
+    4: 0.7,   # fifth starter
+    5: 0.6,
+    6: 0.5,
+    7: 0.4,
+    8: 0.2,
+    9: 0.1,  # 9th supporting slot if present
+}
+
+# Spacing skills (spot_up_shooter, movement_shooter, screen_setter) use this floor
+# instead of raw slot weight. A shooter in slot 7 still occupies a defender — their
+# gravity doesn't decay as sharply as a creator's influence on play-calling does.
+# Slots 1–5 are already at or above this floor and are unaffected.
+SPACING_SLOT_WEIGHT_FLOOR: float = 0.6
+
+# ---------------------------------------------------------------------------
+# Intra-dimension skill weights — how much each skill contributes per dimension.
+# Skills with empty dicts are multipliers/enablers, not raw additive contributors.
+# ---------------------------------------------------------------------------
+SKILL_WEIGHTS: dict[str, dict[str, float]] = {
+    # Spacing
+    "movement_shooter":     {"spacing": 1.5},
+    "spot_up_shooter":      {"spacing": 1.2},
+    "screen_setter":        {"spacing": 0.4},   # enabler, not a spacer itself
+
+    # Creation
+    "pnr_ball_handler":     {"creation": 1.0},
+    "driver":               {"creation": 1.0, "paint": 1.0},
+    "isolation_scorer":     {"creation": 0.7},
+    "mid_post_player":      {"creation": 0.6, "paint": 0.8},
+    "low_post_player":      {"creation": 0.6, "paint": 1.0},
+
+    # Defense
+    "versatile_defender":   {"defense": 1.0},
+    "rim_protector":        {"defense": 1.0},
+    "perimeter_disruptor":  {"defense": 0.6},   # scales with count via DEF-02
+    "rebounder":            {"defense": 0.5},
+
+    # Paint (additional entries beyond driver/low_post/mid_post above)
+    "vertical_spacer":      {"paint": 1.0},
+
+    # Transition
+    "transition_threat":    {"transition": 1.5},
+
+    # Supporting/multiplier skills (not raw dimension contributors)
+    "passer":               {},  # multiplier only
+    "cutter":               {},  # enabled by passers + spacing
+    "pnr_finisher":         {},  # enabled by pnr_ball_handler
+    "offensive_rebounder":  {},  # standalone value
+    "high_flyer":           {},  # multiplier only
 }
 
 # ---------------------------------------------------------------------------
-# Off-ball gravity — defensive attention commanded without the ball
+# Dimension rollup weights to overall score
 # ---------------------------------------------------------------------------
-OFF_BALL_GRAVITY_WEIGHTS: dict[str, float] = {
-    "spot_up_shooter":  1.0,
-    "movement_shooter": 1.2,   # harder to track; movement > spot-up
-    "cutter":           0.9,
-    "vertical_spacer":  0.8,
-    "high_flyer":       0.5,   # lob threat amplifies cutting/spacing
-    "transition_threat": 0.4,  # dual on/off-ball skill
+DIMENSION_WEIGHTS: dict[str, float] = {
+    "offense":      0.30,   # composite of spacing + creation + paint + transition
+    "defense":      0.30,
+    "optionality":  0.20,
+    "robustness":   0.20,
+}
+
+OFFENSE_SUBWEIGHTS: dict[str, float] = {
+    "spacing":    0.35,
+    "creation":   0.35,
+    "paint":      0.20,
+    "transition": 0.10,
 }
 
 # ---------------------------------------------------------------------------
-# Size modifier — scales defensive contributions by player height
+# Modifier delta constants — all additive point deltas on 0–100 dimension scores.
+# All modifier logic reads from here; no magic numbers in modifier functions.
 # ---------------------------------------------------------------------------
-SIZE_MODIFIER: dict[str, float] = {
-    "min_height_inches":         72.0,   # 6-0 → modifier floor
-    "max_height_inches":         84.0,   # 7-0 → modifier ceiling
-    "min_modifier":              0.6,
-    "max_modifier":              1.0,
-    "high_flyer_bonus_per_tier": 0.05,   # each tier of high_flyer adds this
-    "default_modifier":          0.8,    # used when height is unavailable
+MODIFIER_DELTAS: dict[str, float] = {
+    # Defense
+    "DEF_01_rim_amplifies_perimeter":       +8,
+    "DEF_02_perimeter_compound_per_player": +5,   # per additional disruptor beyond first
+    "DEF_03_versatile_perimeter_compound":  +3,
+    "DEF_04_no_rim_versatile_mitigation":   +6,   # reduces missing rim protection penalty
+    "DEF_05_size_penalty":                  -6,
+    "DEF_06_versatile_widens_range":        +3,   # reduces DEF_05 penalty
+    "DEF_07_black_hole_spacing_penalty":    -8,
+    "DEF_08_two_way_bonus":                 +2.5,
+    "DEF_09_rebounding_deficit_penalty":     -10,  # additive penalty when rebounding is deficient
+    "DEF_09_rebounding_deficit_cap":        60,   # hard cap value on defense score after penalty
+
+    # Spacing
+    "OFF_01_low_spacing_caps_creation":     -18,  # per threshold breach level
+    "OFF_02_screen_enables_movement":       +6,
+    "OFF_03_movement_without_screen":       -5,
+    "OFF_04_screen_enables_cutting":        +3,
+    "OFF_05_creation_spacing_imbalance":    -15,
+
+    # On-Ball Balance
+    "OFF_06_exclusive_onball_penalty":      -7,   # per additional exclusively on-ball player
+    "OFF_07_exclusive_onball_below_elite":  -5,
+    "OFF_08_onball_with_offball_bonus":     +1,
+    "OFF_09_single_creator_upweight":       +6,
+    "OFF_10_cornerstone_raises_spacing_threshold": 10,  # points added to spacing threshold
+
+    # Passers & Off-Ball
+    "OFF_11_passer_offball_multiplier":     +0.5,   # per off-ball skill enabled
+    "OFF_12_cutter_without_passer":         -8,
+    "OFF_13_cutter_without_spacing":        -6,
+    "OFF_14_cutter_gravity_bonus":          +2,
+    "OFF_15_vertical_without_lob":          -10,
+    "OFF_16_vertical_with_lob":             +7,
+
+    # Paint
+    "OFF_17_driver_finishing_bonus":        +5,
+    "OFF_18_driver_passing_bonus":          +4,
+    "OFF_19_low_post_spacing_penalty":      -10,
+    "OFF_20_low_post_secondary_bonus":      +4,   # per secondary skill
+    "OFF_21_mid_post_spacing_penalty":      -7,
+    "OFF_22_mid_post_secondary_bonus":      +3,
+    "OFF_23_iso_spacing_penalty":           -5,
+    "OFF_24_iso_secondary_bonus":           +4,
+
+    # High Flyer multipliers
+    "OFF_25_high_flyer_vertical_mult":      1.25,
+    "OFF_26_high_flyer_cutting_mult":       1.20,
+    "OFF_27_high_flyer_pnr_mult":           1.20,
+
+    # PnR
+    "OFF_28_pnr_synergy_bonus":             +8,
+    "OFF_29_pnr_handler_secondary_bonus":   +1,   # per secondary skill
+    "OFF_30_pnr_finisher_secondary_bonus":  +1,   # per secondary skill
+
+    # Transition
+    "OFF_31_transition_passer_synergy":     +8,
+    "OFF_31_transition_dual_threat_double": 1.5,  # tier-scale constant: bonus = base × (tt/elite) × (passer/elite) × this; Elite×Elite → ×2 total
+    "OFF_32_high_flyer_transition_bonus":   +5,   # base delta per high-flyer (multiplied by tier factors)
+    "OFF_32_high_flyer_transition_cap":     +20,  # ceiling on combined bonus across all high-flyers
+
+    # Offensive Rebounding
+    "OFF_33_offreb_spacing_mitigation":     +4,
+
+    # Shooter Density — compounding gravity bonus for multiple shooters
+    "OFF_34_shooter_density_per_extra":     +5,   # +5 spacing per shooter beyond the first (Capable+)
+    "OFF_34_shooter_density_cap":           +20,  # ceiling on total density bonus
+
+    # Non-Shooter Penalty — each non-shooter beyond the first collapses floor spacing
+    "OFF_35_non_shooter_penalty":           -8,   # per non-shooter beyond the first in supporting rotation
+    "OFF_35_non_shooter_penalty_cap":       -24,  # floor on total penalty (max -24 hit)
+
+    # Hard floors
+    "HARD_01_no_paint_penalty":             -25,
+    "HARD_02_no_creation_penalty":          -20,
+    "HARD_03_insufficient_spacing_penalty": -20,
+    "HARD_04_no_defender_penalty":          -25,
+    "HARD_05_no_rebounding_cap":            65,   # hard cap on defense score
 }
 
 # ---------------------------------------------------------------------------
-# Gravity normalisation — maps raw scoring threat score to [0, 1]
-#
-# Calibrated ceiling: scores above max_input clamp to gravity 1.0.
-# True mathematical ceiling (all 7 skills at ATG) is 20.8, but no real player
-# achieves that. 12.0 is set so that a complete multi-dimensional scorer
-# (ATG iso + ATG off-dribble + Elite post + Elite driver) reaches ~1.0,
-# while a one-dimensional scorer (ATG iso only) gets ~0.33. Adjust if real
-# player profiles show consistent mis-calibration.
+# Redundancy ranges — (min_count, over_stack_ceiling) per critical skill.
+# Used by optionality scoring: below min → penalize, above ceiling → diminishing.
 # ---------------------------------------------------------------------------
-GRAVITY_SCALE: dict[str, float] = {
-    "max_input": 12.0,
+REDUNDANCY_RANGES: dict[str, tuple[int, int]] = {
+    "movement_shooter":   (1, 3),
+    "rim_protector":      (1, 2),
+    "versatile_defender": (1, 5),
+    "perimeter_disruptor":(1, 5),
+    "pnr_ball_handler":   (1, 2),
+    "pnr_finisher":       (1, 2),
+    "driver":             (1, 3),
+    "rebounder":          (1, 3),
+    "low_post_player":    (1, 1),  # hard to over-stack
+    "mid_post_player":    (1, 1),
 }
-
-# ---------------------------------------------------------------------------
-# Off-ball gravity normalisation — maps raw off-ball score to [0, 1]
-#
-# Calibrated ceiling: true ceiling (all 6 skills at ATG) is 19.2.
-# 10.0 is set so ATG spot-up + ATG movement (raw=8.8) reaches gravity ~0.88,
-# reflecting Steph Curry-level off-ball threat. Adjust if mis-calibrated.
-# ---------------------------------------------------------------------------
-OFF_BALL_GRAVITY_SCALE: dict[str, float] = {
-    "max_input": 10.0,
-}
-
-# ---------------------------------------------------------------------------
-# Cross-roster multipliers — one skill amplifying another at roster level
-# Each is a (min_multiplier, max_multiplier) range; interpolated by score.
-# ---------------------------------------------------------------------------
-CROSS_ROSTER_MULTIPLIERS: dict[str, dict[str, float]] = {
-    # Screen setters amplify movement shooters (primary) and cutters (secondary)
-    "screen_to_movement": {"min": 0.5, "max": 1.2, "max_input": 16.0},
-    "screen_to_cutter":   {"min": 0.6, "max": 1.0, "max_input": 16.0},
-
-    # Passers amplify cutters, vertical spacers, transition threats
-    "passer_to_cutter":   {"min": 0.2, "max": 1.0, "max_input": 16.0},
-    "passer_to_spacer":   {"min": 0.1, "max": 1.0, "max_input": 16.0},
-
-    # Spacing quality gates cutter effectiveness (room to cut into)
-    # max_input matches approximate ceiling of effective spacing_score
-    "spacing_to_cutter":         {"min": 0.3, "max": 1.0, "max_input": 16.0},
-
-    # On-ball gravity of teammates opens cutting lanes.
-    # max_input is a roster SUM of per-player gravity values (each 0–1),
-    # not a headcount. A typical roster sums to 1–4; 6 saturates the multiplier.
-    "onball_gravity_to_cutter": {"min": 0.5, "max": 1.0, "max_input": 6.0},
-
-    # Rim anchor amplifies perimeter defenders
-    "rim_to_perimeter":   {"min": 1.0, "max": 1.4, "max_input": 16.0},
-}
-
-# ---------------------------------------------------------------------------
-# Compounding exponents — non-linear stacking for defenders / passers
-# ---------------------------------------------------------------------------
-COMPOUNDING_EXPONENTS: dict[str, float] = {
-    "perimeter_disruptors": 1.3,   # Thunder effect — stacking is superlinear
-    "versatile_defenders":  1.15,  # reserved — versatile defenders currently contribute
-                                   # to perimeter_compound at 0.7× rather than their own
-                                   # dedicated compound function; keep for future use
-    "passers":              1.2,   # two elite passers > 2× one
-}
-
-# ---------------------------------------------------------------------------
-# Spacing weights — relative value of each shooter type
-# Movement shooters are harder to guard and worth more per tier than spot-up
-# ---------------------------------------------------------------------------
-SPACING_WEIGHTS: dict[str, float] = {
-    "movement_shooter": 2.0,   # movement >> spot-up per heuristics
-    "spot_up_shooter":  1.0,
-}
-
-# ---------------------------------------------------------------------------
-# Paint touch weights — relative value of each paint-access skill
-# ---------------------------------------------------------------------------
-PAINT_TOUCH_WEIGHTS: dict[str, float] = {
-    "driver":          1.0,
-    "vertical_spacer": 0.9,   # lob threat + lane opener
-    "mid_post_player": 0.8,
-    "low_post_player": 0.8,
-}
-
-# ---------------------------------------------------------------------------
-# Spacing thresholds — raw effective spacing score cutoffs for notes
-# ---------------------------------------------------------------------------
-SPACING_THRESHOLDS: dict[str, float] = {
-    "critical": 3.0,
-    "warning":  5.0,
-    "good":     8.0,
-}
-
-# ---------------------------------------------------------------------------
-# Defense thresholds
-# ---------------------------------------------------------------------------
-DEFENSE_THRESHOLDS: dict[str, float] = {
-    "rim_anchor_min":       2.0,   # rim_score below this = no anchor
-    "versatile_depth_min":  3,     # count of capable+ versatile defenders to compensate no rim
-    "blackhole_max":        1,     # more than this many blackholes = flag
-}
-
-# ---------------------------------------------------------------------------
-# Perimeter compounding threshold — compound score below this is weak
-# ---------------------------------------------------------------------------
-PERIMETER_THRESHOLDS: dict[str, float] = {
-    "warning": 10.0,   # perimeter_compound_score below this → Warning
-}
-
-# ---------------------------------------------------------------------------
-# Strength thresholds — scores above these earn a "strength" note
-# ---------------------------------------------------------------------------
-STRENGTH_THRESHOLDS: dict[str, float] = {
-    "defense":         6.0,   # defense_score above this → Strength
-    "passer_compound": 5.0,   # passer_compound above this → Strength
-    # spacing strength reuses SPACING_THRESHOLDS["good"] = 8.0
-}
-
-# ---------------------------------------------------------------------------
-# Cutter activation ratio — if cutter_score / cutter_raw below this, warn.
-# The four gate floors multiply to a minimum of 0.2*0.3*0.6*0.5 = 0.018.
-# With one good enabler at each gate (e.g. one Elite passer, one movement shooter,
-# one screen setter, one scorer) the product reaches ~0.06. 0.04 is the threshold
-# that separates "truly orphaned" (no support → floor ~0.018) from "some support".
-# ---------------------------------------------------------------------------
-CUTTER_ACTIVATION_RATIO: float = 0.04
 
 # ---------------------------------------------------------------------------
 # Note priority — lower number = shown first
@@ -200,47 +219,13 @@ SEVERITY_ORDER: dict[str, int] = {
 }
 
 # ---------------------------------------------------------------------------
-# High-flexibility skills — gaps here warrant louder notes
-# (per heuristics doc: Passers, VD, Rim Protectors, OffReb, Spot-Up, Movement)
-# ---------------------------------------------------------------------------
-HIGH_FLEX_SKILLS: frozenset[str] = frozenset({
-    "passer",
-    "versatile_defender",
-    "rim_protector",
-    "offensive_rebounder",
-    "spot_up_shooter",
-    "movement_shooter",
-})
-
-# ---------------------------------------------------------------------------
-# Perimeter disruptor depth thresholds — distribution check
-#
-# Separate from perimeter_compound_score, which gets inflated by versatile
-# defenders. This checks raw headcount of players who can actually lock up
-# on the perimeter — the skill that compounds most aggressively (Thunder effect).
-# ---------------------------------------------------------------------------
-PERIMETER_DISRUPTOR_THRESHOLDS: dict[str, int] = {
-    "min_roster_size":  5,   # don't warn until roster is meaningfully filled
-    "warning_capable":  2,   # < 2 Capable+ perimeter disruptors = Warning
-    "tip_capable":      3,   # < 3 Capable+ = Tip (only if no Warning)
-}
-
-# ---------------------------------------------------------------------------
-# Shooter depth thresholds — floor-spacing distribution check
-#
-# Counts players with spot_up_shooter OR movement_shooter at the given tier.
-# Two tiers checked separately so partial rosters get appropriate severity.
-#
-# Proficient+ = real floor threat (defense must guard them beyond the arc).
-# Capable only = saggable — defense can cheat off them.
-# ---------------------------------------------------------------------------
-SHOOTER_DEPTH_THRESHOLDS: dict[str, int] = {
-    "min_roster_size":       5,   # don't warn until roster is meaningfully filled
-    "warning_proficient":    3,   # < 3 Proficient+ shooters = Warning
-    "tip_capable":           4,   # < 4 Capable+ shooters = Tip (only if no Warning)
-}
-
-# ---------------------------------------------------------------------------
 # Live mode — max notes returned
 # ---------------------------------------------------------------------------
-LIVE_NOTE_LIMIT: int = 7
+LIVE_NOTE_LIMIT: int = 10
+
+# ---------------------------------------------------------------------------
+# Absence note minimum players — ABSENCE-tagged notes only surface in live mode
+# when the supporting rotation has at least this many players.
+# Prevents penalizing incomplete rosters for unfilled slots.
+# ---------------------------------------------------------------------------
+ABSENCE_NOTE_MIN_PLAYERS: int = 6
