@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from typing import Literal
 
-from .modifiers import ALL_MODIFIERS
+from .modifiers import ALL_MODIFIERS, guard_range, _parse_height_inches, HEIGHT_COVERAGE_LOW, HEIGHT_COVERAGE_HIGH
 from .hard_checks import ALL_HARD_CHECKS
 from .optionality import compute_optionality, compute_robustness
 from .types import Note, RosterEvaluation, Scores
@@ -426,6 +426,56 @@ def _build_aggregate_traces(
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Height coverage computation (used by debug chart + DEF_05/06)
+# ---------------------------------------------------------------------------
+
+def _compute_height_coverage(all_players: list[dict]) -> dict:
+    """
+    Compute height coverage data for the full roster (cornerstone + supporting).
+
+    Returns a dict with per-player ranges and hole/coverage analysis across
+    the 6'0"–7'2" (72–86 inch) target window.
+    """
+    def _in_to_ft(inches: int) -> str:
+        return f"{inches // 12}'{inches % 12}\""
+
+    player_data = []
+    covered: set[int] = set()
+
+    for p in all_players:
+        height_in = _parse_height_inches(p.get("height"))
+        skills = p.get("skills", {})
+        vd_tier = skills.get("versatile_defender", "None")
+        pd_tier = skills.get("perimeter_disruptor", "None")
+        r = guard_range(p)
+        entry = {
+            "name":           p.get("name", ""),
+            "is_cornerstone": bool(p.get("is_cornerstone", False)),
+            "height_in":      height_in,
+            "height_str":     _in_to_ft(height_in) if height_in else None,
+            "vd_tier":        vd_tier,
+            "pd_tier":        pd_tier,
+            "range_low":      r[0] if r else None,
+            "range_high":     r[1] if r else None,
+        }
+        player_data.append(entry)
+        if r:
+            covered.update(range(r[0], r[1] + 1))
+
+    target = list(range(HEIGHT_COVERAGE_LOW, HEIGHT_COVERAGE_HIGH + 1))
+    holes = [h for h in target if h not in covered]
+
+    return {
+        "players":       player_data,
+        "target_low":    HEIGHT_COVERAGE_LOW,
+        "target_high":   HEIGHT_COVERAGE_HIGH,
+        "holes":         holes,
+        "full_coverage": len(holes) == 0,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main pipeline entry point
 # ---------------------------------------------------------------------------
 
@@ -590,9 +640,13 @@ def evaluate_roster(
         player_traces_out = _build_player_traces(supporting_players)
         aggregate_traces_out = _build_aggregate_traces(dim_scores, modifier_results, scores)
 
+    # ----- Height coverage (always computed — cheap, used by debug chart) -----
+    height_coverage_out = _compute_height_coverage([cornerstone] + supporting_players)
+
     return RosterEvaluation(
         scores=scores,
         notes=all_notes,
         player_traces=player_traces_out,
         aggregate_traces=aggregate_traces_out,
+        height_coverage=height_coverage_out,
     )

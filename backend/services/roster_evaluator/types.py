@@ -91,9 +91,11 @@ class RosterEvaluation:
     notes            — prioritized list of GM notes
     player_traces    — per-player score breakdowns (only populated when debug=True)
     aggregate_traces — cross-roster aggregate breakdowns (only when debug=True)
+    height_coverage  — per-player guard ranges + holes across 6'0"–7'2" (always populated)
     """
 
     scores: Scores
     notes: list[Note]
     player_traces: dict[str, dict] | None = field(default=None)
     aggregate_traces: dict[str, object] | None = field(default=None)
+    height_coverage: dict | None = field(default=None)

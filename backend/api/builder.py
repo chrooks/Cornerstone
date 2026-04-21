@@ -62,6 +62,7 @@ def _serialize_evaluation(evaluation: RosterEvaluation) -> dict:
         "notes":            [dataclasses.asdict(note) for note in evaluation.notes],
         "player_traces":    evaluation.player_traces,
         "aggregate_traces": evaluation.aggregate_traces,
+        "height_coverage":  evaluation.height_coverage,
     }
 
 
