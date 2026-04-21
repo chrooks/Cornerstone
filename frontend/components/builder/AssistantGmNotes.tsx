@@ -166,6 +166,7 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin, onEvaluation
   const [debugTraces, setDebugTraces] = useState<{
     player: Record<string, unknown> | null;
     aggregate: Record<string, unknown> | null;
+    heightCoverage: import("@/lib/types").HeightCoverageData | null;
   } | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -205,8 +206,9 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin, onEvaluation
         setScores(res.data.scores);
         if (isAdmin) {
           setDebugTraces({
-            player:    res.data.player_traces,
-            aggregate: res.data.aggregate_traces,
+            player:        res.data.player_traces,
+            aggregate:     res.data.aggregate_traces,
+            heightCoverage: res.data.height_coverage,
           });
         }
         // Lift full evaluation to parent so the Debug tab can display scoring breakdown
@@ -296,11 +298,12 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin, onEvaluation
         </p>
       )}
 
-      {/* Admin debug panel */}
+      {/* Admin debug panel — traces + height coverage chart */}
       {isAdmin && debugTraces && state === "ready" && (
         <DebugPanel
           playerTraces={debugTraces.player}
           aggregateTraces={debugTraces.aggregate}
+          heightCoverage={debugTraces.heightCoverage}
         />
       )}
     </div>

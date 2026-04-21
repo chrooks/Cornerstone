@@ -37,6 +37,7 @@ import { RotationSlots } from "./RotationSlots";
 import { SkillGrid } from "./SkillGrid";
 import { AssistantGmNotes } from "./AssistantGmNotes";
 import { ScoringBreakdown } from "./ScoringBreakdown";
+import { HeightCoverageChart } from "./HeightCoverageChart";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
 import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
@@ -612,6 +613,12 @@ export function BuilderPage() {
                   playerTraces={latestEval?.player_traces ?? null}
                   aggregateTraces={latestEval?.aggregate_traces ?? null}
                 />
+                {/* Height coverage chart — always shown when eval data exists */}
+                {latestEval?.height_coverage && (
+                  <div className="mt-4">
+                    <HeightCoverageChart data={latestEval.height_coverage} />
+                  </div>
+                )}
               </div>
             )}
           </div>

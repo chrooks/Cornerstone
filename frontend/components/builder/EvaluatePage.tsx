@@ -272,11 +272,12 @@ export function EvaluatePage() {
           {/* Notes — issues, tips, strengths in collapsible sections */}
           <NotesList issues={issues} tips={tips} strengths={strengths} />
 
-          {/* Admin debug panel — only when user is admin and traces exist */}
-          {isAdmin && (evaluation.player_traces || evaluation.aggregate_traces) && (
+          {/* Admin debug panel — traces + height coverage chart */}
+          {isAdmin && (evaluation.player_traces || evaluation.aggregate_traces || evaluation.height_coverage) && (
             <DebugPanel
               playerTraces={evaluation.player_traces}
               aggregateTraces={evaluation.aggregate_traces}
+              heightCoverage={evaluation.height_coverage}
             />
           )}
         </div>

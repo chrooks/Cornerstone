@@ -450,12 +450,45 @@ export interface Note {
   presence_type: "presence" | "absence";
 }
 
+/** Per-player entry in the height coverage map */
+export interface PlayerCoverageEntry {
+  name: string;
+  is_cornerstone: boolean;
+  /** Height in inches, null if no height provided */
+  height_in: number | null;
+  /** Height as "6-8" string, null if no height provided */
+  height_str: string | null;
+  /** Versatile defender tier — sets the base guard range */
+  vd_tier: string;
+  /** Perimeter disruptor tier — extends the lower bound of the guard range */
+  pd_tier: string;
+  /** Low end of guard range in inches, null if no height provided */
+  range_low: number | null;
+  /** High end of guard range in inches, null if no height provided */
+  range_high: number | null;
+}
+
+/** Height coverage map — shows which guard heights are covered by the roster */
+export interface HeightCoverageData {
+  players: PlayerCoverageEntry[];
+  /** Low end of target coverage window in inches (72 = 6'0") */
+  target_low: number;
+  /** High end of target coverage window in inches (86 = 7'2") */
+  target_high: number;
+  /** List of inches in the target window that are NOT covered by any player */
+  holes: number[];
+  /** True when every inch in [target_low, target_high] is covered */
+  full_coverage: boolean;
+}
+
 /** Full evaluation result from POST /api/builder/evaluate */
 export interface RosterEvaluation {
   scores: Scores;
   notes: Note[];
   player_traces: Record<string, Record<string, unknown>> | null;
   aggregate_traces: Record<string, unknown> | null;
+  /** Always populated — height guard coverage across the 6'0"–7'2" window */
+  height_coverage: HeightCoverageData | null;
 }
 
 /** Request payload for POST /api/builder/evaluate */

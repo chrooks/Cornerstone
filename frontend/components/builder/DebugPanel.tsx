@@ -15,6 +15,8 @@
  */
 
 import { useCallback, useState } from "react";
+import { HeightCoverageChart } from "./HeightCoverageChart";
+import type { HeightCoverageData } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Sub-section component
@@ -81,9 +83,11 @@ function TraceSection({ id, title, data }: TraceSectionProps) {
 interface DebugPanelProps {
   playerTraces: Record<string, unknown> | null;
   aggregateTraces: Record<string, unknown> | null;
+  /** Height coverage data — always populated by the backend, shown regardless of debug flag */
+  heightCoverage?: HeightCoverageData | null;
 }
 
-export function DebugPanel({ playerTraces, aggregateTraces }: DebugPanelProps) {
+export function DebugPanel({ playerTraces, aggregateTraces, heightCoverage }: DebugPanelProps) {
   return (
     <div id="debug-panel" className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-2">
       {/* Panel header */}
@@ -104,6 +108,11 @@ export function DebugPanel({ playerTraces, aggregateTraces }: DebugPanelProps) {
         title="Aggregate Traces"
         data={aggregateTraces}
       />
+
+      {/* Height coverage chart — always rendered when data is available */}
+      {heightCoverage && (
+        <HeightCoverageChart data={heightCoverage} />
+      )}
     </div>
   );
 }
