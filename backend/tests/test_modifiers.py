@@ -157,13 +157,13 @@ class TestDEF04:
 
 
 # ---------------------------------------------------------------------------
-# DEF-05: Size penalty for undersized players
+# DEF-05: Height coverage hole penalty (fires when any inch in 6'0–7'2 uncovered)
 # ---------------------------------------------------------------------------
 
 class TestDEF05:
-    def test_fires_for_short_player(self):
-        # 5-10 (70") is below PG average (74"), definitely below SF/PF
-        player = make_player(height="5-10", skills={"versatile_defender": "Capable"})
+    def test_fires_when_roster_has_coverage_holes(self):
+        # Single 6-0 player with no VD: range is roughly 70-71", leaves most of 72-86 uncovered
+        player = make_player(height="6-0", skills={})
         players = [player]
         agg = make_agg()
         result = check_DEF_05(players, agg, make_cornerstone(), MODIFIER_DELTAS)
@@ -171,32 +171,41 @@ class TestDEF05:
         delta, _, _ = result
         assert delta < 0
 
-    def test_does_not_fire_for_tall_player(self):
-        # 6-10 (82") is above average for most roles
-        player = make_player(height="6-10", skills={"versatile_defender": "Capable"})
-        players = [player]
+    def test_does_not_fire_when_full_coverage(self):
+        # Build a squad that covers 72-86 without gaps:
+        # Elite VD at 6-4 (76"): range 76+(-5)=71 to 76+(+4)=80
+        # Elite VD at 6-9 (81"): range 81+(-5)=76 to 81+(+4)=85
+        # Elite VD at 7-2 (86"): range 86+(-5)=81 to 86+(+4)=90
+        # Combined: 71-90 → covers 72-86 fully
+        p1 = make_player("P1", 1, {"versatile_defender": "Elite"}, height="6-4")
+        p2 = make_player("P2", 2, {"versatile_defender": "Elite"}, height="6-9")
+        p3 = make_player("P3", 3, {"versatile_defender": "Elite"}, height="7-2")
+        players = [p1, p2, p3]
         agg = make_agg()
         result = check_DEF_05(players, agg, make_cornerstone(), MODIFIER_DELTAS)
         assert result is None
 
 
 # ---------------------------------------------------------------------------
-# DEF-06: Versatile defender reduces size penalty
+# DEF-06: Full height coverage bonus (fires when 6'0–7'2 fully covered)
 # ---------------------------------------------------------------------------
 
 class TestDEF06:
-    def test_fires_for_versatile_with_size_penalty(self):
-        # Short but versatile defender — modifier should produce a positive offset
-        player = make_player(height="5-10", skills={"versatile_defender": "Proficient"})
-        players = [player]
+    def test_fires_when_full_coverage_achieved(self):
+        # Same three-player squad that covers 72-86 completely
+        p1 = make_player("P1", 1, {"versatile_defender": "Elite"}, height="6-4")
+        p2 = make_player("P2", 2, {"versatile_defender": "Elite"}, height="6-9")
+        p3 = make_player("P3", 3, {"versatile_defender": "Elite"}, height="7-2")
+        players = [p1, p2, p3]
         agg = make_agg()
         result = check_DEF_06(players, agg, make_cornerstone(), MODIFIER_DELTAS)
         assert result is not None
         delta, _, _ = result
         assert delta > 0
 
-    def test_does_not_fire_for_tall_player_without_versatile(self):
-        player = make_player(height="6-9", skills={"rebounder": "Capable"})
+    def test_does_not_fire_when_gaps_remain(self):
+        # Single player can't cover the full 72-86 range alone
+        player = make_player(height="6-9", skills={"versatile_defender": "Capable"})
         players = [player]
         agg = make_agg()
         result = check_DEF_06(players, agg, make_cornerstone(), MODIFIER_DELTAS)
