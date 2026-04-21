@@ -80,7 +80,7 @@ SKILL_WEIGHTS: dict[str, dict[str, float]] = {
     "vertical_spacer":      {"paint": 1.0},
 
     # Transition
-    "transition_threat":    {"transition": 1.5},
+    "transition_threat":    {"transition": 2.5},
 
     # Supporting/multiplier skills (not raw dimension contributors)
     "passer":               {},  # multiplier only
@@ -117,8 +117,10 @@ MODIFIER_DELTAS: dict[str, float] = {
     "DEF_02_perimeter_compound_per_player": +5,   # per additional disruptor beyond first
     "DEF_03_versatile_perimeter_compound":  +3,
     "DEF_04_no_rim_versatile_mitigation":   +6,   # reduces missing rim protection penalty
-    "DEF_05_size_penalty":                  -6,
-    "DEF_06_versatile_widens_range":        +3,   # reduces DEF_05 penalty
+    "DEF_05_height_hole_penalty":           -8,   # base penalty when any coverage hole exists
+    "DEF_05_height_hole_per_inch":          -2,   # additional per uncovered inch
+    "DEF_05_height_hole_cap":              -25,   # floor on total penalty
+    "DEF_06_full_coverage_bonus":           +8,   # bonus when 6'0–7'2 fully covered
     "DEF_07_black_hole_spacing_penalty":    -8,
     "DEF_08_two_way_bonus":                 +2.5,
     "DEF_09_rebounding_deficit_penalty":     -10,  # additive penalty when rebounding is deficient
@@ -169,19 +171,22 @@ MODIFIER_DELTAS: dict[str, float] = {
     # Transition
     "OFF_31_transition_passer_synergy":     +8,
     "OFF_31_transition_dual_threat_double": 1.5,  # tier-scale constant: bonus = base × (tt/elite) × (passer/elite) × this; Elite×Elite → ×2 total
-    "OFF_32_high_flyer_transition_bonus":   +5,   # base delta per high-flyer (multiplied by tier factors)
+    "OFF_32_high_flyer_transition_bonus":   +8,   # base delta per high-flyer (multiplied by tier factors)
     "OFF_32_high_flyer_transition_cap":     +20,  # ceiling on combined bonus across all high-flyers
 
     # Offensive Rebounding
     "OFF_33_offreb_spacing_mitigation":     +4,
 
     # Shooter Density — compounding gravity bonus for multiple shooters
-    "OFF_34_shooter_density_per_extra":     +5,   # +5 spacing per shooter beyond the first (Capable+)
-    "OFF_34_shooter_density_cap":           +20,  # ceiling on total density bonus
+    "OFF_34_shooter_density_per_extra":     +5.5,   # +5 spacing per shooter beyond the first (Capable+)
+    "OFF_34_shooter_density_cap":           +25,  # ceiling on total density bonus
 
     # Non-Shooter Penalty — each non-shooter beyond the first collapses floor spacing
     "OFF_35_non_shooter_penalty":           -8,   # per non-shooter beyond the first in supporting rotation
     "OFF_35_non_shooter_penalty_cap":       -24,  # floor on total penalty (max -24 hit)
+
+    # Cornerstone Spacing — cornerstone shooting creates gravity even though slot weight = 0
+    "OFF_36_cornerstone_spacing_base":      +6,   # base per spacing skill, scaled by tier and skill weight
 
     # Hard floors
     "HARD_01_no_paint_penalty":             -25,

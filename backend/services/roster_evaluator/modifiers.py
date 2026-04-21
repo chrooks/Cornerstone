@@ -138,31 +138,48 @@ def _parse_height_inches(height: str | None) -> int | None:
     return None
 
 
-# Average height per positional group (inferred from height ranges)
-_ROLE_HEIGHT_AVERAGES: dict[str, int] = {
-    "PG": 74,   # 6-2
-    "SG": 76,   # 6-4
-    "SF": 78,   # 6-6
-    "PF": 80,   # 6-8
-    "C":  83,   # 6-11
+# Guard-range deltas (low_offset, high_offset) per versatile_defender tier.
+# A player at height H can guard opponents in [H + low_offset, H + high_offset].
+# Each tier adds 1 in each direction; ATG gets an extra -2 on the low end.
+_HEIGHT_GUARD_DELTAS: dict[str, tuple[int, int]] = {
+    "None":           (-2, +1),
+    "Capable":        (-3, +2),
+    "Proficient":     (-4, +3),
+    "Elite":          (-5, +4),
+    "All-Time Great": (-7, +5),
 }
 
+# Additional low-end extension (in inches) from perimeter_disruptor tier.
+# Ability to guard smaller/quicker players expands the lower bound of the guard range.
+_PERIM_DISRUPTOR_LOW_BONUS: dict[str, int] = {
+    "None":           0,
+    "Capable":        0,
+    "Proficient":     1,
+    "Elite":          2,
+    "All-Time Great": 4,
+}
 
-def _infer_role_average_height(height_inches: int) -> int:
+# Coverage target: every NBA-relevant height from 6'0" to 7'2" (72–86 inches)
+HEIGHT_COVERAGE_LOW  = 72   # 6'0"
+HEIGHT_COVERAGE_HIGH = 86   # 7'2"
+
+
+def guard_range(player: dict) -> tuple[int, int] | None:
     """
-    Infer the positional average height from the player's actual height.
-    Uses simple height bands to approximate the defensive role expectation.
+    Return (low_inch, high_inch) range the player can defend, or None if height unknown.
+
+    Base range from height + VD tier; perimeter_disruptor tier extends the lower
+    bound further (Proficient -1, Elite -2, ATG -4).
     """
-    if height_inches <= 75:
-        return _ROLE_HEIGHT_AVERAGES["PG"]
-    elif height_inches <= 77:
-        return _ROLE_HEIGHT_AVERAGES["SG"]
-    elif height_inches <= 79:
-        return _ROLE_HEIGHT_AVERAGES["SF"]
-    elif height_inches <= 82:
-        return _ROLE_HEIGHT_AVERAGES["PF"]
-    else:
-        return _ROLE_HEIGHT_AVERAGES["C"]
+    height_in = _parse_height_inches(player.get("height"))
+    if height_in is None:
+        return None
+    skills = player.get("skills", {})
+    vd_tier = skills.get("versatile_defender", "None")
+    pd_tier = skills.get("perimeter_disruptor", "None")
+    low_off, high_off = _HEIGHT_GUARD_DELTAS.get(vd_tier, (-2, +1))
+    pd_bonus = _PERIM_DISRUPTOR_LOW_BONUS.get(pd_tier, 0)
+    return (height_in + low_off - pd_bonus, height_in + high_off)
 
 
 def _synergy_check(players: list[dict], skill_a: str, skill_b: str) -> bool:
@@ -195,15 +212,22 @@ def _delta_to_severity(delta: float) -> str:
 
 def check_DEF_01(players, agg, cornerstone, weights):
     """
-    PRESENCE — Rim Protector present → bonus to Defense Score.
+    PRESENCE — Rim Protector present → bonus to Defense Score, scaled by rim protector tier.
     The anchor amplifies the value of every perimeter defender on the roster.
+    An ATG rim protector (Wembanyama) anchors a defense categorically differently
+    than a Capable shot-blocker — tier scaling captures that gap.
     """
     if not agg.get("has_rim_protector", False):
         return None
     # Only fires if there's also a perimeter or versatile defender to amplify
     if agg.get("perimeter_disruptor_count", 0) == 0 and agg.get("versatile_defender_count", 0) == 0:
         return None
-    delta = weights["DEF_01_rim_amplifies_perimeter"]
+    # Scale bonus by the best rim protector tier in the full rotation
+    all_players = [cornerstone] + players
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
+    best_rim_tier = max((_tier_value(p, "rim_protector") for p in all_players), default=0)
+    tier_factor = best_rim_tier / elite_ref
+    delta = weights["DEF_01_rim_amplifies_perimeter"] * tier_factor
     return (delta, "Rim anchor amplifies perimeter defenders — defensive switching scheme is viable.", "defense")
 
 
@@ -212,13 +236,27 @@ check_DEF_01.presence_type = "presence"
 
 def check_DEF_02(players, agg, cornerstone, weights):
     """
-    PRESENCE — 2+ Perimeter Disruptors → compounding defensive bonus per additional disruptor.
+    PRESENCE — 2+ Perimeter Disruptors → compounding defensive bonus per additional disruptor,
+    scaled by each disruptor's tier.
     The Thunder effect: layering disruptors creates switching nightmares for offenses.
+    Three Elite disruptors multiply pressure far beyond three Capable ones.
     """
     count = agg.get("perimeter_disruptor_count", 0)
     if count < 2:
         return None
-    delta = weights["DEF_02_perimeter_compound_per_player"] * (count - 1)
+    # Sort disruptors by tier descending; first is the baseline, each beyond accumulates
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
+    all_players = [cornerstone] + players
+    disruptors = sorted(
+        _players_with_skill(all_players, "perimeter_disruptor"),
+        key=lambda p: _tier_value(p, "perimeter_disruptor"),
+        reverse=True,
+    )
+    per_player = weights["DEF_02_perimeter_compound_per_player"]
+    delta = sum(
+        per_player * (_tier_value(p, "perimeter_disruptor") / elite_ref)
+        for p in disruptors[1:]  # first is baseline; compound from second onward
+    )
     return (delta, f"Perimeter disruptors compound ({count} total) — switching pressure multiplies.", "defense")
 
 
@@ -258,47 +296,70 @@ check_DEF_04.presence_type = "absence"
 
 def check_DEF_05(players, agg, cornerstone, weights):
     """
-    PRESENCE — Any player below average height for their positional role → defensive penalty.
-    Undersized players create defensive mismatches against bigger opponents.
+    ABSENCE — One or more height inches in 6'0"–7'2" (72–86 in) are uncovered by any player's
+    guard range → defensive penalty.
+
+    Each player can defend opponents within their guard range, derived from their height
+    and versatile_defender tier (see _HEIGHT_GUARD_DELTAS). Cornerstone is included —
+    they are on the court and their size matters defensively.
+
+    Penalty = base + (per_inch × hole_count), capped at DEF_05_height_hole_cap.
+    A single hole is already a severe warning; every additional uncovered inch compounds.
     """
-    penalties = []
-    for p in players:
-        height_in = _parse_height_inches(p.get("height"))
-        if height_in is None:
+    all_players = [cornerstone] + players
+    covered: set[int] = set()
+    for p in all_players:
+        r = guard_range(p)
+        if r is None:
             continue
-        role_avg = _infer_role_average_height(height_in)
-        if height_in < role_avg - 2:  # more than 2 inches below role average
-            penalties.append(p["name"])
-    if not penalties:
+        low, high = r
+        covered.update(range(low, high + 1))
+
+    holes = [h for h in range(HEIGHT_COVERAGE_LOW, HEIGHT_COVERAGE_HIGH + 1) if h not in covered]
+    if not holes:
         return None
-    delta = weights["DEF_05_size_penalty"] * len(penalties)
-    names = ", ".join(penalties)
-    return (delta, f"{names} {'is' if len(penalties) == 1 else 'are'} undersized for their defensive role(s).", "defense")
+
+    base      = weights["DEF_05_height_hole_penalty"]
+    per_inch  = weights["DEF_05_height_hole_per_inch"]
+    cap       = weights["DEF_05_height_hole_cap"]
+    delta     = max(cap, base + per_inch * len(holes))
+
+    def _in_to_ft(inches: int) -> str:
+        return f"{inches // 12}'{inches % 12}\""
+
+    hole_ranges = f"{_in_to_ft(min(holes))}–{_in_to_ft(max(holes))}" if len(holes) > 1 else _in_to_ft(holes[0])
+    return (
+        delta,
+        f"{len(holes)} height inch{'es' if len(holes) > 1 else ''} uncovered ({hole_ranges}) — "
+        f"opponents in that size range operate without a size-matched defender.",
+        "defense",
+    )
 
 
-check_DEF_05.presence_type = "presence"
+check_DEF_05.presence_type = "absence"
 
 
 def check_DEF_06(players, agg, cornerstone, weights):
     """
-    PRESENCE — Player has Versatile Defender Proficient+ AND is undersized → reduced size penalty.
-    Skill compensates for size disadvantage at the defensive end.
+    PRESENCE — Full height coverage from 6'0" to 7'2" (no holes) → slight defensive bonus.
+    A rotation that can match up against every height profile is harder to exploit
+    through positional mismatches.
     """
-    bonuses = []
-    for p in players:
-        if not _has_skill(p, "versatile_defender", "Proficient"):
+    all_players = [cornerstone] + players
+    covered: set[int] = set()
+    for p in all_players:
+        r = guard_range(p)
+        if r is None:
             continue
-        height_in = _parse_height_inches(p.get("height"))
-        if height_in is None:
-            continue
-        role_avg = _infer_role_average_height(height_in)
-        if height_in < role_avg - 2:
-            bonuses.append(p["name"])
-    if not bonuses:
+        low, high = r
+        covered.update(range(low, high + 1))
+
+    target = set(range(HEIGHT_COVERAGE_LOW, HEIGHT_COVERAGE_HIGH + 1))
+    if not target.issubset(covered):
         return None
-    delta = weights["DEF_06_versatile_widens_range"]
-    names = ", ".join(bonuses)
-    return (delta, f"{names} offsets size disadvantage with Versatile Defender skill.", "defense")
+
+    delta = weights["DEF_06_full_coverage_bonus"]
+    return (delta, "Full size coverage from 6'0\" to 7'2\" — no exploitable height mismatches.", "defense")
 
 
 check_DEF_06.presence_type = "presence"
@@ -322,15 +383,25 @@ check_DEF_07.presence_type = "presence"
 
 def check_DEF_08(players, agg, cornerstone, weights):
     """
-    PRESENCE — Any player with both an offensive skill AND a defensive skill → cohesion bonus.
-    Two-way players create asymmetric matchup problems for the opponent.
+    PRESENCE — Any player with both an offensive skill AND a defensive skill → cohesion bonus,
+    scaled by the product of their best offensive and defensive skill tiers.
+    An Elite/Elite two-way player creates compounding asymmetry; a Capable/Capable one
+    still helps but far less — the product captures how both sides must be credible threats.
     """
     twoway_players = [p for p in players if _is_twoway(p)]
     if not twoway_players:
         return None
-    delta = weights["DEF_08_two_way_bonus"] * len(twoway_players)
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
+    base = weights["DEF_08_two_way_bonus"]
+    all_off_skills = _ON_BALL_SKILLS | _OFF_BALL_SKILLS | _SHOOTING_SKILLS
+    total = 0.0
+    for p in twoway_players:
+        best_off = max((_tier_value(p, s) for s in all_off_skills), default=0)
+        best_def = max((_tier_value(p, s) for s in _DEFENSIVE_SKILLS), default=0)
+        # Product of both tier factors — both sides must be credible for full bonus
+        total += base * (best_off / elite_ref) * (best_def / elite_ref)
     names = ", ".join(p["name"] for p in twoway_players)
-    return (delta, f"{names} {'is' if len(twoway_players) == 1 else 'are'} two-way — offensive and defensive value.", "defense")
+    return (total, f"{names} {'is' if len(twoway_players) == 1 else 'are'} two-way — offensive and defensive value.", "defense")
 
 
 check_DEF_08.presence_type = "presence"
@@ -392,13 +463,19 @@ check_OFF_01.presence_type = "absence"
 
 def check_OFF_02(players, agg, cornerstone, weights):
     """
-    PRESENCE — Movement Shooter AND Screen Setter on DISTINCT players → Spacing bonus.
-    Screen actions create separation for movement shooters — requires a screen setter to execute.
+    PRESENCE — Movement Shooter AND Screen Setter on DISTINCT players → Spacing bonus,
+    scaled by the sum of movement shooter tier factors.
+    Better shooters extract more value from screens — an Elite movement shooter coming
+    off a curl is a categorically harder coverage assignment than a Capable one.
     """
     if not _synergy_check(players, "movement_shooter", "screen_setter"):
         return None
-    movement_count = agg.get("movement_shooter_count", 0)
-    delta = weights["OFF_02_screen_enables_movement"] * max(1, movement_count)
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
+    movement_shooters = _players_with_skill(players + [cornerstone], "movement_shooter")
+    # Sum tier factors across all movement shooters — each shooter extracts value from screens
+    tier_sum = sum(_tier_value(p, "movement_shooter") / elite_ref for p in movement_shooters)
+    tier_sum = max(1.0, tier_sum)  # floor at 1.0 so at least one Capable shooter gives base bonus
+    delta = weights["OFF_02_screen_enables_movement"] * tier_sum
     return (delta, "Screen setter enables movement shooters — off-ball actions create sustained spacing.", "spacing")
 
 
@@ -555,8 +632,11 @@ check_OFF_10.presence_type = "presence"
 
 def check_OFF_11(players, agg, cornerstone, weights):
     """
-    PRESENCE — Passer Capable+ present (including cornerstone) → multiplier on off-ball contributions.
-    Elite passing unlocks off-ball skills that would otherwise be underutilized.
+    PRESENCE — Passer Capable+ present (including cornerstone) → multiplier on off-ball contributions,
+    scaled by the best passer's tier.
+    An ATG passer finds shooters in tighter windows, hits cutters at full speed, and
+    delivers transition lobs that a Capable passer simply cannot — tier scaling captures
+    how pass quality amplifies off-ball value, not just pass presence.
     """
     if not agg.get("has_passer", False):
         return None
@@ -568,7 +648,12 @@ def check_OFF_11(players, agg, cornerstone, weights):
     )
     if offball_count == 0:
         return None
-    delta = weights["OFF_11_passer_offball_multiplier"] * offball_count
+    # Scale by best passer tier across full rotation including cornerstone
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
+    all_players = [cornerstone] + players
+    best_passer_tier = max((_tier_value(p, "passer") for p in all_players), default=0)
+    passer_factor = best_passer_tier / elite_ref
+    delta = weights["OFF_11_passer_offball_multiplier"] * offball_count * passer_factor
     return (delta, f"Passer unlocks {offball_count} off-ball skills — cutting, spacing, and transition amplified.", "creation")
 
 
@@ -616,6 +701,8 @@ def check_OFF_14(players, agg, cornerstone, weights):
     """
     PRESENCE — Cutter Capable+ AND at least one Proficient+ gravity player (Driver/Post/Iso) on DISTINCT players.
     Gravity players freeze defenders, creating the lanes that cutters exploit.
+    Scaled by each gravity player's best gravity skill tier — an Elite driver freezes
+    help defenders more completely than a Proficient one, opening wider cutting lanes.
     """
     cutter_count = agg.get("cutter_count", 0)
     if cutter_count == 0:
@@ -627,7 +714,13 @@ def check_OFF_14(players, agg, cornerstone, weights):
     cutter_ids = {id(p) for p in cutter_players}
     if not (gravity_ids - cutter_ids) or not (cutter_ids - gravity_ids):
         return None
-    delta = weights["OFF_14_cutter_gravity_bonus"] * len(gravity_players)
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
+    per_player = weights["OFF_14_cutter_gravity_bonus"]
+    # Accumulate tier-scaled contribution per gravity player
+    delta = sum(
+        per_player * (max(_tier_value(p, s) for s in _GRAVITY_SKILLS) / elite_ref)
+        for p in gravity_players
+    )
     return (delta, f"Gravity players freeze help defenders — cutting lanes open for {cutter_count} cutter(s).", "creation")
 
 
@@ -693,14 +786,18 @@ def check_OFF_17(players, agg, cornerstone, weights):
     """
     PRESENCE — Driver AND (Crafty Finisher OR High Flyer) on the SAME player.
     Finishing ability turns a driver into a reliable scorer rather than a layup artist.
+    Scaled by driver tier — an Elite driver reaching the rim with finishing ability
+    is a categorically harder problem than a Capable driver doing the same.
     Single-player modifier — both skills on same player.
     """
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
     for p in players:
         if not _has_skill(p, "driver"):
             continue
         has_finishing = _has_skill(p, "high_flyer") or _has_skill(p, "crafty_finisher")
         if has_finishing:
-            delta = weights["OFF_17_driver_finishing_bonus"]
+            driver_factor = _tier_value(p, "driver") / elite_ref
+            delta = weights["OFF_17_driver_finishing_bonus"] * driver_factor
             return (delta, f"{p['name']}'s finishing ability maximizes the value of drives to the rim.", "paint")
     return None
 
@@ -712,11 +809,15 @@ def check_OFF_18(players, agg, cornerstone, weights):
     """
     PRESENCE — Driver AND Passer on the SAME player.
     A driving passer is a nightmare for rim protectors who can't commit fully without giving up kicks.
+    Scaled by driver tier — an Elite driver draws more committed help, making the kick-out
+    more punishing than a Capable driver who can be bodied at the rim.
     Single-player modifier.
     """
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
     for p in players:
         if _has_skill(p, "driver") and _has_skill(p, "passer"):
-            delta = weights["OFF_18_driver_passing_bonus"]
+            driver_factor = _tier_value(p, "driver") / elite_ref
+            delta = weights["OFF_18_driver_passing_bonus"] * driver_factor
             return (delta, f"{p['name']}'s drive-and-kick ability keeps the defense honest.", "paint")
     return None
 
@@ -875,14 +976,18 @@ check_OFF_25.presence_type = "presence"
 
 def check_OFF_26(players, agg, cornerstone, weights):
     """
-    PRESENCE — High Flyer AND Cutter on the SAME player → multiplied cutting contribution.
-    High-flying athletes convert cuts at a higher rate — rim-level athleticism.
+    PRESENCE — High Flyer AND Cutter on the SAME player → multiplied cutting contribution,
+    scaled by high_flyer tier (consistent with OFF_25 and OFF_27).
+    An ATG high-flyer converting cuts is a rim-level finishing threat that defensive
+    schemes must account for differently than a Capable one.
     Single-player modifier.
     """
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
     for p in players:
         if _has_skill(p, "high_flyer") and _has_skill(p, "cutter"):
+            hf_factor = _tier_value(p, "high_flyer") / elite_ref
             mult = weights["OFF_26_high_flyer_cutting_mult"]
-            delta = (mult - 1.0) * 10
+            delta = (mult - 1.0) * 10 * hf_factor
             return (delta, f"{p['name']}'s athleticism converts cuts at a high rate — a finishing threat above the rim.", "creation")
     return None
 
@@ -892,14 +997,17 @@ check_OFF_26.presence_type = "presence"
 
 def check_OFF_27(players, agg, cornerstone, weights):
     """
-    PRESENCE — High Flyer AND PnR Finisher on the SAME player → multiplied PnR contribution.
+    PRESENCE — High Flyer AND PnR Finisher on the SAME player → multiplied PnR contribution,
+    scaled by high_flyer tier (consistent with OFF_25 and OFF_26).
     High-flying roll men are among the most efficient scorers per possession in basketball.
     Single-player modifier.
     """
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
     for p in players:
         if _has_skill(p, "high_flyer") and _has_skill(p, "pnr_finisher"):
+            hf_factor = _tier_value(p, "high_flyer") / elite_ref
             mult = weights["OFF_27_high_flyer_pnr_mult"]
-            delta = (mult - 1.0) * 10
+            delta = (mult - 1.0) * 10 * hf_factor
             return (delta, f"{p['name']}'s high-flying finish on the PnR roll is nearly unguardable at the rim.", "creation")
     return None
 
@@ -929,12 +1037,18 @@ def check_OFF_28(players, agg, cornerstone, weights):
         if not (handlers_only or finishers_only):
             return None
 
-    delta = weights["OFF_28_pnr_synergy_bonus"]
-    # Apply dual-star multiplier if both are in slots 1–3
+    # Scale bonus by both handler tier and finisher tier — a Curry/Draymond pair vs.
+    # a Capable/Capable pair is not the same interaction.
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
+    best_handler_tier  = max(_tier_value(p, "pnr_ball_handler") for p in handler_players)
+    best_finisher_tier = max(_tier_value(p, "pnr_finisher")     for p in finisher_players)
+    handler_factor  = best_handler_tier  / elite_ref
+    finisher_factor = best_finisher_tier / elite_ref
+    delta = weights["OFF_28_pnr_synergy_bonus"] * handler_factor * finisher_factor
+
     handler_slot = min((p.get("slot", 9) for p in handler_players), default=9)
     finisher_slot = min((p.get("slot", 9) for p in finisher_players), default=9)
     if handler_slot <= 3 and finisher_slot <= 3:
-        # Both are co-stars — apply the note but not a stacking multiplier in delta form
         return (delta, "Elite PnR pair — handler and roll man form a two-man game that breaks half-court defenses.", "creation")
     return (delta, "PnR handler and finisher present — pick-and-roll game creates repeatable high-percentage looks.", "creation")
 
@@ -1167,17 +1281,31 @@ def check_OFF_34(players: list[dict], agg: dict, cornerstone: dict, weights: dic
     per shooter beyond the first, capped at OFF_34_shooter_density_cap.
     """
     all_players = [cornerstone] + players
-    shooter_count = sum(
-        1 for p in all_players
+    shooters = [
+        p for p in all_players
         if _has_skill(p, "spot_up_shooter") or _has_skill(p, "movement_shooter")
-    )
-    if shooter_count < 2:
+    ]
+    if len(shooters) < 2:
         return None
 
+    # Sort shooters by best shooting tier descending; first is baseline (no compound bonus),
+    # each additional shooter contributes per_extra × (their_tier / elite_ref) — better
+    # shooters generate more gravity and earn a larger density contribution.
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
     per_extra = weights["OFF_34_shooter_density_per_extra"]
     cap       = weights["OFF_34_shooter_density_cap"]
-    bonus     = min((shooter_count - 1) * per_extra, cap)
 
+    def _best_shooting_tier(p: dict) -> float:
+        return max(_tier_value(p, "spot_up_shooter"), _tier_value(p, "movement_shooter"))
+
+    sorted_shooters = sorted(shooters, key=_best_shooting_tier, reverse=True)
+    bonus = sum(
+        per_extra * (_best_shooting_tier(p) / elite_ref)
+        for p in sorted_shooters[1:]  # first is baseline; compound from second onward
+    )
+    bonus = min(bonus, cap)
+
+    shooter_count = len(shooters)
     narrative = (
         f"Shooter density ({shooter_count} shooters): every lineup combination "
         f"maintains floor-wide gravity, compounding driving and post-entry opportunities."
@@ -1233,6 +1361,57 @@ check_OFF_35.presence_type = "presence"
 
 
 # ---------------------------------------------------------------------------
+# OFF-36 — Cornerstone spacing gravity
+# ---------------------------------------------------------------------------
+
+def check_OFF_36(players: list[dict], agg: dict, cornerstone: dict, weights: dict):
+    """
+    PRESENCE — Cornerstone has spacing skills → bonus to Spacing Score.
+
+    The cornerstone is slot-weight 0 in Layer 1, so their shooting contributes
+    nothing to the raw spacing score. But a cornerstone who can shoot forces
+    the defense to guard them on the perimeter — they cannot sag off to collapse
+    driving lanes or crowd the paint. That gravity is real and earns spacing credit.
+
+    Relative skill weights mirror SKILL_WEIGHTS in weights.py:
+      movement_shooter × 1.5  (creates separation in motion; harder to guard)
+      spot_up_shooter  × 1.2  (draws a defender to a fixed spot)
+      screen_setter    × 0.4  (enabler, not a spacer itself)
+
+    Each skill contribution is additionally scaled by its tier / elite_ref.
+    """
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
+    base = weights["OFF_36_cornerstone_spacing_base"]
+
+    # (skill, relative weight matching SKILL_WEIGHTS["spacing"] entries)
+    spacing_skills: list[tuple[str, float]] = [
+        ("movement_shooter", 1.5),
+        ("spot_up_shooter",  1.2),
+        ("screen_setter",    0.4),
+    ]
+
+    total = 0.0
+    for skill, skill_w in spacing_skills:
+        tier = _tier_value(cornerstone, skill)
+        if tier == 0:
+            continue
+        total += base * skill_w * (tier / elite_ref)
+
+    if total == 0:
+        return None
+
+    return (
+        total,
+        f"{cornerstone.get('name', 'Cornerstone')}'s shooting presence keeps defenders "
+        f"honest — gravity extends to their position, opening lanes for the supporting cast.",
+        "spacing",
+    )
+
+
+check_OFF_36.presence_type = "presence"
+
+
+# ---------------------------------------------------------------------------
 # Public registry — all modifier functions in evaluation order
 # ---------------------------------------------------------------------------
 
@@ -1245,5 +1424,5 @@ ALL_MODIFIERS: list = [
     check_OFF_16, check_OFF_17, check_OFF_18, check_OFF_19, check_OFF_20,
     check_OFF_21, check_OFF_22, check_OFF_23, check_OFF_24, check_OFF_25,
     check_OFF_26, check_OFF_27, check_OFF_28, check_OFF_29, check_OFF_30,
-    check_OFF_31, check_OFF_32, check_OFF_33, check_OFF_34, check_OFF_35,
+    check_OFF_31, check_OFF_32, check_OFF_33, check_OFF_34, check_OFF_35, check_OFF_36,
 ]
