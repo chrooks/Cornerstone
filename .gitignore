@@ -28,3 +28,4 @@ feature_requests/
 backend/salary_unmatched.txt
 backend/.next/trace*
 .reports/
+knowledge/
