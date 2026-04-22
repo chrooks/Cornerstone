@@ -27,13 +27,15 @@ A manual profile editor for 36 all-time NBA legends who have no modern stats.
 - Each legend is rated on the same 19-skill taxonomy via a Next.js UI
 - A **Claude suggestion feature** pre-populates ratings based on basketball knowledge for the user to accept or override
 
-### Part 3 — Roster Builder and Evaluator *(scaffolded for future build)*
+### Part 3 — Roster Builder and Evaluator
 The user-facing product.
 
 - Users browse current players and their skill profiles, and select an all-time great as their cornerstone
 - An 8-man roster is assembled within a salary cap budget
-- A **compatibility engine** evaluates roster cohesion across offensive fit, defensive fit, and role clarity
-- A score and narrative evaluation is generated via the Claude API
+- A **compatibility engine** evaluates roster cohesion across offensive fit, defensive fit, role clarity, and height coverage
+- A **GM Notes rule engine** (37+ rules) fires contextual observations about roster construction
+- A **cornerstone complement** feature suggests which skill types pair well with the chosen legend
+- A full scoring breakdown and narrative evaluation is generated via the Claude API
 
 All skill profiles, thresholds, flags, and legend profiles are persisted in Supabase.
 
@@ -44,15 +46,27 @@ All skill profiles, thresholds, flags, and legend profiles are persisted in Supa
 ```
 cornerstone/
   backend/
-    api/           Route blueprints (organized by domain)
-    migrations/    SQL migration source files
-    services/      Business logic (stat fetching, skill mapping, Supabase client)
+    api/                    Route blueprints (auth, builder, calibration, composite,
+                            health, legends, pipeline, players, review, rosters,
+                            salaries, skills)
+    services/
+      skill_engine/         Core stat-to-skill evaluation (conditions, transforms,
+                            evaluator, cache, history)
+      roster_evaluator/     Roster scoring engine (weights, modifiers, GM notes rules,
+                            cornerstone complement, hard checks, team description)
+      claude_assessment.py  Claude API integration for player skill ratings
+      compositing.py        Merges stat and Claude ratings, creates flags
+      nba_api_client.py     Fetches live stats from NBA.com
+      salary_scraper.py     Salary data ingestion
+      stats_assembler.py    Assembles per-player stat blobs for evaluation
+      notability.py         Notability signals for player context
   frontend/
-    app/           Next.js App Router pages
-    components/    Shared UI components (shadcn/ui)
-    lib/           API client, Supabase browser client, shared types
+    app/                    Next.js App Router pages (builder, players, legends,
+                            calibration, pipeline, review, login, signup)
+    components/             Shared UI components (shadcn/ui)
+    lib/                    API client, Supabase browser client, shared types
   supabase/
-    migrations/    Supabase CLI migration files (applied via `supabase db push`)
+    migrations/             Supabase CLI migration files (applied via `supabase db push`)
 ```
 
 ---
@@ -61,7 +75,7 @@ cornerstone/
 
 - Python 3.10+
 - Node.js 18+
-- A [Supabase](https://supabase.com) project
+- A [Supabase](https://supabase.com) project (with Auth enabled)
 - An [Anthropic API key](https://console.anthropic.com) (for Claude integration)
 
 ---
@@ -89,8 +103,10 @@ The schema is managed via the Supabase CLI. Migrations live in `supabase/migrati
 | `skill_profiles` | 19-skill ratings per player/season, per source |
 | `skill_flags` | Disagreements between stat-based and Claude ratings, pending review |
 | `skill_thresholds` | Calibration rules mapping stats to skill tiers (Elite/Capable/None) |
-| `legends` | 36 all-time greats — rated manually via the Legends Profile Builder |
+| `legends` | All-time greats — rated manually via the Legends Profile Builder |
 | `anchor_players` | Known-good tier assignments used to validate threshold calibration |
+| `rosters` | Saved user rosters (legend + 8 players) |
+| `salaries` | Current NBA player salary data |
 
 **To apply migrations to a new project:**
 
@@ -128,7 +144,7 @@ cp .env.example .env
 # Edit .env and fill in your credentials
 
 # Run the dev server
-flask run --port=5001
+python -m flask run --port=5001
 ```
 
 The API will be available at http://localhost:5001.
@@ -160,16 +176,28 @@ The app will be available at http://localhost:3000.
 
 ### backend/.env
 
-| Variable | Description |
-|---|---|
-| `SUPABASE_URL` | Your Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | Your Supabase service role key (keep secret — server only) |
-| `ANTHROPIC_API_KEY` | Your Anthropic API key for Claude integration |
+| Variable | Required | Description |
+|---|---|---|
+| `SUPABASE_URL` | Yes | Your Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | Yes | Your Supabase service role key (keep secret — server only) |
+| `SUPABASE_JWT_SECRET` | Yes | JWT secret for admin auth — Supabase Dashboard → Project Settings → API → JWT Secret |
+| `ANTHROPIC_API_KEY` | Yes | Your Anthropic API key for Claude integration |
+| `FRONTEND_ORIGIN` | No | Allowed CORS origin (default: `http://localhost:3000`) |
+| `CLAUDE_MODEL` | No | Claude model to use (default: `claude-sonnet-4-20250514`) |
 
 ### frontend/.env.local
 
-| Variable | Description |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon/public key |
-| `NEXT_PUBLIC_API_URL` | Flask backend URL (default: `http://localhost:5001`) |
+| Variable | Required | Description |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Your Supabase anon/public key |
+| `NEXT_PUBLIC_API_URL` | Yes | Flask backend URL (default: `http://localhost:5001`) |
+| `NEXT_PUBLIC_CALIBRATION_API_KEY` | No | Key for calibration write endpoints |
+
+---
+
+## Authentication
+
+The app uses Supabase Auth (email/password). Login and signup pages live at `/login` and `/signup`.
+
+Backend write endpoints (calibration, pipeline, review) are gated behind `require_admin`, which validates the Supabase JWT and checks for the `admin` role. To grant admin access, set `role: 'admin'` in the user's `app_metadata` via the Supabase dashboard.

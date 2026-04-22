@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 cd backend
 source venv/bin/activate
 python -m flask run --port=5001        # Dev server at http://localhost:5001
-python -m pytest tests/      # Run all tests
+python -m pytest tests/                # Run all tests
 python -m pytest tests/test_skill_mapping_service.py  # Single test file
 ```
 
@@ -23,84 +23,159 @@ npm run lint    # ESLint
 
 ### Database
 ```bash
-supabase db push             # Apply pending migrations
-# New migrations: add timestamped file to supabase/migrations/, then push
+supabase db push   # Apply pending migrations to linked project
+# New migrations: add a timestamped .sql file to supabase/migrations/, then push
 ```
+
+---
 
 ## Architecture Overview
 
-This is a three-layer NBA skill evaluation platform:
+Three-layer NBA skill evaluation and roster builder platform.
 
-**Layer 1 — Skill Pipeline** (internal tooling)
-- Backend fetches stats from NBA.com via `nba_api`, maps them to a 19-skill taxonomy
-- Claude API independently rates players on the same taxonomy
-- A compositing service compares both ratings: agreements are auto-accepted, disagreements create `skill_flags` for manual review
-- Frontend tools: threshold calibration (`/calibration`), pipeline runner (`/pipeline`), review queue (`/review`)
+```
+Frontend (Next.js) ──HTTP + JWT──▶ Backend (Flask) ──SQL──▶ Supabase PostgreSQL
+```
 
-**Layer 2 — Legends Builder** (`/legends`)
-- Manual editor for 36 all-time greats rated on the same 19-skill taxonomy
-- Claude pre-populates suggestions via `POST /api/legends/<id>/suggest`
+**Layer 1 — Skill Pipeline** (admin tooling at `/admin/*`)
+- Stats fetched from NBA.com via `nba_api` → assembled by `stats_assembler.py` → stored in `player_stats`
+- `skill_engine/` evaluates each of 19 skills against JSONB threshold rules → `skill_profiles` (source: `"stats"`)
+- `claude_assessment.py` asks Claude API for the same 19 ratings → `skill_profiles` (source: `"claude"`)
+- `compositing.py` merges both: agreements auto-accepted, disagreements create `skill_flags` for manual review
+- Frontend tools: `/admin/calibration` (threshold editor), `/admin/pipeline` (stat fetch trigger), `/admin/review` (flag resolver)
 
-**Layer 3 — Roster Builder** (`/` — scaffolded, not fully built)
-- Users build 8-man rosters around a cornerstone legend within a salary cap
+**Layer 2 — Legends Builder** (`/admin/legends`)
+- Manual editor for all-time greats rated on the same 19-skill taxonomy
+- `POST /api/legends/<id>/claude-suggestion` pre-populates ratings; admin accepts or overrides
 
-### Backend Structure
+**Layer 3 — Roster Builder** (`/builder`)
+- Users pick a legend cornerstone ($54M salary), add up to 7 supporting players within a salary cap
+- `POST /api/builder/evaluate` runs `roster_evaluator/` to score the roster: base skill weights, dynamic modifiers, hard checks, cornerstone complement synergies, GM Notes (37+ rules), and a Claude-generated team description
+
+---
+
+## Backend Structure
 
 ```
 backend/
-  app.py                        # Flask factory — registers all blueprints
-  api/                          # Route blueprints, one per domain
+  app.py                          # Flask factory — registers 11 blueprints, configures CORS
+  api/
+    auth.py                       # @require_admin JWT decorator (HS256/RS256/ES256)
+    builder.py                    # POST /builder/evaluate
+    calibration.py                # GET/PUT /skills/thresholds, /anchors
+    composite.py                  # POST /players/<id>/composite-profile, /claude-assessment
+    health.py                     # GET /health
+    legends.py                    # CRUD + /claude-suggestion
+    pipeline.py                   # GET /pipeline/status, POST /pipeline/fetch-stats
+    players.py                    # Full player management (search, stats, profile, bio)
+    review.py                     # GET /review/queue, POST /review/<id>/resolve
+    rosters.py                    # CRUD for rosters + roster_slots
+    salaries.py                   # GET /salaries/bulk
   services/
-    skill_engine/               # Core evaluation engine (conditions, transforms, evaluator, cache, history)
-    skill_mapping_service.py    # Orchestrates stat-to-skill evaluation using skill_engine
-    compositing.py              # Merges stat and Claude ratings, creates flags
-    claude_assessment.py        # Claude API integration for player skill ratings
-    nba_api_client.py           # Fetches live stats from NBA.com
-    supabase_client.py          # Supabase singleton client
-    players_service.py          # Player CRUD and bulk queries
+    skill_engine/                 # Core stat→skill evaluation sub-package
+      conditions.py               # evaluate_condition(), evaluate_conditions_block()
+      evaluator.py                # evaluate_skill(), apply_auto_promotions(), tier bumps
+      transforms.py               # apply_pre_adjustments(), apply_stabilization()
+      cache.py                    # get_thresholds(), compute_and_store_league_averages()
+      history.py                  # Multi-season stat blending
+    roster_evaluator/             # Roster scoring engine
+      evaluator.py                # RosterEvaluator.evaluate_roster() — 770 lines, main entry
+      weights.py                  # Per-skill base score contributions
+      modifiers.py                # Dynamic modifiers (playoff, era, tier-scaled) — 1600 lines
+      hard_checks.py              # Validation (physical constraints, draft-pick rules)
+      cornerstone_complement.py   # Synergy scores: how well players complement cornerstone
+      team_description.py         # Claude-powered narrative generation
+      types.py                    # RosterEvaluation dataclass + related types
+    skill_mapping_service.py      # Orchestrates skill_engine + compositing + Claude API
+    claude_assessment.py          # rate_player(), suggest_skills_for_legend()
+    compositing.py                # merge_ratings(), create_flags()
+    nba_api_client.py             # Fetches live stats from NBA.com
+    stats_assembler.py            # Compiles raw NBA.com stats into player_stats JSONB blob
+    salary_scraper.py             # Salary data ingestion
+    players_service.py            # get_player(), list_players(), create_player()
+    notability.py                 # Notability signals for player context
+    supabase_client.py            # Supabase singleton: get_supabase()
+    skills.py                     # SKILL_LIST, SKILL_LABELS (backend canonical source)
 ```
 
-**Key services pattern**: `skill_engine/` is a sub-package extracted from the original monolithic `skill_mapping_service.py`. Each file in `skill_engine/` has a single responsibility (conditions evaluation, stat transforms, tier evaluation, caching, history).
+---
 
-### Frontend Structure
+## Frontend Structure
 
 ```
 frontend/
-  app/                          # Next.js App Router pages
-    calibration/                # Threshold calibration tool (complex UI)
-    pipeline/                   # Pipeline status dashboard
-    review/                     # Review queue + per-player flag resolution
-    legends/                    # Legends grid + editor
-    players/                    # Player explorer + individual profile pages
+  app/
+    page.tsx                      # Home / splash
+    login/, signup/               # Supabase auth forms
+    unauthorized/                 # Auth error page
+    players/                      # Player explorer + [player_id] profile
+    builder/                      # Roster editor (drag-drop via @dnd-kit)
+      evaluate/                   # Evaluation results: score breakdown, GM Notes, narrative
+    admin/
+      calibration/                # Threshold JSONB editor (Monaco editor)
+      pipeline/                   # Pipeline status + trigger
+      review/                     # Flag queue + [player_id] resolver
+      legends/                    # Legend grid + [legend_id] editor
+      players/[player_id]/        # Admin player editor
   lib/
-    types.ts                    # All shared TypeScript types (mirrors backend response shapes)
-    api.ts                      # All fetch calls to Flask backend via apiFetch()
-    skills.ts                   # SKILL_LIST, SKILL_LABELS — the canonical 19-skill taxonomy
-    tiers.ts                    # SKILL_TIERS ordering and display helpers
-    stat-keys.ts                # Stat key labels for display
-  components/                   # shadcn/ui components
+    api.ts                        # All backend calls via apiFetch<T>() — injects JWT + base URL
+    types.ts                      # All TypeScript interfaces (mirrors backend response shapes)
+    skills.ts                     # SKILL_LIST, SKILL_LABELS, SKILL_TIERS (frontend canonical source)
+    tiers.ts                      # getTierColor(), getTierIcon(), getTierLabel()
+    stat-keys.ts                  # Display labels for raw stat keys
+  components/                     # shadcn/ui + custom components
 ```
 
-**Key frontend pattern**: All backend calls go through `apiFetch<T>()` in `lib/api.ts`, which prepends the base URL and injects the calibration API key for write requests. Types in `lib/types.ts` mirror backend response shapes exactly.
+**Key frontend pattern**: All backend calls go through `apiFetch<T>()` in `lib/api.ts`. Types in `lib/types.ts` mirror backend response shapes exactly. All API responses follow `{ success, data, error }` envelope.
 
-### Skill Threshold Data Model
+---
 
-Skill thresholds are stored as JSONB in the `skill_thresholds` table. Each row has a `thresholds` field with this shape:
-```
+## Key Constraints
+
+- **Skill thresholds are JSONB, not SQL** — threshold updates always go through the calibration API (`PUT /api/skills/thresholds/<skill_name>`), never as SQL migrations. The calibration UI edits these live.
+- **Volume gates use per-game divisors** — `~70 games` for a full season. Never use raw per-season counts in threshold conditions.
+- **`apply_pre_adjustments` uses `copy.deepcopy`** — load-bearing; removing it causes stat mutations to bleed across multiple adjustments.
+- **19-skill taxonomy is immutable** — defined in `backend/services/skills.py` and `frontend/lib/skills.ts`. Adding a skill requires a DB migration.
+- **Admin write endpoints require `@require_admin`** — decorator in `api/auth.py` verifies Supabase JWT and checks `user_roles` table. Grant admin via Supabase dashboard (`user_roles` table, `role = 'admin'`).
+- **`NEXT_PUBLIC_CALIBRATION_API_KEY`** — required in frontend `.env.local` for calibration write endpoints.
+
+---
+
+## Skill Threshold Schema
+
+```json
 {
-  volume_gate: ConditionsBlock,     # minimum games/minutes to qualify
-  tiers: { Elite: ConditionsBlock, Proficient: ConditionsBlock, Capable: ConditionsBlock },
-  tier_bumps: TierBump[],           # promote/demote based on secondary conditions
-  auto_promotions: AutoPromotion[], # link one skill's tier to another's minimum
-  stabilization: StabilizationConfig[],  # Bayesian regression-to-mean configs
-  pre_adjustments: []               # stat mutations applied before evaluation
+  "volume_gate": ConditionsBlock,
+  "tiers": {
+    "Elite": ConditionsBlock,
+    "Proficient": ConditionsBlock,
+    "Capable": ConditionsBlock
+  },
+  "tier_bumps": [{ "condition": ConditionsBlock, "bump_tier": "Elite" }],
+  "auto_promotions": [{ "source_skill": "Scorer", "target_skill": "OffDribbShooter", "min_tier": "Elite" }],
+  "stabilization": [{ "metric": "pts", "regression_factor": 0.7 }],
+  "pre_adjustments": []
 }
 ```
 
-The calibration UI allows editing these JSONB rules directly. **Do not convert threshold updates to SQL migrations** — always return updated JSON to the calibration endpoint.
+---
 
-### Key Constraints
+## Environment Variables
 
-- **Skill thresholds use per-game volume conditions** — the volume gate divisor is ~70 games (a full season). Don't use per-season raw counts when writing new threshold conditions.
-- **`apply_pre_adjustments` in skill_engine uses `copy.deepcopy`** — this is load-bearing; removing it causes multiple adjustments to mutate the original stats blob.
-- **API write endpoints require `X-Calibration-Key` header** — set `NEXT_PUBLIC_CALIBRATION_API_KEY` in frontend `.env.local`.
+### backend/.env
+| Variable | Required | Notes |
+|---|---|---|
+| `SUPABASE_URL` | Yes | Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | Yes | Service role key — server only |
+| `SUPABASE_JWT_SECRET` | Yes | For HS256 JWT verification (newer projects use JWKS/RS256 auto-fetched) |
+| `ANTHROPIC_API_KEY` | Yes | Claude API key |
+| `FRONTEND_ORIGIN` | No | CORS origin (default: `http://localhost:3000`) |
+| `CLAUDE_MODEL` | No | Model override (default: `claude-sonnet-4-20250514`) |
+
+### frontend/.env.local
+| Variable | Required | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public anon key |
+| `NEXT_PUBLIC_API_URL` | Yes | Flask backend URL (default: `http://localhost:5001`) |
+| `NEXT_PUBLIC_CALIBRATION_API_KEY` | No | Key for calibration write endpoints |
