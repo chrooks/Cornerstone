@@ -99,3 +99,6 @@ class RosterEvaluation:
     player_traces: dict[str, dict] | None = field(default=None)
     aggregate_traces: dict[str, object] | None = field(default=None)
     height_coverage: dict | None = field(default=None)
+    # LLM-generated GM-memo narrative — only populated in final mode.
+    # None when mode is "live" or when the Anthropic API call fails.
+    team_description: str | None = field(default=None)

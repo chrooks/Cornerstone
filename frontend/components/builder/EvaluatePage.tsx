@@ -24,6 +24,83 @@ import { DebugPanel } from "./DebugPanel";
 import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
+// TeamDescriptionCard — LLM-generated GM-memo narrative (final mode only)
+// ---------------------------------------------------------------------------
+
+interface TeamDescriptionCardProps {
+  /** The narrative text, or null/undefined if not yet available or not applicable */
+  description: string | null | undefined;
+  /** True while the final evaluation API call is in flight */
+  isLoading: boolean;
+}
+
+/**
+ * Collapsible card displaying the LLM-generated team identity narrative.
+ *
+ * Renders a spinner placeholder while the evaluation is loading (final mode only).
+ * Renders nothing when not loading and no description is available.
+ * Expanded by default when a description is present.
+ */
+function TeamDescriptionCard({ description, isLoading }: TeamDescriptionCardProps) {
+  // Track open/collapsed state — default open so the narrative is immediately visible
+  const [isOpen, setIsOpen] = useState(true);
+
+  // Don't render anything if we're not loading and there's no content
+  if (!isLoading && !description) return null;
+
+  return (
+    <div id="eval-team-description" className="border border-border rounded-lg overflow-hidden">
+      {/* Header — always visible, toggles collapse */}
+      <button
+        id="eval-team-description-toggle"
+        type="button"
+        onClick={() => setIsOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-muted/30 transition-colors cursor-pointer"
+        aria-expanded={isOpen}
+      >
+        <span className="text-sm font-semibold text-purple-400">
+          Team Identity
+        </span>
+        <span className="text-muted-foreground text-xs font-mono" aria-hidden>
+          {isOpen ? "▾" : "▸"}
+        </span>
+      </button>
+
+      {/* Content — only rendered when open */}
+      {isOpen && (
+        <div id="eval-team-description-content" className="px-4 pb-4 pt-1">
+          {isLoading ? (
+            // Spinner placeholder while the API call is in flight
+            <div id="eval-team-description-loading" className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+              <svg
+                className="animate-spin h-3.5 w-3.5 text-muted-foreground"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+              Generating team identity…
+            </div>
+          ) : (
+            // Render each paragraph from the narrative as its own <p> element
+            <div id="eval-team-description-text" className="space-y-3">
+              {description!.split("\n\n").map((para, i) => (
+                <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                  {para.trim()}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -245,7 +322,7 @@ export function EvaluatePage() {
         <RosterSummary allSlots={dataReady.slots} cornerstoneId={cornerstoneId} />
       )}
 
-      {/* Loading skeleton */}
+      {/* Loading skeleton — shown while player data loads (phase 1) or evaluation runs (phase 2) */}
       {isLoading && (
         <div id="eval-skeleton" className="space-y-4 animate-pulse">
           <div className="h-32 bg-muted rounded-xl" />
@@ -255,6 +332,13 @@ export function EvaluatePage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Team Identity spinner — visible during the evaluation API call (final mode only).
+          Since this page always calls in final mode, we always show the spinner while evaluating
+          so the user can see where the narrative will appear before results arrive. */}
+      {evalState === "evaluating" && (
+        <TeamDescriptionCard description={null} isLoading={true} />
       )}
 
       {/* Error */}
@@ -268,6 +352,12 @@ export function EvaluatePage() {
 
           {/* Score display — all 9 dimensions */}
           <ScoreDisplay scores={evaluation.scores} />
+
+          {/* Team Identity — LLM GM-memo narrative (final mode only) */}
+          <TeamDescriptionCard
+            description={evaluation.team_description}
+            isLoading={false}
+          />
 
           {/* Notes — issues, suggestions, strengths in collapsible sections */}
           <NotesList issues={issues} suggestions={suggestions} strengths={strengths} />

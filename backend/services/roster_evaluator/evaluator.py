@@ -16,13 +16,17 @@ and modifier condition checks — never to the aggregate dimension scores.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Literal
+
+logger = logging.getLogger(__name__)
 
 from .modifiers import ALL_MODIFIERS, guard_range, _parse_height_inches, HEIGHT_COVERAGE_LOW, HEIGHT_COVERAGE_HIGH
 from .hard_checks import ALL_HARD_CHECKS
 from .optionality import compute_optionality, compute_robustness
 from .cornerstone_complement import get_complement_notes
+from .team_description import generate_team_description
 from .types import Note, RosterEvaluation, Scores
 from .weights import (
     TIER_VALUES,
@@ -38,6 +42,7 @@ from .weights import (
     ABSENCE_NOTE_MIN_PLAYERS,
     COMPLEMENT_STAGE_CUTOFF,
     SPACING_SLOT_WEIGHT_FLOOR,
+    NOTE_SUPPRESSION_THRESHOLD,
 )
 
 # Skills that contribute to the spacing dimension — these use SPACING_SLOT_WEIGHT_FLOOR
@@ -649,6 +654,14 @@ def evaluate_roster(
         # not just the magnitude of this one modifier's delta.
         severity = _severity_from_delta(delta, presence_type, _final_score_lookup.get(dimension))
 
+        # Suppress negative notes when the final dimension score is healthy enough
+        # that the note's premise no longer holds. Modifiers fire against pre-modifier
+        # scores — positive modifiers can later push a dimension well past the threshold,
+        # making "floor spacing is too thin (34)" misleading when final spacing is 84.
+        final_dim_score = _final_score_lookup.get(dimension)
+        if delta < 0 and final_dim_score is not None and final_dim_score > NOTE_SUPPRESSION_THRESHOLD:
+            continue
+
         # Apply note_min_severity override (promotes only — never demotes)
         min_severity = _MIN_SEVERITY_OVERRIDES.get(trace_key)
         if min_severity is not None and SEVERITY_ORDER[severity] > SEVERITY_ORDER[min_severity]:
@@ -710,10 +723,25 @@ def evaluate_roster(
     # ----- Height coverage (always computed — cheap, used by debug chart) -----
     height_coverage_out = _compute_height_coverage([cornerstone] + supporting_players)
 
+    # ----- LLM team description (final mode only — too slow for live) -----
+    # Calls Anthropic haiku; any failure degrades gracefully to None.
+    # The service's own try/except handles most failures; the outer guard here
+    # ensures the whole evaluation never fails due to the LLM being unavailable.
+    team_description_out: str | None = None
+    if mode == "final":
+        try:
+            team_description_out = generate_team_description(cornerstone, supporting_players, scores)
+        except Exception:
+            logger.exception(
+                "generate_team_description raised unexpectedly — continuing with None"
+            )
+            team_description_out = None
+
     return RosterEvaluation(
         scores=scores,
         notes=all_notes,
         player_traces=player_traces_out,
         aggregate_traces=aggregate_traces_out,
         height_coverage=height_coverage_out,
+        team_description=team_description_out,
     )

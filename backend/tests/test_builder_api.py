@@ -438,3 +438,72 @@ class TestEvaluateEndpointValidation:
             "mode": "live",
         })
         assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# team_description field — LLM-generated GM-memo narrative
+# ---------------------------------------------------------------------------
+
+class TestTeamDescription:
+    def test_final_mode_returns_team_description_field(self, client):
+        """
+        Final mode response must include team_description when generate_team_description
+        returns a string. We mock the service so no real Anthropic API call is made.
+        """
+        from unittest.mock import patch
+
+        players = [
+            minimal_cornerstone(),
+            minimal_supporting_player("Alice", 1),
+            minimal_supporting_player("Bob", 2),
+        ]
+
+        # Mock at the point where evaluator.py imports and calls it
+        with patch(
+            "services.roster_evaluator.evaluator.generate_team_description",
+            return_value="Test narrative.",
+        ):
+            resp, data = post_evaluate(client, {"players": players, "mode": "final", "debug": False})
+
+        assert resp.status_code == 200
+        assert data["success"] is True
+        assert data["data"]["team_description"] == "Test narrative."
+
+    def test_live_mode_team_description_is_null(self, client):
+        """
+        Live mode must never call the LLM — team_description must be null regardless
+        of what the LLM would return.
+        """
+        players = [
+            minimal_cornerstone(),
+            minimal_supporting_player("Alice", 1),
+        ]
+        resp, data = post_evaluate(client, {"players": players, "mode": "live", "debug": False})
+
+        assert resp.status_code == 200
+        assert data["data"]["team_description"] is None
+
+    def test_final_mode_description_null_on_api_failure(self, client):
+        """
+        If generate_team_description raises an exception the response should still
+        be 200 and team_description should be null — failure mode is graceful degradation.
+
+        Note: the service itself catches and logs all exceptions, returning None.
+        We raise inside the mock to simulate a code path where the exception escapes
+        before the service's own try/except (e.g., network error at client creation).
+        """
+        from unittest.mock import patch
+
+        players = [
+            minimal_cornerstone(),
+            minimal_supporting_player("Alice", 1),
+        ]
+
+        with patch(
+            "services.roster_evaluator.evaluator.generate_team_description",
+            side_effect=RuntimeError("API down"),
+        ):
+            resp, data = post_evaluate(client, {"players": players, "mode": "final", "debug": False})
+
+        assert resp.status_code == 200
+        assert data["data"]["team_description"] is None

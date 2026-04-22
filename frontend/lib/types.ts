@@ -489,6 +489,8 @@ export interface RosterEvaluation {
   aggregate_traces: Record<string, unknown> | null;
   /** Always populated — height guard coverage across the 6'0"–7'2" window */
   height_coverage: HeightCoverageData | null;
+  /** LLM-generated GM-memo narrative; only present in final mode, null on failure or live mode */
+  team_description?: string | null;
 }
 
 /** Request payload for POST /api/builder/evaluate */

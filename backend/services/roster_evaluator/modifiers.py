@@ -433,6 +433,35 @@ def check_DEF_09(players, agg, cornerstone, weights):
 check_DEF_09.presence_type = "absence"
 
 
+def check_DEF_10(players, agg, cornerstone, weights):
+    """
+    PRESENCE — 2+ Perimeter Disruptors → transition bonus, scaled by tier.
+    Mirrors DEF_02 at 0.8x: elite perimeter pressure generates deflections and live-ball
+    turnovers that convert directly into fast-break opportunities. More disruptors,
+    and higher-tier ones, produce more transition chances.
+    """
+    count = agg.get("perimeter_disruptor_count", 0)
+    if count < 2:
+        return None
+    elite_ref = float(TIER_VALUES.get("Elite", 5))
+    all_players = [cornerstone] + players
+    disruptors = sorted(
+        _players_with_skill(all_players, "perimeter_disruptor"),
+        key=lambda p: _tier_value(p, "perimeter_disruptor"),
+        reverse=True,
+    )
+    per_player = weights["DEF_10_perimeter_transition_per_player"]
+    # Compound from the second disruptor onward, same structure as DEF_02
+    delta = sum(
+        per_player * (_tier_value(p, "perimeter_disruptor") / elite_ref)
+        for p in disruptors[1:]
+    )
+    return (delta, f"Perimeter pressure ({count} disruptors) generates deflections and live-ball turnovers — transition opportunities increase.", "transition")
+
+
+check_DEF_10.presence_type = "presence"
+
+
 # ---------------------------------------------------------------------------
 # Spacing / On-Ball Balance modifiers (OFF-01 through OFF-10)
 # ---------------------------------------------------------------------------
@@ -1417,13 +1446,41 @@ def check_OFF_36(players: list[dict], agg: dict, cornerstone: dict, weights: dic
 check_OFF_36.presence_type = "presence"
 
 
+def check_OFF_37(players, agg, cornerstone, weights):
+    """
+    ABSENCE — Only 1 Capable+ passer in the full rotation → playmaker concentration warning.
+    A single primary playmaker creates a hard lineup dependency: when that player sits,
+    the bench loses its half-court orchestrator and the offense devolves into spot-up looks
+    and transition shots rather than generated half-court creation. This fires regardless
+    of the creation score — a 98 creation score built on one passer is structurally fragile.
+
+    Targets roster_balance (not creation) so note survives the healthy-score suppression filter.
+    """
+    all_players = [cornerstone] + players
+    passers = [p for p in all_players if _has_skill(p, "passer")]
+    if len(passers) != 1:
+        return None
+    passer_name = passers[0].get("name", "the primary playmaker")
+    delta = weights["OFF_37_single_passer_dependency"]
+    return (
+        delta,
+        f"Creation runs through {passer_name} — bench units have no half-court orchestrator when they sit. "
+        f"The offense becomes a series of spot-up looks and transition attempts without a second passer to sustain generated creation.",
+        "roster_balance",
+    )
+
+
+check_OFF_37.presence_type = "absence"
+check_OFF_37.note_min_severity = "warning"
+
+
 # ---------------------------------------------------------------------------
 # Public registry — all modifier functions in evaluation order
 # ---------------------------------------------------------------------------
 
 ALL_MODIFIERS: list = [
     check_DEF_01, check_DEF_02, check_DEF_03, check_DEF_04, check_DEF_05,
-    check_DEF_06, check_DEF_07, check_DEF_08, check_DEF_09,
+    check_DEF_06, check_DEF_07, check_DEF_08, check_DEF_09, check_DEF_10,
     check_OFF_01, check_OFF_02, check_OFF_03, check_OFF_04, check_OFF_05,
     check_OFF_06, check_OFF_07, check_OFF_08, check_OFF_09, check_OFF_10,
     check_OFF_11, check_OFF_12, check_OFF_13, check_OFF_14, check_OFF_15,
@@ -1431,4 +1488,5 @@ ALL_MODIFIERS: list = [
     check_OFF_21, check_OFF_22, check_OFF_23, check_OFF_24, check_OFF_25,
     check_OFF_26, check_OFF_27, check_OFF_28, check_OFF_29, check_OFF_30,
     check_OFF_31, check_OFF_32, check_OFF_33, check_OFF_34, check_OFF_35, check_OFF_36,
+    check_OFF_37,
 ]

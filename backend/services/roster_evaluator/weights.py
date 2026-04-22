@@ -125,6 +125,7 @@ MODIFIER_DELTAS: dict[str, float] = {
     "DEF_08_two_way_bonus":                 +2.5,
     "DEF_09_rebounding_deficit_penalty":     -10,  # additive penalty when rebounding is deficient
     "DEF_09_rebounding_deficit_cap":        60,   # hard cap value on defense score after penalty
+    "DEF_10_perimeter_transition_per_player": +4,  # 0.8 × DEF_02; perimeter pressure → deflections → fast breaks
 
     # Spacing
     "OFF_01_low_spacing_caps_creation":     -18,  # per threshold breach level
@@ -141,7 +142,7 @@ MODIFIER_DELTAS: dict[str, float] = {
     "OFF_10_cornerstone_raises_spacing_threshold": 10,  # points added to spacing threshold
 
     # Passers & Off-Ball
-    "OFF_11_passer_offball_multiplier":     +0.5,   # per off-ball skill enabled
+    "OFF_11_passer_offball_multiplier":     +0.4,   # per off-ball skill enabled (reduced from 0.5 — prevents single ATG passer inflating creation unrealistically)
     "OFF_12_cutter_without_passer":         -8,
     "OFF_13_cutter_without_spacing":        -6,
     "OFF_14_cutter_gravity_bonus":          +2,
@@ -167,6 +168,9 @@ MODIFIER_DELTAS: dict[str, float] = {
     "OFF_28_pnr_synergy_bonus":             +8,
     "OFF_29_pnr_handler_secondary_bonus":   +1,   # per secondary skill
     "OFF_30_pnr_finisher_secondary_bonus":  +1,   # per secondary skill
+
+    # Creation concentration
+    "OFF_37_single_passer_dependency":      -10,  # penalty when only 1 passer in full rotation
 
     # Transition
     "OFF_31_transition_passer_synergy":     +8,
@@ -242,3 +246,15 @@ ABSENCE_NOTE_MIN_PLAYERS: int = 3
 # suggestion module retires and the main modifier system takes over fully.
 # ---------------------------------------------------------------------------
 COMPLEMENT_STAGE_CUTOFF: int = 3
+
+# ---------------------------------------------------------------------------
+# Healthy-dimension note suppression — negative modifier notes are dropped when
+# the final dimension score exceeds this threshold.
+#
+# Modifiers run in Layer 3 against pre-modifier scores. When positive modifiers
+# later push a dimension well into healthy territory, the negative notes that fired
+# against the raw score become misleading (e.g. "floor spacing is too thin (34)"
+# when the final spacing is 84). Any negative note whose dimension finishes above
+# this threshold is suppressed entirely — the score answers the concern already.
+# ---------------------------------------------------------------------------
+NOTE_SUPPRESSION_THRESHOLD: float = 65.0
