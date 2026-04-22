@@ -203,7 +203,7 @@ def _delta_to_severity(delta: float) -> str:
     elif delta > 8:
         return "strength"
     else:
-        return "tip"
+        return "suggestion"
 
 
 # ---------------------------------------------------------------------------
@@ -268,7 +268,10 @@ def check_DEF_03(players, agg, cornerstone, weights):
     PRESENCE — Versatile Defender AND Perimeter Disruptor both present → compound bonus.
     Different defender archetypes covering different threat profiles.
     """
-    if agg.get("versatile_defender_count", 0) == 0 or agg.get("perimeter_disruptor_count", 0) == 0:
+    all_players = [cornerstone] + players
+    if not any(_has_skill(p, "versatile_defender") for p in all_players):
+        return None
+    if not any(_has_skill(p, "perimeter_disruptor") for p in all_players):
         return None
     delta = weights["DEF_03_versatile_perimeter_compound"]
     return (delta, "Versatile defenders and perimeter disruptors complement each other.", "defense")
@@ -288,7 +291,7 @@ def check_DEF_04(players, agg, cornerstone, weights):
     if versatile_count < 3:
         return None
     delta = weights["DEF_04_no_rim_versatile_mitigation"]
-    return (delta, f"No rim anchor, but {versatile_count} versatile defenders partially compensate through rotations.", "defense")
+    return (delta, f"No rim anchor — {versatile_count} versatile defenders rotate to cover. Add a rim protector to unlock full interior deterrence and defensive switching.", "defense")
 
 
 check_DEF_04.presence_type = "absence"
@@ -331,7 +334,7 @@ def check_DEF_05(players, agg, cornerstone, weights):
     return (
         delta,
         f"{len(holes)} height inch{'es' if len(holes) > 1 else ''} uncovered ({hole_ranges}) — "
-        f"opponents in that size range operate without a size-matched defender.",
+        f"opponents in that size range find easy matchups. Add a versatile defender in that size range to close the gap.",
         "defense",
     )
 
@@ -370,15 +373,16 @@ def check_DEF_07(players, agg, cornerstone, weights):
     PRESENCE — Any player with None across all offensive skills → Spacing Score penalty.
     Offensive black holes shrink the floor and force teammates to carry more offensive burden.
     """
-    blackholes = [p for p in players if _is_offensive_blackhole(p)]
+    blackholes = [p for p in players + [cornerstone] if _is_offensive_blackhole(p)]
     if not blackholes:
         return None
     delta = weights["DEF_07_black_hole_spacing_penalty"] * len(blackholes)
     names = ", ".join(p["name"] for p in blackholes)
-    return (delta, f"{names} {'has' if len(blackholes) == 1 else 'have'} no offensive skills — floor spacing shrinks.", "spacing")
+    return (delta, f"{names} {'has' if len(blackholes) == 1 else 'have'} no offensive skills — floor spacing collapses. Add a shooter or replace with a two-way player to relieve the floor.", "spacing")
 
 
 check_DEF_07.presence_type = "presence"
+check_DEF_07.note_min_severity = "warning"
 
 
 def check_DEF_08(players, agg, cornerstone, weights):
@@ -388,7 +392,7 @@ def check_DEF_08(players, agg, cornerstone, weights):
     An Elite/Elite two-way player creates compounding asymmetry; a Capable/Capable one
     still helps but far less — the product captures how both sides must be credible threats.
     """
-    twoway_players = [p for p in players if _is_twoway(p)]
+    twoway_players = [p for p in players + [cornerstone] if _is_twoway(p)]
     if not twoway_players:
         return None
     elite_ref = float(TIER_VALUES.get("Elite", 5))
@@ -423,7 +427,7 @@ def check_DEF_09(players, agg, cornerstone, weights):
     # modifier trace_keys — parallel to how HARD_05 is applied for hard checks.
     # Do NOT return the cap value (60) as delta — that would incorrectly ADD 60 to defense.
     delta = weights["DEF_09_rebounding_deficit_penalty"]
-    return (delta, "Rebounding is a significant weakness — opponents will dominate the glass.", "defense")
+    return (delta, "Rebounding coverage is thin — opponents will attack the glass freely. Add an elite rebounder or two more capable ones to stabilize second-chance defense.", "defense")
 
 
 check_DEF_09.presence_type = "absence"
@@ -455,7 +459,7 @@ def check_OFF_01(players, agg, cornerstone, weights):
     # Scale penalty with deficit depth
     scale = min(2.0, deficit / threshold)
     delta = weights["OFF_01_low_spacing_caps_creation"] * scale
-    return (delta, f"Low floor spacing ({spacing:.0f}) limits creation options — defenders collapse on every pick.", "creation")
+    return (delta, f"Floor spacing is too thin ({spacing:.0f}) — defenders collapse on every drive and cut. Add a spot-up or movement shooter to open the floor.", "creation")
 
 
 check_OFF_01.presence_type = "absence"
@@ -468,7 +472,7 @@ def check_OFF_02(players, agg, cornerstone, weights):
     Better shooters extract more value from screens — an Elite movement shooter coming
     off a curl is a categorically harder coverage assignment than a Capable one.
     """
-    if not _synergy_check(players, "movement_shooter", "screen_setter"):
+    if not _synergy_check(players + [cornerstone], "movement_shooter", "screen_setter"):
         return None
     elite_ref = float(TIER_VALUES.get("Elite", 5))
     movement_shooters = _players_with_skill(players + [cornerstone], "movement_shooter")
@@ -487,14 +491,15 @@ def check_OFF_03(players, agg, cornerstone, weights):
     ABSENCE — 2+ Movement Shooters but no Screen Setter → penalty to movement shooter value.
     Movement shooters need screens to create separation; without them, the action stalls.
     """
-    movement_count = agg.get("movement_shooter_count", 0)
+    all_players = [cornerstone] + players
+    movement_count = sum(1 for p in all_players if _has_skill(p, "movement_shooter"))
     if movement_count < 2:
         return None
-    has_screen = any(_has_skill(p, "screen_setter") for p in players)
+    has_screen = any(_has_skill(p, "screen_setter") for p in all_players)
     if has_screen:
         return None
     delta = weights["OFF_03_movement_without_screen"]
-    return (delta, f"{movement_count} movement shooters without a screen setter — off-ball runs lack trigger points.", "spacing")
+    return (delta, f"{movement_count} movement shooters without a screen setter — off-ball actions stall. Add a screen setter to trigger curl opportunities.", "spacing")
 
 
 check_OFF_03.presence_type = "absence"
@@ -505,7 +510,7 @@ def check_OFF_04(players, agg, cornerstone, weights):
     PRESENCE — Cutter AND Screen Setter on DISTINCT players → bonus to cutting contributions.
     Screens free cutters from defenders; two distinct players required for the action.
     """
-    if not _synergy_check(players, "cutter", "screen_setter"):
+    if not _synergy_check(players + [cornerstone], "cutter", "screen_setter"):
         return None
     delta = weights["OFF_04_screen_enables_cutting"]
     return (delta, "Screen setter frees cutters — backdoor and elevator cuts become viable.", "creation")
@@ -527,7 +532,7 @@ def check_OFF_05(players, agg, cornerstone, weights):
     delta = weights["OFF_05_creation_spacing_imbalance"]
     stronger = "creation" if creation > spacing else "spacing"
     weaker = "spacing" if stronger == "creation" else "creation"
-    return (delta, f"Extreme imbalance: {stronger} ({max(creation, spacing):.0f}) far outpaces {weaker} ({min(creation, spacing):.0f}).", stronger)
+    return (delta, f"Extreme imbalance: {stronger} ({max(creation, spacing):.0f}) far outpaces {weaker} ({min(creation, spacing):.0f}) — one dimension undercuts the other. Add a {'spot-up shooter' if weaker == 'spacing' else 'ball-handler or driver'} to bring balance.", stronger)
 
 
 check_OFF_05.presence_type = "absence"
@@ -538,11 +543,11 @@ def check_OFF_06(players, agg, cornerstone, weights):
     PRESENCE — 2+ exclusively on-ball players → scaling penalty per additional one.
     Multiple ball-dominant players without off-ball skills create possessions that stall.
     """
-    exclusive_count = agg.get("exclusive_onball_count", 0)
+    exclusive_count = sum(1 for p in players + [cornerstone] if _is_exclusively_onball(p))
     if exclusive_count < 2:
         return None
     delta = weights["OFF_06_exclusive_onball_penalty"] * (exclusive_count - 1)
-    return (delta, f"{exclusive_count} exclusively on-ball players — possessions become contested and predictable.", "creation")
+    return (delta, f"{exclusive_count} exclusively on-ball players create a predictable, ball-congested offense. Add an off-ball threat or spot-up shooter to give them space to work.", "creation")
 
 
 check_OFF_06.presence_type = "presence"
@@ -554,7 +559,7 @@ def check_OFF_07(players, agg, cornerstone, weights):
     A ball-dominant player who isn't elite creates possessions with low probability of success.
     """
     bad_onball = []
-    for p in players:
+    for p in players + [cornerstone]:
         if not _is_exclusively_onball(p):
             continue
         # Check if primary on-ball skill is below Elite
@@ -568,7 +573,7 @@ def check_OFF_07(players, agg, cornerstone, weights):
         return None
     delta = weights["OFF_07_exclusive_onball_below_elite"]
     names = ", ".join(bad_onball)
-    return (delta, f"{names} {'is' if len(bad_onball) == 1 else 'are'} exclusively on-ball but below Elite — limiting ROI on possessions.", "creation")
+    return (delta, f"{names} {'is' if len(bad_onball) == 1 else 'are'} exclusively on-ball but below Elite — possessions stall. Add off-ball skills or replace with an Elite creator.", "creation")
 
 
 check_OFF_07.presence_type = "presence"
@@ -580,7 +585,7 @@ def check_OFF_08(players, agg, cornerstone, weights):
     Versatile offensive players force defenders to account for multiple threats simultaneously.
     """
     versatile = []
-    for p in players:
+    for p in players + [cornerstone]:
         has_onball = any(_has_skill(p, s) for s in _ON_BALL_SKILLS)
         has_offball = any(_has_skill(p, s) for s in _OFF_BALL_SKILLS | _SHOOTING_SKILLS)
         if has_onball and has_offball:
@@ -600,11 +605,11 @@ def check_OFF_09(players, agg, cornerstone, weights):
     ABSENCE — Only one supporting player with a creation skill → upweight that player's contributions.
     A single creator is a single point of failure, but becomes even more valuable.
     """
-    creators = [p for p in players if any(_has_skill(p, s) for s in _CREATION_SKILLS)]
+    creators = [p for p in players + [cornerstone] if any(_has_skill(p, s) for s in _CREATION_SKILLS)]
     if len(creators) != 1:
         return None
     delta = weights["OFF_09_single_creator_upweight"]
-    return (delta, f"{creators[0]['name']} is the lone creator — elite usage required from the single ball-handler.", "creation")
+    return (delta, f"Only one creator on the roster — the offense stalls when they're off the floor. Add a secondary ball-handler or driver to reduce single-point-of-failure risk.", "creation")
 
 
 check_OFF_09.presence_type = "absence"
@@ -673,10 +678,11 @@ def check_OFF_12(players, agg, cornerstone, weights):
     if has_passer:
         return None
     delta = weights["OFF_12_cutter_without_passer"]
-    return (delta, f"{cutter_count} cutter(s) without a passer — cuts go unrewarded without a lob/kickout threat.", "creation")
+    return (delta, f"{cutter_count} cutter(s) without a passer to find them — cutting actions go unrewarded. Add a passer to unlock cutting as a real offensive threat.", "creation")
 
 
 check_OFF_12.presence_type = "absence"
+check_OFF_12.note_min_severity = "warning"
 
 
 def check_OFF_13(players, agg, cornerstone, weights):
@@ -691,7 +697,7 @@ def check_OFF_13(players, agg, cornerstone, weights):
     if spacing >= _LOW_SPACING_THRESHOLD:
         return None
     delta = weights["OFF_13_cutter_without_spacing"]
-    return (delta, f"Cutting lanes are clogged — low floor spacing ({spacing:.0f}) limits cutter effectiveness.", "creation")
+    return (delta, f"Cutting lanes are clogged — floor spacing ({spacing:.0f}) leaves no room to attack. Add a shooter to open lanes for the cutter(s).", "creation")
 
 
 check_OFF_13.presence_type = "absence"
@@ -707,7 +713,7 @@ def check_OFF_14(players, agg, cornerstone, weights):
     cutter_count = agg.get("cutter_count", 0)
     if cutter_count == 0:
         return None
-    gravity_players = [p for p in players if any(_has_skill(p, s, "Proficient") for s in _GRAVITY_SKILLS)]
+    gravity_players = [p for p in players + [cornerstone] if any(_has_skill(p, s, "Proficient") for s in _GRAVITY_SKILLS)]
     cutter_players = [p for p in players if _has_skill(p, "cutter")]
     # Require distinct players
     gravity_ids = {id(p) for p in gravity_players}
@@ -746,7 +752,7 @@ def check_OFF_15(players, agg, cornerstone, weights):
         )
         if not has_distinct_lob:
             delta = weights["OFF_15_vertical_without_lob"]
-            return (delta, f"{vp['name']}'s vertical spacing goes unrewarded without a lob passer.", "paint")
+            return (delta, f"{vp['name']}'s vertical spacing is wasted without a lob passer to find them. Add a passer or driver to convert the lob threat.", "paint")
     return None
 
 
@@ -791,7 +797,7 @@ def check_OFF_17(players, agg, cornerstone, weights):
     Single-player modifier — both skills on same player.
     """
     elite_ref = float(TIER_VALUES.get("Elite", 5))
-    for p in players:
+    for p in players + [cornerstone]:
         if not _has_skill(p, "driver"):
             continue
         has_finishing = _has_skill(p, "high_flyer") or _has_skill(p, "crafty_finisher")
@@ -814,7 +820,7 @@ def check_OFF_18(players, agg, cornerstone, weights):
     Single-player modifier.
     """
     elite_ref = float(TIER_VALUES.get("Elite", 5))
-    for p in players:
+    for p in players + [cornerstone]:
         if _has_skill(p, "driver") and _has_skill(p, "passer"):
             driver_factor = _tier_value(p, "driver") / elite_ref
             delta = weights["OFF_18_driver_passing_bonus"] * driver_factor
@@ -830,14 +836,14 @@ def check_OFF_19(players, agg, cornerstone, weights):
     ABSENCE — Low Post Capable+ present AND Spacing Score below threshold.
     Low post players need spacing to operate; without it, the paint is packed and helpless.
     """
-    has_low_post = any(_has_skill(p, "low_post_player") for p in players)
+    has_low_post = any(_has_skill(p, "low_post_player") for p in players + [cornerstone])
     if not has_low_post:
         return None
     spacing = agg.get("spacing_score_pre_modifiers", 50.0)
     if spacing >= _LOW_SPACING_THRESHOLD:
         return None
     delta = weights["OFF_19_low_post_spacing_penalty"]
-    return (delta, f"Low post game throttled by poor spacing ({spacing:.0f}) — defenders double without consequence.", "paint")
+    return (delta, f"Poor spacing ({spacing:.0f}) clogs the paint and neutralizes the low post game. Add a floor spacer to give the post player room to operate.", "paint")
 
 
 check_OFF_19.presence_type = "absence"
@@ -873,14 +879,14 @@ def check_OFF_21(players, agg, cornerstone, weights):
     ABSENCE — Mid Post Capable+ AND Spacing Score below threshold.
     Mid post players (like low post) need spacing — dense paint negates mid-range angle plays.
     """
-    has_mid_post = any(_has_skill(p, "mid_post_player") for p in players)
+    has_mid_post = any(_has_skill(p, "mid_post_player") for p in players + [cornerstone])
     if not has_mid_post:
         return None
     spacing = agg.get("spacing_score_pre_modifiers", 50.0)
     if spacing >= _LOW_SPACING_THRESHOLD:
         return None
     delta = weights["OFF_21_mid_post_spacing_penalty"]
-    return (delta, f"Mid post game suffers without spacing ({spacing:.0f}) — no clear angles to work from.", "paint")
+    return (delta, f"Tight spacing ({spacing:.0f}) shuts down mid-post angles — help defense has no cost. Add a shooter to create room for mid-post attacks.", "paint")
 
 
 check_OFF_21.presence_type = "absence"
@@ -919,14 +925,14 @@ def check_OFF_23(players, agg, cornerstone, weights):
     ABSENCE — Iso Scorer Capable+ AND Spacing Score below threshold.
     Iso scorers need the corner-3 threat to keep help defenders off them.
     """
-    has_iso = any(_has_skill(p, "isolation_scorer") for p in players)
+    has_iso = any(_has_skill(p, "isolation_scorer") for p in players + [cornerstone])
     if not has_iso:
         return None
     spacing = agg.get("spacing_score_pre_modifiers", 50.0)
     if spacing >= _LOW_SPACING_THRESHOLD:
         return None
     delta = weights["OFF_23_iso_spacing_penalty"]
-    return (delta, f"Isolation scorer operating in a crowded floor ({spacing:.0f}) — help defense has no cost.", "creation")
+    return (delta, f"Crowded floor ({spacing:.0f}) neutralizes isolation — help defenders sag freely. Add a corner shooter to force the defense to spread.", "creation")
 
 
 check_OFF_23.presence_type = "absence"
@@ -1338,7 +1344,7 @@ def check_OFF_35(players: list[dict], agg: dict, cornerstone: dict, weights: dic
     """
     # Count supporting players with zero shooting at Capable+ tier
     non_shooter_count = sum(
-        1 for p in players
+        1 for p in players + [cornerstone]
         if not _has_skill(p, "spot_up_shooter") and not _has_skill(p, "movement_shooter")
     )
     if non_shooter_count <= 1:
@@ -1350,14 +1356,14 @@ def check_OFF_35(players: list[dict], agg: dict, cornerstone: dict, weights: dic
     delta       = max(extra * per_penalty, cap)  # cap is negative (floor)
 
     narrative = (
-        f"{non_shooter_count} non-shooters in the rotation allow defenders to sag into "
-        f"the paint, collapsing driving lanes and post-entry windows. Even one reliable "
-        f"floor-spacer would open the offense significantly."
+        f"{non_shooter_count} non-shooters allow defenders to sag and pack the paint — "
+        f"driving lanes disappear. Replace a non-shooter with a spot-up or movement shooter to reopen the floor."
     )
     return (delta, narrative, "spacing")
 
 
 check_OFF_35.presence_type = "presence"
+check_OFF_35.note_min_severity = "warning"
 
 
 # ---------------------------------------------------------------------------

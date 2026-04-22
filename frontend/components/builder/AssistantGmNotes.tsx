@@ -163,6 +163,7 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin, onEvaluation
   const [notes, setNotes]         = useState<Note[]>([]);
   const [scores, setScores]       = useState<Scores | null>(null);
   const [errorMsg, setErrorMsg]   = useState<string | null>(null);
+  const [changedSignal, setChangedSignal] = useState<{ added: number; removed: number } | null>(null);
   const [debugTraces, setDebugTraces] = useState<{
     player: Record<string, unknown> | null;
     aggregate: Record<string, unknown> | null;
@@ -170,31 +171,32 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin, onEvaluation
   } | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks previous trace_key set to compute what-changed diff after each eval
+  const prevTraceKeysRef = useRef<Set<string> | null>(null);
 
   // Stable key: changes on player add/remove OR slot reorder, so swapping slots triggers re-eval
   // (slot position affects slot weight, which directly affects scores)
+  // Stable key: changes on legend selection, player add/remove, or slot reorder.
+  // Legend ID is prefixed so switching cornerstones triggers re-eval even with 0 supporting players.
   const rosterKey = useMemo(() => {
-    return allSlots
+    const legendPart = legendDetail ? `legend:${legendDetail.id}` : "legend:none";
+    const slotPart = allSlots
       .map((p, i) => (p ? `${i}:${p.id}` : null))
       .filter(Boolean)
       .join(",");
-  }, [allSlots]);
+    return `${legendPart}|${slotPart}`;
+  }, [allSlots, legendDetail]);
 
   // Whether there are any supporting players (non-legend) to evaluate
   const supportingCount = allSlots.filter((p) => p !== null && !p.is_legend).length;
 
   const runEval = useCallback(async () => {
-    // Build payload — requires both a legend (cornerstone) and at least one supporting player
+    // Requires a legend (cornerstone) — supporting players can be zero for complement suggestions
     if (!legendDetail) {
       setState("idle");
       return;
     }
     const players = buildPlayerPayload(allSlots, legendDetail);
-    // Need at least cornerstone + 1 supporting player
-    if (players.length < 2) {
-      setState("idle");
-      return;
-    }
 
     setState("analyzing");
     setErrorMsg(null);
@@ -204,6 +206,16 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin, onEvaluation
       if (res.success && res.data) {
         setNotes(res.data.notes);
         setScores(res.data.scores);
+
+        // Compute what-changed diff between this eval and the previous one
+        const currentKeys = new Set(res.data.notes.map((n) => n.trace_key));
+        const prev = prevTraceKeysRef.current;
+        if (prev) {
+          const added   = [...currentKeys].filter((k) => !prev.has(k)).length;
+          const removed = [...prev].filter((k) => !currentKeys.has(k)).length;
+          setChangedSignal(added > 0 || removed > 0 ? { added, removed } : null);
+        }
+        prevTraceKeysRef.current = currentKeys;
         if (isAdmin) {
           setDebugTraces({
             player:        res.data.player_traces,
@@ -227,10 +239,13 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin, onEvaluation
   }, [allSlots, legendDetail, isAdmin]);
 
   useEffect(() => {
-    if (supportingCount === 0) {
+    // No legend selected — nothing to evaluate or suggest
+    if (!legendDetail) {
       setState("idle");
       setNotes([]);
       setScores(null);
+      setChangedSignal(null);
+      prevTraceKeysRef.current = null;
       return;
     }
 
@@ -240,14 +255,14 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin, onEvaluation
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  // rosterKey captures add/remove; runEval is stable-ish via useCallback
+  // rosterKey encodes legend + all slots; runEval is stable-ish via useCallback
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rosterKey]);
 
   // Split notes into buckets for NotesList
-  const issues    = useMemo(() => notes.filter((n) => n.severity === "critical" || n.severity === "warning"), [notes]);
-  const tips      = useMemo(() => notes.filter((n) => n.severity === "tip"), [notes]);
-  const strengths = useMemo(() => notes.filter((n) => n.severity === "strength"), [notes]);
+  const issues      = useMemo(() => notes.filter((n) => n.severity === "critical" || n.severity === "warning"), [notes]);
+  const suggestions = useMemo(() => notes.filter((n) => n.severity === "suggestion"), [notes]);
+  const strengths   = useMemo(() => notes.filter((n) => n.severity === "strength"), [notes]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -281,13 +296,22 @@ export function AssistantGmNotes({ allSlots, legendDetail, isAdmin, onEvaluation
           {/* Mini score bar — 4 key metrics at a glance */}
           {scores && <MiniScoreBar scores={scores} />}
 
-          {/* Notes list — issues, tips (strengths suppressed in live mode) */}
+              {/* What-changed pill — shows diff from previous eval */}
+          {changedSignal && (
+            <p id="gm-notes-changed-pill" className="text-[10px] text-muted-foreground font-mono bg-muted/40 rounded px-2 py-1">
+              {changedSignal.added > 0 && `+ ${changedSignal.added} new`}
+              {changedSignal.added > 0 && changedSignal.removed > 0 && " · "}
+              {changedSignal.removed > 0 && `− ${changedSignal.removed} resolved`}
+            </p>
+          )}
+
+          {/* Notes list — issues, suggestions, strengths */}
           {notes.length === 0 ? (
             <p id="builder-gm-notes-empty" className="text-xs text-muted-foreground">
               No issues found — roster looks solid.
             </p>
           ) : (
-            <NotesList issues={issues} tips={tips} strengths={strengths} />
+            <NotesList issues={issues} suggestions={suggestions} strengths={strengths} />
           )}
         </>
       )}

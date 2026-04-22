@@ -231,7 +231,10 @@ class TestDEF07:
         player = make_player(skills={"spot_up_shooter": "Capable"})
         players = [player]
         agg = make_agg()
-        result = check_DEF_07(players, agg, make_cornerstone(), MODIFIER_DELTAS)
+        # Cornerstone must have an offensive skill — DEF_07 now includes cornerstone in
+        # the black-hole check, so a skill-less cornerstone would trigger the penalty.
+        cornerstone = make_cornerstone(skills={"pnr_ball_handler": "Elite"})
+        result = check_DEF_07(players, agg, cornerstone, MODIFIER_DELTAS)
         assert result is None
 
 

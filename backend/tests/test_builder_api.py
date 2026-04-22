@@ -205,28 +205,35 @@ class TestLiveModeEndpoint:
         assert resp.status_code == 200
         assert len(data["data"]["notes"]) <= LIVE_NOTE_LIMIT
 
-    def test_live_mode_no_strength_notes(self, client):
-        """Live mode must never return strength-severity notes."""
+    def test_live_mode_limits_strength_notes(self, client):
+        """Live mode must return at most LIVE_STRENGTH_LIMIT strength-severity notes."""
+        from services.roster_evaluator.weights import LIVE_STRENGTH_LIMIT
         players = [atg_cornerstone()] + [
             elite_supporting_player(f"P{i}", i) for i in range(1, 6)
         ]
         resp, data = post_evaluate(client, {"players": players, "mode": "live", "debug": False})
-        for note in data["data"]["notes"]:
-            assert note["severity"] != "strength"
+        strength_notes = [n for n in data["data"]["notes"] if n["severity"] == "strength"]
+        assert len(strength_notes) <= LIVE_STRENGTH_LIMIT
 
-    def test_live_mode_absence_notes_suppressed_below_6_supporting(self, client):
-        """ABSENCE notes are suppressed in live mode when fewer than 6 supporting players."""
-        # Only 3 supporting players (below threshold of 6)
+    def test_live_mode_absence_notes_suppressed_below_3_supporting(self, client):
+        """
+        ABSENCE modifier notes are suppressed in live mode when fewer than 3 supporting
+        players. Complement notes (COMPLEMENT_* trace keys) are intentionally excluded from
+        this rule — they are designed to appear in early roster stages.
+        """
+        # Only 2 supporting players (below threshold of 3)
         players = [minimal_cornerstone()] + [
-            minimal_supporting_player(f"P{i}", i) for i in range(1, 4)
+            minimal_supporting_player(f"P{i}", i) for i in range(1, 3)
         ]
         resp, data = post_evaluate(client, {"players": players, "mode": "live", "debug": False})
         assert resp.status_code == 200
         for note in data["data"]["notes"]:
-            # All notes in live mode with < 6 supporting players must be presence-based
-            assert note["presence_type"] == "presence", (
-                f"Absence note appeared in live mode with < 6 supporting players: {note}"
-            )
+            # Complement notes are allowed to be absence-type at any stage
+            is_complement = note["trace_key"].startswith("COMPLEMENT_")
+            if not is_complement:
+                assert note["presence_type"] == "presence", (
+                    f"Non-complement absence note appeared with < 3 supporting players: {note}"
+                )
 
 
 # ---------------------------------------------------------------------------

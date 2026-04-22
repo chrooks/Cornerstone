@@ -59,7 +59,7 @@ SPACING_SLOT_WEIGHT_FLOOR: float = 0.6
 # ---------------------------------------------------------------------------
 SKILL_WEIGHTS: dict[str, dict[str, float]] = {
     # Spacing
-    "movement_shooter":     {"spacing": 1.5},
+    "movement_shooter":     {"spacing": 2},
     "spot_up_shooter":      {"spacing": 1.2},
     "screen_setter":        {"spacing": 0.4},   # enabler, not a spacer itself
 
@@ -219,18 +219,26 @@ REDUNDANCY_RANGES: dict[str, tuple[int, int]] = {
 SEVERITY_ORDER: dict[str, int] = {
     "critical": 0,
     "warning":  1,
-    "tip":      2,
+    "suggestion": 2,
     "strength": 3,
 }
 
 # ---------------------------------------------------------------------------
-# Live mode — max notes returned
+# Live mode — max notes returned; max strength notes returned
 # ---------------------------------------------------------------------------
 LIVE_NOTE_LIMIT: int = 10
+LIVE_STRENGTH_LIMIT: int = 2
 
 # ---------------------------------------------------------------------------
 # Absence note minimum players — ABSENCE-tagged notes only surface in live mode
 # when the supporting rotation has at least this many players.
-# Prevents penalizing incomplete rosters for unfilled slots.
+# Now that absence notes are directional suggestions (not penalties), 3 players
+# is enough context to give meaningful recommendations.
 # ---------------------------------------------------------------------------
-ABSENCE_NOTE_MIN_PLAYERS: int = 6
+ABSENCE_NOTE_MIN_PLAYERS: int = 3
+
+# ---------------------------------------------------------------------------
+# Cornerstone complement layer — max supporting players before the complement
+# suggestion module retires and the main modifier system takes over fully.
+# ---------------------------------------------------------------------------
+COMPLEMENT_STAGE_CUTOFF: int = 3

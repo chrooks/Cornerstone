@@ -64,7 +64,7 @@ class Note:
     """
     A single GM note surfaced to the user.
 
-    severity      — critical / warning / tip / strength
+    severity      — critical / warning / suggestion / strength
     category      — broad bucket for grouping in the UI
     text          — user-facing prose; names players currently on the roster
     trace_key     — which modifier or hard check produced this note
@@ -73,7 +73,7 @@ class Note:
                     below ABSENCE_NOTE_MIN_PLAYERS supporting players)
     """
 
-    severity: Literal["critical", "warning", "tip", "strength"]
+    severity: Literal["critical", "warning", "suggestion", "strength"]
     category: Literal["offense", "defense", "two_way", "roster_balance"]
     # WARNING: text may contain user-supplied player names. Callers must
     # render this as text content (not raw HTML) to prevent XSS.

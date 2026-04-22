@@ -204,10 +204,10 @@ export function EvaluatePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataReady, adminLoading]);
 
-  // Note buckets — split into issues, tips, strengths
-  const issues    = useMemo(() => evaluation?.notes.filter((n) => n.severity === "critical" || n.severity === "warning") ?? [], [evaluation]);
-  const tips      = useMemo(() => evaluation?.notes.filter((n) => n.severity === "tip") ?? [], [evaluation]);
-  const strengths = useMemo(() => evaluation?.notes.filter((n) => n.severity === "strength") ?? [], [evaluation]);
+  // Note buckets — split into issues, suggestions, strengths
+  const issues      = useMemo(() => evaluation?.notes.filter((n) => n.severity === "critical" || n.severity === "warning") ?? [], [evaluation]);
+  const suggestions = useMemo(() => evaluation?.notes.filter((n) => n.severity === "suggestion") ?? [], [evaluation]);
+  const strengths   = useMemo(() => evaluation?.notes.filter((n) => n.severity === "strength") ?? [], [evaluation]);
 
   const isLoading = evalState === "loading" || evalState === "evaluating";
 
@@ -269,8 +269,8 @@ export function EvaluatePage() {
           {/* Score display — all 9 dimensions */}
           <ScoreDisplay scores={evaluation.scores} />
 
-          {/* Notes — issues, tips, strengths in collapsible sections */}
-          <NotesList issues={issues} tips={tips} strengths={strengths} />
+          {/* Notes — issues, suggestions, strengths in collapsible sections */}
+          <NotesList issues={issues} suggestions={suggestions} strengths={strengths} />
 
           {/* Admin debug panel — traces + height coverage chart */}
           {isAdmin && (evaluation.player_traces || evaluation.aggregate_traces || evaluation.height_coverage) && (

@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * NotesList.tsx — Collapsible issues/tips/strengths section display.
+ * NotesList.tsx — Collapsible issues/suggestions/strengths section display.
  *
  * Three collapsible sections:
  *   - Issues (critical + warning) — open by default
- *   - Tips — collapsed by default
+ *   - Suggestions — collapsed by default
  *   - Strengths — collapsed by default
  *
  * IMPORTANT: Note text is rendered as plain text content, never innerHTML.
@@ -24,7 +24,7 @@ function badgeClass(severity: Note["severity"]): string {
   switch (severity) {
     case "critical": return "bg-red-500/20 text-red-400 border border-red-500/30";
     case "warning":  return "bg-amber-500/20 text-amber-400 border border-amber-500/30";
-    case "tip":      return "bg-blue-500/20 text-blue-400 border border-blue-500/30";
+    case "suggestion": return "bg-blue-500/20 text-blue-400 border border-blue-500/30";
     case "strength": return "bg-green-500/20 text-green-400 border border-green-500/30";
   }
 }
@@ -118,11 +118,11 @@ function CollapsibleSection({
 
 interface NotesListProps {
   issues: Note[];
-  tips: Note[];
+  suggestions: Note[];
   strengths: Note[];
 }
 
-export function NotesList({ issues, tips, strengths }: NotesListProps) {
+export function NotesList({ issues, suggestions, strengths }: NotesListProps) {
   return (
     <div id="notes-list" className="space-y-2">
       <CollapsibleSection
@@ -135,13 +135,13 @@ export function NotesList({ issues, tips, strengths }: NotesListProps) {
         emptyText="No critical issues found."
       />
       <CollapsibleSection
-        id="notes-tips"
-        title="Tips"
-        count={tips.length}
-        notes={tips}
+        id="notes-suggestions"
+        title="Suggestions"
+        count={suggestions.length}
+        notes={suggestions}
         defaultOpen={false}
         titleColorClass="text-blue-400"
-        emptyText="No optimization tips."
+        emptyText="No suggestions."
       />
       <CollapsibleSection
         id="notes-strengths"

@@ -22,6 +22,7 @@ from typing import Literal
 from .modifiers import ALL_MODIFIERS, guard_range, _parse_height_inches, HEIGHT_COVERAGE_LOW, HEIGHT_COVERAGE_HIGH
 from .hard_checks import ALL_HARD_CHECKS
 from .optionality import compute_optionality, compute_robustness
+from .cornerstone_complement import get_complement_notes
 from .types import Note, RosterEvaluation, Scores
 from .weights import (
     TIER_VALUES,
@@ -33,12 +34,26 @@ from .weights import (
     REDUNDANCY_RANGES,
     SEVERITY_ORDER,
     LIVE_NOTE_LIMIT,
+    LIVE_STRENGTH_LIMIT,
     ABSENCE_NOTE_MIN_PLAYERS,
+    COMPLEMENT_STAGE_CUTOFF,
     SPACING_SLOT_WEIGHT_FLOOR,
 )
 
 # Skills that contribute to the spacing dimension — these use SPACING_SLOT_WEIGHT_FLOOR
 _SPACING_SKILLS: frozenset[str] = frozenset({"movement_shooter", "spot_up_shooter", "screen_setter"})
+
+# ---------------------------------------------------------------------------
+# Minimum severity overrides — built at module load by scanning ALL_MODIFIERS
+# for note_min_severity attributes set on modifier functions.
+# Applied in note assembly: promotes severity if the computed level is weaker
+# than the override. Never demotes — promotion only.
+# ---------------------------------------------------------------------------
+_MIN_SEVERITY_OVERRIDES: dict[str, str] = {
+    modifier_fn.__name__.replace("check_", "").upper(): getattr(modifier_fn, "note_min_severity", None)
+    for modifier_fn in ALL_MODIFIERS
+    if getattr(modifier_fn, "note_min_severity", None) is not None
+}
 
 
 # ---------------------------------------------------------------------------
@@ -261,29 +276,44 @@ def _compute_context_flags(
 # Layer 3 — Interaction modifier application
 # ---------------------------------------------------------------------------
 
-def _severity_from_delta(delta: float, presence_type: str) -> str:
+def _severity_from_delta(delta: float, presence_type: str, final_score: float | None = None) -> str:
     """
-    Derive note severity from delta magnitude and sign.
+    Derive note severity from delta sign + presence type (positive notes) or final
+    dimension score (negative notes).
 
-    Positive deltas (bonuses) → strength or tip depending on magnitude.
-    Negative deltas (penalties) → warning or critical depending on magnitude.
-    Per spec: strength = positive delta > 8; critical = abs delta > 20; warning = 10–20; tip = 3–9.
+    Positive presence notes → strength (what's working well on the current roster).
+    Positive absence notes → suggestion (gap compensation — directional recommendation).
+    Negative notes → severity from the final dimension score, not the delta magnitude.
+      - score < 30  → critical  (dimension is broken)
+      - score < 55  → warning   (dimension is struggling)
+      - score ≥ 55  → suggestion (dimension is healthy; note is informational)
+    Falls back to delta magnitude when no final score is available (e.g. roster_balance).
     """
     if delta > 0:
-        # Positive delta = something good about the roster
-        if delta > 8:
+        # Positive presence = a synergy/strength on the current roster
+        # Positive absence = a gap mitigation — still a recommendation to add something
+        if presence_type == "presence":
             return "strength"
         else:
-            return "tip"
+            return "suggestion"
     else:
-        # Negative delta = a problem with the roster
-        abs_delta = abs(delta)
-        if abs_delta > 20:
-            return "critical"
-        elif abs_delta >= 10:
-            return "warning"
+        if final_score is not None:
+            # Use actual dimension health, not how large this one delta is
+            if final_score < 30:
+                return "critical"
+            elif final_score < 55:
+                return "warning"
+            else:
+                return "suggestion"
         else:
-            return "tip"
+            # Fallback: no dimension score available (e.g. roster_balance notes)
+            abs_delta = abs(delta)
+            if abs_delta > 20:
+                return "critical"
+            elif abs_delta >= 10:
+                return "warning"
+            else:
+                return "suggestion"
 
 
 def _category_from_dimension(dimension: str) -> str:
@@ -602,13 +632,28 @@ def evaluate_roster(
     )
 
     # ----- Assemble notes -----
+    # Score lookup for final-score-based severity on negative notes.
+    # Includes all sub-dimensions plus the composite offense score.
+    _final_score_lookup: dict[str, float] = {
+        **final_dim_scores,
+        "offense": offense_score,
+    }
+
     # Build note list from modifier results (5-tuple: delta, narrative, dimension, presence_type, trace_key)
     modifier_notes: list[Note] = []
+    # Strength candidates collected separately so live mode can cap them at LIVE_STRENGTH_LIMIT
+    strength_candidates: list[tuple[float, Note]] = []
+
     for delta, narrative, dimension, presence_type, trace_key in modifier_results:
-        severity = _severity_from_delta(delta, presence_type)
-        # Strength notes only included in final mode
-        if severity == "strength" and mode != "final":
-            continue
+        # Pass the final dimension score so severity reflects actual roster health,
+        # not just the magnitude of this one modifier's delta.
+        severity = _severity_from_delta(delta, presence_type, _final_score_lookup.get(dimension))
+
+        # Apply note_min_severity override (promotes only — never demotes)
+        min_severity = _MIN_SEVERITY_OVERRIDES.get(trace_key)
+        if min_severity is not None and SEVERITY_ORDER[severity] > SEVERITY_ORDER[min_severity]:
+            severity = min_severity
+
         note = Note(
             severity=severity,
             category=_category_from_dimension(dimension),
@@ -616,7 +661,20 @@ def evaluate_roster(
             trace_key=trace_key,
             presence_type=presence_type,
         )
-        modifier_notes.append(note)
+
+        if severity == "strength":
+            # Collect strength notes with their delta for sorting in live mode
+            strength_candidates.append((abs(delta), note))
+        else:
+            modifier_notes.append(note)
+
+    # Add strength notes: all in final mode, top LIVE_STRENGTH_LIMIT by |delta| in live mode
+    if mode == "final":
+        modifier_notes.extend(n for _, n in strength_candidates)
+    else:
+        # Sort by abs delta descending and take at most LIVE_STRENGTH_LIMIT
+        strength_candidates.sort(key=lambda t: t[0], reverse=True)
+        modifier_notes.extend(n for _, n in strength_candidates[:LIVE_STRENGTH_LIMIT])
 
     # Combine all notes
     all_notes: list[Note] = modifier_notes + hard_check_notes
@@ -626,7 +684,16 @@ def evaluate_roster(
     if mode == "live" and supporting_count < ABSENCE_NOTE_MIN_PLAYERS:
         all_notes = [n for n in all_notes if n.presence_type == "presence"]
 
-    # Sort: critical → warning → tip → strength
+    # Cornerstone complement layer — inject early-stage directional suggestions.
+    # Runs when the supporting rotation is below COMPLEMENT_STAGE_CUTOFF (default 3).
+    # These notes bypass the ABSENCE_NOTE_MIN_PLAYERS filter above because they're
+    # specifically designed for early roster stages — they're merged in after it.
+    if supporting_count < COMPLEMENT_STAGE_CUTOFF:
+        complement_notes = get_complement_notes(cornerstone, supporting_players)
+        # Prepend so they sort naturally with the rest (all are "suggestion" severity)
+        all_notes = complement_notes + all_notes
+
+    # Sort: critical → warning → suggestion → strength
     all_notes.sort(key=lambda n: SEVERITY_ORDER.get(n.severity, 99))
 
     # Cap at LIVE_NOTE_LIMIT in live mode

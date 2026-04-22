@@ -432,7 +432,7 @@ export interface Scores {
   robustness: number;
 }
 
-export type NoteSeverity = "critical" | "warning" | "tip" | "strength";
+export type NoteSeverity = "critical" | "warning" | "suggestion" | "strength";
 
 export type NoteCategory = "offense" | "defense" | "two_way" | "roster_balance";
 
