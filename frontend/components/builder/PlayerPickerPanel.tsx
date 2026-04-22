@@ -294,7 +294,7 @@ export function PlayerPickerPanel({
             className={cn(
               "px-3 py-1.5 transition-colors",
               viewMode === "cards"
-                ? "bg-foreground text-background"
+                ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted",
             )}
           >
@@ -307,7 +307,7 @@ export function PlayerPickerPanel({
             className={cn(
               "px-3 py-1.5 border-l border-border transition-colors",
               viewMode === "table"
-                ? "bg-foreground text-background"
+                ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted",
             )}
           >

@@ -520,7 +520,7 @@ export function BuilderPage() {
                 className={cn(
                   "px-4 py-2 text-xs font-medium transition-colors",
                   leftTab === "skills"
-                    ? "border-b-2 border-foreground text-foreground -mb-px"
+                    ? "border-b-2 border-primary text-foreground -mb-px"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -533,7 +533,7 @@ export function BuilderPage() {
                 className={cn(
                   "px-4 py-2 text-xs font-medium transition-colors",
                   leftTab === "notes"
-                    ? "border-b-2 border-foreground text-foreground -mb-px"
+                    ? "border-b-2 border-primary text-foreground -mb-px"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >

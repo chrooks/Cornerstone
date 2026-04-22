@@ -263,7 +263,7 @@ function SkillReviewRow({
               className={cn(
                 "text-xs px-3 py-1.5 rounded-md border font-medium transition-colors",
                 showOverride
-                  ? "border-foreground bg-foreground text-background"
+                  ? "border-primary bg-primary text-primary-foreground"
                   : "border-input text-muted-foreground hover:text-foreground hover:border-foreground",
                 saving && "opacity-50 cursor-not-allowed"
               )}
@@ -951,7 +951,7 @@ export default function PlayerReviewPage() {
                                 onClick={() =>
                                   overrideTier && handleManualOverride(skill, overrideTier)
                                 }
-                                className="text-xs px-2 py-1 rounded bg-foreground text-background font-medium disabled:opacity-40 hover:opacity-80 transition-opacity"
+                                className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground font-medium disabled:opacity-40 hover:opacity-80 transition-opacity"
                               >
                                 {overrideSaving ? "…" : "Save"}
                               </button>

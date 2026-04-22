@@ -111,7 +111,7 @@ function LoginForm() {
         id="login-submit-btn"
         type="submit"
         disabled={loading}
-        className="w-full rounded-md bg-foreground text-background py-2 text-sm font-medium hover:opacity-80 disabled:opacity-40 transition-opacity"
+        className="w-full rounded-md bg-primary text-primary-foreground py-2 text-sm font-medium hover:opacity-80 disabled:opacity-40 transition-opacity"
       >
         {loading ? "Signing in…" : "Sign in"}
       </button>

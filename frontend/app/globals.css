@@ -10,50 +10,68 @@
 }
 
 /* shadcn/ui CSS variables — mapped to HSL values for Tailwind v3 compatibility */
+/* Palette source: new_palette.css (warm orange/amber tones) */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Warm light background (#f0f0f0) */
+    --background: 0 0% 94%;
+    /* Near-black warm text (#0e0907) */
+    --foreground: 17 34% 4%;
+    /* Card: slightly lighter than background */
+    --card: 0 0% 97%;
+    --card-foreground: 17 34% 4%;
+    /* Popover: white for contrast */
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --popover-foreground: 17 34% 4%;
+    /* Primary: warm orange (#ffa05c) */
+    --primary: 25 100% 68%;
+    --primary-foreground: 17 34% 4%;
+    /* Secondary: soft peach (#f3a181) */
+    --secondary: 17 83% 73%;
+    --secondary-foreground: 17 34% 4%;
+    /* Muted: desaturated warm tone */
+    --muted: 25 30% 88%;
+    --muted-foreground: 17 20% 40%;
+    /* Accent: bold orange (#fe6d34) — white foreground for contrast */
+    --accent: 17 99% 60%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Borders and inputs: warm light gray */
+    --border: 25 20% 85%;
+    --input: 25 20% 85%;
+    --ring: 25 100% 68%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    /* Deep near-black background (#0f0f0f) */
+    --background: 0 0% 6%;
+    /* Warm off-white text (#f8f3f1) */
+    --foreground: 18 33% 96%;
+    /* Card: slightly lighter than background */
+    --card: 0 0% 9%;
+    --card-foreground: 18 33% 96%;
+    --popover: 0 0% 9%;
+    --popover-foreground: 18 33% 96%;
+    /* Primary: deep amber (#a34400) */
+    --primary: 25 100% 32%;
+    --primary-foreground: 18 33% 96%;
+    /* Secondary: dark rust (#7e2c0c) */
+    --secondary: 17 97% 27%;
+    --secondary-foreground: 18 33% 96%;
+    /* Muted: dark warm tone */
+    --muted: 17 30% 15%;
+    --muted-foreground: 18 20% 65%;
+    /* Accent: deep red-orange (#cb3a01) */
+    --accent: 17 99% 40%;
+    --accent-foreground: 18 33% 96%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    /* Borders and inputs: dark warm tone */
+    --border: 17 30% 15%;
+    --input: 17 30% 15%;
+    --ring: 25 100% 32%;
   }
 
   * {

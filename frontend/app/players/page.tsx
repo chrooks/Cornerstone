@@ -595,7 +595,7 @@ function PlayersPageContent() {
           <span
             className={cn(
               "relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200",
-              legendsVisible ? "bg-foreground" : "bg-muted-foreground/30",
+              legendsVisible ? "bg-primary" : "bg-muted-foreground/30",
             )}
           >
             <span
@@ -618,7 +618,7 @@ function PlayersPageContent() {
               className={cn(
                 "px-3 py-1.5 transition-colors",
                 viewMode === "table"
-                  ? "bg-foreground text-background"
+                  ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted",
               )}
             >
@@ -631,7 +631,7 @@ function PlayersPageContent() {
               className={cn(
                 "px-3 py-1.5 border-l border-border transition-colors",
                 viewMode === "cards"
-                  ? "bg-foreground text-background"
+                  ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted",
               )}
             >

@@ -89,7 +89,7 @@ export function NavBar() {
                 >
                   {label}
                   {isActive && (
-                    <span className="absolute -bottom-[calc(0.75rem+1px)] left-0 right-0 h-0.5 bg-foreground rounded-t-full" />
+                    <span className="absolute -bottom-[calc(0.75rem+1px)] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
                   )}
                 </Link>
               );
@@ -117,7 +117,7 @@ export function NavBar() {
                   </svg>
                   {/* Active underline when on any /admin/* page */}
                   {adminActive && (
-                    <span className="absolute -bottom-[calc(0.75rem+1px)] left-0 right-0 h-0.5 bg-foreground rounded-t-full" />
+                    <span className="absolute -bottom-[calc(0.75rem+1px)] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
                   )}
                 </button>
 
@@ -162,7 +162,7 @@ export function NavBar() {
                   className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                 >
                   {/* Circle with first letter */}
-                  <span className="flex items-center justify-center w-7 h-7 rounded-full bg-foreground text-background text-xs font-bold uppercase select-none flex-shrink-0">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-xs font-bold uppercase select-none flex-shrink-0">
                     {email.charAt(0)}
                   </span>
                   {/* Email text — hidden on small screens */}

@@ -229,7 +229,7 @@ export default function LegendsPage() {
               className={cn(
                 "text-xs px-2 py-1 rounded border transition-colors",
                 filterKey === key
-                  ? "bg-foreground text-background border-foreground"
+                  ? "bg-primary text-primary-foreground border-primary"
                   : "border-border text-muted-foreground hover:text-foreground"
               )}
             >

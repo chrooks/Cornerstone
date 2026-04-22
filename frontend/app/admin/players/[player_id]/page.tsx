@@ -165,7 +165,7 @@ function SkillRow({
             type="button"
             disabled={!selectedTier || saving}
             onClick={handleSaveOverride}
-            className="text-xs px-2 py-0.5 rounded bg-foreground text-background font-medium disabled:opacity-40 hover:opacity-80 transition-opacity"
+            className="text-xs px-2 py-0.5 rounded bg-primary text-primary-foreground font-medium disabled:opacity-40 hover:opacity-80 transition-opacity"
           >
             {saving ? "…" : "Save"}
           </button>
@@ -567,7 +567,7 @@ export default function PlayerProfilePage() {
                   type="button"
                   disabled={bioSaving}
                   onClick={handleSaveBio}
-                  className="text-xs px-3 py-1 rounded bg-foreground text-background font-medium disabled:opacity-40 hover:opacity-80 transition-opacity"
+                  className="text-xs px-3 py-1 rounded bg-primary text-primary-foreground font-medium disabled:opacity-40 hover:opacity-80 transition-opacity"
                 >
                   {bioSaving ? "Saving…" : "Save"}
                 </button>

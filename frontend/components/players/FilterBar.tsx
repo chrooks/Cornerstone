@@ -475,7 +475,7 @@ export function FilterBar({
           onClick={handleAdd}
           disabled={atMax}
           title={atMax ? `Maximum ${MAX_ACTIVE_FILTERS} filters reached` : "Add filter"}
-          className="px-3 py-1.5 rounded text-xs font-medium bg-foreground text-background hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+          className="px-3 py-1.5 rounded text-xs font-medium bg-primary text-primary-foreground hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
         >
           Add Filter
         </button>
