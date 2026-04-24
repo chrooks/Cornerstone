@@ -41,10 +41,12 @@ export function PlayerSearchCombobox({
     try {
       const res = await listPlayers(q);
       if (res.success && res.data) {
-        // Filter client-side by name since the backend may not support ?search param
-        const lower = q.toLowerCase();
+        // Filter client-side by name since the backend may not support ?search param.
+        // Strip diacritics so "jokic" matches "Jokić", "luka" matches "Lūka", etc.
+        const strip = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const normalizedQuery = strip(q);
         const filtered = res.data.filter((p) =>
-          p.name.toLowerCase().includes(lower)
+          strip(p.name).includes(normalizedQuery)
         );
         setResults(filtered.slice(0, 10));
         setOpen(true);

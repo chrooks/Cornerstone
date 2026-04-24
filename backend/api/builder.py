@@ -58,13 +58,15 @@ def _err(msg: str, status: int = 400) -> tuple:
 def _serialize_evaluation(evaluation: RosterEvaluation) -> dict:
     """Serialize a RosterEvaluation to a plain dict for JSON output."""
     return {
-        "scores":           dataclasses.asdict(evaluation.scores),
-        "notes":            [dataclasses.asdict(note) for note in evaluation.notes],
-        "player_traces":    evaluation.player_traces,
-        "aggregate_traces": evaluation.aggregate_traces,
-        "height_coverage":  evaluation.height_coverage,
+        "scores":                 dataclasses.asdict(evaluation.scores),
+        "notes":                  [dataclasses.asdict(note) for note in evaluation.notes],
+        "player_traces":          evaluation.player_traces,
+        "aggregate_traces":       evaluation.aggregate_traces,
+        "height_coverage":        evaluation.height_coverage,
         # LLM narrative: string in final mode (or None on API failure), always None in live mode
-        "team_description": evaluation.team_description,
+        "team_description":       evaluation.team_description,
+        # Per-player dimension contributions (always populated when supporting players exist)
+        "player_impact_summary":  evaluation.player_impact_summary,
     }
 
 

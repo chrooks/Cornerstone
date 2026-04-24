@@ -230,8 +230,8 @@ SEVERITY_ORDER: dict[str, int] = {
 # ---------------------------------------------------------------------------
 # Live mode — max notes returned; max strength notes returned
 # ---------------------------------------------------------------------------
-LIVE_NOTE_LIMIT: int = 10
-LIVE_STRENGTH_LIMIT: int = 2
+LIVE_NOTE_LIMIT: int = 14
+LIVE_STRENGTH_LIMIT: int = 5
 
 # ---------------------------------------------------------------------------
 # Absence note minimum players — ABSENCE-tagged notes only surface in live mode
@@ -246,6 +246,14 @@ ABSENCE_NOTE_MIN_PLAYERS: int = 3
 # suggestion module retires and the main modifier system takes over fully.
 # ---------------------------------------------------------------------------
 COMPLEMENT_STAGE_CUTOFF: int = 3
+
+# ---------------------------------------------------------------------------
+# Directional guidance — score-based archetype suggestions that continue
+# after the complement module retires (3+ supporting players).
+# Dimensions scoring below this threshold get a "your team needs X" suggestion.
+# ---------------------------------------------------------------------------
+DIRECTIONAL_GUIDANCE_THRESHOLD: float = 40.0
+DIRECTIONAL_NOTE_LIMIT: int = 2
 
 # ---------------------------------------------------------------------------
 # Healthy-dimension note suppression — negative modifier notes are dropped when

@@ -43,6 +43,8 @@ from .weights import (
     COMPLEMENT_STAGE_CUTOFF,
     SPACING_SLOT_WEIGHT_FLOOR,
     NOTE_SUPPRESSION_THRESHOLD,
+    DIRECTIONAL_GUIDANCE_THRESHOLD,
+    DIRECTIONAL_NOTE_LIMIT,
 )
 
 # Skills that contribute to the spacing dimension — these use SPACING_SLOT_WEIGHT_FLOOR
@@ -427,6 +429,46 @@ def _build_player_traces(supporting_players: list[dict]) -> dict:
     return traces
 
 
+def _build_player_impact_summary(supporting_players: list[dict]) -> dict[str, list[dict]]:
+    """
+    Build a lightweight per-player impact summary: top dimension contributions
+    as percentages of theoretical maximum. Always computed (not debug-only).
+
+    Returns: { "Player Name": [{"dimension": "spacing", "pct": 18.5}, ...] }
+    Each player gets up to 3 top dimension contributions, sorted by pct descending.
+    """
+    summary: dict[str, list[dict]] = {}
+    for p in supporting_players:
+        slot_weight = SLOT_WEIGHTS.get(p.get("slot", 9), 0.05)
+        # Aggregate raw contributions per dimension
+        dim_totals: dict[str, float] = {}
+        for skill, dim_weights in SKILL_WEIGHTS.items():
+            tier_val = _tier_value(p, skill)
+            if tier_val == 0:
+                continue
+            eff_slot_weight = (
+                max(slot_weight, SPACING_SLOT_WEIGHT_FLOOR)
+                if skill in _SPACING_SKILLS
+                else slot_weight
+            )
+            for dim, skill_weight in dim_weights.items():
+                contribution = tier_val * skill_weight * eff_slot_weight
+                dim_totals[dim] = dim_totals.get(dim, 0.0) + contribution
+
+        # Normalize to percentage of theoretical max and take top 3
+        contributions = []
+        for dim, raw_val in dim_totals.items():
+            theo_max = _THEORETICAL_MAX.get(dim, 1.0)
+            pct = round((raw_val / theo_max) * 100.0, 1)
+            if pct >= 1.0:  # skip negligible contributions
+                contributions.append({"dimension": dim, "pct": pct})
+
+        contributions.sort(key=lambda c: c["pct"], reverse=True)
+        summary[p["name"]] = contributions[:3]
+
+    return summary
+
+
 def _build_aggregate_traces(
     dim_scores: dict[str, float],
     modifier_results: list[tuple[float, str, str, str, str]],
@@ -508,6 +550,107 @@ def _compute_height_coverage(all_players: list[dict]) -> dict:
         "holes":         holes,
         "full_coverage": len(holes) == 0,
     }
+
+
+# ---------------------------------------------------------------------------
+# Directional guidance — score-based archetype suggestions for 3+ players
+# ---------------------------------------------------------------------------
+
+# Maps low-scoring dimensions to specific archetype recommendations.
+# Each entry: (dimension, trace_key_context, guidance_text)
+# When a modifier trace_key is present, the guidance is more specific.
+_DIRECTIONAL_GUIDANCE: list[tuple[str, str | None, str]] = [
+    # Spacing — generic and modifier-specific variants
+    ("spacing", "OFF_01",
+     "Floor spacing is limiting your offense. Add a shooter to open driving lanes and create room for your creators."),
+    ("spacing", None,
+     "Your team needs more shooting. Look for a spot-up or movement shooter to stretch the defense."),
+    # Creation
+    ("creation", "HARD_02",
+     "All creation runs through the cornerstone. Add a secondary ball-handler or driver to share the playmaking load."),
+    ("creation", None,
+     "Your team needs more shot creation. Look for a PnR ball-handler, driver, or isolation scorer."),
+    # Paint
+    ("paint", "HARD_01",
+     "No one can attack the rim. Add a driver, vertical spacer, or post player to generate paint touches."),
+    ("paint", None,
+     "Paint scoring is thin. Add a driver or lob threat to keep defenses honest inside."),
+    # Defense
+    ("defense", "HARD_04",
+     "Your roster has zero defensive skills. Add a versatile defender or rim protector as a foundation."),
+    ("defense", None,
+     "Defense is a weakness. Look for a versatile defender or rim protector to anchor your stop-getting."),
+    # Transition
+    ("transition", None,
+     "Your team lacks transition scoring. A transition threat can generate easy baskets before defenses set."),
+]
+
+
+def _generate_directional_notes(
+    final_dim_scores: dict[str, float],
+    fired_trace_keys: set[str],
+) -> list[Note]:
+    """
+    Generate archetype-recommendation notes for dimensions scoring below
+    DIRECTIONAL_GUIDANCE_THRESHOLD. Uses fired modifier trace keys to give
+    specific advice when possible (e.g. "add a shooter" when OFF_01 fired).
+
+    Returns at most DIRECTIONAL_NOTE_LIMIT notes.
+    """
+    notes: list[Note] = []
+
+    # Track which dimensions we've already generated a note for
+    covered_dims: set[str] = set()
+
+    for dimension, trace_key_ctx, text in _DIRECTIONAL_GUIDANCE:
+        if len(notes) >= DIRECTIONAL_NOTE_LIMIT:
+            break
+        if dimension in covered_dims:
+            continue
+
+        score = final_dim_scores.get(dimension, 0.0)
+        if score >= DIRECTIONAL_GUIDANCE_THRESHOLD:
+            continue
+
+        # Prefer the modifier-specific variant if that modifier fired
+        if trace_key_ctx is not None and trace_key_ctx not in fired_trace_keys:
+            continue
+
+        notes.append(Note(
+            severity="suggestion",
+            category="offense" if dimension in ("spacing", "creation", "paint", "transition") else "defense",
+            text=text,
+            trace_key=f"DIR_{dimension.upper()}",
+            presence_type="absence",
+            dimension=dimension,
+        ))
+        covered_dims.add(dimension)
+
+    # Second pass: fill remaining slots with generic variants for uncovered low dimensions
+    if len(notes) < DIRECTIONAL_NOTE_LIMIT:
+        for dimension, trace_key_ctx, text in _DIRECTIONAL_GUIDANCE:
+            if len(notes) >= DIRECTIONAL_NOTE_LIMIT:
+                break
+            if dimension in covered_dims:
+                continue
+            if trace_key_ctx is not None:
+                continue  # skip modifier-specific in this pass
+
+            score = final_dim_scores.get(dimension, 0.0)
+            if score >= DIRECTIONAL_GUIDANCE_THRESHOLD:
+                continue
+
+            notes.append(Note(
+                severity="suggestion",
+                category="offense" if dimension in ("spacing", "creation", "paint", "transition") else "defense",
+                text=text,
+                trace_key=f"DIR_{dimension.upper()}",
+                presence_type="absence",
+                dimension=dimension,
+            ))
+            covered_dims.add(dimension)
+
+    return notes
 
 
 # ---------------------------------------------------------------------------
@@ -673,6 +816,7 @@ def evaluate_roster(
             text=narrative,
             trace_key=trace_key,
             presence_type=presence_type,
+            dimension=dimension,
         )
 
         if severity == "strength":
@@ -706,6 +850,16 @@ def evaluate_roster(
         # Prepend so they sort naturally with the rest (all are "suggestion" severity)
         all_notes = complement_notes + all_notes
 
+    # Directional guidance — score-based archetype suggestions for 3+ players.
+    # Complements the cornerstone_complement module which retires at COMPLEMENT_STAGE_CUTOFF.
+    # Uses fired modifier trace keys to give specific advice ("add a shooter to open lanes").
+    if supporting_count >= COMPLEMENT_STAGE_CUTOFF:
+        fired_keys = {trace_key for _, _, _, _, trace_key in modifier_results}
+        # Include hard check trace keys too — they signal critical gaps
+        fired_keys.update(n.trace_key for n in hard_check_notes)
+        directional_notes = _generate_directional_notes(final_dim_scores, fired_keys)
+        all_notes = all_notes + directional_notes
+
     # Sort: critical → warning → suggestion → strength
     all_notes.sort(key=lambda n: SEVERITY_ORDER.get(n.severity, 99))
 
@@ -719,6 +873,9 @@ def evaluate_roster(
     if debug:
         player_traces_out = _build_player_traces(supporting_players)
         aggregate_traces_out = _build_aggregate_traces(dim_scores, modifier_results, scores)
+
+    # ----- Player impact summary (always computed — cheap, O(players × skills)) -----
+    impact_summary_out = _build_player_impact_summary(supporting_players) if supporting_players else None
 
     # ----- Height coverage (always computed — cheap, used by debug chart) -----
     height_coverage_out = _compute_height_coverage([cornerstone] + supporting_players)
@@ -744,4 +901,5 @@ def evaluate_roster(
         aggregate_traces=aggregate_traces_out,
         height_coverage=height_coverage_out,
         team_description=team_description_out,
+        player_impact_summary=impact_summary_out,
     )

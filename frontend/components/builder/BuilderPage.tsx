@@ -33,12 +33,13 @@ import { SALARY_CAP, LEGEND_SALARY, MAX_ROSTER_SLOTS } from "@/lib/builder-confi
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { LegendPickerGrid } from "./LegendPickerGrid";
 import { SalaryGauge } from "./SalaryGauge";
-import { RotationSlots } from "./RotationSlots";
+import { CourtLineup } from "./CourtLineup";
 import { SkillGrid } from "./SkillGrid";
 import { AssistantGmNotes } from "./AssistantGmNotes";
 import { ScoringBreakdown } from "./ScoringBreakdown";
 import { HeightCoverageChart } from "./HeightCoverageChart";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
+import type { SuggestionFilter } from "@/lib/noteFilters";
 import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -233,11 +234,15 @@ export function BuilderPage() {
         return;
       }
 
-      // If a slot is already selected and we click a different filled slot → swap.
+      // With a slot already selected, click-on-another-slot performs a swap:
+      //   filled ↔ filled → swap the two players' positions
+      //   filled ↔ empty  → move the player into the empty slot (source becomes empty)
+      // Cornerstone endpoints are already blocked above, so the cornerstone can
+      // never end up empty via this path.
       if (
         selectedSlot !== null &&
-        allSlots[selectedSlot - 1] !== null &&
-        allSlots[slotIndex - 1] !== null
+        // Require at least one non-empty endpoint — empty↔empty is a no-op
+        (allSlots[selectedSlot - 1] !== null || allSlots[slotIndex - 1] !== null)
       ) {
         const newSlots = [...allSlots];
         [newSlots[selectedSlot - 1], newSlots[slotIndex - 1]] = [
@@ -338,6 +343,8 @@ export function BuilderPage() {
 
   // ── Hovered rotation slot — used to highlight that player's bar slice ────
   const [hoveredSlotIndex, setHoveredSlotIndex] = useState<number | null>(null);
+  // ── Hovered court-lineup player — cross-highlights the same player in the picker list ──
+  const [hoveredCourtPlayerId, setHoveredCourtPlayerId] = useState<string | null>(null);
 
   // ── Hovered picker player — used to show cap impact preview in gauge ──────
   const [pickerHoveredSalary, setPickerHoveredSalary] = useState<number | null>(null);
@@ -369,9 +376,123 @@ export function BuilderPage() {
 
   // ── Mobile player picker toggle ────────────────────────────────────────────
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [isWideBuilderLayout, setIsWideBuilderLayout] = useState(false);
+
+  // ── Suggestion-driven skill filter for player picker ────────────────────
+  // When a GM Notes suggestion is clicked, we push a {skill, tier} filter into
+  // the player picker via a trigger pattern (parallel to salaryCapFilter) and
+  // briefly flash the right panel so the user can see where the action landed.
+  const [suggestionFilterTrigger, setSuggestionFilterTrigger] = useState<SuggestionFilter | null>(null);
+  const [pickerFlashKey, setPickerFlashKey] = useState(0);
+  const [pickerFlashing, setPickerFlashing] = useState(false);
+
+  // Activate a brief orange ring on the picker whenever pickerFlashKey changes
+  useEffect(() => {
+    if (pickerFlashKey === 0) return;
+    setPickerFlashing(true);
+    const t = setTimeout(() => setPickerFlashing(false), 900);
+    return () => clearTimeout(t);
+  }, [pickerFlashKey]);
+
+  // Handler passed to AssistantGmNotes → NotesList → SwsColumn. Pushes the
+  // suggestion filter into the picker and triggers the visual flash.
+  const handleSuggestionFilter = useCallback(
+    (filter: SuggestionFilter) => {
+      setSuggestionFilterTrigger(filter);
+      setPickerFlashKey((k) => k + 1);
+      // Ensure the picker is visible on mobile where it may be hidden behind a toggle
+      setPickerOpen(true);
+    },
+    [],
+  );
+
+  // ── Resizable right panel ────────────────────────────────────────────────
+  // Width stored as fraction of the split container (0.0–1.0). Default ~27% (≈340px of ~1260px).
+  // Dragging the handle resizes between 20% and 55%.
+  const [rightPanelFrac, setRightPanelFrac] = useState(0.27);
+  const splitRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
+  const isVerticalDraggingRef = useRef(false);
+  const DEFAULT_TOP_PANEL_FRAC = 0.42;
+  const MIN_TOP_PANEL_FRAC = 0.28;
+  const [topPanelFrac, setTopPanelFrac] = useState(DEFAULT_TOP_PANEL_FRAC);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const syncLayoutMode = () => setIsWideBuilderLayout(mediaQuery.matches);
+
+    syncLayoutMode();
+    mediaQuery.addEventListener("change", syncLayoutMode);
+    return () => mediaQuery.removeEventListener("change", syncLayoutMode);
+  }, []);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    const startX = e.clientX;
+    const startFrac = rightPanelFrac;
+
+    const onMove = (moveEvent: MouseEvent) => {
+      if (!splitRef.current || !isDraggingRef.current) return;
+      const containerWidth = splitRef.current.getBoundingClientRect().width;
+      // Delta is inverted: dragging left grows the right panel
+      const dx = moveEvent.clientX - startX;
+      const deltaFrac = dx / containerWidth;
+      // Right panel grows when handle moves left (subtract delta)
+      const newFrac = Math.max(0.20, Math.min(0.55, startFrac - deltaFrac));
+      setRightPanelFrac(newFrac);
+    };
+
+    const onUp = () => {
+      isDraggingRef.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [rightPanelFrac]);
+
+  const handleVerticalResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isVerticalDraggingRef.current = true;
+    const startY = e.clientY;
+    const startFrac = topPanelFrac;
+
+    const onMove = (moveEvent: MouseEvent) => {
+      if (!leftPanelRef.current || !isVerticalDraggingRef.current) return;
+      const containerHeight = leftPanelRef.current.getBoundingClientRect().height;
+      const dy = moveEvent.clientY - startY;
+      const deltaFrac = dy / containerHeight;
+      const newFrac = Math.max(
+        MIN_TOP_PANEL_FRAC,
+        Math.min(DEFAULT_TOP_PANEL_FRAC, startFrac + deltaFrac),
+      );
+      setTopPanelFrac(newFrac);
+    };
+
+    const onUp = () => {
+      isVerticalDraggingRef.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }, [topPanelFrac]);
 
   // ── Left panel tab ────────────────────────────────────────────────────────
-  const [leftTab, setLeftTab] = useState<"skills" | "notes" | "debug">("skills");
+  // Default to "notes" — design intent: GM Notes are the primary feedback surface
+  const [leftTab, setLeftTab] = useState<"skills" | "notes" | "debug">("notes");
 
   // ── Latest evaluation — lifted from AssistantGmNotes for the Debug tab ────
   const [latestEval, setLatestEval] = useState<RosterEvaluation | null>(null);
@@ -476,43 +597,99 @@ export function BuilderPage() {
         </div>
       </div>
 
-      {/* 60/40 split */}
-      <div id="builder-split" className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
+      {/* Resizable split — left (builder) + drag handle + right (player picker) */}
+      <div id="builder-split" ref={splitRef} className="flex-1 flex flex-col lg:flex-row min-h-0">
 
         {/* ── Left panel: builder ──────────────────────────────────────────── */}
-        <div id="builder-left-panel" className="flex flex-col gap-3 lg:w-[60%] min-w-0 overflow-hidden">
+        <div
+          id="builder-left-panel"
+          ref={leftPanelRef}
+          className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden pr-0 lg:pr-1"
+        >
 
-          {/* Salary gauge */}
-          <div className="flex-shrink-0">
-            <SalaryGauge
-              usedSalary={usedSalary}
-              cap={SALARY_CAP}
-              highlightRange={highlightRange}
-              previewSalary={pickerHoveredSalary}
-              onRemainingClick={(max) => setSalaryCapFilter(max)}
-            />
+          {/* Roster card — salary bar + court lineup + bench */}
+          <div
+            id="builder-roster-card"
+            className={cn(
+              "bg-card border border-border rounded-xl shadow-sm overflow-hidden flex flex-col min-h-0",
+              isWideBuilderLayout ? "flex-[0_1_auto]" : "flex-shrink-0 mb-3",
+            )}
+            style={isWideBuilderLayout ? { flex: `${topPanelFrac} 1 0%` } : undefined}
+          >
+            {/* Salary gauge inside the card */}
+            <div className="px-5 pt-3 pb-2">
+              <SalaryGauge
+                usedSalary={usedSalary}
+                cap={SALARY_CAP}
+                highlightRange={highlightRange}
+                previewSalary={pickerHoveredSalary}
+                onRemainingClick={(max) => setSalaryCapFilter(max)}
+              />
+            </div>
+
+            {/* Court lineup — arc starters + bench row */}
+            <div id="builder-roster-lineup-wrapper" className="flex-1 min-h-0">
+              <CourtLineup
+                allSlots={allSlots}
+                cornerstoneId={cornerstoneId}
+                selectedSlot={selectedSlot}
+                onSlotClick={handleSlotClick}
+                onRemoveSlot={handleRemoveSlot}
+                onDropPlayer={handleDropPlayer}
+                onSwapSlots={handleSwapSlots}
+                onSlotHover={(slotIndex) => {
+                  setHoveredSlotIndex(slotIndex);
+                  // Lift the slot's player id so the picker can cross-highlight
+                  const occupant = allSlots[slotIndex - 1];
+                  setHoveredCourtPlayerId(occupant?.id ?? null);
+                }}
+                onSlotHoverEnd={() => {
+                  setHoveredSlotIndex(null);
+                  setHoveredCourtPlayerId(null);
+                }}
+              />
+            </div>
           </div>
 
-          {/* Rotation slots */}
-          <div className="flex-shrink-0">
-            <RotationSlots
-              allSlots={allSlots}
-              cornerstoneId={cornerstoneId}
-              selectedSlot={selectedSlot}
-              onSlotClick={handleSlotClick}
-              onRemoveSlot={handleRemoveSlot}
-              onDropPlayer={handleDropPlayer}
-              onSwapSlots={handleSwapSlots}
-              onSlotHover={(slotIndex) => setHoveredSlotIndex(slotIndex)}
-              onSlotHoverEnd={() => setHoveredSlotIndex(null)}
-            />
+          <div
+            id="builder-vertical-resize-handle"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize roster and notes panels"
+            onMouseDown={handleVerticalResizeStart}
+            className={cn(
+              "hidden lg:flex items-center justify-center flex-shrink-0 cursor-row-resize group",
+              "h-3 hover:h-4 transition-[height]",
+            )}
+          >
+            <div className="h-px w-16 rounded-full bg-border group-hover:bg-foreground/30 transition-colors" />
           </div>
-
 
           {/* Skill grid / GM Notes — tabbed to share space */}
-          <div id="builder-grid-area" className="flex flex-col min-h-0 flex-1 overflow-hidden border border-border rounded-lg">
+          <div
+            id="builder-grid-area"
+            className={cn(
+              "flex flex-col min-h-0 overflow-hidden border border-border rounded-lg",
+              !isWideBuilderLayout && "flex-1",
+            )}
+            style={isWideBuilderLayout ? { flex: `${1 - topPanelFrac} 1 0%` } : undefined}
+          >
             {/* Tab bar */}
             <div id="builder-left-tabs" className="flex border-b border-border flex-shrink-0">
+              {/* GM Notes tab first — primary feedback surface per design */}
+              <button
+                id="builder-tab-notes"
+                type="button"
+                onClick={() => setLeftTab("notes")}
+                className={cn(
+                  "px-4 py-2 text-xs font-medium transition-colors",
+                  leftTab === "notes"
+                    ? "border-b-2 border-amber-500 text-foreground -mb-px"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                GM Notes
+              </button>
               <button
                 id="builder-tab-skills"
                 type="button"
@@ -525,19 +702,6 @@ export function BuilderPage() {
                 )}
               >
                 Skills
-              </button>
-              <button
-                id="builder-tab-notes"
-                type="button"
-                onClick={() => setLeftTab("notes")}
-                className={cn(
-                  "px-4 py-2 text-xs font-medium transition-colors",
-                  leftTab === "notes"
-                    ? "border-b-2 border-primary text-foreground -mb-px"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                GM Notes
               </button>
               {/* Debug tab — admin only */}
               {isAdmin && (
@@ -593,6 +757,7 @@ export function BuilderPage() {
                 legendDetail={legendDetail}
                 isAdmin={isAdmin}
                 onEvaluation={setLatestEval}
+                onSuggestionFilter={handleSuggestionFilter}
               />
             </div>
 
@@ -624,14 +789,34 @@ export function BuilderPage() {
           </div>
         </div>
 
-        {/* ── Right panel: player picker ───────────────────────────────────── */}
+        {/* ── Drag handle — resizes right panel ───────────────────────────── */}
+        <div
+          id="builder-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize player panel"
+          onMouseDown={handleResizeStart}
+          className={cn(
+            "hidden lg:flex items-center justify-center flex-shrink-0 cursor-col-resize group",
+            "w-3 hover:w-4 transition-[width]",
+          )}
+        >
+          <div className="w-px h-12 rounded-full bg-border group-hover:bg-foreground/30 transition-colors" />
+        </div>
+
+        {/* ── Right panel: player picker — resizable via drag handle ─────── */}
         <div
           id="builder-right-panel"
           className={cn(
-            "flex-col lg:w-[50%] min-w-0 border border-border rounded-lg p-3 overflow-hidden",
+            "flex-col min-w-0 border rounded-lg p-3 overflow-hidden lg:flex-shrink-0 transition-[box-shadow,border-color] duration-300",
             "lg:flex",
             pickerOpen ? "flex" : "hidden",
+            // Brief orange glow when a GM Notes suggestion pushes a filter in
+            pickerFlashing
+              ? "border-orange-400 ring-2 ring-orange-400/60 shadow-[0_0_16px_rgba(251,146,60,0.35)]"
+              : "border-border",
           )}
+          style={{ width: `${Math.round(rightPanelFrac * 100)}%` }}
         >
           <PlayerPickerPanel
             players={activeRows}
@@ -640,11 +825,14 @@ export function BuilderPage() {
             remainingSalary={SALARY_CAP - usedSalary}
             salaryFilterTrigger={salaryCapFilter}
             onSalaryFilterInjected={() => setSalaryCapFilter(null)}
+            skillFilterTrigger={suggestionFilterTrigger}
+            onSkillFilterInjected={() => setSuggestionFilterTrigger(null)}
             rosterPlayerIds={rosterPlayerIds}
             selectedSlot={selectedSlot}
             onPlayerClick={handlePlayerClick}
             onPlayerHover={(salary) => setPickerHoveredSalary(salary)}
             onPlayerHoverEnd={() => setPickerHoveredSalary(null)}
+            highlightedPlayerId={hoveredCourtPlayerId}
           />
         </div>
       </div>

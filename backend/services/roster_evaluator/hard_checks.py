@@ -58,6 +58,7 @@ def check_HARD_01(
              "are all absent. The offense cannot attack the rim or generate high-percentage shots.",
         trace_key="HARD_01",
         presence_type="absence",
+        dimension="paint",
     )
 
 
@@ -92,6 +93,7 @@ def check_HARD_02(
              "skills outside the cornerstone. Everything runs through one player.",
         trace_key="HARD_02",
         presence_type="absence",
+        dimension="creation",
     )
 
 
@@ -131,6 +133,7 @@ def check_HARD_03(
         text=text,
         trace_key="HARD_03",
         presence_type="absence",
+        dimension="spacing",
     )
 
 
@@ -167,6 +170,7 @@ def check_HARD_04(
              "rim protectors, or perimeter disruptors. This team cannot generate stops.",
         trace_key="HARD_04",
         presence_type="absence",
+        dimension="defense",
     )
 
 
@@ -211,6 +215,7 @@ def check_HARD_05(
         text=text,
         trace_key="HARD_05",
         presence_type="absence",
+        dimension="defense",
     )
 
 

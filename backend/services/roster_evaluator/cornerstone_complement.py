@@ -411,6 +411,7 @@ def get_complement_notes(
                 text=text,
                 trace_key=rule.trace_key,
                 presence_type="absence",
+                dimension=rule.dimension,
             ))
 
     return notes

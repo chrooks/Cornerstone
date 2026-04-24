@@ -52,6 +52,17 @@ const config: Config = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      // Score delta chip: fade in briefly then fade out after 3s
+      keyframes: {
+        "delta-fade": {
+          "0%":   { opacity: "1" },
+          "70%":  { opacity: "1" },
+          "100%": { opacity: "0" },
+        },
+      },
+      animation: {
+        "delta-fade": "delta-fade 3s ease-out forwards",
+      },
     },
   },
   plugins: [],

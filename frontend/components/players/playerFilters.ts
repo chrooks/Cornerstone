@@ -273,8 +273,11 @@ export const AVAILABLE_FILTERS: PlayerFilterType[] = [
   {
     label: "Name",
     inputMethod: "text",
-    apply: (player, value) =>
-      player.name.toLowerCase().includes(value.toLowerCase()),
+    // Strip diacritics so "jokic" matches "Jokić", "luka" matches "Lūka", etc.
+    apply: (player, value) => {
+      const strip = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      return strip(player.name).includes(strip(value));
+    },
   },
 
   // ── Select filters ────────────────────────────────────────────────────────

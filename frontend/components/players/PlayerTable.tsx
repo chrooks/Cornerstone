@@ -155,6 +155,11 @@ interface PlayerTableProps {
   onRowHover?: (player: PlayerWithSkills) => void;
   /** Called on row mouseleave — clears gauge preview. */
   onRowHoverEnd?: () => void;
+  /**
+   * Player ID to visually highlight — the row is drawn with an amber tint even
+   * when it's disabled. Used by the builder to mirror CourtLineup face hovers.
+   */
+  highlightedPlayerId?: string | null;
 }
 
 export function PlayerTable({
@@ -174,6 +179,7 @@ export function PlayerTable({
   disabledPlayerIds,
   onRowHover,
   onRowHoverEnd,
+  highlightedPlayerId,
 }: PlayerTableProps) {
   const router = useRouter();
 
@@ -551,9 +557,11 @@ export function PlayerTable({
                       }
                       router.push(`/players/${player.id}`);
                     };
+                const isHighlighted = highlightedPlayerId != null && highlightedPlayerId === player.id;
                 return (
                 <tr
                   key={player.id}
+                  id={`player-row-${player.id}`}
                   draggable={!!onRowDragStart && !isDisabled}
                   onDragStart={onRowDragStart && !isDisabled ? (e) => onRowDragStart(e, player) : undefined}
                   onClick={handleRowClick}
@@ -569,6 +577,9 @@ export function PlayerTable({
                       : isLegend
                       ? "bg-amber-50/30 dark:bg-amber-950/10 cursor-default"
                       : "hover:bg-muted/40 cursor-pointer",
+                    // Cross-component highlight driven by CourtLineup face hover.
+                    // `!opacity-100` overrides the disabled dimming so the match is visible.
+                    isHighlighted && "!opacity-100 bg-amber-100/70 dark:bg-amber-900/30 outline outline-2 outline-amber-400/80 outline-offset-[-2px]",
                   )}
                 >
                   {visibleColumns.map((col) => {
@@ -580,6 +591,8 @@ export function PlayerTable({
                         className={cn(
                           "px-2 py-1.5 whitespace-nowrap overflow-hidden text-ellipsis",
                           col.sticky && "sticky left-0 z-10 bg-background group-hover:bg-muted border-r border-border transition-colors",
+                          // Sticky cell needs the highlight bg to override bg-background
+                          col.sticky && isHighlighted && "!bg-amber-100/70 dark:!bg-amber-900/30",
                           isSkillCol && onSkillOverride && "cursor-context-menu",
                         )}
                         onContextMenu={

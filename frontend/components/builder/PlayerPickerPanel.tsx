@@ -33,6 +33,7 @@ import {
 } from "@/components/players/playerFilters";
 import type { SortKey } from "@/components/players/SortControls";
 import type { PlayerWithSkills } from "@/lib/types";
+import type { SuggestionFilter } from "@/lib/noteFilters";
 
 // ---------------------------------------------------------------------------
 // Sort comparator (mirrors players/page.tsx)
@@ -109,10 +110,22 @@ interface PlayerPickerPanelProps {
   salaryFilterTrigger?: number | null;
   /** Called after the salary filter has been injected — parent should reset trigger to null. */
   onSalaryFilterInjected?: () => void;
+  /**
+   * When set, the panel programmatically adds a "Skill = X at tier Y" filter entry — used by
+   * the GM Notes suggestion-link flow. Parent resets this to null after the effect fires.
+   */
+  skillFilterTrigger?: SuggestionFilter | null;
+  /** Called after the skill filter has been injected — parent should reset trigger to null. */
+  onSkillFilterInjected?: () => void;
   /** Called on player row/card mouseenter — salary passed to gauge preview. */
   onPlayerHover?: (salary: number | null) => void;
   /** Called on player row/card mouseleave — clears gauge preview. */
   onPlayerHoverEnd?: () => void;
+  /**
+   * Player ID to visually highlight in the list — used by BuilderPage to mirror
+   * the CourtLineup face hover into the picker list.
+   */
+  highlightedPlayerId?: string | null;
 }
 
 export function PlayerPickerPanel({
@@ -125,8 +138,11 @@ export function PlayerPickerPanel({
   onPlayerClick,
   salaryFilterTrigger,
   onSalaryFilterInjected,
+  skillFilterTrigger,
+  onSkillFilterInjected,
   onPlayerHover,
   onPlayerHoverEnd,
+  highlightedPlayerId,
 }: PlayerPickerPanelProps) {
   // ── View mode ─────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<ViewMode>("table");
@@ -172,6 +188,38 @@ export function PlayerPickerPanel({
   // Only run when trigger changes — not on every filterEntries/nextConnector change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [salaryFilterTrigger]);
+
+  // ── Skill filter injection — GM Notes suggestion link ───────────────────
+  // When parent triggers a {skill, tier} filter from a clicked suggestion note,
+  // inject it into the existing filter system. Replaces any prior skill filter
+  // for the SAME skill so repeated clicks don't pile up duplicates.
+  useEffect(() => {
+    if (!skillFilterTrigger) return;
+    const skillFilter = AVAILABLE_FILTERS.find((f) => f.label === "Skill");
+    if (!skillFilter) return;
+    const encodedValue = `${skillFilterTrigger.skill}|${skillFilterTrigger.tier}`;
+    setFilterEntries((prev) => {
+      // Drop any existing Skill entry pinned to this same skill (any tier) so we don't duplicate
+      const pruned = prev.filter((e) => {
+        if ("paren" in e) return true;
+        if (e.filter.label !== "Skill") return true;
+        const prevSkill = e.value.split("|")[0];
+        return prevSkill !== skillFilterTrigger.skill;
+      });
+      if (pruned.length >= MAX_ACTIVE_FILTERS) return pruned;
+      const entry: ActiveFilter = {
+        id: crypto.randomUUID(),
+        filter: skillFilter,
+        value: encodedValue,
+        connector: nextConnector,
+        negated: false,
+      };
+      return [...pruned, entry];
+    });
+    onSkillFilterInjected?.();
+  // Only run when trigger identity changes — not on every filterEntries/nextConnector change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skillFilterTrigger]);
 
   const sorted = useMemo(() => stableMultiSort(filtered, sortKeys), [filtered, sortKeys]);
 
@@ -387,13 +435,17 @@ export function PlayerPickerPanel({
               disabledPlayerIds={disabledPlayerIds}
               onRowHover={onPlayerHover ? (player) => onPlayerHover(player.salary ?? null) : undefined}
               onRowHoverEnd={onPlayerHoverEnd}
+              highlightedPlayerId={highlightedPlayerId}
             />
           ) : (
             <>
               <div id="player-picker-cards" className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
-                {paginated.map((player) => (
+                {paginated.map((player) => {
+                  const isHighlighted = highlightedPlayerId != null && highlightedPlayerId === player.id;
+                  return (
                   <div
                     key={player.id}
+                    id={`player-card-${player.id}`}
                     draggable
                     onDragStart={(e) => handleRowDragStart(e, player)}
                     onClick={() => handleRowClick(player)}
@@ -401,13 +453,16 @@ export function PlayerPickerPanel({
                     onMouseEnter={onPlayerHover ? () => onPlayerHover(player.salary ?? null) : undefined}
                     onMouseLeave={onPlayerHoverEnd}
                     className={cn(
-                      "cursor-pointer",
-                      isUnavailable(player) ? "opacity-40 pointer-events-none" : "",
+                      "cursor-pointer rounded-lg transition-shadow",
+                      isUnavailable(player) && !isHighlighted ? "opacity-40 pointer-events-none" : "",
+                      // CourtLineup face hover → cross-highlight even on disabled cards
+                      isHighlighted && "!opacity-100 ring-2 ring-amber-400/80 shadow-[0_0_12px_rgba(251,191,36,0.3)]",
                     )}
                   >
                     <PlayerCard player={player} />
                   </div>
-                ))}
+                  );
+                })}
                 {paginated.length === 0 && (
                   <p className="col-span-full text-center text-sm text-muted-foreground py-6">
                     No players match the current filters.

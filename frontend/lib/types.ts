@@ -448,6 +448,8 @@ export interface Note {
   trace_key: string;
   /** Whether this note fires from what IS on the roster ("presence") or what is MISSING ("absence"). */
   presence_type: "presence" | "absence";
+  /** Which scoring dimension this note affects (e.g. "spacing", "defense"). Null for dimension-agnostic notes. */
+  dimension: string | null;
 }
 
 /** Per-player entry in the height coverage map */
@@ -481,6 +483,12 @@ export interface HeightCoverageData {
   full_coverage: boolean;
 }
 
+/** Per-player dimension contribution entry in the impact summary */
+export interface PlayerImpactEntry {
+  dimension: string;
+  pct: number;
+}
+
 /** Full evaluation result from POST /api/builder/evaluate */
 export interface RosterEvaluation {
   scores: Scores;
@@ -491,6 +499,8 @@ export interface RosterEvaluation {
   height_coverage: HeightCoverageData | null;
   /** LLM-generated GM-memo narrative; only present in final mode, null on failure or live mode */
   team_description?: string | null;
+  /** Per-player top dimension contributions as % of theoretical max */
+  player_impact_summary: Record<string, PlayerImpactEntry[]> | null;
 }
 
 /** Request payload for POST /api/builder/evaluate */

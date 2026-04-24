@@ -80,6 +80,10 @@ class Note:
     text: str
     trace_key: str
     presence_type: Literal["presence", "absence"] = "presence"
+    # Which scoring dimension this note affects (e.g. "spacing", "defense").
+    # Used by the frontend to show which score bar a note relates to in the
+    # what-changed panel. None for notes not tied to a specific dimension.
+    dimension: str | None = None
 
 
 @dataclass(frozen=True)
@@ -102,3 +106,7 @@ class RosterEvaluation:
     # LLM-generated GM-memo narrative — only populated in final mode.
     # None when mode is "live" or when the Anthropic API call fails.
     team_description: str | None = field(default=None)
+    # Per-player top dimension contributions as % of theoretical max.
+    # Always populated when supporting players exist.
+    # Shape: { "Player Name": [{"dimension": "spacing", "pct": 18.5}, ...] }
+    player_impact_summary: dict[str, list[dict]] | None = field(default=None)

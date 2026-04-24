@@ -15,13 +15,13 @@ import { PUBLIC_SKILL_CATEGORIES, SKILL_LABELS } from "@/lib/skills";
 import type { PlayerWithSkills, LegendProfile } from "@/lib/types";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 
-/** Tier color classes for inline cell text (compact, no badge border needed). */
-const TIER_TEXT_CLASSES: Record<string, string> = {
-  "All-Time Great": "text-violet-700 font-semibold",
-  Elite:            "text-emerald-700 font-semibold",
-  Proficient:       "text-sky-700",
-  Capable:          "text-amber-700",
-  None:             "text-muted-foreground/40",
+/** Background color classes for tier squares. */
+const TIER_BG_CLASSES: Record<string, string> = {
+  "All-Time Great": "bg-violet-500",
+  Elite:            "bg-emerald-500",
+  Proficient:       "bg-sky-500",
+  Capable:          "bg-amber-500",
+  None:             "",
 };
 
 interface SkillGridProps {
@@ -35,15 +35,46 @@ interface SkillGridProps {
   hideEmptyColumns?: boolean;
 }
 
-/** Return display text for a tier value (collapse "None" and null to "—"). */
-function tierLabel(tier: string | null | undefined): string {
-  if (!tier || tier === "None") return "—";
-  return tier;
+/** Numeric values for computing averages across the roster. */
+const TIER_NUMERIC: Record<string, number> = {
+  "All-Time Great": 4,
+  Elite: 3,
+  Proficient: 2,
+  Capable: 1,
+  None: 0,
+};
+
+/** Map a numeric average back to the nearest tier label for display. */
+function avgTierLabel(avg: number): string {
+  if (avg < 0.25) return "—";
+  if (avg < 1.5) return "C";
+  if (avg < 2.5) return "P";
+  if (avg < 3.5) return "E";
+  return "ATG";
 }
 
-function tierClass(tier: string | null | undefined): string {
-  if (!tier || tier === "None") return "text-muted-foreground/30";
-  return TIER_TEXT_CLASSES[tier] ?? "text-foreground";
+/** Color class for an average tier value. */
+function avgTierClass(avg: number): string {
+  if (avg < 0.25) return "text-muted-foreground/30";
+  if (avg < 1.5) return "text-amber-700";
+  if (avg < 2.5) return "text-sky-700";
+  if (avg < 3.5) return "text-emerald-700 font-semibold";
+  return "text-violet-700 font-semibold";
+}
+
+/** Colored square for a tier value. Shows tier name on hover via native title tooltip. */
+function TierSquare({ tier }: { tier: string | null | undefined }) {
+  const resolved = tier && tier !== "None" ? tier : null;
+  if (!resolved) {
+    // Empty / None — render a faint placeholder square
+    return <span className="inline-block size-4 rounded-sm bg-muted/40" />;
+  }
+  return (
+    <span
+      className={cn("inline-block size-4 rounded-sm cursor-default", TIER_BG_CLASSES[resolved] ?? "bg-muted")}
+      title={resolved}
+    />
+  );
 }
 
 export function SkillGrid({
@@ -80,7 +111,7 @@ export function SkillGrid({
                   key={slotIndex}
                   id={`builder-skill-grid-col-${slotIndex}`}
                   // sticky top-0 so column names stay visible on vertical scroll
-                  className="sticky top-0 z-30 bg-background px-2 py-1.5 text-center font-medium border-b border-border min-w-[80px] text-foreground"
+                  className="sticky top-0 z-30 bg-background px-1 py-1.5 text-center font-medium border-b border-border min-w-[44px] text-foreground"
                 >
                   <span className="truncate block max-w-[76px] mx-auto" title={name}>
                     {name.split(" ").pop()}
@@ -88,6 +119,14 @@ export function SkillGrid({
                 </th>
               );
             })}
+
+            {/* Average column header — sticky top + right */}
+            <th
+              id="builder-skill-grid-col-avg"
+              className="sticky top-0 right-0 z-40 bg-background px-2 py-1.5 text-center font-medium border-b border-border border-l border-border/60 min-w-[50px] text-muted-foreground"
+            >
+              Avg
+            </th>
           </tr>
         </thead>
 
@@ -99,7 +138,8 @@ export function SkillGrid({
                 <td className="sticky left-0 z-10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 bg-muted border-y border-border/60 whitespace-nowrap">
                   {category}
                 </td>
-                <td colSpan={visibleIndices.length} className="bg-muted border-y border-border/60" />
+                {/* +1 for avg column */}
+                <td colSpan={visibleIndices.length + 1} className="bg-muted border-y border-border/60" />
               </tr>
 
               {/* Skill rows within this category */}
@@ -129,18 +169,40 @@ export function SkillGrid({
                       <td
                         key={slotIndex}
                         id={`builder-skill-grid-cell-${slotIndex}-${skill}`}
-                        className="px-2 py-1 text-center"
+                        className="px-1 py-1 text-center"
                       >
                         {!p ? (
-                          <span className="text-muted-foreground/20">—</span>
+                          <span className="inline-block size-4 rounded-sm bg-muted/20" />
                         ) : (
-                          <span className={cn("whitespace-nowrap", tierClass(tier))}>
-                            {tierLabel(tier)}
-                          </span>
+                          <TierSquare tier={tier} />
                         )}
                       </td>
                     );
                   })}
+
+                  {/* Average tier across filled slots */}
+                  {(() => {
+                    const tiers = visibleIndices
+                      .map((i) => {
+                        const p = allSlots[i];
+                        if (!p) return null;
+                        const isCornerstone = p.id === cornerstoneId;
+                        const tier = isCornerstone ? legendProfile?.[skill] : p.skills?.[skill];
+                        return TIER_NUMERIC[tier ?? "None"] ?? 0;
+                      })
+                      .filter((v): v is number => v !== null && v > 0);
+                    const avg = tiers.length > 0 ? tiers.reduce((a, b) => a + b, 0) / tiers.length : 0;
+                    return (
+                      <td
+                        id={`builder-skill-grid-avg-${skill}`}
+                        className={cn("sticky right-0 z-10 px-2 py-1 text-center border-l border-border/60 bg-background", rowIdx % 2 !== 0 && "bg-muted/20")}
+                      >
+                        <span className={cn("whitespace-nowrap text-[10px]", avgTierClass(avg))}>
+                          {avgTierLabel(avg)}
+                        </span>
+                      </td>
+                    );
+                  })()}
                 </tr>
               ))}
             </>
