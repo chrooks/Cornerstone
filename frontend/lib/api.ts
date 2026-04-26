@@ -573,3 +573,62 @@ export async function evaluateRoster(
     body: JSON.stringify(payload),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Cohesion Calibration (admin-only)
+// ---------------------------------------------------------------------------
+
+/** Fetch a single player's base composites for the cohesion calibration panel. */
+export async function fetchPlayerComposites(
+  playerId: string,
+): Promise<ApiResponse<{
+  player_id: string;
+  name: string;
+  height: string | null;
+  composites_normalized: Record<string, number>;
+  bell_curve: { amplitude: number; peak: number; range_down: number; range_up: number; flat_down: number; flat_up: number };
+}>> {
+  return apiFetch(`/api/cohesion/player/${encodeURIComponent(playerId)}/composites`);
+}
+
+/** Fetch bell curve params + pre-computed curve array for chart rendering. */
+export async function fetchBellCurve(
+  playerId: string,
+): Promise<ApiResponse<{
+  player_id: string;
+  name: string;
+  params: Record<string, number>;
+  curve: { height: number; height_display: string; value: number }[];
+}>> {
+  return apiFetch(`/api/cohesion/bell-curve/${encodeURIComponent(playerId)}`);
+}
+
+/** Evaluate a 5-player lineup via the cohesion engine. */
+export async function evaluateLineup(
+  players: { name: string; height: string | null; skills: Record<string, string> }[],
+): Promise<ApiResponse<{
+  cohesion_score: number;
+  subscores: Record<string, number>;
+  synergies_applied: string[];
+  accentuation: { strength_amplification: number; weakness_coverage: number };
+}>> {
+  return apiFetch("/api/cohesion/lineup/evaluate", {
+    method: "POST",
+    body: JSON.stringify({ players }),
+  });
+}
+
+/** Fetch all cohesion engine weight constants (merged with any runtime overrides). */
+export async function fetchCohesionWeights(): Promise<ApiResponse<Record<string, unknown>>> {
+  return apiFetch<Record<string, unknown>>("/api/cohesion/weights");
+}
+
+/** Apply partial weight overrides (in-memory, resets on server restart). */
+export async function updateCohesionWeights(
+  overrides: Record<string, unknown>,
+): Promise<ApiResponse<Record<string, unknown>>> {
+  return apiFetch<Record<string, unknown>>("/api/cohesion/weights", {
+    method: "PUT",
+    body: JSON.stringify(overrides),
+  });
+}
