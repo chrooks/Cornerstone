@@ -503,6 +503,88 @@ export interface RosterEvaluation {
   player_impact_summary: Record<string, PlayerImpactEntry[]> | null;
 }
 
+// ---------------------------------------------------------------------------
+// Cohesion Engine — additive response types used when EVAL_ENGINE=cohesion
+// ---------------------------------------------------------------------------
+
+export type CohesionNoteType = "strength" | "weakness" | "suggestion";
+
+/** A structured cohesion-engine note. */
+export interface CohesionNote {
+  type: CohesionNoteType;
+  category: string;
+  severity: number;
+  raw_value: number;
+  text: string;
+}
+
+/** A player's normalized base composites in the cohesion engine. */
+export interface CohesionCompositeScores {
+  spacing: number;
+  finishing: number;
+  paint_touch: number;
+  anchor: number;
+  post_game: number;
+  pnr_screener: number;
+  off_ball_impact: number;
+  shot_creation: number;
+  rebounding: number;
+  transition: number;
+}
+
+/** Defensive bell curve parameters for one player. */
+export interface CohesionBellCurve {
+  amplitude: number;
+  peak: number;
+  range_down: number;
+  range_up: number;
+  flat_down: number;
+  flat_up: number;
+}
+
+/** Per-player composite payload returned by the cohesion engine. */
+export interface CohesionPlayerComposites {
+  player_id: string;
+  name: string;
+  base: CohesionCompositeScores;
+  bell_curve: CohesionBellCurve;
+}
+
+/** One evaluated starting lineup in the cohesion response. */
+export interface CohesionLineupData {
+  cohesion_score: number;
+  subscores: Record<string, number>;
+  synergies_applied: string[];
+  accentuation: {
+    strength_amplification: number;
+    weakness_coverage: number;
+  };
+}
+
+/** Summary across all evaluated five-man lineups. */
+export interface CohesionLineupSummary {
+  total_lineups: number;
+  viable_lineups: number;
+  median_score: number;
+  archetype_labels: string[];
+}
+
+/** Full evaluation result from POST /api/builder/evaluate when EVAL_ENGINE=cohesion. */
+export interface CohesionRosterEvaluation {
+  star_rating: number;
+  star_rating_breakdown: {
+    starting_5: number;
+    depth: number;
+    archetype_diversity: number;
+    floor: number;
+  };
+  starting_lineup: CohesionLineupData;
+  player_composites: CohesionPlayerComposites[];
+  lineup_summary: CohesionLineupSummary;
+  notes: CohesionNote[];
+  team_description: string | null;
+}
+
 /** Request payload for POST /api/builder/evaluate */
 export interface EvaluatePayload {
   players: Array<{

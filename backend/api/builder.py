@@ -20,11 +20,14 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import os
 from typing import Any
 
 from flask import Blueprint, jsonify, request
 
-from services.roster_evaluator.evaluator import evaluate_roster
+from services.cohesion_engine import evaluate_roster as evaluate_cohesion_roster
+from services.cohesion_engine.types import RosterEvaluation as CohesionRosterEvaluation
+from services.roster_evaluator.evaluator import evaluate_roster as evaluate_legacy_roster
 from services.roster_evaluator.types import RosterEvaluation, Scores
 
 logger = logging.getLogger(__name__)
@@ -32,6 +35,7 @@ logger = logging.getLogger(__name__)
 builder_bp = Blueprint("builder", __name__, url_prefix="/api/builder")
 
 _VALID_MODES = {"live", "final"}
+EVAL_ENGINE = os.environ.get("EVAL_ENGINE", "legacy").lower()
 
 # Input size limits — prevents CPU amplification on this unauthenticated endpoint
 _MAX_PLAYERS = 20
@@ -67,6 +71,63 @@ def _serialize_evaluation(evaluation: RosterEvaluation) -> dict:
         "team_description":       evaluation.team_description,
         # Per-player dimension contributions (always populated when supporting players exist)
         "player_impact_summary":  evaluation.player_impact_summary,
+    }
+
+
+def _serialize_lineup(lineup) -> dict:
+    """Serialize a cohesion LineupCohesion dataclass."""
+    return {
+        "cohesion_score": lineup.score,
+        "subscores": lineup.subscores,
+        "synergies_applied": lineup.synergies_applied,
+        "accentuation": {
+            "strength_amplification": lineup.accentuation_strength,
+            "weakness_coverage": lineup.accentuation_weakness,
+        },
+    }
+
+
+def _serialize_player_composites(player) -> dict:
+    """Serialize cohesion player composites with display scores grouped under base."""
+    return {
+        "player_id": player.player_id,
+        "name": player.name,
+        "base": {
+            "spacing": player.spacing,
+            "finishing": player.finishing,
+            "paint_touch": player.paint_touch,
+            "anchor": player.anchor,
+            "post_game": player.post_game,
+            "pnr_screener": player.pnr_screener,
+            "off_ball_impact": player.off_ball_impact,
+            "shot_creation": player.shot_creation,
+            "rebounding": player.rebounding,
+            "transition": player.transition,
+        },
+        "bell_curve": {
+            "amplitude": player.bell_amplitude,
+            "peak": player.bell_peak,
+            "range_down": player.bell_range_down,
+            "range_up": player.bell_range_up,
+            "flat_down": player.bell_flat_down,
+            "flat_up": player.bell_flat_up,
+        },
+    }
+
+
+def _serialize_cohesion_evaluation(evaluation: CohesionRosterEvaluation) -> dict:
+    """Serialize a cohesion-engine RosterEvaluation to the new response shape."""
+    return {
+        "star_rating": evaluation.star_rating,
+        "star_rating_breakdown": evaluation.star_breakdown,
+        "starting_lineup": _serialize_lineup(evaluation.starting_lineup),
+        "player_composites": [
+            _serialize_player_composites(player)
+            for player in evaluation.player_composites
+        ],
+        "lineup_summary": evaluation.lineup_summary,
+        "notes": [dataclasses.asdict(note) for note in evaluation.notes],
+        "team_description": evaluation.team_description,
     }
 
 
@@ -189,7 +250,11 @@ def evaluate():
         return _err("'debug' must be a boolean")
 
     try:
-        result = evaluate_roster(body["players"], mode=mode, debug=debug)
+        if EVAL_ENGINE == "cohesion":
+            result = evaluate_cohesion_roster(body["players"], mode=mode)
+            return _ok(_serialize_cohesion_evaluation(result))
+
+        result = evaluate_legacy_roster(body["players"], mode=mode, debug=debug)
         return _ok(_serialize_evaluation(result))
     except Exception:
         logger.exception("Error in POST /api/builder/evaluate")

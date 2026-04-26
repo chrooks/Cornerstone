@@ -28,7 +28,7 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 - [x] (2026-04-26) Phase 4: Roster scoring (roster.py)
 - [x] (2026-04-26) Phase 5: Notes system (notes.py)
 - [x] (2026-04-26) Phase 6: Claude narrative (team_description.py)
-- [ ] Phase 7: API integration + frontend types
+- [x] (2026-04-26) Phase 7: API integration + frontend types
 - [ ] Phase 8: Test suite
 
 
@@ -51,6 +51,12 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Observation: Phase 5 and Phase 6 can be developed independently, but both need a roster-level integration pass afterward.
   Evidence: `notes.py` and `team_description.py` were implemented in parallel with disjoint write scopes, then `roster.py` was updated so live evaluations include generated notes and final evaluations attempt the optional team narrative after notes are present.
+
+- Observation: The API can expose the new engine without disturbing existing callers because the default `EVAL_ENGINE` value remains `legacy`.
+  Evidence: `backend/tests/test_builder_api.py` continued to pass unchanged while `backend/tests/test_builder_api_cohesion.py` verified the toggled cohesion response shape by setting `api.builder.EVAL_ENGINE = "cohesion"` inside the test.
+
+- Observation: The full backend suite currently has three failures outside the Phase 7 files.
+  Evidence: `source backend/venv/bin/activate && python -m pytest backend/tests/ -v` reported 409 passed and 3 failed. The failures were in `test_compositing_and_notability.py::TestSkillSetSizes::test_moderate_confidence_exactly_11` and `test_skill_mapping_service.py` per-season `play_type.cut_poss` gating cases; the targeted cohesion and builder API suites passed.
 
 
 ## Decision Log
@@ -91,6 +97,10 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
   Rationale: Structured notes are cheap, deterministic, and required for live roster-building feedback. The Claude narrative is optional UX flourish with network/API-key dependency, so live mode should skip it while final mode degrades gracefully to `None` on failure.
   Date/Author: 2026-04-26, implementation
 
+- Decision: Keep cohesion frontend response types additive and prefixed with `Cohesion`.
+  Rationale: During the migration window, the legacy API response shape and existing `RosterEvaluation` TypeScript interface must remain valid. Prefixing the new interfaces lets frontend integration opt into the new shape when `EVAL_ENGINE=cohesion` without creating type collisions.
+  Date/Author: 2026-04-26, implementation
+
 
 ## Outcomes & Retrospective
 
@@ -111,6 +121,9 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Phase 6 outcome: `backend/services/cohesion_engine/team_description.py` now adapts the legacy Claude GM memo flow to cohesion-engine data. It builds prompts from player composites, starting-lineup subscores, archetypes, synergies, and structured notes, avoids exposing numeric scores in the prompt, calls Anthropic Haiku when `ANTHROPIC_API_KEY` is available, and returns `None` on missing key, API failure, or malformed response. `roster.py` calls it only in `mode="final"`.
   Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 62 tests, including mocked Anthropic success/failure cases. `python -m py_compile backend/services/cohesion_engine/notes.py backend/services/cohesion_engine/team_description.py backend/services/cohesion_engine/roster.py` succeeded.
+
+- Phase 7 outcome: `backend/api/builder.py` now reads `EVAL_ENGINE` at module load, keeps the legacy evaluator as the default path, and branches to `services.cohesion_engine.evaluate_roster()` when the value is `cohesion`. The cohesion serializer returns `star_rating`, `star_rating_breakdown`, `starting_lineup`, `player_composites`, `lineup_summary`, `notes`, and `team_description`. `frontend/lib/types.ts` now includes additive `Cohesion*` interfaces for the new response shape.
+  Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ backend/tests/test_builder_api_cohesion.py backend/tests/test_builder_api.py -v` passed with 100 tests and one pre-existing Supabase deprecation warning. `source backend/venv/bin/activate && python -m py_compile backend/api/builder.py` succeeded. `cd frontend && npm run lint` passed with no ESLint warnings or errors. A full backend suite run reported 409 passed and 3 failures in existing skill-taxonomy and skill-mapping tests outside the Phase 7 files.
 
 
 ## Code Review Findings
