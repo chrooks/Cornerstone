@@ -20,6 +20,7 @@ import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { ScoreDisplay } from "./ScoreDisplay";
+import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { NotesList } from "./NotesList";
 import { DebugPanel } from "./DebugPanel";
 import type { CohesionRosterEvaluation, LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
@@ -359,10 +360,11 @@ export function EvaluatePage() {
       {evalState === "ready" && evaluation && (
         <div id="eval-results" className="space-y-6">
 
-          {/* Score display — legacy 9-dimension bars (cohesion star rating added in Phase 2) */}
-          {!isCohesionEvaluation(evaluation) && (
-            <ScoreDisplay scores={evaluation.scores} />
-          )}
+          {/* Score display — branch on engine type */}
+          {isCohesionEvaluation(evaluation)
+            ? <CohesionScoreDisplay evaluation={evaluation} />
+            : <ScoreDisplay scores={evaluation.scores} />
+          }
 
           {/* Team Identity — LLM GM-memo narrative (final mode only) */}
           <TeamDescriptionCard
