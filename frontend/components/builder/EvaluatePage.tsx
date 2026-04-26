@@ -15,13 +15,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { listPlayersWithSkills, getLegend, evaluateRoster } from "@/lib/api";
+import { isCohesionEvaluation, normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { ScoreDisplay } from "./ScoreDisplay";
 import { NotesList } from "./NotesList";
 import { DebugPanel } from "./DebugPanel";
-import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
+import type { CohesionRosterEvaluation, LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // TeamDescriptionCard — LLM-generated GM-memo narrative (final mode only)
@@ -230,7 +231,7 @@ export function EvaluatePage() {
   const [evalState, setEvalState] = useState<EvalState>("loading");
   const [errorMsg, setErrorMsg]   = useState<string | null>(null);
   const [dataReady, setDataReady] = useState<DataReady | null>(null);
-  const [evaluation, setEvaluation] = useState<RosterEvaluation | null>(null);
+  const [evaluation, setEvaluation] = useState<RosterEvaluation | CohesionRosterEvaluation | null>(null);
 
   // Capture searchParams at mount — stable ref avoids closure staleness
   const paramsRef = useRef(searchParams.toString());
@@ -281,10 +282,18 @@ export function EvaluatePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataReady, adminLoading]);
 
+  // Normalize cohesion notes into legacy Note shape so bucketing works for both engines
+  const normalizedNotes = useMemo(() => {
+    if (!evaluation) return [];
+    return isCohesionEvaluation(evaluation)
+      ? normalizeCohesionNotes(evaluation.notes)
+      : evaluation.notes;
+  }, [evaluation]);
+
   // Note buckets — split into issues, suggestions, strengths
-  const issues      = useMemo(() => evaluation?.notes.filter((n) => n.severity === "critical" || n.severity === "warning") ?? [], [evaluation]);
-  const suggestions = useMemo(() => evaluation?.notes.filter((n) => n.severity === "suggestion") ?? [], [evaluation]);
-  const strengths   = useMemo(() => evaluation?.notes.filter((n) => n.severity === "strength") ?? [], [evaluation]);
+  const issues      = useMemo(() => normalizedNotes.filter((n) => n.severity === "critical" || n.severity === "warning"), [normalizedNotes]);
+  const suggestions = useMemo(() => normalizedNotes.filter((n) => n.severity === "suggestion"), [normalizedNotes]);
+  const strengths   = useMemo(() => normalizedNotes.filter((n) => n.severity === "strength"), [normalizedNotes]);
 
   const isLoading = evalState === "loading" || evalState === "evaluating";
 
@@ -350,8 +359,10 @@ export function EvaluatePage() {
       {evalState === "ready" && evaluation && (
         <div id="eval-results" className="space-y-6">
 
-          {/* Score display — all 9 dimensions */}
-          <ScoreDisplay scores={evaluation.scores} />
+          {/* Score display — legacy 9-dimension bars (cohesion star rating added in Phase 2) */}
+          {!isCohesionEvaluation(evaluation) && (
+            <ScoreDisplay scores={evaluation.scores} />
+          )}
 
           {/* Team Identity — LLM GM-memo narrative (final mode only) */}
           <TeamDescriptionCard
@@ -362,8 +373,8 @@ export function EvaluatePage() {
           {/* Notes — issues, suggestions, strengths in collapsible sections */}
           <NotesList issues={issues} suggestions={suggestions} strengths={strengths} />
 
-          {/* Admin debug panel — traces + height coverage chart */}
-          {isAdmin && (evaluation.player_traces || evaluation.aggregate_traces || evaluation.height_coverage) && (
+          {/* Admin debug panel — traces + height coverage chart (legacy only; cohesion debug in Phase 3B) */}
+          {isAdmin && !isCohesionEvaluation(evaluation) && (evaluation.player_traces || evaluation.aggregate_traces || evaluation.height_coverage) && (
             <DebugPanel
               playerTraces={evaluation.player_traces}
               aggregateTraces={evaluation.aggregate_traces}

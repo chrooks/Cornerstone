@@ -28,6 +28,7 @@ import type {
   LegendClaudeSuggestion,
   EvaluatePayload,
   RosterEvaluation,
+  CohesionRosterEvaluation,
 } from "./types";
 
 // Points to the Flask dev server by default; override via env var in production.
@@ -560,11 +561,14 @@ export async function getLegendClaudeSuggestion(
 // Roster Evaluator
 // ---------------------------------------------------------------------------
 
-/** Evaluate a roster and return GM notes (live or final mode). */
+/** Evaluate a roster and return GM notes (live or final mode).
+ *  Returns legacy RosterEvaluation or CohesionRosterEvaluation depending
+ *  on which engine the backend is configured to use (EVAL_ENGINE env var).
+ *  Consumers should narrow with isCohesionEvaluation() from cohesionHelpers. */
 export async function evaluateRoster(
   payload: EvaluatePayload,
-): Promise<ApiResponse<RosterEvaluation>> {
-  return apiFetch<RosterEvaluation>("/api/builder/evaluate", {
+): Promise<ApiResponse<RosterEvaluation | CohesionRosterEvaluation>> {
+  return apiFetch<RosterEvaluation | CohesionRosterEvaluation>("/api/builder/evaluate", {
     method: "POST",
     body: JSON.stringify(payload),
   });

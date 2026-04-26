@@ -40,7 +40,8 @@ import { ScoringBreakdown } from "./ScoringBreakdown";
 import { HeightCoverageChart } from "./HeightCoverageChart";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
 import type { SuggestionFilter } from "@/lib/noteFilters";
-import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
+import type { CohesionRosterEvaluation, LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
+import { isCohesionEvaluation } from "@/lib/cohesionHelpers";
 
 // ---------------------------------------------------------------------------
 // URL param helpers
@@ -495,7 +496,7 @@ export function BuilderPage() {
   const [leftTab, setLeftTab] = useState<"skills" | "notes" | "debug">("notes");
 
   // ── Latest evaluation — lifted from AssistantGmNotes for the Debug tab ────
-  const [latestEval, setLatestEval] = useState<RosterEvaluation | null>(null);
+  const [latestEval, setLatestEval] = useState<RosterEvaluation | CohesionRosterEvaluation | null>(null);
 
   // ── Scroll position preservation across tab switches ──────────────────────
   // Each scrollable panel gets a ref; positions are cached in a stable ref object.
@@ -774,15 +775,20 @@ export function BuilderPage() {
                   leftTab !== "debug" && "hidden",
                 )}
               >
-                <ScoringBreakdown
-                  playerTraces={latestEval?.player_traces ?? null}
-                  aggregateTraces={latestEval?.aggregate_traces ?? null}
-                />
-                {/* Height coverage chart — always shown when eval data exists */}
-                {latestEval?.height_coverage && (
-                  <div className="mt-4">
-                    <HeightCoverageChart data={latestEval.height_coverage} />
-                  </div>
+                {/* Legacy debug: scoring breakdown + height chart (cohesion debug panel added in Phase 3B) */}
+                {latestEval && !isCohesionEvaluation(latestEval) && (
+                  <>
+                    <ScoringBreakdown
+                      playerTraces={latestEval.player_traces ?? null}
+                      aggregateTraces={latestEval.aggregate_traces ?? null}
+                    />
+                    {/* Height coverage chart — always shown when eval data exists */}
+                    {latestEval.height_coverage && (
+                      <div className="mt-4">
+                        <HeightCoverageChart data={latestEval.height_coverage} />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

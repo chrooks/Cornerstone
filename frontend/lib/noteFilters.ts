@@ -33,12 +33,24 @@ const TRACE_KEY_FILTERS: Record<string, SuggestionFilter> = {
 };
 
 // Default skill to surface when only a dimension is known.
+// Includes both legacy dimension keys and cohesion engine category keys.
 const DIMENSION_FALLBACK: Record<string, SuggestionFilter> = {
+  // Legacy dimension keys
   spacing:    { skill: "spot_up_shooter",    tier: "Capable or higher" },
   creation:   { skill: "pnr_ball_handler",   tier: "Capable or higher" },
   paint:      { skill: "driver",             tier: "Capable or higher" },
   defense:    { skill: "versatile_defender", tier: "Capable or higher" },
   transition: { skill: "transition_threat",  tier: "Capable or higher" },
+  // Cohesion engine category keys (mapped to closest skill filter)
+  shot_creation:  { skill: "pnr_ball_handler",   tier: "Capable or higher" },
+  paint_touch:    { skill: "driver",             tier: "Capable or higher" },
+  anchor:         { skill: "rim_protector",      tier: "Capable or higher" },
+  post_game:      { skill: "low_post_player",    tier: "Capable or higher" },
+  pnr_screener:   { skill: "pnr_finisher",       tier: "Capable or higher" },
+  off_ball:       { skill: "cutter",             tier: "Capable or higher" },
+  rebounding:     { skill: "rebounder",          tier: "Capable or higher" },
+  passing:        { skill: "passer",             tier: "Capable or higher" },
+  defense_gap:    { skill: "versatile_defender", tier: "Capable or higher" },
 };
 
 /**
