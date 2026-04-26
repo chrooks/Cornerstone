@@ -28,6 +28,7 @@ from services.cohesion_engine.bell_curve import (
 )
 from services.cohesion_engine.cohesion import evaluate_lineup
 from services.cohesion_engine.composites import compute_player_composites
+from services.cohesion_engine.types import PlayerComposites
 from services.cohesion_engine import weights as weights_module
 from services.supabase_client import get_supabase
 
@@ -121,7 +122,7 @@ def _fetch_player_with_skills(player_id: str) -> dict | None:
     }
 
 
-def _serialize_composites(pc: Any) -> dict[str, float]:
+def _serialize_composites(pc: PlayerComposites) -> dict[str, float]:
     """Extract the 10 normalized composite scores from a PlayerComposites dataclass."""
     return {
         "spacing": pc.spacing,
@@ -145,7 +146,7 @@ def _get_all_weights() -> dict[str, Any]:
     # Collect all uppercase dict/tuple/float/int constants from the weights module
     result: dict[str, Any] = {}
     for name in dir(weights_module):
-        if name.startswith("_"):
+        if name.startswith("_") or not name.isupper():
             continue
         value = getattr(weights_module, name)
         if isinstance(value, (dict, tuple, list, float, int)):
@@ -182,12 +183,16 @@ def get_player_composites(player_id: str) -> tuple:
         return jsonify({"success": False, "data": None, "error": "Player not found"}), 404
 
     height_inches = parse_height_inches(player.get("height"))
-    pc = compute_player_composites(
-        player["skills"],
-        player_id=player["id"],
-        name=player["name"],
-        height_inches=height_inches,
-    )
+    try:
+        pc = compute_player_composites(
+            player["skills"],
+            player_id=player["id"],
+            name=player["name"],
+            height_inches=height_inches,
+        )
+    except Exception:
+        logger.exception("Error computing composites for player %s", player_id)
+        return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500
 
     return jsonify({
         "success": True,
@@ -225,21 +230,27 @@ def get_bell_curve(player_id: str) -> tuple:
         return jsonify({"success": False, "data": None, "error": "Player not found"}), 404
 
     height_inches = parse_height_inches(player.get("height"))
-    # Compute raw bell params from skills + height
-    skills_str = {k: str(v) for k, v in player["skills"].items()}
-    params = compute_bell_params(skills_str, height_inches or 78)
+    # Compute raw bell params from skills + height.
+    # player["skills"] has already filtered None tiers in _fetch_player_with_skills.
+    skills_str = {k: str(v) for k, v in player["skills"].items() if v is not None}
+    try:
+        params = compute_bell_params(skills_str, height_inches or 78)
+    except Exception:
+        logger.exception("Error computing bell curve for player %s", player_id)
+        return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500
 
-    # Pre-compute the curve array for every inch in the chart range
+    # Pre-compute the curve array for every inch in the chart range.
+    # Cast int-typed params explicitly — compute_bell_params returns float | int.
     curve = []
     for h in range(_BELL_MIN_IN, _BELL_MAX_IN + 1):
         value = defensive_value_at_height(
             target_height=h,
             amplitude=params["amplitude"],
-            peak_center=params["peak_center"],
-            range_down=params["range_down"],
-            range_up=params["range_up"],
-            flat_top_down=params["flat_top_down"],
-            flat_top_up=params["flat_top_up"],
+            peak_center=int(params["peak_center"]),
+            range_down=int(params["range_down"]),
+            range_up=int(params["range_up"]),
+            flat_top_down=int(params["flat_top_down"]),
+            flat_top_up=int(params["flat_top_up"]),
         )
         curve.append({
             "height": h,
@@ -307,7 +318,11 @@ def evaluate_lineup_endpoint() -> tuple:
             return jsonify({"success": False, "data": None, "error": f"Player {i} has too many skills"}), 400
 
     # Run cohesion evaluation on the lineup
-    result = evaluate_lineup(players)
+    try:
+        result = evaluate_lineup(players)
+    except Exception:
+        logger.exception("Error evaluating lineup")
+        return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500
 
     return jsonify({
         "success": True,
@@ -361,7 +376,7 @@ def update_weights() -> tuple:
     if not isinstance(body, dict):
         return jsonify({"success": False, "data": None, "error": "Request body must be a JSON object"}), 400
 
-    # Merge each section's overrides into the in-memory store
+    # Merge each section's overrides into the in-memory store (immutable replace)
     for section, overrides in body.items():
         if not isinstance(section, str):
             continue
@@ -371,9 +386,16 @@ def update_weights() -> tuple:
                 "data": None,
                 "error": f"Override for '{section}' must be an object",
             }), 400
-        if section not in _WEIGHT_OVERRIDES:
-            _WEIGHT_OVERRIDES[section] = {}
-        _WEIGHT_OVERRIDES[section].update(overrides)
+        # Validate all override values are numeric
+        for key, val in overrides.items():
+            if not isinstance(val, (int, float)):
+                return jsonify({
+                    "success": False,
+                    "data": None,
+                    "error": f"Override value for '{section}.{key}' must be a number",
+                }), 400
+        # Immutable merge — create new dict rather than mutating in-place
+        _WEIGHT_OVERRIDES[section] = {**_WEIGHT_OVERRIDES.get(section, {}), **overrides}
 
     logger.info("Weight overrides updated: %s", list(body.keys()))
 
