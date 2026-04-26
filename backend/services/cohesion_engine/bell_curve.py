@@ -221,19 +221,13 @@ def _player_defensive_values(player: dict[str, Any]) -> list[float]:
     ]
 
 
-def compute_lineup_defense(lineup: list[dict[str, Any]]) -> tuple[float, float, list[int]]:
-    """
-    Compute lineup defensive coverage, gap penalty, and uncovered height inches.
-
-    At each target height, defenders stack with diminishing returns: strongest
-    defender gets full credit, then 50%, 25%, and 10% for additional bodies.
-    """
+def compute_lineup_coverage_by_height(lineup: list[dict[str, Any]]) -> dict[int, float]:
+    """Return stacked defensive coverage for each supported target height."""
     if not lineup:
-        gap_positions = list(range(HEIGHT_MIN_INCHES, HEIGHT_MAX_INCHES + 1))
-        return 0.0, DEFENSIVE_GAP_PENALTY_SCALE * len(gap_positions), gap_positions
+        return {height: 0.0 for height in range(HEIGHT_MIN_INCHES, HEIGHT_MAX_INCHES + 1)}
 
     per_player_values = [_player_defensive_values(player) for player in lineup]
-    coverage_by_height: list[float] = []
+    coverage_by_height: dict[int, float] = {}
 
     for height_index in range(HEIGHT_MAX_INCHES - HEIGHT_MIN_INCHES + 1):
         values = sorted((values[height_index] for values in per_player_values), reverse=True)
@@ -245,20 +239,32 @@ def compute_lineup_defense(lineup: list[dict[str, Any]]) -> tuple[float, float, 
                 else STACKING_RETURNS[-1]
             )
             stacked += value * return_factor
-        coverage_by_height.append(stacked)
+        coverage_by_height[HEIGHT_MIN_INCHES + height_index] = stacked
+
+    return coverage_by_height
+
+
+def compute_lineup_defense(lineup: list[dict[str, Any]]) -> tuple[float, float, list[int]]:
+    """
+    Compute lineup defensive coverage, gap penalty, and uncovered height inches.
+
+    At each target height, defenders stack with diminishing returns: strongest
+    defender gets full credit, then 50%, 25%, and 10% for additional bodies.
+    """
+    coverage_by_height = compute_lineup_coverage_by_height(lineup)
 
     gap_positions = [
-        HEIGHT_MIN_INCHES + index
-        for index, coverage in enumerate(coverage_by_height)
+        height
+        for height, coverage in coverage_by_height.items()
         if coverage < DEFENSIVE_GAP_THRESHOLD
     ]
 
     if gap_positions:
-        min_coverage = min(coverage_by_height)
+        min_coverage = min(coverage_by_height.values())
         max_gap_depth = DEFENSIVE_GAP_THRESHOLD - min_coverage
         gap_penalty = DEFENSIVE_GAP_PENALTY_SCALE * len(gap_positions) * max_gap_depth
     else:
         gap_penalty = 0.0
 
-    average_coverage = sum(coverage_by_height) / len(coverage_by_height)
+    average_coverage = sum(coverage_by_height.values()) / len(coverage_by_height)
     return round(average_coverage, 2), round(gap_penalty, 2), gap_positions

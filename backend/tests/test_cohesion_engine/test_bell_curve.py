@@ -7,6 +7,7 @@ from __future__ import annotations
 from backend.services.cohesion_engine.bell_curve import (
     apply_rp_pd_boost,
     compute_bell_params,
+    compute_lineup_coverage_by_height,
     compute_lineup_defense,
     defensive_value_at_height,
     parse_height_inches,
@@ -107,6 +108,15 @@ def test_compute_lineup_defense_stacks_values_and_reports_gaps():
     assert coverage > 1.0
     assert gap_penalty <= 0.0
     assert all(72 <= height <= 88 for height in gaps)
+
+
+def test_compute_lineup_coverage_by_height_returns_supported_range():
+    coverage = compute_lineup_coverage_by_height(
+        [player("Wing", "6-7", {"versatile_defender": "Elite"})]
+    )
+
+    assert set(coverage) == set(range(72, 89))
+    assert coverage[79] == 3.5
 
 
 def test_compute_lineup_defense_empty_lineup_returns_all_gaps():

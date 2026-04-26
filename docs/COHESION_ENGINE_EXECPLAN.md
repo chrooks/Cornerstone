@@ -24,7 +24,7 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - [x] (2026-04-26) Phase 1: Foundation (types.py, weights.py, __init__.py)
 - [x] (2026-04-26) Phase 2: Player-level computation (composites.py, bell_curve.py)
-- [ ] Phase 3: Lineup-level computation (synergies.py, ratios.py, accentuation.py, cohesion.py)
+- [x] (2026-04-26) Phase 3: Lineup-level computation (synergies.py, ratios.py, accentuation.py, cohesion.py)
 - [ ] Phase 4: Roster scoring (roster.py)
 - [ ] Phase 5: Notes system (notes.py)
 - [ ] Phase 6: Claude narrative (team_description.py)
@@ -42,6 +42,9 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Observation: The distribution builder originally imported the Supabase client at `composites.py` module import time, which made pure formula tests load database dependencies unnecessarily.
   Evidence: The implementation now lazy-loads `get_supabase()` and `run_query()` only inside `build_distributions()`, so `compute_raw_composites()`, `normalize_composites()`, and `compute_player_composites()` can be imported and tested without touching the database client.
+
+- Observation: The Phase 3 docs name several lineup subscores as "totals," but the rollup contract expects every subscore on a 0-10 scale.
+  Evidence: `cohesion.py` computes player composite totals as lineup averages for `paint_touch_total`, `post_game_total`, `pnr_screener_total`, `anchor_total`, `rebounding`, and `transition`, then clamps each subscore to 0-10. This preserves bounded rollup behavior while still rewarding lineup-wide strength.
 
 
 ## Decision Log
@@ -70,6 +73,10 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
   Rationale: Its function (early-game suggestions) is fully replaced by Mode A notes + the accentuation system.
   Date/Author: 2026-04-25, design session
 
+- Decision: Normalize Phase 3 "total" subscores as lineup averages rather than raw sums.
+  Rationale: Raw sums of five normalized 0-10 player composites can reach 50, but `COHESION_ROLLUP_WEIGHTS` assumes each input is normalized to 0-1 by dividing the subscore by 10. Averaging keeps each total on the same 0-10 scale as ratios and defensive subscores without adding premature calibration constants.
+  Date/Author: 2026-04-26, implementation
+
 
 ## Outcomes & Retrospective
 
@@ -78,6 +85,9 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Phase 2 outcome: `backend/services/cohesion_engine/composites.py` now computes raw player composites using the validated formulas, normalizes via the cached 60th-percentile hybrid distribution when enough population data exists, falls back to theoretical max normalization for small or empty caches, builds distributions from current plus legend skill profiles, and returns `PlayerComposites` dataclasses. `backend/services/cohesion_engine/bell_curve.py` now computes defensive bell parameters, evaluates trapezoid/quadratic defensive value by target height, applies the RP-to-PD teammate boost without mutating input players, and computes lineup defensive coverage with diminishing stacking returns.
   Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 29 tests. Manual smoke checks imported `compute_raw_composites`, `normalize_composites`, `compute_player_composites`, `compute_bell_params`, and `compute_lineup_defense`; constructing a sample `PlayerComposites` and evaluating a three-player defensive lineup both completed successfully.
+
+- Phase 3 outcome: The lineup cohesion layer now exists. `synergies.py` applies all 12 Phase 3 synergy checks without mutating input players. `ratios.py` implements the harmonic-mean balance scores. `accentuation.py` computes strength amplification and weakness coverage from normalized player composites. `cohesion.py` orchestrates RP-to-PD boost, synergies, player composite computation, 13 bounded subscores, defensive coverage/gaps, accentuation, and weighted 0-5 lineup scoring.
+  Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 47 tests. `python -m py_compile` succeeded for `ratios.py`, `synergies.py`, `accentuation.py`, and `cohesion.py`. A manual `evaluate_lineup()` smoke check returned score `1.21`, all 13 expected subscore keys, and synergy IDs including `OFF-28`.
 
 
 ## Code Review Findings

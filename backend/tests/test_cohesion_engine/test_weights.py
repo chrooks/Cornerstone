@@ -89,6 +89,7 @@ def test_synergy_scale_factors_match_impl_spec_table():
     }
     assert weights.SYNERGY_PENALTY_SEVERITY == 5.0
     assert weights.OFF_13_RAW_SPACING_THRESHOLD == 15.0
+    assert weights.SYNERGY_CREATOR_THRESHOLD == 6.0
 
 
 def test_cohesion_rollup_weights_match_impl_spec_and_sum_to_one():

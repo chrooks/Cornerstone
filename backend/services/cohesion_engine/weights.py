@@ -172,6 +172,7 @@ SYNERGY_BOOSTED_SKILLS: dict[str, tuple[str, ...]] = {
 
 SYNERGY_PENALTY_SEVERITY: float = 5.0
 OFF_13_RAW_SPACING_THRESHOLD: float = 15.0
+SYNERGY_CREATOR_THRESHOLD: float = 6.0
 
 
 # ---------------------------------------------------------------------------
