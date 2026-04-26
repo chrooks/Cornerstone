@@ -23,7 +23,7 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 ## Progress
 
 - [x] (2026-04-26) Phase 1: Foundation (types.py, weights.py, __init__.py)
-- [ ] Phase 2: Player-level computation (composites.py, bell_curve.py)
+- [x] (2026-04-26) Phase 2: Player-level computation (composites.py, bell_curve.py)
 - [ ] Phase 3: Lineup-level computation (synergies.py, ratios.py, accentuation.py, cohesion.py)
 - [ ] Phase 4: Roster scoring (roster.py)
 - [ ] Phase 5: Notes system (notes.py)
@@ -39,6 +39,9 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Observation: The referenced common Codex rule files in the user-provided AGENTS-style context are not present in this local environment.
   Evidence: Attempts to read `~/.codex/rules/common/coding-style.md`, `git-workflow.md`, `security.md`, `agents.md`, and `development-workflow.md` returned "No such file or directory." The active in-repo guidance came from `CLAUDE.md`, the ExecPlan, and the scoring specs.
+
+- Observation: The distribution builder originally imported the Supabase client at `composites.py` module import time, which made pure formula tests load database dependencies unnecessarily.
+  Evidence: The implementation now lazy-loads `get_supabase()` and `run_query()` only inside `build_distributions()`, so `compute_raw_composites()`, `normalize_composites()`, and `compute_player_composites()` can be imported and tested without touching the database client.
 
 
 ## Decision Log
@@ -72,6 +75,9 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Phase 1 outcome: The new `backend/services/cohesion_engine/` package now exists with a public `evaluate_roster()` stub, frozen dataclasses for the planned response shapes, and a centralized `weights.py` containing the Phase 1 constants from `docs/SCORING_EVAL_IMPL_SPEC.md` sections 1-8 plus Layer 2 roster normalization constants. Initial tests cover dataclass construction, dataclass immutability, and the pinned weight values needed by later phases.
   Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 12 tests. The requested import checks for `types.py` and `weights.py` also completed successfully.
+
+- Phase 2 outcome: `backend/services/cohesion_engine/composites.py` now computes raw player composites using the validated formulas, normalizes via the cached 60th-percentile hybrid distribution when enough population data exists, falls back to theoretical max normalization for small or empty caches, builds distributions from current plus legend skill profiles, and returns `PlayerComposites` dataclasses. `backend/services/cohesion_engine/bell_curve.py` now computes defensive bell parameters, evaluates trapezoid/quadratic defensive value by target height, applies the RP-to-PD teammate boost without mutating input players, and computes lineup defensive coverage with diminishing stacking returns.
+  Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 29 tests. Manual smoke checks imported `compute_raw_composites`, `normalize_composites`, `compute_player_composites`, `compute_bell_params`, and `compute_lineup_defense`; constructing a sample `PlayerComposites` and evaluating a three-player defensive lineup both completed successfully.
 
 
 ## Code Review Findings
