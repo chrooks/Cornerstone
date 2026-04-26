@@ -71,13 +71,14 @@ const BELL_HEIGHTS = Array.from({ length: BELL_MAX_IN - BELL_MIN_IN + 1 }, (_, i
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Heatmap cell color for 0-10 composite scores (red → yellow → green). */
+/** Heatmap cell color for 0-10 composite scores (red → yellow → green).
+ *  Uses high-contrast text on low-opacity backgrounds for readability. */
 function compositeHeatColor(score: number): string {
-  if (score >= 8) return "bg-green-600/50 text-green-200";
-  if (score >= 6) return "bg-green-800/30 text-green-300";
-  if (score >= 4) return "bg-amber-800/30 text-amber-300";
-  if (score >= 2) return "bg-red-800/30 text-red-300";
-  return "bg-red-700/40 text-red-200";
+  if (score >= 8) return "bg-green-900/40 text-green-300 font-semibold";
+  if (score >= 6) return "bg-green-900/25 text-green-400";
+  if (score >= 4) return "bg-amber-900/25 text-amber-300";
+  if (score >= 2) return "bg-red-900/20 text-red-400";
+  return "bg-red-900/30 text-red-300";
 }
 
 /** Convert inches to display label (e.g. 74 → "6'2\""). */
@@ -141,14 +142,14 @@ function CompositesTable({ players }: { players: CohesionPlayerComposites[] }) {
       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
         Player Composites (0–10)
       </p>
-      <table className="w-full text-[10px] border-collapse">
+      <table className="w-full text-[10px] border-separate" style={{ borderSpacing: "2px 3px" }}>
         <thead>
           <tr>
             <th className="text-left text-muted-foreground font-medium pr-2 py-1">Player</th>
             {COMPOSITE_COLS.map((col) => (
               <th
                 key={col.key}
-                className="text-center text-muted-foreground font-medium px-1 py-1 min-w-[32px]"
+                className="text-center text-muted-foreground font-medium px-1 py-1 min-w-[36px]"
                 title={col.key}
               >
                 {col.abbr}
@@ -158,8 +159,8 @@ function CompositesTable({ players }: { players: CohesionPlayerComposites[] }) {
         </thead>
         <tbody>
           {players.map((player) => (
-            <tr key={player.player_id} className="border-t border-border/30">
-              <td className="text-foreground font-medium pr-2 py-1 whitespace-nowrap max-w-[100px] truncate">
+            <tr key={player.player_id}>
+              <td className="text-foreground font-medium pr-2 py-1.5 whitespace-nowrap max-w-[100px] truncate">
                 {player.name}
               </td>
               {COMPOSITE_COLS.map((col) => {
@@ -170,7 +171,7 @@ function CompositesTable({ players }: { players: CohesionPlayerComposites[] }) {
                   <td
                     key={col.key}
                     className={cn(
-                      "text-center font-mono tabular-nums px-1 py-1 rounded-sm",
+                      "text-center font-mono tabular-nums px-1.5 py-1.5 rounded",
                       compositeHeatColor(score),
                     )}
                   >
