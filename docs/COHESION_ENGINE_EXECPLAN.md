@@ -25,7 +25,7 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 - [x] (2026-04-26) Phase 1: Foundation (types.py, weights.py, __init__.py)
 - [x] (2026-04-26) Phase 2: Player-level computation (composites.py, bell_curve.py)
 - [x] (2026-04-26) Phase 3: Lineup-level computation (synergies.py, ratios.py, accentuation.py, cohesion.py)
-- [ ] Phase 4: Roster scoring (roster.py)
+- [x] (2026-04-26) Phase 4: Roster scoring (roster.py)
 - [ ] Phase 5: Notes system (notes.py)
 - [ ] Phase 6: Claude narrative (team_description.py)
 - [ ] Phase 7: API integration + frontend types
@@ -45,6 +45,9 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Observation: The Phase 3 docs name several lineup subscores as "totals," but the rollup contract expects every subscore on a 0-10 scale.
   Evidence: `cohesion.py` computes player composite totals as lineup averages for `paint_touch_total`, `post_game_total`, `pnr_screener_total`, `anchor_total`, `rebounding`, and `transition`, then clamps each subscore to 0-10. This preserves bounded rollup behavior while still rewarding lineup-wide strength.
+
+- Observation: Manual Phase 4 smoke checks without database-built percentile distributions produce low roster star ratings because theoretical-max fallback normalization is intentionally conservative for multiplicative composites.
+  Evidence: A nine-player synthetic roster returned `star_rating=0.67`, `total_lineups=126`, and `median_score=1.02`. This validates the roster pipeline shape while confirming that meaningful real-player calibration still depends on `build_distributions()` or later integration with database data.
 
 
 ## Decision Log
@@ -77,6 +80,10 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
   Rationale: Raw sums of five normalized 0-10 player composites can reach 50, but `COHESION_ROLLUP_WEIGHTS` assumes each input is normalized to 0-1 by dividing the subscore by 10. Averaging keeps each total on the same 0-10 scale as ratios and defensive subscores without adding premature calibration constants.
   Date/Author: 2026-04-26, implementation
 
+- Decision: Return an empty zero-score `LineupCohesion` for rosters with fewer than five players.
+  Rationale: `RosterEvaluation.starting_lineup` is a required dataclass field, but lineups are only meaningful with five players. A zero placeholder keeps the API shape stable until Phase 5 adds Mode A notes for partial rosters.
+  Date/Author: 2026-04-26, implementation
+
 
 ## Outcomes & Retrospective
 
@@ -88,6 +95,9 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Phase 3 outcome: The lineup cohesion layer now exists. `synergies.py` applies all 12 Phase 3 synergy checks without mutating input players. `ratios.py` implements the harmonic-mean balance scores. `accentuation.py` computes strength amplification and weakness coverage from normalized player composites. `cohesion.py` orchestrates RP-to-PD boost, synergies, player composite computation, 13 bounded subscores, defensive coverage/gaps, accentuation, and weighted 0-5 lineup scoring.
   Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 47 tests. `python -m py_compile` succeeded for `ratios.py`, `synergies.py`, `accentuation.py`, and `cohesion.py`. A manual `evaluate_lineup()` smoke check returned score `1.21`, all 13 expected subscore keys, and synergy IDs including `OFF-28`.
+
+- Phase 4 outcome: `backend/services/cohesion_engine/roster.py` now implements the public roster evaluator. It computes base player composites, handles partial rosters without lineup scoring, evaluates all five-man combinations for rosters with at least five players, uses slot order for the starting lineup, computes starting-five/depth/archetype-diversity/floor breakdown values, and returns a `RosterEvaluation`. `backend/services/cohesion_engine/__init__.py` now re-exports the real `evaluate_roster()` implementation instead of the Phase 1 stub.
+  Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 52 tests. `python -m py_compile backend/services/cohesion_engine/roster.py backend/services/cohesion_engine/__init__.py` succeeded. Manual smoke checks confirmed a partial roster returns zero lineups and one base composite, while a nine-player roster returns `total_lineups=126`, a normalized star breakdown, and a 0-5 star rating.
 
 
 ## Code Review Findings
