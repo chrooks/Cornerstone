@@ -29,7 +29,7 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 - [x] (2026-04-26) Phase 5: Notes system (notes.py)
 - [x] (2026-04-26) Phase 6: Claude narrative (team_description.py)
 - [x] (2026-04-26) Phase 7: API integration + frontend types
-- [ ] Phase 8: Test suite
+- [x] (2026-04-26) Phase 8: Test suite
 
 
 ## Surprises & Discoveries
@@ -55,8 +55,11 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 - Observation: The API can expose the new engine without disturbing existing callers because the default `EVAL_ENGINE` value remains `legacy`.
   Evidence: `backend/tests/test_builder_api.py` continued to pass unchanged while `backend/tests/test_builder_api_cohesion.py` verified the toggled cohesion response shape by setting `api.builder.EVAL_ENGINE = "cohesion"` inside the test.
 
-- Observation: The full backend suite currently has three failures outside the Phase 7 files.
-  Evidence: `source backend/venv/bin/activate && python -m pytest backend/tests/ -v` reported 409 passed and 3 failed. The failures were in `test_compositing_and_notability.py::TestSkillSetSizes::test_moderate_confidence_exactly_11` and `test_skill_mapping_service.py` per-season `play_type.cut_poss` gating cases; the targeted cohesion and builder API suites passed.
+- Observation: The full backend suite currently has three failures outside the cohesion engine and builder API files.
+  Evidence: `source backend/venv/bin/activate && python -m pytest backend/tests/ -v` reported 418 passed and 3 failed after Phase 8. The failures were in `test_compositing_and_notability.py::TestSkillSetSizes::test_moderate_confidence_exactly_11` and `test_skill_mapping_service.py` per-season `play_type.cut_poss` gating cases; the targeted cohesion and builder API suites passed.
+
+- Observation: The backend venv does not include `pytest-cov`, so Phase 8 coverage evidence used Python's stdlib `trace` module.
+  Evidence: `python -m pytest backend/tests/test_cohesion_engine/ --cov=backend/services/cohesion_engine --cov-report=term-missing -q` failed with "unrecognized arguments: --cov". The trace run reported every `services.cohesion_engine` module at or above 85% line coverage, with all non-timing tests passing under trace.
 
 
 ## Decision Log
@@ -124,6 +127,9 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Phase 7 outcome: `backend/api/builder.py` now reads `EVAL_ENGINE` at module load, keeps the legacy evaluator as the default path, and branches to `services.cohesion_engine.evaluate_roster()` when the value is `cohesion`. The cohesion serializer returns `star_rating`, `star_rating_breakdown`, `starting_lineup`, `player_composites`, `lineup_summary`, `notes`, and `team_description`. `frontend/lib/types.ts` now includes additive `Cohesion*` interfaces for the new response shape.
   Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ backend/tests/test_builder_api_cohesion.py backend/tests/test_builder_api.py -v` passed with 100 tests and one pre-existing Supabase deprecation warning. `source backend/venv/bin/activate && python -m py_compile backend/api/builder.py` succeeded. `cd frontend && npm run lint` passed with no ESLint warnings or errors. A full backend suite run reported 409 passed and 3 failures in existing skill-taxonomy and skill-mapping tests outside the Phase 7 files.
+
+- Phase 8 outcome: `backend/tests/test_cohesion_engine/test_acceptance.py` now adds final acceptance coverage for six named reference profiles, defensive bell archetypes, OFF-13/OFF-37 synergy contracts, and the 126-lineup runtime target. This complements the existing unit and integration suite across composites, bell curves, synergies, ratios, accentuation, lineup cohesion, roster scoring, notes, team description, types, and weights.
+  Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 71 tests. `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ backend/tests/test_builder_api_cohesion.py backend/tests/test_builder_api.py -v` passed with 109 tests and one pre-existing Supabase deprecation warning. `backend/venv/bin/python -m trace --count --missing --summary --coverdir /tmp/cohesion_trace --ignore-dir /Users/cdbrooks/Development/Software/Repositories/cornerstone/backend/venv --ignore-dir /Users/cdbrooks/Development/Software/Repositories/cornerstone/frontend --module pytest backend/tests/test_cohesion_engine/ -q -k 'not full_nine_player_roster_evaluates_126_lineups_under_100ms'` passed with 70 tests and one timing test deselected; the trace summary reported all `services.cohesion_engine` modules at 85%+ line coverage. The full backend suite reported 418 passed and 3 existing non-cohesion failures.
 
 
 ## Code Review Findings
