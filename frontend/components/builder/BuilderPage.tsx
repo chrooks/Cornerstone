@@ -38,6 +38,7 @@ import { SkillGrid } from "./SkillGrid";
 import { AssistantGmNotes } from "./AssistantGmNotes";
 import { ScoringBreakdown } from "./ScoringBreakdown";
 import { HeightCoverageChart } from "./HeightCoverageChart";
+import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 import type { CohesionRosterEvaluation, LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
@@ -775,7 +776,10 @@ export function BuilderPage() {
                   leftTab !== "debug" && "hidden",
                 )}
               >
-                {/* Legacy debug: scoring breakdown + height chart (cohesion debug panel added in Phase 3B) */}
+                {/* Debug panel — branch on engine type */}
+                {latestEval && isCohesionEvaluation(latestEval) && (
+                  <CohesionDebugPanel evaluation={latestEval} />
+                )}
                 {latestEval && !isCohesionEvaluation(latestEval) && (
                   <>
                     <ScoringBreakdown

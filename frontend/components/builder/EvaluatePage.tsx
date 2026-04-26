@@ -23,6 +23,7 @@ import { ScoreDisplay } from "./ScoreDisplay";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { NotesList } from "./NotesList";
 import { DebugPanel } from "./DebugPanel";
+import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import type { CohesionRosterEvaluation, LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -375,7 +376,10 @@ export function EvaluatePage() {
           {/* Notes — issues, suggestions, strengths in collapsible sections */}
           <NotesList issues={issues} suggestions={suggestions} strengths={strengths} />
 
-          {/* Admin debug panel — traces + height coverage chart (legacy only; cohesion debug in Phase 3B) */}
+          {/* Admin debug panel — branch on engine type */}
+          {isAdmin && isCohesionEvaluation(evaluation) && (
+            <CohesionDebugPanel evaluation={evaluation} />
+          )}
           {isAdmin && !isCohesionEvaluation(evaluation) && (evaluation.player_traces || evaluation.aggregate_traces || evaluation.height_coverage) && (
             <DebugPanel
               playerTraces={evaluation.player_traces}
