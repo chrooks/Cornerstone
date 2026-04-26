@@ -111,8 +111,17 @@ def _fetch_player_with_skills(player_id: str) -> dict | None:
         return None
 
     raw_profile = profile_res.data[0].get("profile") or {}
-    # Convert profile dict to skill_name → tier string (skip null tiers)
-    skills = {k: v for k, v in raw_profile.items() if v is not None}
+    # Composite profiles store { skill_name: { final_tier: "Elite", ... } }.
+    # Legend profiles store { skill_name: "Elite" } (flat strings).
+    # Extract the tier string from whichever shape we get.
+    skills: dict[str, str] = {}
+    for k, v in raw_profile.items():
+        if isinstance(v, dict):
+            tier = v.get("final_tier")
+            if tier is not None:
+                skills[k] = str(tier)
+        elif isinstance(v, str):
+            skills[k] = v
 
     return {
         "id": player["id"],

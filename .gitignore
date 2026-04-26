@@ -21,6 +21,8 @@ TODO.md
 
 .vscode
 .claude
+.codex/
+.mcp.json
 prompts/
 
 feature_requests/
@@ -29,3 +31,4 @@ backend/salary_unmatched.txt
 backend/.next/trace*
 .reports/
 knowledge/
+scripts/composite_results/

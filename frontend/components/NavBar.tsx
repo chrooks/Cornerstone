@@ -9,10 +9,11 @@ import { getBrowserSupabase } from "@/lib/supabase/client";
 
 // Admin dropdown items
 const ADMIN_LINKS = [
-  { href: "/admin/pipeline",    label: "Pipeline"    },
-  { href: "/admin/review",      label: "Review"      },
-  { href: "/admin/calibration", label: "Calibration" },
-  { href: "/admin/legends",     label: "Legends"     },
+  { href: "/admin/pipeline",              label: "Pipeline"    },
+  { href: "/admin/review",                label: "Review"      },
+  { href: "/admin/calibration",           label: "Calibration" },
+  { href: "/admin/cohesion-calibration",  label: "Cohesion"    },
+  { href: "/admin/legends",               label: "Legends"     },
 ];
 
 export function NavBar() {

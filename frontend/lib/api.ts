@@ -60,9 +60,10 @@ export async function apiFetch<T>(
     ...(isWrite && CALIBRATION_KEY ? { "X-Calibration-Key": CALIBRATION_KEY } : {}),
   };
 
-  // Attach the Supabase JWT on write requests when running in the browser.
-  // Dynamic import avoids pulling the browser Supabase client into server-side bundles.
-  if (isWrite && typeof window !== "undefined") {
+  // Attach the Supabase JWT on all requests when running in the browser.
+  // Admin-only GET endpoints (e.g. /api/cohesion/*) need the token too.
+  // Public endpoints simply ignore the Authorization header.
+  if (typeof window !== "undefined") {
     try {
       const { getAccessToken } = await import("./supabase/client");
       const token = await getAccessToken();

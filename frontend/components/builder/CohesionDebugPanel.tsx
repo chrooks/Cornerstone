@@ -72,13 +72,13 @@ const BELL_HEIGHTS = Array.from({ length: BELL_MAX_IN - BELL_MIN_IN + 1 }, (_, i
 // ---------------------------------------------------------------------------
 
 /** Heatmap cell color for 0-10 composite scores (red → yellow → green).
- *  Uses high-contrast text on low-opacity backgrounds for readability. */
+ *  Black text on opaque colored backgrounds for maximum readability. */
 function compositeHeatColor(score: number): string {
-  if (score >= 8) return "bg-green-900/40 text-green-300 font-semibold";
-  if (score >= 6) return "bg-green-900/25 text-green-400";
-  if (score >= 4) return "bg-amber-900/25 text-amber-300";
-  if (score >= 2) return "bg-red-900/20 text-red-400";
-  return "bg-red-900/30 text-red-300";
+  if (score >= 8) return "bg-green-400 text-black font-semibold";
+  if (score >= 6) return "bg-green-300 text-black";
+  if (score >= 4) return "bg-amber-300 text-black";
+  if (score >= 2) return "bg-red-300 text-black";
+  return "bg-red-400 text-black";
 }
 
 /** Convert inches to display label (e.g. 74 → "6'2\""). */
