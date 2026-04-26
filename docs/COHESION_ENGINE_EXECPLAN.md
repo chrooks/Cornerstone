@@ -26,8 +26,8 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 - [x] (2026-04-26) Phase 2: Player-level computation (composites.py, bell_curve.py)
 - [x] (2026-04-26) Phase 3: Lineup-level computation (synergies.py, ratios.py, accentuation.py, cohesion.py)
 - [x] (2026-04-26) Phase 4: Roster scoring (roster.py)
-- [ ] Phase 5: Notes system (notes.py)
-- [ ] Phase 6: Claude narrative (team_description.py)
+- [x] (2026-04-26) Phase 5: Notes system (notes.py)
+- [x] (2026-04-26) Phase 6: Claude narrative (team_description.py)
 - [ ] Phase 7: API integration + frontend types
 - [ ] Phase 8: Test suite
 
@@ -48,6 +48,9 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Observation: Manual Phase 4 smoke checks without database-built percentile distributions produce low roster star ratings because theoretical-max fallback normalization is intentionally conservative for multiplicative composites.
   Evidence: A nine-player synthetic roster returned `star_rating=0.67`, `total_lineups=126`, and `median_score=1.02`. This validates the roster pipeline shape while confirming that meaningful real-player calibration still depends on `build_distributions()` or later integration with database data.
+
+- Observation: Phase 5 and Phase 6 can be developed independently, but both need a roster-level integration pass afterward.
+  Evidence: `notes.py` and `team_description.py` were implemented in parallel with disjoint write scopes, then `roster.py` was updated so live evaluations include generated notes and final evaluations attempt the optional team narrative after notes are present.
 
 
 ## Decision Log
@@ -84,6 +87,10 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
   Rationale: `RosterEvaluation.starting_lineup` is a required dataclass field, but lineups are only meaningful with five players. A zero placeholder keeps the API shape stable until Phase 5 adds Mode A notes for partial rosters.
   Date/Author: 2026-04-26, implementation
 
+- Decision: Generate notes for every roster evaluation, but only generate the Claude narrative in `mode="final"`.
+  Rationale: Structured notes are cheap, deterministic, and required for live roster-building feedback. The Claude narrative is optional UX flourish with network/API-key dependency, so live mode should skip it while final mode degrades gracefully to `None` on failure.
+  Date/Author: 2026-04-26, implementation
+
 
 ## Outcomes & Retrospective
 
@@ -98,6 +105,12 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 
 - Phase 4 outcome: `backend/services/cohesion_engine/roster.py` now implements the public roster evaluator. It computes base player composites, handles partial rosters without lineup scoring, evaluates all five-man combinations for rosters with at least five players, uses slot order for the starting lineup, computes starting-five/depth/archetype-diversity/floor breakdown values, and returns a `RosterEvaluation`. `backend/services/cohesion_engine/__init__.py` now re-exports the real `evaluate_roster()` implementation instead of the Phase 1 stub.
   Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 52 tests. `python -m py_compile backend/services/cohesion_engine/roster.py backend/services/cohesion_engine/__init__.py` succeeded. Manual smoke checks confirmed a partial roster returns zero lineups and one base composite, while a nine-player roster returns `total_lineups=126`, a normalized star breakdown, and a 0-5 star rating.
+
+- Phase 5 outcome: `backend/services/cohesion_engine/notes.py` now generates deterministic structured `Note` objects. Mode A handles 1-4 player rosters from player composites, passing skills, basic synergy checks, and defensive gaps. Mode B handles 5+ player rosters from starting-lineup subscores, synergies, accentuation, and weakness-to-suggestion mapping. `roster.py` now includes notes in returned `RosterEvaluation` objects for both partial and full rosters.
+  Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 62 tests. A partial-roster smoke check returned seven notes including spacing strength, anchor/paint/defense-gap weaknesses, and matching suggestions.
+
+- Phase 6 outcome: `backend/services/cohesion_engine/team_description.py` now adapts the legacy Claude GM memo flow to cohesion-engine data. It builds prompts from player composites, starting-lineup subscores, archetypes, synergies, and structured notes, avoids exposing numeric scores in the prompt, calls Anthropic Haiku when `ANTHROPIC_API_KEY` is available, and returns `None` on missing key, API failure, or malformed response. `roster.py` calls it only in `mode="final"`.
+  Verification: `source backend/venv/bin/activate && python -m pytest backend/tests/test_cohesion_engine/ -v` passed with 62 tests, including mocked Anthropic success/failure cases. `python -m py_compile backend/services/cohesion_engine/notes.py backend/services/cohesion_engine/team_description.py backend/services/cohesion_engine/roster.py` succeeded.
 
 
 ## Code Review Findings

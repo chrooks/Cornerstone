@@ -8,6 +8,7 @@ composites for display without lineup-context synergies.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from itertools import combinations
 from statistics import median
 from typing import Any
@@ -15,7 +16,9 @@ from typing import Any
 from .bell_curve import parse_height_inches
 from .cohesion import evaluate_lineup
 from .composites import compute_player_composites
-from .types import LineupCohesion, Note, PlayerComposites, RosterEvaluation
+from .notes import generate_notes
+from .team_description import generate_team_description
+from .types import LineupCohesion, PlayerComposites, RosterEvaluation
 from .weights import (
     ARCHETYPE_LABELS,
     DEPTH_LINEUP_CEILING,
@@ -149,16 +152,14 @@ def evaluate_roster(players: list[dict[str, Any]], mode: str = "live") -> Roster
     """
     Evaluate a 1-9 player roster.
 
-    Mode is accepted for API compatibility with the legacy evaluator. Phase 5
-    notes and Phase 6 narrative will make mode meaningful.
+    Live mode returns structured notes. Final mode also attempts the optional
+    Claude-generated team narrative and degrades to None if that call fails.
     """
-    del mode
-
     ordered_players = _sort_players_for_starting_lineup(list(players))
     base_composites = _compute_base_composites(ordered_players)
 
     if len(ordered_players) < 5:
-        return RosterEvaluation(
+        evaluation = RosterEvaluation(
             star_rating=0.0,
             star_breakdown={
                 "starting_5": 0.0,
@@ -174,9 +175,15 @@ def evaluate_roster(players: list[dict[str, Any]], mode: str = "live") -> Roster
                 "median_score": 0.0,
                 "archetype_labels": [],
             },
-            notes=[],
+            notes=generate_notes(ordered_players, base_composites),
             team_description=None,
         )
+        if mode == "final":
+            return replace(
+                evaluation,
+                team_description=generate_team_description(evaluation, ordered_players),
+            )
+        return evaluation
 
     starting_players = ordered_players[:5]
     starting_lineup = evaluate_lineup(starting_players)
@@ -189,14 +196,30 @@ def evaluate_roster(players: list[dict[str, Any]], mode: str = "live") -> Roster
         if lineup.score >= VIABLE_LINEUP_THRESHOLD:
             archetypes.update(_archetypes_for_lineup(lineup))
 
+    lineup_summary = _lineup_summary(lineups, archetypes)
     breakdown = _star_breakdown(starting_lineup, lineups, archetypes)
+    notes = generate_notes(
+        ordered_players,
+        base_composites,
+        {
+            "starting_lineup": starting_lineup,
+            "lineup_summary": lineup_summary,
+            "star_breakdown": breakdown,
+        },
+    )
 
-    return RosterEvaluation(
+    evaluation = RosterEvaluation(
         star_rating=_rollup_star_rating(breakdown),
         star_breakdown=breakdown,
         starting_lineup=starting_lineup,
         player_composites=base_composites,
-        lineup_summary=_lineup_summary(lineups, archetypes),
-        notes=[],
+        lineup_summary=lineup_summary,
+        notes=notes,
         team_description=None,
     )
+    if mode == "final":
+        return replace(
+            evaluation,
+            team_description=generate_team_description(evaluation, ordered_players),
+        )
+    return evaluation

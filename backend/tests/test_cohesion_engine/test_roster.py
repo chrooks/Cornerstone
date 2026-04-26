@@ -59,7 +59,7 @@ def test_evaluate_roster_partial_roster_returns_base_composites_without_lineups(
         "median_score": 0.0,
         "archetype_labels": [],
     }
-    assert result.notes == []
+    assert result.notes
     assert result.team_description is None
 
 
@@ -106,3 +106,17 @@ def test_evaluate_roster_uses_slot_order_for_starting_lineup():
     expected = evaluate_roster(sorted(players, key=lambda player: player["slot"])[:5])
 
     assert result.starting_lineup.score == expected.starting_lineup.score
+
+
+def test_evaluate_roster_final_mode_attaches_team_description(monkeypatch):
+    players = [balanced_player(f"P{i}", i) for i in range(1, 6)]
+
+    monkeypatch.setattr(
+        "backend.services.cohesion_engine.roster.generate_team_description",
+        lambda evaluation, raw_players: "A crisp GM memo.",
+    )
+
+    result = evaluate_roster(players, mode="final")
+
+    assert result.notes
+    assert result.team_description == "A crisp GM memo."
