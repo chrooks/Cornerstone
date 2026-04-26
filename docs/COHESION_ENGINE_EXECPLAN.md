@@ -61,6 +61,9 @@ To verify the engine is working: start the Flask backend with `EVAL_ENGINE=cohes
 - Observation: The backend venv does not include `pytest-cov`, so Phase 8 coverage evidence used Python's stdlib `trace` module.
   Evidence: `python -m pytest backend/tests/test_cohesion_engine/ --cov=backend/services/cohesion_engine --cov-report=term-missing -q` failed with "unrecognized arguments: --cov". The trace run reported every `services.cohesion_engine` module at or above 85% line coverage, with all non-timing tests passing under trace.
 
+- Observation: Cohesion engine production imports must use the Flask app's `services.*` import root, not `backend.services.*`.
+  Evidence: Running `flask run --port=5001 --debug` from `backend/` failed with `ModuleNotFoundError: No module named 'backend'` from `cohesion_engine/composites.py`. Switching those imports to `services.skills` and `services.supabase_client` made `flask --app app routes` succeed while the targeted repo-root pytest suite still passed.
+
 
 ## Decision Log
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.services.skills import ALL_SKILLS
+from services.skills import ALL_SKILLS
 
 from .bell_curve import compute_bell_params
 from .types import PlayerComposites
@@ -29,14 +29,14 @@ COMPOSITE_DISTRIBUTIONS: dict[str, list[float]] = {}
 
 def _get_supabase_client():
     """Load the Supabase client only when distribution building needs the DB."""
-    from backend.services.supabase_client import get_supabase
+    from services.supabase_client import get_supabase
 
     return get_supabase()
 
 
 def _run_query(query):
     """Thin wrapper so tests can replace DB execution without real network IO."""
-    from backend.services.supabase_client import run_query
+    from services.supabase_client import run_query
 
     return run_query(query)
 
