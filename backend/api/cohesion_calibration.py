@@ -1,0 +1,384 @@
+"""
+api/cohesion_calibration.py — Admin endpoints for cohesion engine calibration.
+
+Blueprint prefix: /api/cohesion
+All endpoints require @require_admin.
+
+Endpoints:
+  GET  /player/<player_id>/composites — Single player's base composites
+  GET  /bell-curve/<player_id>        — Bell curve params + pre-computed curve array
+  POST /lineup/evaluate               — Run cohesion evaluation on a 5-player lineup
+  GET  /weights                       — All engine weight constants
+  PUT  /weights                       — Apply partial weight overrides (in-memory)
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import logging
+from typing import Any
+
+from flask import Blueprint, jsonify, request
+
+from api.auth import require_admin
+from services.cohesion_engine.bell_curve import (
+    compute_bell_params,
+    defensive_value_at_height,
+    parse_height_inches,
+)
+from services.cohesion_engine.cohesion import evaluate_lineup
+from services.cohesion_engine.composites import compute_player_composites
+from services.cohesion_engine import weights as weights_module
+from services.supabase_client import get_supabase
+
+logger = logging.getLogger(__name__)
+
+cohesion_calibration_bp = Blueprint(
+    "cohesion_calibration",
+    __name__,
+    url_prefix="/api/cohesion",
+)
+
+# ---------------------------------------------------------------------------
+# In-memory weight overrides (reset on server restart — safe default)
+# ---------------------------------------------------------------------------
+
+_WEIGHT_OVERRIDES: dict[str, dict[str, Any]] = {}
+
+# Height range for bell curve pre-computation (6'0" to 7'4")
+_BELL_MIN_IN = 72
+_BELL_MAX_IN = 88
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _fetch_player_with_skills(player_id: str) -> dict | None:
+    """
+    Fetch a player's metadata and composite skill profile from Supabase.
+
+    Returns a dict with keys: id, name, height, skills (skill_name → tier string).
+    Returns None if the player or their skill profile is not found.
+    """
+    supabase = get_supabase()
+
+    # Fetch player metadata
+    player_res = (
+        supabase.table("players")
+        .select("id, name, height")
+        .eq("id", player_id)
+        .limit(1)
+        .execute()
+    )
+    if not player_res.data:
+        # Try legends table as fallback
+        legend_res = (
+            supabase.table("legends")
+            .select("id, name, height")
+            .eq("id", player_id)
+            .limit(1)
+            .execute()
+        )
+        if not legend_res.data:
+            return None
+        player = legend_res.data[0]
+        # Fetch legend skill profile (manual source)
+        profile_res = (
+            supabase.table("skill_profiles")
+            .select("profile")
+            .eq("legend_id", player_id)
+            .eq("is_legend", True)
+            .eq("source", "manual")
+            .limit(1)
+            .execute()
+        )
+    else:
+        player = player_res.data[0]
+        # Fetch composite skill profile for current players
+        profile_res = (
+            supabase.table("skill_profiles")
+            .select("profile")
+            .eq("player_id", player_id)
+            .eq("source", "composite")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+    if not profile_res.data:
+        return None
+
+    raw_profile = profile_res.data[0].get("profile") or {}
+    # Convert profile dict to skill_name → tier string (skip null tiers)
+    skills = {k: v for k, v in raw_profile.items() if v is not None}
+
+    return {
+        "id": player["id"],
+        "name": player["name"],
+        "height": player.get("height"),
+        "skills": skills,
+    }
+
+
+def _serialize_composites(pc: Any) -> dict[str, float]:
+    """Extract the 10 normalized composite scores from a PlayerComposites dataclass."""
+    return {
+        "spacing": pc.spacing,
+        "finishing": pc.finishing,
+        "paint_touch": pc.paint_touch,
+        "anchor": pc.anchor,
+        "post_game": pc.post_game,
+        "pnr_screener": pc.pnr_screener,
+        "off_ball_impact": pc.off_ball_impact,
+        "shot_creation": pc.shot_creation,
+        "rebounding": pc.rebounding,
+        "transition": pc.transition,
+    }
+
+
+def _get_all_weights() -> dict[str, Any]:
+    """
+    Build a merged view of all weight constants: defaults from weights.py
+    overlaid with any runtime overrides from _WEIGHT_OVERRIDES.
+    """
+    # Collect all uppercase dict/tuple/float/int constants from the weights module
+    result: dict[str, Any] = {}
+    for name in dir(weights_module):
+        if name.startswith("_"):
+            continue
+        value = getattr(weights_module, name)
+        if isinstance(value, (dict, tuple, list, float, int)):
+            result[name] = value
+
+    # Apply overrides on top
+    for section, overrides in _WEIGHT_OVERRIDES.items():
+        if section in result and isinstance(result[section], dict):
+            # Merge partial overrides into the dict copy
+            result[section] = {**result[section], **overrides}
+        else:
+            result[section] = overrides
+
+    return result
+
+
+def _inches_to_display(inches: int) -> str:
+    """Convert height in inches to display format (e.g. 74 → 6'2\")."""
+    ft = inches // 12
+    inch = inches % 12
+    return f"{ft}'{inch}\""
+
+
+# ---------------------------------------------------------------------------
+# GET /player/<player_id>/composites
+# ---------------------------------------------------------------------------
+
+@cohesion_calibration_bp.route("/player/<player_id>/composites")
+@require_admin
+def get_player_composites(player_id: str) -> tuple:
+    """Return a single player's base composites (no lineup synergies)."""
+    player = _fetch_player_with_skills(player_id)
+    if not player:
+        return jsonify({"success": False, "data": None, "error": "Player not found"}), 404
+
+    height_inches = parse_height_inches(player.get("height"))
+    pc = compute_player_composites(
+        player["skills"],
+        player_id=player["id"],
+        name=player["name"],
+        height_inches=height_inches,
+    )
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "player_id": player["id"],
+            "name": player["name"],
+            "height": player.get("height"),
+            "composites_normalized": _serialize_composites(pc),
+            "bell_curve": {
+                "amplitude": pc.bell_amplitude,
+                "peak": pc.bell_peak,
+                "range_down": pc.bell_range_down,
+                "range_up": pc.bell_range_up,
+                "flat_down": pc.bell_flat_down,
+                "flat_up": pc.bell_flat_up,
+            },
+        },
+        "error": None,
+    }), 200
+
+
+# ---------------------------------------------------------------------------
+# GET /bell-curve/<player_id>
+# ---------------------------------------------------------------------------
+
+@cohesion_calibration_bp.route("/bell-curve/<player_id>")
+@require_admin
+def get_bell_curve(player_id: str) -> tuple:
+    """
+    Return bell curve parameters plus a pre-computed value-at-height array
+    for direct chart rendering (one point per inch from 6'0" to 7'4").
+    """
+    player = _fetch_player_with_skills(player_id)
+    if not player:
+        return jsonify({"success": False, "data": None, "error": "Player not found"}), 404
+
+    height_inches = parse_height_inches(player.get("height"))
+    # Compute raw bell params from skills + height
+    skills_str = {k: str(v) for k, v in player["skills"].items()}
+    params = compute_bell_params(skills_str, height_inches or 78)
+
+    # Pre-compute the curve array for every inch in the chart range
+    curve = []
+    for h in range(_BELL_MIN_IN, _BELL_MAX_IN + 1):
+        value = defensive_value_at_height(
+            target_height=h,
+            amplitude=params["amplitude"],
+            peak_center=params["peak_center"],
+            range_down=params["range_down"],
+            range_up=params["range_up"],
+            flat_top_down=params["flat_top_down"],
+            flat_top_up=params["flat_top_up"],
+        )
+        curve.append({
+            "height": h,
+            "height_display": _inches_to_display(h),
+            "value": round(value, 3),
+        })
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "player_id": player["id"],
+            "name": player["name"],
+            "params": params,
+            "curve": curve,
+        },
+        "error": None,
+    }), 200
+
+
+# ---------------------------------------------------------------------------
+# POST /lineup/evaluate
+# ---------------------------------------------------------------------------
+
+# Validation limits for lineup evaluation
+_MAX_LINEUP_SIZE = 5
+_MAX_NAME_LENGTH = 100
+_MAX_SKILLS = 25
+
+
+@cohesion_calibration_bp.route("/lineup/evaluate", methods=["POST"])
+@require_admin
+def evaluate_lineup_endpoint() -> tuple:
+    """
+    Evaluate a 5-player lineup and return cohesion score + subscores.
+
+    Request body:
+      {
+        "players": [
+          { "name": "...", "height": "6-2", "skills": { ... } },
+          ...
+        ]
+      }
+    """
+    body = request.get_json(silent=True) or {}
+    players = body.get("players")
+
+    if not isinstance(players, list):
+        return jsonify({"success": False, "data": None, "error": "'players' must be an array"}), 400
+    if len(players) != _MAX_LINEUP_SIZE:
+        return jsonify({"success": False, "data": None, "error": f"Exactly {_MAX_LINEUP_SIZE} players required"}), 400
+
+    # Validate each player dict
+    for i, p in enumerate(players):
+        if not isinstance(p, dict):
+            return jsonify({"success": False, "data": None, "error": f"Player {i} must be an object"}), 400
+        name = p.get("name")
+        if not isinstance(name, str) or not name:
+            return jsonify({"success": False, "data": None, "error": f"Player {i} must have a non-empty 'name'"}), 400
+        if len(name) > _MAX_NAME_LENGTH:
+            return jsonify({"success": False, "data": None, "error": f"Player {i} name too long"}), 400
+        skills = p.get("skills")
+        if skills is not None and not isinstance(skills, dict):
+            return jsonify({"success": False, "data": None, "error": f"Player {i} 'skills' must be an object"}), 400
+        if isinstance(skills, dict) and len(skills) > _MAX_SKILLS:
+            return jsonify({"success": False, "data": None, "error": f"Player {i} has too many skills"}), 400
+
+    # Run cohesion evaluation on the lineup
+    result = evaluate_lineup(players)
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "cohesion_score": result.score,
+            "subscores": result.subscores,
+            "synergies_applied": list(result.synergies_applied),
+            "accentuation": {
+                "strength_amplification": result.accentuation_strength,
+                "weakness_coverage": result.accentuation_weakness,
+            },
+        },
+        "error": None,
+    }), 200
+
+
+# ---------------------------------------------------------------------------
+# GET /weights
+# ---------------------------------------------------------------------------
+
+@cohesion_calibration_bp.route("/weights")
+@require_admin
+def get_weights() -> tuple:
+    """Return all engine weight constants merged with any runtime overrides."""
+    return jsonify({
+        "success": True,
+        "data": _get_all_weights(),
+        "error": None,
+    }), 200
+
+
+# ---------------------------------------------------------------------------
+# PUT /weights
+# ---------------------------------------------------------------------------
+
+@cohesion_calibration_bp.route("/weights", methods=["PUT"])
+@require_admin
+def update_weights() -> tuple:
+    """
+    Apply partial weight overrides. Stored in-memory (reset on restart).
+
+    Request body: a dict of section_name → { key: value } overrides.
+    Example:
+      {
+        "COHESION_ROLLUP_WEIGHTS": { "defensive_coverage": 0.18 },
+        "COMPOSITE_COEFFICIENTS": { "paint_touch_vertical_spacer": 0.5 }
+      }
+    """
+    body = request.get_json(silent=True) or {}
+
+    if not isinstance(body, dict):
+        return jsonify({"success": False, "data": None, "error": "Request body must be a JSON object"}), 400
+
+    # Merge each section's overrides into the in-memory store
+    for section, overrides in body.items():
+        if not isinstance(section, str):
+            continue
+        if not isinstance(overrides, dict):
+            return jsonify({
+                "success": False,
+                "data": None,
+                "error": f"Override for '{section}' must be an object",
+            }), 400
+        if section not in _WEIGHT_OVERRIDES:
+            _WEIGHT_OVERRIDES[section] = {}
+        _WEIGHT_OVERRIDES[section].update(overrides)
+
+    logger.info("Weight overrides updated: %s", list(body.keys()))
+
+    return jsonify({
+        "success": True,
+        "data": _get_all_weights(),
+        "error": None,
+    }), 200

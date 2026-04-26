@@ -102,6 +102,7 @@ from api.review import review_bp
 from api.legends import legends_bp
 from api.rosters import rosters_bp
 from api.builder import builder_bp
+from api.cohesion_calibration import cohesion_calibration_bp
 
 
 def create_app() -> Flask:
@@ -134,6 +135,7 @@ def create_app() -> Flask:
     app.register_blueprint(legends_bp)      # Prompt 8: legends profile builder
     app.register_blueprint(rosters_bp)      # Prompt 9: roster builder persistence
     app.register_blueprint(builder_bp)      # Phase 4: roster evaluation engine
+    app.register_blueprint(cohesion_calibration_bp)  # Cohesion engine calibration
 
     return app
 
