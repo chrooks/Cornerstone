@@ -11,7 +11,7 @@
  * All state lifted to page level. No global stores.
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Toaster, toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
@@ -97,6 +97,12 @@ const PLAYER_COLORS = [
 // Bell curve chart range: 6'0" (72in) to 7'4" (88in)
 const BELL_MIN_IN = 72;
 const BELL_MAX_IN = 88;
+
+const CENTER_TABS: { key: CenterTab; label: string }[] = [
+  { key: "bell_curves", label: "Bell Curves" },
+  { key: "lineup", label: "Lineup Tester" },
+  { key: "weights", label: "Weights" },
+];
 
 const SUBSCORE_LABELS: Record<string, string> = {
   spacing_creation_ratio: "Spacing / Creation",
@@ -406,19 +412,19 @@ function WeightsEditor({ onWeightsUpdated }: WeightsEditorProps) {
   const [MonacoEditor, setMonacoEditor] = useState<typeof import("@monaco-editor/react").default | null>(null);
 
   // Load Monaco lazily on mount
-  useState(() => {
+  useEffect(() => {
     import("@monaco-editor/react").then((mod) => setMonacoEditor(() => mod.default));
-  });
+  }, []);
 
   // Fetch current weights on mount
-  useState(() => {
+  useEffect(() => {
     fetchCohesionWeights().then((res) => {
       if (res.success && res.data) {
         setEditorContent(JSON.stringify(res.data, null, 2));
       }
       setLoading(false);
     });
-  });
+  }, []);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -445,6 +451,8 @@ function WeightsEditor({ onWeightsUpdated }: WeightsEditorProps) {
       setEditorContent(JSON.stringify(res.data, null, 2));
       toast.success("Weights reset to defaults");
       onWeightsUpdated();
+    } else {
+      toast.error(res.error ?? "Failed to reset weights");
     }
   }, [onWeightsUpdated]);
 
@@ -653,7 +661,8 @@ export default function CohesionCalibrationPage() {
     }
     const res = await fetchBellCurve(selectedComposites.player_id);
     if (res.success && res.data) {
-      setOverlayPlayers((prev) => [...prev, res.data!]);
+      const curveData = res.data;
+      setOverlayPlayers((prev) => [...prev, curveData]);
       // Auto-switch to bell curves tab
       setCenterTab("bell_curves");
     } else {
@@ -671,10 +680,11 @@ export default function CohesionCalibrationPage() {
     // Fetch this player's composites to get skills + height
     const res = await fetchPlayerComposites(player.id);
     if (res.success && res.data) {
+      const playerHeight = res.data.height;
       setLineupSlots((prev) =>
         prev.map((slot, i) =>
           i === index
-            ? { player, skills: {}, height: res.data!.height }
+            ? { player, skills: {}, height: playerHeight }
             : slot,
         ),
       );
@@ -688,6 +698,9 @@ export default function CohesionCalibrationPage() {
 
   /** Evaluate the current 5-player lineup. */
   const handleEvaluateLineup = useCallback(async () => {
+    // Guard against partial lineup even if button disabled state is bypassed
+    if (lineupSlots.some((s) => !s.player)) return;
+
     setEvaluatingLineup(true);
     // Build the player array for the API — using name + height
     const players = lineupSlots.map((slot) => ({
@@ -720,12 +733,7 @@ export default function CohesionCalibrationPage() {
     // No-op for now — in the future, could auto-re-evaluate the current lineup
   }, []);
 
-  // --- Tab data ---
-  const tabs: { key: CenterTab; label: string }[] = useMemo(() => [
-    { key: "bell_curves", label: "Bell Curves" },
-    { key: "lineup", label: "Lineup Tester" },
-    { key: "weights", label: "Weights" },
-  ], []);
+  // --- Tab data (module-level constant, no memo needed) ---
 
   return (
     <>
@@ -845,7 +853,7 @@ export default function CohesionCalibrationPage() {
           <div id="cohesion-cal-center-panel" className="flex-1 min-w-0 flex flex-col overflow-hidden">
             {/* Tab bar */}
             <div id="cohesion-cal-tab-bar" className="flex-shrink-0 flex border-b border-border bg-background">
-              {tabs.map((tab) => (
+              {CENTER_TABS.map((tab) => (
                 <button
                   key={tab.key}
                   id={`cohesion-cal-tab-${tab.key}`}
