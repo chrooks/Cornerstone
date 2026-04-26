@@ -15,6 +15,7 @@
  *   Breakdown (0-1): green (≥0.7), amber (0.4–0.69), red (<0.4)
  */
 
+import { useId } from "react";
 import { cn } from "@/lib/utils";
 import type { CohesionRosterEvaluation } from "@/lib/types";
 
@@ -70,20 +71,23 @@ function StarFilled({ className }: { className?: string }) {
   );
 }
 
-/** Half-filled star SVG icon (left half filled, right half empty). */
+/** Half-filled star SVG icon — uses inline clipPath to avoid global id collision. */
 function StarHalf({ className }: { className?: string }) {
+  // Use useId()-style unique id to prevent SVG clipPath collision when multiple
+  // CohesionScoreDisplay instances render in the same document.
+  const clipId = useId();
   return (
     <svg className={className} viewBox="0 0 24 24" width="24" height="24">
       {/* Filled left half */}
       <defs>
-        <clipPath id="star-half-clip">
+        <clipPath id={clipId}>
           <rect x="0" y="0" width="12" height="24" />
         </clipPath>
       </defs>
       <path
         d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
         fill="currentColor"
-        clipPath="url(#star-half-clip)"
+        clipPath={`url(#${clipId})`}
       />
       {/* Empty outline for right half */}
       <path
@@ -113,14 +117,15 @@ function StarEmpty({ className }: { className?: string }) {
  *      3.25 → 3.5 → 3 filled, 1 half, 1 empty
  */
 function StarRating({ rating, colorClass }: { rating: number; colorClass: string }) {
-  // Round to nearest half star for display
-  const rounded = Math.round(rating * 2) / 2;
+  // Clamp to [0, 5] then round to nearest half star for display
+  const clamped = Math.max(0, Math.min(5, rating));
+  const rounded = Math.round(clamped * 2) / 2;
   const fullStars = Math.floor(rounded);
   const hasHalf = rounded % 1 !== 0;
   const emptyStars = 5 - fullStars - (hasHalf ? 1 : 0);
 
   return (
-    <div id="cohesion-star-icons" className={cn("flex items-center gap-0.5", colorClass)}>
+    <div className={cn("flex items-center gap-0.5", colorClass)} aria-hidden="true">
       {Array.from({ length: fullStars }, (_, i) => (
         <StarFilled key={`full-${i}`} className="w-8 h-8" />
       ))}
@@ -138,7 +143,7 @@ function StarRating({ rating, colorClass }: { rating: number; colorClass: string
 
 /** A labeled horizontal bar for 0-1 breakdown factors. */
 function BreakdownBar({ id, label, value }: { id: string; label: string; value: number }) {
-  const pct = Math.round(value * 100);
+  const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
   return (
     <div id={id} className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
@@ -240,7 +245,12 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
     <div id="cohesion-score-display" className="space-y-4 rounded-xl border border-border bg-card p-4">
 
       {/* Star Rating Hero */}
-      <div id="cohesion-score-hero" className="flex flex-col items-center gap-2 py-2">
+      <div
+        id="cohesion-score-hero"
+        role="group"
+        aria-label={`Roster cohesion: ${star_rating.toFixed(2)} out of 5 stars`}
+        className="flex flex-col items-center gap-2 py-2"
+      >
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Roster Cohesion
         </p>
