@@ -1,0 +1,138 @@
+"""
+Tests that pin Phase 1 cohesion-engine constants to the implementation spec.
+"""
+
+from __future__ import annotations
+
+import math
+
+from backend.services.cohesion_engine import weights
+
+
+def test_tier_values_match_design_mapping():
+    assert weights.TIER_VALUES == {
+        "None": 0.0,
+        "Capable": 1.5,
+        "Proficient": 3.0,
+        "Elite": 6.0,
+        "All-Time Great": 10.0,
+    }
+
+
+def test_composite_coefficients_match_resolved_formulas():
+    assert weights.COMPOSITE_COEFFICIENTS["spacing_off_dribble"] == 0.5
+    assert weights.COMPOSITE_COEFFICIENTS["paint_touch_finishing_scale"] == 0.08
+    assert weights.COMPOSITE_COEFFICIENTS["paint_touch_vertical_spacer"] == 0.6
+    assert weights.COMPOSITE_COEFFICIENTS["post_game_mid_post"] == 0.7
+    assert weights.COMPOSITE_COEFFICIENTS["pnr_screener_secondary_scale"] == 0.15
+    assert weights.COMPOSITE_COEFFICIENTS["shot_creation_spacing"] == 0.3
+    assert weights.COMPOSITE_COEFFICIENTS["transition_passer_scale"] == 0.2
+
+
+def test_theoretical_maxima_match_impl_spec_fallback_table():
+    assert weights.THEORETICAL_MAX == {
+        "spacing": 25.0,
+        "finishing": 20.0,
+        "paint_touch": 85.8,
+        "anchor": 33.0,
+        "post_game": 17.0,
+        "pnr_screener": 50.0,
+        "off_ball_impact": 61.0,
+        "shot_creation": 60.0,
+        "rebounding": 20.0,
+        "transition": 42.0,
+    }
+
+
+def test_bell_curve_tables_and_peak_shifts_match_impl_spec():
+    assert weights.AMPLITUDE_MAP["Elite"] == 3.0
+    assert weights.AMPLITUDE_MAP["All-Time Great"] == 4.0
+    assert weights.WARM_BODY == 0.5
+    assert weights.VD_EXT == {
+        "None": 0,
+        "Capable": 2,
+        "Proficient": 3,
+        "Elite": 5,
+        "All-Time Great": 7,
+    }
+    assert weights.PD_DOWN == {
+        "None": 0,
+        "Capable": 1,
+        "Proficient": 2,
+        "Elite": 3,
+        "All-Time Great": 5,
+    }
+    assert weights.RP_UP == {
+        "None": 0,
+        "Capable": 1,
+        "Proficient": 2,
+        "Elite": 3,
+        "All-Time Great": 4,
+    }
+    assert weights.PEAK_SHIFT_PD_ONLY == -2
+    assert weights.PEAK_SHIFT_RP_ONLY == 2
+
+
+def test_synergy_scale_factors_match_impl_spec_table():
+    assert weights.SYNERGY_SCALE_FACTORS == {
+        "OFF-02": 0.05,
+        "OFF-03": 0.03,
+        "OFF-04": 0.04,
+        "OFF-12": 0.05,
+        "OFF-13": 0.03,
+        "OFF-14": 0.04,
+        "OFF-15": 0.05,
+        "OFF-16": 0.05,
+        "OFF-28": 0.05,
+        "OFF-31": 0.04,
+        "OFF-32": 0.03,
+    }
+    assert weights.SYNERGY_PENALTY_SEVERITY == 5.0
+    assert weights.OFF_13_RAW_SPACING_THRESHOLD == 15.0
+
+
+def test_cohesion_rollup_weights_match_impl_spec_and_sum_to_one():
+    assert weights.COHESION_ROLLUP_WEIGHTS["spacing_creation_ratio"] == 0.12
+    assert weights.COHESION_ROLLUP_WEIGHTS["spacing_paint_touch_ratio"] == 0.06
+    assert weights.COHESION_ROLLUP_WEIGHTS["defensive_coverage"] == 0.15
+    assert weights.COHESION_ROLLUP_WEIGHTS["defensive_gaps"] == 0.10
+    assert weights.COHESION_ROLLUP_WEIGHTS["accentuation_strength"] == 0.05
+    assert weights.COHESION_ROLLUP_WEIGHTS["accentuation_weakness"] == 0.05
+    assert math.isclose(sum(weights.COHESION_ROLLUP_WEIGHTS.values()), 1.0)
+
+
+def test_ratio_accentuation_note_and_layer_2_constants_exist():
+    assert weights.RATIO_DEAD_ZONE == 0.2
+    assert weights.REBOUNDING_SPACING_DEFICIT_THRESHOLD == 5.0
+    assert weights.ACCENTUATION_STRENGTH_THRESHOLD == 7.5
+    assert weights.ACCENTUATION_WEAKNESS_THRESHOLD == 2.5
+    assert weights.ACCENTUATION_FALLBACK_STRENGTH_THRESHOLD == 6.0
+    assert weights.ACCENTUATION_FALLBACK_WEAKNESS_THRESHOLD == 2.0
+    assert weights.NOTE_ELITE_COMPOSITE_THRESHOLD == 8.0
+    assert weights.NOTE_STACKED_COMPOSITE_THRESHOLD == 6.0
+    assert weights.NOTE_LIMIT_PER_TYPE == 3
+    assert weights.ROSTER_ROLLUP_WEIGHTS == {
+        "starting_5": 0.45,
+        "depth": 0.25,
+        "archetype_diversity": 0.20,
+        "floor": 0.10,
+    }
+    assert weights.VIABLE_LINEUP_THRESHOLD == 3.5
+    assert weights.DEPTH_LINEUP_CEILING == 40
+    assert weights.TOTAL_LINEUPS_FULL_ROSTER == 126
+
+
+def test_defensive_and_rp_pd_boost_constants_match_impl_spec():
+    assert weights.DEFENSIVE_GAP_THRESHOLD == 1.0
+    assert weights.DEFENSIVE_GAP_PENALTY_SCALE == -0.5
+    assert weights.DEFENSIVE_REBOUNDING_MINIMUM == 3.0
+    assert weights.DEFENSIVE_REBOUNDING_PENALTY_SCALE == 2.0
+    assert weights.DEFENSIVE_TRANSITION_BOOST_DIVISOR == 15.0
+    assert weights.DEFENSIVE_TRANSITION_BOOST_CAP == 2.0
+    assert weights.RP_PD_BOOST == {
+        "None": 0.0,
+        "Capable": 0.0,
+        "Proficient": 0.0,
+        "Elite": 0.5,
+        "All-Time Great": 1.0,
+    }
