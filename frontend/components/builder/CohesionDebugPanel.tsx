@@ -97,7 +97,9 @@ function defensiveValueAtHeight(
 ): number {
   const { amplitude, peak, range_down, range_up, flat_down, flat_up } = params;
 
-  // Determine direction-specific parameters
+  // Determine direction-specific parameters.
+  // Math.abs gives same result as backend's signed subtraction in each branch.
+  // When targetHeight == peak, falls into down/range_down branch (same as backend).
   const distance = Math.abs(targetHeight - peak);
   const flat = targetHeight > peak ? flat_up : flat_down;
   const total = targetHeight > peak ? range_up : range_down;
@@ -315,7 +317,7 @@ function SynergiesChips({ synergies }: { synergies: string[] }) {
         Synergies Fired
       </p>
       <div className="flex flex-wrap gap-1.5">
-        {synergies.map((s) => {
+        {synergies.map((s, idx) => {
           // Color code by prefix: OFF → blue, DEF → violet, BAL → amber
           const colorClass = s.startsWith("OFF")
             ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
@@ -324,7 +326,7 @@ function SynergiesChips({ synergies }: { synergies: string[] }) {
               : "bg-amber-500/20 text-amber-300 border-amber-500/30";
           return (
             <span
-              key={s}
+              key={`${s}-${idx}`}
               className={cn("text-[9px] font-mono px-1.5 py-0.5 rounded border", colorClass)}
             >
               {s}
