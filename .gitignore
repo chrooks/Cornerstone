@@ -32,3 +32,4 @@ backend/.next/trace*
 .reports/
 knowledge/
 scripts/composite_results/
+scripts/compute_composites.py
