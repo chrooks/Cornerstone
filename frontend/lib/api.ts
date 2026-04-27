@@ -614,6 +614,10 @@ export async function evaluateLineup(
   subscores: Record<string, number>;
   synergies_applied: string[];
   accentuation: { strength_amplification: number; weakness_coverage: number };
+  accentuation_details?: {
+    strength?: { score: number; credit: number; checks: number; terms: Record<string, unknown>[] };
+    weakness?: { score: number; credit: number; checks: number; terms: Record<string, unknown>[] };
+  };
   boosted_bell_curves?: ({ amplitude: number; peak: number; range_down: number; range_up: number; flat_down: number; flat_up: number } | null)[];
   rp_pd_boosts?: {
     player_index: number;

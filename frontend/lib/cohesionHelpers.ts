@@ -26,6 +26,7 @@ const OFFENSE_CATEGORIES = new Set([
   "off_ball_impact",
   "post_game",
   "pnr_screener",
+  "pnr_pairing",
 ]);
 
 // Defense-oriented cohesion categories

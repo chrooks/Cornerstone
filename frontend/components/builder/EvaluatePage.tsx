@@ -221,6 +221,56 @@ interface DataReady {
   legend: LegendDetail;
 }
 
+const TEAM_DESCRIPTION_CACHE_VERSION = "team-description-v1";
+
+function sortedSkillEntries(skills: Record<string, string | null | undefined>): [string, string][] {
+  return Object.entries(skills)
+    .map(([skill, tier]) => [skill, tier ?? "None"] as [string, string])
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
+function hashString(value: string): string {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = ((hash << 5) + hash) ^ value.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function teamDescriptionCacheKey(slots: (PlayerWithSkills | null)[], legend: LegendDetail): string {
+  const fingerprint = {
+    version: TEAM_DESCRIPTION_CACHE_VERSION,
+    cornerstone: {
+      id: legend.id,
+      height: legend.height,
+      skills: sortedSkillEntries(legend.profile),
+    },
+    slots: slots.map((player, index) => (
+      player
+        ? {
+            slot: index + 1,
+            id: player.id,
+            height: player.height,
+            skills: sortedSkillEntries((player.skills ?? {}) as Record<string, string>),
+          }
+        : { slot: index + 1, id: null }
+    )),
+  };
+
+  return `builder-final-team-description:${TEAM_DESCRIPTION_CACHE_VERSION}:${hashString(JSON.stringify(fingerprint))}`;
+}
+
+function readCachedTeamDescription(cacheKey: string): string | null {
+  if (typeof window === "undefined") return null;
+  const cached = window.localStorage.getItem(cacheKey);
+  return cached && cached.trim().length > 0 ? cached : null;
+}
+
+function writeCachedTeamDescription(cacheKey: string, description: string | null | undefined): void {
+  if (typeof window === "undefined" || !description) return;
+  window.localStorage.setItem(cacheKey, description);
+}
+
 export function EvaluatePage() {
   const searchParams = useSearchParams();
   const router       = useRouter();
@@ -265,12 +315,20 @@ export function EvaluatePage() {
     if (!dataReady || adminLoading) return;
 
     const players = buildPlayerPayload(dataReady.slots, dataReady.legend);
+    const descriptionCacheKey = teamDescriptionCacheKey(dataReady.slots, dataReady.legend);
+    const cachedDescription = readCachedTeamDescription(descriptionCacheKey);
     setEvalState("evaluating");
 
-    evaluateRoster({ players, mode: "final", debug: isAdmin })
+    // Numeric evaluation should always run fresh, but the final narrative can
+    // be reused for the exact same roster fingerprint to avoid duplicate LLM calls.
+    evaluateRoster({ players, mode: cachedDescription ? "live" : "final", debug: isAdmin })
       .then((res) => {
         if (res.success && res.data) {
-          setEvaluation(res.data);
+          const evaluationWithCachedDescription = cachedDescription
+            ? { ...res.data, team_description: cachedDescription }
+            : res.data;
+          writeCachedTeamDescription(descriptionCacheKey, evaluationWithCachedDescription.team_description);
+          setEvaluation(evaluationWithCachedDescription);
           setEvalState("ready");
         } else {
           setErrorMsg(res.error ?? "Evaluation failed");

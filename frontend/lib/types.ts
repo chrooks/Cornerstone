@@ -561,6 +561,50 @@ export interface CohesionLineupData {
     strength_amplification: number;
     weakness_coverage: number;
   };
+  accentuation_details?: {
+    strength?: {
+      score: number;
+      credit: number;
+      checks: number;
+      terms: {
+        player: string;
+        composite: string;
+        value: number;
+        teammate: string;
+        teammate_composite: string;
+        teammate_value: number;
+        contribution: number;
+      }[];
+    };
+    weakness?: {
+      score: number;
+      credit: number;
+      checks: number;
+      terms: {
+        player: string;
+        composite: string;
+        weakness_depth: number;
+        teammate: string;
+        cover_value: number;
+        contribution: number;
+      }[];
+    };
+  };
+  /** RP-PD boosted curves for the evaluated starting lineup. */
+  boosted_bell_curves?: (CohesionBellCurve | null)[];
+  /** Per-player perimeter-disruptor boosts provided by the best rim protector. */
+  rp_pd_boosts?: {
+    player_index: number;
+    player_name: string;
+    provider_index: number;
+    provider_name: string;
+    provider_rim_protector_tier: string;
+    boost: number;
+    original_pd_tier: string;
+    effective_pd_tier: string;
+    original_pd_value: number;
+    effective_pd_value: number;
+  }[];
 }
 
 /** Summary across all evaluated five-man lineups. */
@@ -569,6 +613,12 @@ export interface CohesionLineupSummary {
   viable_lineups: number;
   median_score: number;
   archetype_labels: string[];
+  bench_lineups?: number;
+  bench_viable_lineups?: number;
+  bench_median_score?: number;
+  depth_viable_ratio?: number;
+  depth_quality?: number;
+  depth_score?: number;
 }
 
 /** Full evaluation result from POST /api/builder/evaluate when EVAL_ENGINE=cohesion. */

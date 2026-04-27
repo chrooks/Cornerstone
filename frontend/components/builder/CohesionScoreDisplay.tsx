@@ -141,13 +141,41 @@ function StarRating({ rating, colorClass }: { rating: number; colorClass: string
 // Sub-components
 // ---------------------------------------------------------------------------
 
+const BREAKDOWN_DESCRIPTIONS: Record<string, string> = {
+  starting_5: "How strong the selected starting five is on the 0-5 cohesion scale.",
+  depth: "Bench rotation depth: viable non-starting lineup ratio blended with median non-starting lineup quality.",
+  archetype_diversity: "How many different lineup identities the roster can support.",
+  floor: "How stable the roster is across all evaluated five-man lineup combinations.",
+};
+
+const SUBSCORE_DESCRIPTIONS: Record<string, string> = {
+  spacing_creation_ratio: "How well lineup spacing and shot creation balance each other.",
+  creation_offball_ratio: "Whether on-ball creation has enough off-ball impact around it.",
+  spacing_paint_touch_ratio: "Whether rim pressure and paint touches have enough spacing support.",
+  rebound_transition_ratio: "Whether rebounding and transition play support each other.",
+  rebounding_spacing_deficit: "Whether spacing is adequate or rebounding can offset a spacing deficit.",
+  paint_touch_total: "Lineup-wide ability to pressure the rim and create paint touches.",
+  post_game_total: "Top post option, secondary post option, and post depth blended together.",
+  pnr_pairing: "How well pick-and-roll handlers and screeners match in both quality and balance.",
+  anchor_total: "Primary defensive anchor quality with secondary support and depth.",
+  collective_passing: "Primary creator passing plus lineup-wide passing depth.",
+  rebounding: "Top rebounders plus team rebounding depth.",
+  transition: "Lineup-wide transition pressure and open-court value.",
+  defensive_coverage: "Stacked height-based defensive bell-curve coverage after lineup effects.",
+  defensive_gaps: "How many height bands avoid falling below the defensive gap threshold.",
+  accentuation_strength: "How much the lineup amplifies its best traits.",
+  accentuation_weakness: "How well the lineup covers its weakest traits.",
+};
+
 /** A labeled horizontal bar for 0-1 breakdown factors. */
-function BreakdownBar({ id, label, value }: { id: string; label: string; value: number }) {
+function BreakdownBar({ id, label, value, description }: { id: string; label: string; value: number; description: string }) {
   const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
   return (
     <div id={id} className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        <span id={`${id}-label`} className="text-xs font-medium text-muted-foreground cursor-help" title={description}>
+          {label}
+        </span>
         <span className={cn("text-xs font-mono font-bold tabular-nums", breakdownColorClass(value))}>
           {pct}%
         </span>
@@ -168,13 +196,15 @@ function BreakdownBar({ id, label, value }: { id: string; label: string; value: 
 }
 
 /** A labeled horizontal bar for 0-10 subscore values. */
-function SubscoreBar({ id, label, score }: { id: string; label: string; score: number }) {
+function SubscoreBar({ id, label, score, description }: { id: string; label: string; score: number; description: string }) {
   const rounded = Math.round(score * 10) / 10;
   const widthPct = Math.max(0, Math.min(100, (score / 10) * 100));
   return (
     <div id={id} className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        <span id={`${id}-label`} className="text-xs font-medium text-muted-foreground cursor-help" title={description}>
+          {label}
+        </span>
         <span className={cn("text-xs font-mono font-bold tabular-nums", subscoreColorClass(score))}>
           {rounded.toFixed(1)}
         </span>
@@ -200,20 +230,21 @@ function SubscoreBar({ id, label, score }: { id: string; label: string; score: n
 
 const SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: string }[] }[] = [
   {
-    heading: "Ratios",
+    heading: "Fit Ratios",
     entries: [
       { key: "spacing_creation_ratio", label: "Spacing / Creation" },
+      { key: "creation_offball_ratio", label: "Creation / Off-Ball" },
       { key: "spacing_paint_touch_ratio", label: "Spacing / Paint Touch" },
       { key: "rebound_transition_ratio", label: "Rebound / Transition" },
-      { key: "rebounding_spacing_deficit", label: "Rebounding–Spacing Gap" },
+      { key: "rebounding_spacing_deficit", label: "Spacing Support" },
     ],
   },
   {
-    heading: "Totals",
+    heading: "Lineup Qualities",
     entries: [
       { key: "paint_touch_total", label: "Paint Touch" },
       { key: "post_game_total", label: "Post Game" },
-      { key: "pnr_screener_total", label: "PnR Screener" },
+      { key: "pnr_pairing", label: "PnR Pairing" },
       { key: "anchor_total", label: "Anchor" },
       { key: "collective_passing", label: "Passing" },
       { key: "rebounding", label: "Rebounding" },
@@ -223,8 +254,8 @@ const SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: string 
   {
     heading: "Defense",
     entries: [
-      { key: "defensive_coverage", label: "Defensive Coverage" },
-      { key: "defensive_gaps", label: "Defensive Gaps" },
+      { key: "defensive_coverage", label: "Def Coverage" },
+      { key: "defensive_gaps", label: "Def Gaps" },
     ],
   },
 ];
@@ -267,10 +298,10 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           Rating Breakdown
         </p>
-        <BreakdownBar id="cohesion-breakdown-starting5" label="Starting 5" value={star_rating_breakdown.starting_5} />
-        <BreakdownBar id="cohesion-breakdown-depth" label="Depth" value={star_rating_breakdown.depth} />
-        <BreakdownBar id="cohesion-breakdown-versatility" label="Versatility" value={star_rating_breakdown.archetype_diversity} />
-        <BreakdownBar id="cohesion-breakdown-floor" label="Floor" value={star_rating_breakdown.floor} />
+        <BreakdownBar id="cohesion-breakdown-starting5" label="Starting 5" value={star_rating_breakdown.starting_5} description={BREAKDOWN_DESCRIPTIONS.starting_5} />
+        <BreakdownBar id="cohesion-breakdown-depth" label="Depth" value={star_rating_breakdown.depth} description={BREAKDOWN_DESCRIPTIONS.depth} />
+        <BreakdownBar id="cohesion-breakdown-versatility" label="Versatility" value={star_rating_breakdown.archetype_diversity} description={BREAKDOWN_DESCRIPTIONS.archetype_diversity} />
+        <BreakdownBar id="cohesion-breakdown-floor" label="Floor" value={star_rating_breakdown.floor} description={BREAKDOWN_DESCRIPTIONS.floor} />
       </div>
 
       <div className="w-full h-px bg-border" />
@@ -292,6 +323,7 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
                   id={`cohesion-subscore-${entry.key}`}
                   label={entry.label}
                   score={starting_lineup.subscores[entry.key] ?? 0}
+                  description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
                 />
               ))}
             </div>
@@ -311,11 +343,13 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
             id="cohesion-accentuation-strength"
             label="Strength Amp"
             score={starting_lineup.accentuation.strength_amplification}
+            description={SUBSCORE_DESCRIPTIONS.accentuation_strength}
           />
           <SubscoreBar
             id="cohesion-accentuation-weakness"
             label="Weakness Cover"
             score={starting_lineup.accentuation.weakness_coverage}
+            description={SUBSCORE_DESCRIPTIONS.accentuation_weakness}
           />
         </div>
       </div>
