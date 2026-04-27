@@ -26,7 +26,9 @@ from typing import Any
 from flask import Blueprint, jsonify, request
 
 from services.cohesion_engine import evaluate_roster as evaluate_cohesion_roster
+from services.cohesion_engine.composites import ensure_distributions
 from services.cohesion_engine.types import RosterEvaluation as CohesionRosterEvaluation
+from services.players_service import CURRENT_SEASON
 from services.roster_evaluator.evaluator import evaluate_roster as evaluate_legacy_roster
 from services.roster_evaluator.types import RosterEvaluation, Scores
 
@@ -251,6 +253,7 @@ def evaluate():
 
     try:
         if EVAL_ENGINE == "cohesion":
+            ensure_distributions(CURRENT_SEASON)
             result = evaluate_cohesion_roster(body["players"], mode=mode)
             return _ok(_serialize_cohesion_evaluation(result))
 

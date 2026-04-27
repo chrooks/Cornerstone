@@ -8,6 +8,7 @@ sub-composites, and normalization happens once at the end.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from services.skills import ALL_SKILLS
@@ -25,6 +26,9 @@ from .weights import (
 )
 
 COMPOSITE_DISTRIBUTIONS: dict[str, list[float]] = {}
+_DISTRIBUTION_SEASON: str | None = None
+
+logger = logging.getLogger(__name__)
 
 
 def _get_supabase_client():
@@ -101,7 +105,7 @@ def compute_raw_composites(skills: dict[str, str | float]) -> dict[str, float]:
         1.0,
         1.0
         + c["pnr_screener_secondary_scale"]
-        * (tier_value(skills, "spot_up_shooter") + tier_value(skills, "passer")),
+        * (tier_value(skills, "vertical_spacer") + tier_value(skills, "spot_up_shooter")),
     )
     raw_pnr_screener = tier_value(skills, "pnr_finisher") * pnr_secondary_mult + tier_value(
         skills,
@@ -123,7 +127,7 @@ def compute_raw_composites(skills: dict[str, str | float]) -> dict[str, float]:
     raw_off_ball_impact = (
         raw_spacing
         + tier_value(skills, "cutter") * cutting_finishing_mult
-        + tier_value(skills, "passer")
+        + tier_value(skills, "passer") * c["off_ball_passer"]
     )
 
     # Step 5: shot creation references raw spacing and raw paint touch.
@@ -190,16 +194,46 @@ def set_distributions(distributions: dict[str, list[float]] | None) -> None:
 
 def clear_distributions() -> None:
     """Clear cached distributions so normalization falls back to theoretical max."""
+    global _DISTRIBUTION_SEASON
+    _DISTRIBUTION_SEASON = None
     set_distributions(None)
+
+
+def distributions_ready() -> bool:
+    """Return True when every composite has enough distribution values."""
+    return all(
+        len(COMPOSITE_DISTRIBUTIONS.get(name, [])) >= MIN_DISTRIBUTION_SIZE
+        for name in COMPOSITE_NAMES
+    )
+
+
+def ensure_distributions(season: str, force: bool = False) -> bool:
+    """
+    Build percentile normalization distributions when missing.
+
+    Returns True when percentile normalization is ready. Failures are logged and
+    leave theoretical fallback available, so request handling can continue.
+    """
+    global _DISTRIBUTION_SEASON
+    if not force and _DISTRIBUTION_SEASON == season and distributions_ready():
+        return True
+
+    try:
+        build_distributions(season)
+        _DISTRIBUTION_SEASON = season
+    except Exception as exc:
+        logger.warning(
+            "Unable to build cohesion composite distributions; using theoretical fallback (%s)",
+            exc,
+        )
+        return False
+
+    return distributions_ready()
 
 
 def normalize_composites(raw: dict[str, float]) -> dict[str, float]:
     """Normalize raw composites to 0.0-10.0 using cache or theoretical fallback."""
-    using_percentiles = all(
-        len(COMPOSITE_DISTRIBUTIONS.get(name, [])) >= MIN_DISTRIBUTION_SIZE
-        for name in raw
-    )
-    if using_percentiles:
+    if distributions_ready():
         return {
             name: _percentile_normalize(value, COMPOSITE_DISTRIBUTIONS.get(name, []))
             for name, value in raw.items()
@@ -246,7 +280,7 @@ def build_distributions(season: str) -> dict[str, list[float]]:
     legend_profiles = _run_query(
         lambda: client.table("skill_profiles")
         .select("profile")
-        .eq("source", "composite")
+        .eq("source", "manual")
         .eq("is_legend", True)
         .execute()
     )

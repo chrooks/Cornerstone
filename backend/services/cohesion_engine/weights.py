@@ -34,6 +34,7 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "post_game_mid_post": 0.7,
     "pnr_screener_secondary_scale": 0.15,
     "off_ball_finishing_scale": 0.08,
+    "off_ball_passer": 0.3,
     "shot_creation_spacing": 0.3,
     "transition_passer_scale": 0.2,
     "transition_high_flyer": 0.7,
@@ -120,14 +121,37 @@ PD_CROSS_HEIGHT_MAX: int = 75
 PD_CROSS_SCALE: float = 0.5
 PD_CROSS_HEIGHT_WINDOW: int = 4
 
-DEFENSIVE_GAP_THRESHOLD: float = 1.0
-DEFENSIVE_GAP_PENALTY_SCALE: float = -0.5
+DEFENSIVE_GAP_THRESHOLD: float = 1.5
+DEFENSIVE_GAP_PENALTY_SCALE: float = -1.5
+DEFENSIVE_COVERAGE_SATURATION_RAW: float = 2.7
 DEFENSIVE_REBOUNDING_MINIMUM: float = 3.0
 DEFENSIVE_REBOUNDING_PENALTY_SCALE: float = 2.0
 DEFENSIVE_GUARD_DENSITY_HEIGHT_RANGE: tuple[int, int] = (72, 79)
 DEFENSIVE_TRANSITION_BOOST_DIVISOR: float = 15.0
 DEFENSIVE_TRANSITION_BOOST_CAP: float = 2.0
 STACKING_RETURNS: tuple[float, ...] = (1.0, 0.5, 0.25, 0.1)
+PASSING_PRIMARY_CREATOR_WEIGHT: float = 0.6
+PASSING_DEPTH_WEIGHT: float = 0.4
+REBOUNDING_PRIMARY_WEIGHT: float = 0.45
+REBOUNDING_SECONDARY_WEIGHT: float = 0.35
+REBOUNDING_DEPTH_WEIGHT: float = 0.20
+ANCHOR_PRIMARY_WEIGHT: float = 0.6
+ANCHOR_SECONDARY_WEIGHT: float = 0.3
+ANCHOR_DEPTH_WEIGHT: float = 0.1
+
+POST_GAME_PRIMARY_WEIGHT: float = 0.5
+POST_GAME_SECONDARY_WEIGHT: float = 0.35
+POST_GAME_DEPTH_WEIGHT: float = 0.15
+
+PNR_HANDLER_SUPPORT_SCALE: float = 0.35
+PNR_HANDLER_PRIMARY_WEIGHT: float = 0.65
+PNR_HANDLER_SECONDARY_WEIGHT: float = 0.25
+PNR_HANDLER_DEPTH_WEIGHT: float = 0.10
+PNR_SCREENER_PRIMARY_WEIGHT: float = 0.55
+PNR_SCREENER_SECONDARY_WEIGHT: float = 0.30
+PNR_SCREENER_DEPTH_WEIGHT: float = 0.15
+PNR_PAIRING_QUALITY_GATE_FLOOR: float = 0.70
+PNR_PAIRING_QUALITY_GATE_SCALE: float = 0.30
 
 RP_PD_BOOST: dict[str, float] = {
     "None": 0.0,
@@ -151,7 +175,6 @@ SYNERGY_SCALE_FACTORS: dict[str, float] = {
     "OFF-14": 0.04,
     "OFF-15": 0.05,
     "OFF-16": 0.05,
-    "OFF-28": 0.05,
     "OFF-31": 0.04,
     "OFF-32": 0.03,
 }
@@ -165,7 +188,6 @@ SYNERGY_BOOSTED_SKILLS: dict[str, tuple[str, ...]] = {
     "OFF-14": ("cutter",),
     "OFF-15": ("vertical_spacer",),
     "OFF-16": ("vertical_spacer",),
-    "OFF-28": ("pnr_ball_handler", "pnr_finisher"),
     "OFF-31": ("transition_threat",),
     "OFF-32": ("high_flyer",),
 }
@@ -181,10 +203,11 @@ SYNERGY_CREATOR_THRESHOLD: float = 6.0
 
 COHESION_ROLLUP_WEIGHTS: dict[str, float] = {
     "spacing_creation_ratio": 0.12,
+    "creation_offball_ratio": 0.06,
     "spacing_paint_touch_ratio": 0.06,
     "paint_touch_total": 0.08,
     "post_game_total": 0.03,
-    "pnr_screener_total": 0.03,
+    "pnr_pairing": 0.03,
     "anchor_total": 0.08,
     "collective_passing": 0.06,
     "rebounding": 0.06,
@@ -192,7 +215,7 @@ COHESION_ROLLUP_WEIGHTS: dict[str, float] = {
     "rebound_transition_ratio": 0.04,
     "rebounding_spacing_deficit": 0.03,
     "defensive_coverage": 0.15,
-    "defensive_gaps": 0.10,
+    "defensive_gaps": 0.15,
     "accentuation_strength": 0.05,
     "accentuation_weakness": 0.05,
 }
@@ -254,7 +277,7 @@ ROSTER_ROLLUP_WEIGHTS: dict[str, float] = {
 }
 
 STAR_RATING_MAX: float = 5.0
-VIABLE_LINEUP_THRESHOLD: float = 3.5
+VIABLE_LINEUP_THRESHOLD: float = 2.75
 DEPTH_LINEUP_CEILING: int = 40
 TOTAL_LINEUPS_FULL_ROSTER: int = 126
 ARCHETYPE_LABELS: tuple[str, ...] = (

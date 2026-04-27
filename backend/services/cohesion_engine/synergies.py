@@ -69,8 +69,6 @@ def apply_synergies(lineup: list[dict[str, Any]]) -> tuple[list[dict[str, Any]],
     passers = [i for i, player in enumerate(lineup) if _skill(player, "passer") > 0]
     drivers = [i for i, player in enumerate(lineup) if _skill(player, "driver") > 0]
     vertical_spacers = [i for i, player in enumerate(lineup) if _skill(player, "vertical_spacer") > 0]
-    handlers = [i for i, player in enumerate(lineup) if _skill(player, "pnr_ball_handler") > 0]
-    finishers = [i for i, player in enumerate(lineup) if _skill(player, "pnr_finisher") > 0]
     transition_threats = [i for i, player in enumerate(lineup) if _skill(player, "transition_threat") > 0]
     high_flyers = [i for i, player in enumerate(lineup) if _skill(player, "high_flyer") > 0]
     creators = [
@@ -140,20 +138,6 @@ def apply_synergies(lineup: list[dict[str, Any]]) -> tuple[list[dict[str, Any]],
                 provider_value = max(_skill(lineup[i], "passer") + _skill(lineup[i], "driver") for i in providers)
                 _boost(boosted[spacer], "vertical_spacer", SYNERGY_SCALE_FACTORS["OFF-16"], provider_value)
                 fire("OFF-16")
-
-    if handlers and finishers:
-        for handler in handlers:
-            providers = [i for i in finishers if i != handler]
-            if providers:
-                provider_value = max(_skill(lineup[i], "pnr_finisher") for i in providers)
-                _boost(boosted[handler], "pnr_ball_handler", SYNERGY_SCALE_FACTORS["OFF-28"], provider_value)
-                fire("OFF-28")
-        for finisher in finishers:
-            providers = [i for i in handlers if i != finisher]
-            if providers:
-                provider_value = max(_skill(lineup[i], "pnr_ball_handler") for i in providers)
-                _boost(boosted[finisher], "pnr_finisher", SYNERGY_SCALE_FACTORS["OFF-28"], provider_value)
-                fire("OFF-28")
 
     if transition_threats and passers:
         for threat in transition_threats:

@@ -44,6 +44,7 @@ _SUBSCORE_LABELS: dict[str, str] = {
     "paint_touch_total": "paint pressure",
     "post_game_total": "post creation",
     "pnr_screener_total": "screen-and-roll pressure",
+    "pnr_pairing": "pick-and-roll pairing",
     "anchor_total": "interior defensive anchoring",
     "collective_passing": "collective passing",
     "rebounding": "rebounding",

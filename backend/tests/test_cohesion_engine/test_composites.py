@@ -51,9 +51,9 @@ def test_compute_raw_composites_matches_validated_formula_order():
     assert raw["paint_touch"] == pytest.approx(21.6)
     assert raw["anchor"] == pytest.approx(12.45)
     assert raw["post_game"] == pytest.approx(5.7)
-    assert raw["pnr_screener"] == pytest.approx(10.35)
+    assert raw["pnr_screener"] == pytest.approx(7.2)
     assert raw["transition"] == pytest.approx(21.45)
-    assert raw["off_ball_impact"] == pytest.approx(24.55)
+    assert raw["off_ball_impact"] == pytest.approx(17.55)
     assert raw["shot_creation"] == pytest.approx(40.525)
 
 

@@ -61,6 +61,11 @@ def rebound_transition_ratio(rebounding: float, transition: float) -> float:
     return ratio_score(rebounding, transition)
 
 
+def creation_offball_ratio(shot_creation: float, off_ball_impact: float) -> float:
+    """Score whether on-ball creation is balanced with off-ball gravity."""
+    return ratio_score(shot_creation, off_ball_impact)
+
+
 def rebounding_spacing_deficit_ratio(rebounding: float, spacing: float) -> float:
     """Reward offensive rebounding as a partial offset only when spacing is low."""
     if spacing >= REBOUNDING_SPACING_DEFICIT_THRESHOLD:

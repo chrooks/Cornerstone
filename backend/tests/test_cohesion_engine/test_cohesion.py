@@ -27,10 +27,11 @@ def test_evaluate_lineup_returns_all_subscores_in_range():
     assert 0.0 <= result.score <= 5.0
     assert set(result.subscores) == {
         "spacing_creation_ratio",
+        "creation_offball_ratio",
         "spacing_paint_touch_ratio",
         "paint_touch_total",
         "post_game_total",
-        "pnr_screener_total",
+        "pnr_pairing",
         "anchor_total",
         "collective_passing",
         "rebounding",
@@ -41,8 +42,9 @@ def test_evaluate_lineup_returns_all_subscores_in_range():
         "defensive_gaps",
     }
     assert all(0.0 <= value <= 10.0 for value in result.subscores.values())
-    assert "OFF-28" in result.synergies_applied
+    assert "OFF-28" not in result.synergies_applied
     assert "OFF-02" in result.synergies_applied
+    assert result.subscores["pnr_pairing"] > 0.0
     assert result.accentuation_strength >= 0.0
     assert result.accentuation_weakness >= 0.0
 

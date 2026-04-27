@@ -33,6 +33,7 @@ SUBSCORE_ARCHETYPES: dict[str, str] = {
     "paint_touch_total": "paint",
     "post_game_total": "paint",
     "pnr_screener_total": "offensive",
+    "pnr_pairing": "offensive",
     "anchor_total": "defensive",
     "collective_passing": "offensive",
     "rebounding": "paint",

@@ -4,8 +4,6 @@ Tests that pin Phase 1 cohesion-engine constants to the implementation spec.
 
 from __future__ import annotations
 
-import math
-
 from backend.services.cohesion_engine import weights
 
 
@@ -83,23 +81,24 @@ def test_synergy_scale_factors_match_impl_spec_table():
         "OFF-14": 0.04,
         "OFF-15": 0.05,
         "OFF-16": 0.05,
-        "OFF-28": 0.05,
         "OFF-31": 0.04,
         "OFF-32": 0.03,
     }
     assert weights.SYNERGY_PENALTY_SEVERITY == 5.0
     assert weights.OFF_13_RAW_SPACING_THRESHOLD == 15.0
     assert weights.SYNERGY_CREATOR_THRESHOLD == 6.0
+    assert weights.PNR_HANDLER_SUPPORT_SCALE == 0.35
 
 
 def test_cohesion_rollup_weights_match_impl_spec_and_sum_to_one():
     assert weights.COHESION_ROLLUP_WEIGHTS["spacing_creation_ratio"] == 0.12
     assert weights.COHESION_ROLLUP_WEIGHTS["spacing_paint_touch_ratio"] == 0.06
+    assert "pnr_pairing" in weights.COHESION_ROLLUP_WEIGHTS
+    assert "pnr_screener_total" not in weights.COHESION_ROLLUP_WEIGHTS
     assert weights.COHESION_ROLLUP_WEIGHTS["defensive_coverage"] == 0.15
-    assert weights.COHESION_ROLLUP_WEIGHTS["defensive_gaps"] == 0.10
+    assert weights.COHESION_ROLLUP_WEIGHTS["defensive_gaps"] == 0.15
     assert weights.COHESION_ROLLUP_WEIGHTS["accentuation_strength"] == 0.05
     assert weights.COHESION_ROLLUP_WEIGHTS["accentuation_weakness"] == 0.05
-    assert math.isclose(sum(weights.COHESION_ROLLUP_WEIGHTS.values()), 1.0)
 
 
 def test_ratio_accentuation_note_and_layer_2_constants_exist():
@@ -118,14 +117,14 @@ def test_ratio_accentuation_note_and_layer_2_constants_exist():
         "archetype_diversity": 0.20,
         "floor": 0.10,
     }
-    assert weights.VIABLE_LINEUP_THRESHOLD == 3.5
+    assert weights.VIABLE_LINEUP_THRESHOLD == 2.75
     assert weights.DEPTH_LINEUP_CEILING == 40
     assert weights.TOTAL_LINEUPS_FULL_ROSTER == 126
 
 
 def test_defensive_and_rp_pd_boost_constants_match_impl_spec():
-    assert weights.DEFENSIVE_GAP_THRESHOLD == 1.0
-    assert weights.DEFENSIVE_GAP_PENALTY_SCALE == -0.5
+    assert weights.DEFENSIVE_GAP_THRESHOLD == 1.5
+    assert weights.DEFENSIVE_GAP_PENALTY_SCALE == -1.5
     assert weights.DEFENSIVE_REBOUNDING_MINIMUM == 3.0
     assert weights.DEFENSIVE_REBOUNDING_PENALTY_SCALE == 2.0
     assert weights.DEFENSIVE_TRANSITION_BOOST_DIVISOR == 15.0

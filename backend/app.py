@@ -105,6 +105,24 @@ from api.builder import builder_bp
 from api.cohesion_calibration import cohesion_calibration_bp
 
 
+def _warm_cohesion_distributions() -> None:
+    """
+    Preload percentile distributions for cohesion composite normalization.
+
+    If Supabase is unavailable during startup, the engine can still serve using
+    theoretical fallback; calibration/builder requests also attempt a lazy load.
+    """
+    try:
+        from services.cohesion_engine.composites import ensure_distributions
+        from services.players_service import CURRENT_SEASON
+
+        ready = ensure_distributions(CURRENT_SEASON)
+        if ready:
+            logging.getLogger(__name__).info("Cohesion composite distributions loaded")
+    except Exception:
+        logging.getLogger(__name__).exception("Unable to warm cohesion composite distributions")
+
+
 def create_app() -> Flask:
     """Application factory — creates and configures the Flask app."""
     app = Flask(__name__)
@@ -136,6 +154,8 @@ def create_app() -> Flask:
     app.register_blueprint(rosters_bp)      # Prompt 9: roster builder persistence
     app.register_blueprint(builder_bp)      # Phase 4: roster evaluation engine
     app.register_blueprint(cohesion_calibration_bp)  # Cohesion engine calibration
+
+    _warm_cohesion_distributions()
 
     return app
 

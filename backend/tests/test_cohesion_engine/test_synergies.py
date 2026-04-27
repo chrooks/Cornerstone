@@ -68,7 +68,7 @@ def test_vertical_spacer_penalty_and_boost_conditions():
     assert boosted[0]["skills"]["vertical_spacer"] > 6.0
 
 
-def test_off_28_boosts_handler_and_finisher_on_distinct_players():
+def test_off_28_is_retired_in_favor_of_pnr_pairing_subscore():
     lineup = [
         make_player("Handler", {"pnr_ball_handler": "Elite"}),
         make_player("Finisher", {"pnr_finisher": "Proficient"}),
@@ -76,9 +76,9 @@ def test_off_28_boosts_handler_and_finisher_on_distinct_players():
 
     boosted, fired = apply_synergies(lineup)
 
-    assert "OFF-28" in fired
-    assert boosted[0]["skills"]["pnr_ball_handler"] == pytest.approx(6.9)
-    assert boosted[1]["skills"]["pnr_finisher"] == pytest.approx(3.9)
+    assert "OFF-28" not in fired
+    assert boosted[0]["skills"]["pnr_ball_handler"] == "Elite"
+    assert boosted[1]["skills"]["pnr_finisher"] == "Proficient"
 
 
 def test_transition_synergies_and_single_passer_flag_fire():

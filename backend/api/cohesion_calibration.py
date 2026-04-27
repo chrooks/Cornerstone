@@ -22,14 +22,17 @@ from flask import Blueprint, jsonify, request
 
 from api.auth import require_admin
 from services.cohesion_engine.bell_curve import (
+    apply_rp_pd_boost,
     compute_bell_params,
     defensive_value_at_height,
     parse_height_inches,
 )
 from services.cohesion_engine.cohesion import evaluate_lineup
-from services.cohesion_engine.composites import compute_player_composites
+from services.cohesion_engine.composites import compute_player_composites, compute_raw_composites
+from services.cohesion_engine.composites import ensure_distributions
 from services.cohesion_engine.types import PlayerComposites
 from services.cohesion_engine import weights as weights_module
+from services.players_service import CURRENT_SEASON
 from services.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -147,6 +150,11 @@ def _serialize_composites(pc: PlayerComposites) -> dict[str, float]:
     }
 
 
+def _serialize_raw_composites(skills: dict[str, str]) -> dict[str, float]:
+    """Return raw composite formula outputs before percentile normalization."""
+    return {key: round(value, 3) for key, value in compute_raw_composites(skills).items()}
+
+
 def _get_all_weights() -> dict[str, Any]:
     """
     Build a merged view of all weight constants: defaults from weights.py
@@ -179,6 +187,58 @@ def _inches_to_display(inches: int) -> str:
     return f"{ft}'{inch}\""
 
 
+def _rp_pd_boost_details(
+    original_lineup: list[dict[str, Any]],
+    boosted_lineup: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Describe RP-to-PD teammate boosts applied before defensive curves are scored."""
+    provider_index: int | None = None
+    provider_value = 0.0
+    for index, player in enumerate(original_lineup):
+        tier = player.get("skills", {}).get("rim_protector", "None")
+        value = weights_module.AMPLITUDE_MAP.get(tier, 0.0)
+        if value > provider_value:
+            provider_index = index
+            provider_value = value
+
+    if provider_index is None:
+        return []
+
+    provider = original_lineup[provider_index]
+    provider_tier = provider.get("skills", {}).get("rim_protector", "None")
+    boost = weights_module.RP_PD_BOOST.get(provider_tier, 0.0)
+    if boost <= 0:
+        return []
+
+    details: list[dict[str, Any]] = []
+    provider_name = provider.get("name") or f"Player {provider_index + 1}"
+    for index, player in enumerate(original_lineup):
+        if index == provider_index:
+            continue
+
+        original_tier = player.get("skills", {}).get("perimeter_disruptor", "None")
+        effective_tier = boosted_lineup[index].get("skills", {}).get("perimeter_disruptor", "None")
+        original_value = weights_module.AMPLITUDE_MAP.get(original_tier, 0.0)
+        effective_value = weights_module.AMPLITUDE_MAP.get(effective_tier, 0.0)
+        if effective_value <= original_value:
+            continue
+
+        details.append({
+            "player_index": index,
+            "player_name": player.get("name") or f"Player {index + 1}",
+            "provider_index": provider_index,
+            "provider_name": provider_name,
+            "provider_rim_protector_tier": provider_tier,
+            "boost": boost,
+            "original_pd_tier": original_tier,
+            "effective_pd_tier": effective_tier,
+            "original_pd_value": original_value,
+            "effective_pd_value": effective_value,
+        })
+
+    return details
+
+
 # ---------------------------------------------------------------------------
 # GET /player/<player_id>/composites
 # ---------------------------------------------------------------------------
@@ -187,6 +247,7 @@ def _inches_to_display(inches: int) -> str:
 @require_admin
 def get_player_composites(player_id: str) -> tuple:
     """Return a single player's base composites (no lineup synergies)."""
+    ensure_distributions(CURRENT_SEASON)
     player = _fetch_player_with_skills(player_id)
     if not player:
         return jsonify({"success": False, "data": None, "error": "Player not found"}), 404
@@ -209,6 +270,8 @@ def get_player_composites(player_id: str) -> tuple:
             "player_id": player["id"],
             "name": player["name"],
             "height": player.get("height"),
+            "skills": player["skills"],
+            "composites_raw": _serialize_raw_composites(player["skills"]),
             "composites_normalized": _serialize_composites(pc),
             "bell_curve": {
                 "amplitude": pc.bell_amplitude,
@@ -304,6 +367,7 @@ def evaluate_lineup_endpoint() -> tuple:
       }
     """
     body = request.get_json(silent=True) or {}
+    ensure_distributions(CURRENT_SEASON)
     players = body.get("players")
 
     if not isinstance(players, list):
@@ -326,12 +390,50 @@ def evaluate_lineup_endpoint() -> tuple:
         if isinstance(skills, dict) and len(skills) > _MAX_SKILLS:
             return jsonify({"success": False, "data": None, "error": f"Player {i} has too many skills"}), 400
 
+    # Recover real skill profiles when the client submits a player id with an
+    # empty skill map. This keeps calibration scores meaningful even if a UI
+    # caller only has lightweight player metadata in hand.
+    resolved_players: list[dict[str, Any]] = []
+    for p in players:
+        player_id = p.get("id") or p.get("player_id")
+        skills = p.get("skills") or {}
+        if player_id and not skills:
+            fetched = _fetch_player_with_skills(str(player_id))
+            if fetched:
+                resolved_players.append({
+                    **p,
+                    "height": p.get("height") or fetched.get("height"),
+                    "skills": fetched["skills"],
+                })
+                continue
+        resolved_players.append(p)
+
     # Run cohesion evaluation on the lineup
     try:
-        result = evaluate_lineup(players)
+        result = evaluate_lineup(resolved_players)
     except Exception:
         logger.exception("Error evaluating lineup")
         return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500
+
+    # Compute RP-PD boosted bell curves so the frontend chart reflects the
+    # same defensive picture the engine actually uses for scoring.
+    boosted_lineup = apply_rp_pd_boost(resolved_players)
+    rp_pd_boosts = _rp_pd_boost_details(resolved_players, boosted_lineup)
+    boosted_bell_curves: list[dict[str, Any] | None] = []
+    for player in boosted_lineup:
+        height_inches = parse_height_inches(player.get("height"))
+        if height_inches is None:
+            boosted_bell_curves.append(None)
+            continue
+        params = compute_bell_params(player.get("skills", {}), height_inches)
+        boosted_bell_curves.append({
+            "amplitude": params["amplitude"],
+            "peak": params["peak_center"],
+            "range_down": params["range_down"],
+            "range_up": params["range_up"],
+            "flat_down": params["flat_top_down"],
+            "flat_up": params["flat_top_up"],
+        })
 
     return jsonify({
         "success": True,
@@ -343,6 +445,8 @@ def evaluate_lineup_endpoint() -> tuple:
                 "strength_amplification": result.accentuation_strength,
                 "weakness_coverage": result.accentuation_weakness,
             },
+            "boosted_bell_curves": boosted_bell_curves,
+            "rp_pd_boosts": rp_pd_boosts,
         },
         "error": None,
     }), 200
