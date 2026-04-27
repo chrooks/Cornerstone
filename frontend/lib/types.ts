@@ -21,6 +21,8 @@ export interface Player {
   games_played: number | null;
   minutes_per_game: number | null;
   season: string;
+  /** True when this player record represents a legend rather than an active player. */
+  is_legend?: boolean;
 }
 
 /** Full stats blob returned by GET /api/players/<id>/stats */

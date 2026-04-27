@@ -586,6 +586,8 @@ export async function fetchPlayerComposites(
   player_id: string;
   name: string;
   height: string | null;
+  skills: Record<string, string>;
+  composites_raw: Record<string, number>;
   composites_normalized: Record<string, number>;
   bell_curve: { amplitude: number; peak: number; range_down: number; range_up: number; flat_down: number; flat_up: number };
 }>> {
@@ -606,12 +608,25 @@ export async function fetchBellCurve(
 
 /** Evaluate a 5-player lineup via the cohesion engine. */
 export async function evaluateLineup(
-  players: { name: string; height: string | null; skills: Record<string, string> }[],
+  players: { id?: string; name: string; height: string | null; skills: Record<string, string> }[],
 ): Promise<ApiResponse<{
   cohesion_score: number;
   subscores: Record<string, number>;
   synergies_applied: string[];
   accentuation: { strength_amplification: number; weakness_coverage: number };
+  boosted_bell_curves?: ({ amplitude: number; peak: number; range_down: number; range_up: number; flat_down: number; flat_up: number } | null)[];
+  rp_pd_boosts?: {
+    player_index: number;
+    player_name: string;
+    provider_index: number;
+    provider_name: string;
+    provider_rim_protector_tier: string;
+    boost: number;
+    original_pd_tier: string;
+    effective_pd_tier: string;
+    original_pd_value: number;
+    effective_pd_value: number;
+  }[];
 }>> {
   return apiFetch("/api/cohesion/lineup/evaluate", {
     method: "POST",

@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { listPlayers } from "@/lib/api";
-import type { Player } from "@/lib/types";
+import { listPlayers, listLegends } from "@/lib/api";
+import type { Player, LegendSummary } from "@/lib/types";
 
 interface PlayerSearchComboboxProps {
   onSelect: (player: Player) => void;
   placeholder?: string;
   className?: string;
+  /** When true, also search legends and show them with a ★ prefix. */
+  includeLegends?: boolean;
 }
 
 /**
@@ -16,10 +18,27 @@ interface PlayerSearchComboboxProps {
  * Debounces input by 300ms. Shows name, team, and position in the dropdown.
  * Reused in calibration and roster builder.
  */
+/** Convert a LegendSummary into a Player-shaped object so the combobox can treat them uniformly. */
+function legendToPlayer(legend: LegendSummary): Player {
+  return {
+    id: legend.id,
+    nba_api_id: legend.nba_api_id ?? 0,
+    name: legend.name,
+    team: legend.team,
+    position: legend.position,
+    age: legend.age,
+    games_played: null,
+    minutes_per_game: null,
+    season: "",
+    is_legend: true,
+  };
+}
+
 export function PlayerSearchCombobox({
   onSelect,
   placeholder = "Search players…",
   className,
+  includeLegends = false,
 }: PlayerSearchComboboxProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Player[]>([]);
@@ -29,6 +48,20 @@ export function PlayerSearchCombobox({
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+
+  // Cache legends list so we only fetch once per mount (not per keystroke)
+  const legendsCacheRef = useRef<Player[] | null>(null);
+  useEffect(() => {
+    if (!includeLegends) return;
+    listLegends().then((res) => {
+      if (res.success && res.data) {
+        legendsCacheRef.current = res.data.map(legendToPlayer);
+      }
+    });
+  }, [includeLegends]);
+
+  /** Strip diacritics so "jokic" matches "Jokić", "luka" matches "Lūka", etc. */
+  const strip = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
   // Debounced search — triggers 300ms after the user stops typing
   const search = useCallback(async (q: string) => {
@@ -40,24 +73,33 @@ export function PlayerSearchCombobox({
     setLoading(true);
     try {
       const res = await listPlayers(q);
+      const normalizedQuery = strip(q);
+      let combined: Player[] = [];
+
       if (res.success && res.data) {
         // Filter client-side by name since the backend may not support ?search param.
-        // Strip diacritics so "jokic" matches "Jokić", "luka" matches "Lūka", etc.
-        const strip = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        const normalizedQuery = strip(q);
-        const filtered = res.data.filter((p) =>
+        combined = res.data.filter((p) =>
           strip(p.name).includes(normalizedQuery)
         );
-        setResults(filtered.slice(0, 10));
-        setOpen(true);
-        setHighlightedIndex(-1);
       }
+
+      // Merge matching legends (client-side filter from cached list)
+      if (includeLegends && legendsCacheRef.current) {
+        const matchingLegends = legendsCacheRef.current.filter((l) =>
+          strip(l.name).includes(normalizedQuery)
+        );
+        combined = [...matchingLegends, ...combined];
+      }
+
+      setResults(combined.slice(0, 12));
+      setOpen(true);
+      setHighlightedIndex(-1);
     } catch {
       setResults([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [includeLegends]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -157,7 +199,10 @@ export function PlayerSearchCombobox({
                 i === highlightedIndex ? "bg-accent" : "hover:bg-accent/50"
               )}
             >
-              <span className="font-medium">{player.name}</span>
+              <span className="font-medium">
+                {player.is_legend && <span className="text-amber-500 mr-1" aria-label="Legend">★</span>}
+                {player.name}
+              </span>
               <span className="text-xs text-muted-foreground">
                 {player.team && <span>{player.team}</span>}
                 {player.position && (
