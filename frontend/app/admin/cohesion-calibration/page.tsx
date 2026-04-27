@@ -15,6 +15,7 @@ import { useState, useCallback, useEffect } from "react";
 import { Toaster, toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
+import { CohesionCompositesTable } from "@/components/cohesion/CohesionResultDetails";
 import {
   fetchPlayerComposites,
   fetchBellCurve,
@@ -24,7 +25,7 @@ import {
 } from "@/lib/api";
 import { ALL_SKILL_NAMES, formatSkillName } from "@/lib/skills";
 import { TIER_BADGE_CLASSES, tierToNum } from "@/lib/tiers";
-import type { Player, SkillTier } from "@/lib/types";
+import type { CohesionPlayerComposites, Player, SkillTier } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,6 +66,10 @@ interface LineupTestResult {
   subscores: Record<string, number>;
   synergies_applied: string[];
   accentuation: { strength_amplification: number; weakness_coverage: number };
+  accentuation_details?: {
+    strength?: { score: number; credit: number; checks: number; terms: Record<string, unknown>[] };
+    weakness?: { score: number; credit: number; checks: number; terms: Record<string, unknown>[] };
+  };
   /** RP-PD boosted bell curves — reflects the actual defensive picture the engine scores. */
   boosted_bell_curves?: (PlayerCompositeData["bell_curve"] | null)[];
   /** Teammate perimeter-disruptor boosts created by the lineup's best rim protector. */
@@ -138,7 +143,7 @@ const SUBSCORE_LABELS: Record<string, string> = {
   creation_offball_ratio: "Creation / Off-Ball",
   spacing_paint_touch_ratio: "Spacing / Paint Touch",
   rebound_transition_ratio: "Rebound / Transition",
-  rebounding_spacing_deficit: "Rebound–Spacing Gap",
+  rebounding_spacing_deficit: "Spacing Support",
   pnr_pairing: "PnR Pairing",
   paint_touch_total: "Paint Touch",
   post_game_total: "Post Game",
@@ -1162,8 +1167,8 @@ function explanationForSubscore(
           { label: spacingDeficit > 0 ? "spacing deficit" : "no spacing deficit", value: spacingDeficit },
         ],
         detailLines: spacingDeficit > 0
-          ? ["This only rewards rebounding as an offset when spacing is below 5.0."]
-          : ["This is 0.0 because spacing is already at or above the deficit threshold."],
+          ? ["Spacing is below 5.0, so rebounding is checked as an offset for the spacing deficit."]
+          : ["This scores 10.0 because spacing is already at or above the deficit threshold."],
       };
     }
     case "defensive_coverage":
@@ -1886,6 +1891,11 @@ function LineupTester({ lineupSlots, weights, onSlotSelect, onSlotRemove, onSlot
               )}
             </div>
           )}
+
+          <CohesionCompositesTable
+            players={lineupSlotsToCompositeRows(lineupSlots)}
+            idPrefix="cohesion-cal-lineup-result-composites"
+          />
         </div>
       )}
     </div>
@@ -2142,6 +2152,35 @@ function emptyLineupSlot(): LineupSlot {
   };
 }
 
+function lineupSlotsToCompositeRows(lineupSlots: LineupSlot[]): CohesionPlayerComposites[] {
+  return lineupSlots
+    .filter((slot): slot is LineupSlot & { player: Player } => slot.player !== null)
+    .map((slot) => ({
+      player_id: slot.player.id,
+      name: slot.player.name,
+      base: {
+        spacing: slot.normalizedComposites.spacing ?? 0,
+        finishing: slot.normalizedComposites.finishing ?? 0,
+        paint_touch: slot.normalizedComposites.paint_touch ?? 0,
+        anchor: slot.normalizedComposites.anchor ?? 0,
+        post_game: slot.normalizedComposites.post_game ?? 0,
+        pnr_screener: slot.normalizedComposites.pnr_screener ?? 0,
+        off_ball_impact: slot.normalizedComposites.off_ball_impact ?? 0,
+        shot_creation: slot.normalizedComposites.shot_creation ?? 0,
+        rebounding: slot.normalizedComposites.rebounding ?? 0,
+        transition: slot.normalizedComposites.transition ?? 0,
+      },
+      bell_curve: slot.bellCurve ?? {
+        amplitude: 0,
+        peak: 78,
+        range_down: 0,
+        range_up: 0,
+        flat_down: 0,
+        flat_up: 0,
+      },
+    }));
+}
+
 function resultFromStorage(value: unknown): LineupTestResult | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<LineupTestResult>;
@@ -2169,6 +2208,7 @@ function resultFromStorage(value: unknown): LineupTestResult | null {
     subscores: candidate.subscores as Record<string, number>,
     synergies_applied: candidate.synergies_applied.map((id) => String(id)),
     accentuation: candidate.accentuation as LineupTestResult["accentuation"],
+    accentuation_details: candidate.accentuation_details,
     boosted_bell_curves: candidate.boosted_bell_curves,
     rp_pd_boosts: candidate.rp_pd_boosts,
   };
@@ -2462,6 +2502,7 @@ export default function CohesionCalibrationPage() {
         subscores: res.data.subscores,
         synergies_applied: res.data.synergies_applied,
         accentuation: res.data.accentuation,
+        accentuation_details: res.data.accentuation_details,
         boosted_bell_curves: res.data.boosted_bell_curves,
         rp_pd_boosts: res.data.rp_pd_boosts,
       };
