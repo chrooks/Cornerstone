@@ -67,8 +67,8 @@ def creation_offball_ratio(shot_creation: float, off_ball_impact: float) -> floa
 
 
 def rebounding_spacing_deficit_ratio(rebounding: float, spacing: float) -> float:
-    """Reward offensive rebounding as a partial offset only when spacing is low."""
+    """Score whether spacing is adequate or rebounding can offset a spacing deficit."""
     if spacing >= REBOUNDING_SPACING_DEFICIT_THRESHOLD:
-        return 0.0
+        return 10.0
     spacing_deficit = max(0.0, REBOUNDING_SPACING_DEFICIT_THRESHOLD - spacing)
     return ratio_score(rebounding, spacing_deficit)

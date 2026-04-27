@@ -71,7 +71,7 @@ SUBSCORE_LABELS: dict[str, str] = {
     "rebounding": "rebounding",
     "transition": "transition play",
     "rebound_transition_ratio": "rebound-to-run balance",
-    "rebounding_spacing_deficit": "spacing with glass support",
+    "rebounding_spacing_deficit": "spacing support",
     "defensive_coverage": "defensive coverage",
     "defensive_gaps": "defensive coverage",
 }
@@ -370,6 +370,7 @@ def _lineup_from_pipeline(pipeline_data: Any) -> LineupCohesion | None:
             synergies_applied=list(lineup.get("synergies_applied", [])),
             accentuation_strength=float(lineup.get("accentuation_strength", 0.0)),
             accentuation_weakness=float(lineup.get("accentuation_weakness", 0.0)),
+            accentuation_details=dict(lineup.get("accentuation_details", {})),
         )
     if is_dataclass(lineup):
         return lineup

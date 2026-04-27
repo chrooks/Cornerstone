@@ -50,7 +50,7 @@ _SUBSCORE_LABELS: dict[str, str] = {
     "rebounding": "rebounding",
     "transition": "transition pressure",
     "rebound_transition_ratio": "rebound-to-transition balance",
-    "rebounding_spacing_deficit": "rebounding/spacing tradeoff",
+    "rebounding_spacing_deficit": "spacing support",
     "defensive_coverage": "defensive coverage",
     "defensive_gaps": "defensive gap management",
 }

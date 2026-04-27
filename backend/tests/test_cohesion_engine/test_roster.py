@@ -79,6 +79,7 @@ def test_evaluate_roster_with_five_players_scores_one_lineup():
         "floor",
     }
     assert all(0.0 <= value <= 1.0 for value in result.star_breakdown.values())
+    assert result.star_breakdown["depth"] == 0.0
 
 
 def test_evaluate_roster_with_nine_players_evaluates_all_126_lineups():
@@ -89,6 +90,7 @@ def test_evaluate_roster_with_nine_players_evaluates_all_126_lineups():
     assert result.lineup_summary["total_lineups"] == 126
     assert 0 <= result.lineup_summary["viable_lineups"] <= 126
     assert 0.0 <= result.lineup_summary["median_score"] <= 5.0
+    assert result.star_breakdown["depth"] < 1.0
     assert all(label in {"offensive", "defensive", "transition", "balanced", "paint", "shooting"} for label in result.lineup_summary["archetype_labels"])
 
 

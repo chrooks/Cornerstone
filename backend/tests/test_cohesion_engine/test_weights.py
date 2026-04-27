@@ -118,7 +118,8 @@ def test_ratio_accentuation_note_and_layer_2_constants_exist():
         "floor": 0.10,
     }
     assert weights.VIABLE_LINEUP_THRESHOLD == 2.75
-    assert weights.DEPTH_LINEUP_CEILING == 40
+    assert weights.DEPTH_VIABLE_RATIO_WEIGHT == 0.60
+    assert weights.DEPTH_QUALITY_WEIGHT == 0.40
     assert weights.TOTAL_LINEUPS_FULL_ROSTER == 126
 
 

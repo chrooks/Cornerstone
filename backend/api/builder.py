@@ -26,6 +26,8 @@ from typing import Any
 from flask import Blueprint, jsonify, request
 
 from services.cohesion_engine import evaluate_roster as evaluate_cohesion_roster
+from services.cohesion_engine import weights as cohesion_weights
+from services.cohesion_engine.bell_curve import apply_rp_pd_boost, compute_bell_params, parse_height_inches
 from services.cohesion_engine.composites import ensure_distributions
 from services.cohesion_engine.types import RosterEvaluation as CohesionRosterEvaluation
 from services.players_service import CURRENT_SEASON
@@ -76,8 +78,94 @@ def _serialize_evaluation(evaluation: RosterEvaluation) -> dict:
     }
 
 
-def _serialize_lineup(lineup) -> dict:
+def _cohesion_players_in_slot_order(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Match cohesion roster.py ordering so starting-lineup debug data lines up."""
+    return [
+        player
+        for _index, player in sorted(
+            enumerate(players),
+            key=lambda item: (item[1].get("slot", 999), item[0]),
+        )
+    ]
+
+
+def _rp_pd_boost_details(
+    original_lineup: list[dict[str, Any]],
+    boosted_lineup: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Describe RP-to-PD boosts used by boosted defensive bell curves."""
+    provider_index: int | None = None
+    provider_value = 0.0
+    for index, player in enumerate(original_lineup):
+        tier = player.get("skills", {}).get("rim_protector", "None")
+        value = cohesion_weights.AMPLITUDE_MAP.get(tier, 0.0)
+        if value > provider_value:
+            provider_index = index
+            provider_value = value
+
+    if provider_index is None:
+        return []
+
+    provider = original_lineup[provider_index]
+    provider_tier = provider.get("skills", {}).get("rim_protector", "None")
+    boost = cohesion_weights.RP_PD_BOOST.get(provider_tier, 0.0)
+    if boost <= 0:
+        return []
+
+    details: list[dict[str, Any]] = []
+    provider_name = provider.get("name") or f"Player {provider_index + 1}"
+    for index, player in enumerate(original_lineup):
+        if index == provider_index:
+            continue
+        original_tier = player.get("skills", {}).get("perimeter_disruptor", "None")
+        effective_tier = boosted_lineup[index].get("skills", {}).get("perimeter_disruptor", "None")
+        original_value = cohesion_weights.AMPLITUDE_MAP.get(original_tier, 0.0)
+        effective_value = cohesion_weights.AMPLITUDE_MAP.get(effective_tier, 0.0)
+        if effective_value <= original_value:
+            continue
+        details.append({
+            "player_index": index,
+            "player_name": player.get("name") or f"Player {index + 1}",
+            "provider_index": provider_index,
+            "provider_name": provider_name,
+            "provider_rim_protector_tier": provider_tier,
+            "boost": boost,
+            "original_pd_tier": original_tier,
+            "effective_pd_tier": effective_tier,
+            "original_pd_value": original_value,
+            "effective_pd_value": effective_value,
+        })
+    return details
+
+
+def _boosted_bell_curve_payload(starting_players: list[dict[str, Any]]) -> tuple[list[dict[str, Any] | None], list[dict[str, Any]]]:
+    """Compute the boosted defensive curves used by the cohesion engine."""
+    boosted_lineup = apply_rp_pd_boost(starting_players)
+    boosted_bell_curves: list[dict[str, Any] | None] = []
+    for player in boosted_lineup:
+        height_inches = parse_height_inches(player.get("height"))
+        if height_inches is None:
+            boosted_bell_curves.append(None)
+            continue
+        params = compute_bell_params(player.get("skills", {}), height_inches)
+        boosted_bell_curves.append({
+            "amplitude": params["amplitude"],
+            "peak": params["peak_center"],
+            "range_down": params["range_down"],
+            "range_up": params["range_up"],
+            "flat_down": params["flat_top_down"],
+            "flat_up": params["flat_top_up"],
+        })
+    return boosted_bell_curves, _rp_pd_boost_details(starting_players, boosted_lineup)
+
+
+def _serialize_lineup(lineup, starting_players: list[dict[str, Any]] | None = None) -> dict:
     """Serialize a cohesion LineupCohesion dataclass."""
+    boosted_bell_curves: list[dict[str, Any] | None] = []
+    rp_pd_boosts: list[dict[str, Any]] = []
+    if starting_players:
+        boosted_bell_curves, rp_pd_boosts = _boosted_bell_curve_payload(starting_players)
+
     return {
         "cohesion_score": lineup.score,
         "subscores": lineup.subscores,
@@ -86,6 +174,9 @@ def _serialize_lineup(lineup) -> dict:
             "strength_amplification": lineup.accentuation_strength,
             "weakness_coverage": lineup.accentuation_weakness,
         },
+        "accentuation_details": lineup.accentuation_details,
+        "boosted_bell_curves": boosted_bell_curves,
+        "rp_pd_boosts": rp_pd_boosts,
     }
 
 
@@ -117,12 +208,13 @@ def _serialize_player_composites(player) -> dict:
     }
 
 
-def _serialize_cohesion_evaluation(evaluation: CohesionRosterEvaluation) -> dict:
+def _serialize_cohesion_evaluation(evaluation: CohesionRosterEvaluation, players: list[dict[str, Any]]) -> dict:
     """Serialize a cohesion-engine RosterEvaluation to the new response shape."""
+    starting_players = _cohesion_players_in_slot_order(players)[:5]
     return {
         "star_rating": evaluation.star_rating,
         "star_rating_breakdown": evaluation.star_breakdown,
-        "starting_lineup": _serialize_lineup(evaluation.starting_lineup),
+        "starting_lineup": _serialize_lineup(evaluation.starting_lineup, starting_players),
         "player_composites": [
             _serialize_player_composites(player)
             for player in evaluation.player_composites
@@ -255,7 +347,7 @@ def evaluate():
         if EVAL_ENGINE == "cohesion":
             ensure_distributions(CURRENT_SEASON)
             result = evaluate_cohesion_roster(body["players"], mode=mode)
-            return _ok(_serialize_cohesion_evaluation(result))
+            return _ok(_serialize_cohesion_evaluation(result, body["players"]))
 
         result = evaluate_legacy_roster(body["players"], mode=mode, debug=debug)
         return _ok(_serialize_evaluation(result))

@@ -51,46 +51,97 @@ def _complements(composite: str) -> set[str]:
     return related
 
 
-def compute_accentuation(lineup_composites: list[PlayerComposites]) -> tuple[float, float]:
-    """Compute strength amplification and weakness coverage on 0-10 scales."""
+def compute_accentuation_details(lineup_composites: list[PlayerComposites]) -> dict:
+    """Compute accentuation scores and return equation-friendly detail."""
     if len(lineup_composites) < 2:
-        return 0.0, 0.0
+        return {
+            "strength": {"score": 0.0, "credit": 0.0, "checks": 0, "terms": []},
+            "weakness": {"score": 0.0, "credit": 0.0, "checks": 0, "terms": []},
+        }
 
     strengths_by_player = [_strengths(player) for player in lineup_composites]
     weaknesses_by_player = [_weaknesses(player) for player in lineup_composites]
 
     strength_credit = 0.0
     strength_checks = 0
+    strength_terms: list[dict] = []
     for player_index, strengths in enumerate(strengths_by_player):
         for composite, value in strengths.items():
             complements = _complements(composite)
             if not complements:
                 continue
             best_teammate = 0.0
+            best_teammate_index: int | None = None
+            best_teammate_composite: str | None = None
             for teammate_index, teammate_strengths in enumerate(strengths_by_player):
                 if teammate_index == player_index:
                     continue
-                best_teammate = max(
-                    best_teammate,
-                    max((teammate_strengths.get(name, 0.0) for name in complements), default=0.0),
-                )
+                for name in complements:
+                    teammate_value = teammate_strengths.get(name, 0.0)
+                    if teammate_value > best_teammate:
+                        best_teammate = teammate_value
+                        best_teammate_index = teammate_index
+                        best_teammate_composite = name
             if best_teammate > 0:
-                strength_credit += (value / 10.0) * (best_teammate / 10.0) * 10.0
+                contribution = (value / 10.0) * (best_teammate / 10.0) * 10.0
+                strength_credit += contribution
                 strength_checks += 1
+                strength_terms.append({
+                    "player": lineup_composites[player_index].name,
+                    "composite": composite,
+                    "value": round(value, 1),
+                    "teammate": lineup_composites[best_teammate_index].name if best_teammate_index is not None else "",
+                    "teammate_composite": best_teammate_composite or "",
+                    "teammate_value": round(best_teammate, 1),
+                    "contribution": round(contribution, 2),
+                })
 
     weakness_credit = 0.0
     weakness_checks = 0
+    weakness_terms: list[dict] = []
     for player_index, weaknesses in enumerate(weaknesses_by_player):
         for composite, weakness_depth in weaknesses.items():
             best_cover = 0.0
+            best_cover_index: int | None = None
             for teammate_index, teammate_strengths in enumerate(strengths_by_player):
                 if teammate_index == player_index:
                     continue
-                best_cover = max(best_cover, teammate_strengths.get(composite, 0.0))
+                cover_value = teammate_strengths.get(composite, 0.0)
+                if cover_value > best_cover:
+                    best_cover = cover_value
+                    best_cover_index = teammate_index
             if best_cover > 0:
-                weakness_credit += (weakness_depth / 10.0) * (best_cover / 10.0) * 10.0
+                contribution = (weakness_depth / 10.0) * (best_cover / 10.0) * 10.0
+                weakness_credit += contribution
                 weakness_checks += 1
+                weakness_terms.append({
+                    "player": lineup_composites[player_index].name,
+                    "composite": composite,
+                    "weakness_depth": round(weakness_depth, 1),
+                    "teammate": lineup_composites[best_cover_index].name if best_cover_index is not None else "",
+                    "cover_value": round(best_cover, 1),
+                    "contribution": round(contribution, 2),
+                })
 
     strength_score = strength_credit / strength_checks if strength_checks else 0.0
     weakness_score = weakness_credit / weakness_checks if weakness_checks else 0.0
-    return round(min(10.0, strength_score), 1), round(min(10.0, weakness_score), 1)
+    return {
+        "strength": {
+            "score": round(min(10.0, strength_score), 1),
+            "credit": round(strength_credit, 2),
+            "checks": strength_checks,
+            "terms": strength_terms,
+        },
+        "weakness": {
+            "score": round(min(10.0, weakness_score), 1),
+            "credit": round(weakness_credit, 2),
+            "checks": weakness_checks,
+            "terms": weakness_terms,
+        },
+    }
+
+
+def compute_accentuation(lineup_composites: list[PlayerComposites]) -> tuple[float, float]:
+    """Compute strength amplification and weakness coverage on 0-10 scales."""
+    details = compute_accentuation_details(lineup_composites)
+    return details["strength"]["score"], details["weakness"]["score"]

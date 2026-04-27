@@ -11,7 +11,7 @@ from __future__ import annotations
 from math import exp, sqrt
 from typing import Any
 
-from .accentuation import compute_accentuation
+from .accentuation import compute_accentuation_details
 from .bell_curve import (
     apply_rp_pd_boost,
     compute_lineup_coverage_by_height,
@@ -276,7 +276,9 @@ def evaluate_lineup(players: list[dict[str, Any]]) -> LineupCohesion:
     defensive_gaps = 10.0 + gap_penalty
     transition += _defensive_transition_boost(synergy_players)
 
-    accentuation_strength, accentuation_weakness = compute_accentuation(player_composites)
+    accentuation_details = compute_accentuation_details(player_composites)
+    accentuation_strength = accentuation_details["strength"]["score"]
+    accentuation_weakness = accentuation_details["weakness"]["score"]
 
     subscores = {
         "spacing_creation_ratio": spacing_creation_ratio(spacing, shot_creation),
@@ -301,4 +303,5 @@ def evaluate_lineup(players: list[dict[str, Any]]) -> LineupCohesion:
         synergies_applied=synergies_applied,
         accentuation_strength=accentuation_strength,
         accentuation_weakness=accentuation_weakness,
+        accentuation_details=accentuation_details,
     )

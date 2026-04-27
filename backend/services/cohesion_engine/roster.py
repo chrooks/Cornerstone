@@ -21,7 +21,8 @@ from .team_description import generate_team_description
 from .types import LineupCohesion, PlayerComposites, RosterEvaluation
 from .weights import (
     ARCHETYPE_LABELS,
-    DEPTH_LINEUP_CEILING,
+    DEPTH_QUALITY_WEIGHT,
+    DEPTH_VIABLE_RATIO_WEIGHT,
     ROSTER_ROLLUP_WEIGHTS,
     STAR_RATING_MAX,
     VIABLE_LINEUP_THRESHOLD,
@@ -108,11 +109,37 @@ def _lineup_summary(lineups: list[LineupCohesion], archetypes: set[str]) -> dict
     """Build the compact lineup summary used by API serialization later."""
     scores = [lineup.score for lineup in lineups]
     viable_count = sum(1 for score in scores if score >= VIABLE_LINEUP_THRESHOLD)
+    depth = _depth_components(lineups)
     return {
         "total_lineups": len(lineups),
         "viable_lineups": viable_count,
         "median_score": round(median(scores), 2) if scores else 0.0,
         "archetype_labels": sorted(archetypes),
+        "bench_lineups": depth["bench_lineups"],
+        "bench_viable_lineups": depth["bench_viable_lineups"],
+        "bench_median_score": depth["bench_median_score"],
+        "depth_viable_ratio": depth["viable_ratio"],
+        "depth_quality": depth["quality"],
+        "depth_score": depth["score"],
+    }
+
+
+def _depth_components(lineups: list[LineupCohesion]) -> dict[str, float | int]:
+    """Calculate bench-depth ingredients shared by summary and star breakdown."""
+    bench_scores = [lineup.score for lineup in lineups[1:]]
+    bench_lineups = len(bench_scores)
+    bench_viable_lineups = sum(1 for score in bench_scores if score >= VIABLE_LINEUP_THRESHOLD)
+    viable_ratio = bench_viable_lineups / bench_lineups if bench_lineups else 0.0
+    bench_median_score = median(bench_scores) if bench_scores else 0.0
+    quality = min(1.0, bench_median_score / STAR_RATING_MAX) if bench_scores else 0.0
+    score = DEPTH_VIABLE_RATIO_WEIGHT * viable_ratio + DEPTH_QUALITY_WEIGHT * quality
+    return {
+        "bench_lineups": bench_lineups,
+        "bench_viable_lineups": bench_viable_lineups,
+        "bench_median_score": round(bench_median_score, 2),
+        "viable_ratio": round(viable_ratio, 3),
+        "quality": round(quality, 3),
+        "score": round(min(1.0, score), 3),
     }
 
 
@@ -130,11 +157,11 @@ def _star_breakdown(
             "floor": 0.0,
         }
 
-    viable_count = sum(1 for lineup in lineups if lineup.score >= VIABLE_LINEUP_THRESHOLD)
     scores = [lineup.score for lineup in lineups]
+    depth = _depth_components(lineups)
     return {
         "starting_5": round(min(1.0, starting_lineup.score / STAR_RATING_MAX), 3),
-        "depth": round(min(1.0, viable_count / DEPTH_LINEUP_CEILING), 3),
+        "depth": float(depth["score"]),
         "archetype_diversity": round(min(1.0, len(archetypes) / len(ARCHETYPE_LABELS)), 3),
         "floor": round(min(1.0, median(scores) / STAR_RATING_MAX), 3),
     }

@@ -34,5 +34,5 @@ def test_spacing_paint_touch_asymmetry_penalizes_paint_heavy_lineups_more():
 
 
 def test_rebounding_spacing_deficit_only_fires_when_spacing_is_low():
-    assert rebounding_spacing_deficit_ratio(6, 6) == 0.0
+    assert rebounding_spacing_deficit_ratio(6, 6) == 10.0
     assert rebounding_spacing_deficit_ratio(4, 3) > 0.0

@@ -445,6 +445,7 @@ def evaluate_lineup_endpoint() -> tuple:
                 "strength_amplification": result.accentuation_strength,
                 "weakness_coverage": result.accentuation_weakness,
             },
+            "accentuation_details": result.accentuation_details,
             "boosted_bell_curves": boosted_bell_curves,
             "rp_pd_boosts": rp_pd_boosts,
         },

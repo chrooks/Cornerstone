@@ -8,7 +8,7 @@ modules, then returns these shapes to the API serializer.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 
@@ -55,6 +55,7 @@ class LineupCohesion:
     synergies_applied: list[str]
     accentuation_strength: float
     accentuation_weakness: float
+    accentuation_details: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
