@@ -19,6 +19,8 @@ def make_composite(
     anchor: float = 0.0,
     shot_creation: float = 0.0,
     transition: float = 0.0,
+    perimeter_defense: float = 0.0,
+    interior_defense: float = 0.0,
 ) -> PlayerComposites:
     return PlayerComposites(
         player_id=player_id,
@@ -33,6 +35,8 @@ def make_composite(
         shot_creation=shot_creation,
         rebounding=0.0,
         transition=transition,
+        perimeter_defense=perimeter_defense,
+        interior_defense=interior_defense,
         bell_amplitude=0.0,
         bell_peak=78,
         bell_range_down=0,

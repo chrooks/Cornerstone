@@ -158,6 +158,8 @@ const SUBSCORE_DESCRIPTIONS: Record<string, string> = {
   post_game_total: "Top post option, secondary post option, and post depth blended together.",
   pnr_pairing: "How well pick-and-roll handlers and screeners match in both quality and balance.",
   anchor_total: "Primary defensive anchor quality with secondary support and depth.",
+  perimeter_defense_total: "Primary perimeter defender quality with secondary support and depth.",
+  interior_defense_total: "Primary interior defender quality with secondary support and depth.",
   collective_passing: "Primary creator passing plus lineup-wide passing depth.",
   rebounding: "Top rebounders plus team rebounding depth.",
   transition: "Lineup-wide transition pressure and open-court value.",
@@ -254,6 +256,8 @@ const SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: string 
   {
     heading: "Defense",
     entries: [
+      { key: "perimeter_defense_total", label: "Perim Defense" },
+      { key: "interior_defense_total", label: "Interior Defense" },
       { key: "defensive_coverage", label: "Def Coverage" },
       { key: "defensive_gaps", label: "Def Gaps" },
     ],

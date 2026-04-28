@@ -196,6 +196,8 @@ def _serialize_player_composites(player) -> dict:
             "shot_creation": player.shot_creation,
             "rebounding": player.rebounding,
             "transition": player.transition,
+            "perimeter_defense": player.perimeter_defense,
+            "interior_defense": player.interior_defense,
         },
         "bell_curve": {
             "amplitude": player.bell_amplitude,

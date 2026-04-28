@@ -39,6 +39,8 @@ SUGGESTION_TEMPLATES: dict[str, str] = {
     "post_game": "Add a low-post or mid-post scorer.",
     "pnr_screener": "Add a PnR roll man or screen setter.",
     "anchor": "Add a rim protector to anchor the paint.",
+    "perimeter_defense": "Add a perimeter defender to pressure ball handlers.",
+    "interior_defense": "Add an interior defender to protect the paint.",
     "rebounding": "Add a rebounder to control the glass.",
     PASSING_CATEGORY: "Add a playmaker to orchestrate the offense.",
     "transition": "Add a transition athlete for fast-break scoring.",
@@ -54,6 +56,8 @@ COMPOSITE_LABELS: dict[str, str] = {
     "post_game": "post play",
     "pnr_screener": "screen-and-roll play",
     "anchor": "paint defense",
+    "perimeter_defense": "perimeter pressure",
+    "interior_defense": "interior defense",
     "rebounding": "rebounding",
     "transition": "transition play",
     "off_ball_impact": "off-ball impact",
@@ -67,6 +71,8 @@ SUBSCORE_LABELS: dict[str, str] = {
     "pnr_screener_total": "screen-and-roll play",
     "pnr_pairing": "pick-and-roll pairing",
     "anchor_total": "paint defense",
+    "perimeter_defense_total": "perimeter pressure",
+    "interior_defense_total": "interior defense",
     "collective_passing": "passing",
     "rebounding": "rebounding",
     "transition": "transition play",
@@ -84,6 +90,8 @@ SUBSCORE_SUGGESTIONS: dict[str, str] = {
     "pnr_screener_total": "pnr_screener",
     "pnr_pairing": "pnr_screener",
     "anchor_total": "anchor",
+    "perimeter_defense_total": "perimeter_defense",
+    "interior_defense_total": "interior_defense",
     "collective_passing": PASSING_CATEGORY,
     "rebounding": "rebounding",
     "transition": "transition",
@@ -187,7 +195,15 @@ def _strongest_player(composites: list[PlayerComposites], category: str) -> Play
 def _mode_a_strengths(players: list[dict[str, Any]], composites: list[PlayerComposites]) -> list[Note]:
     strengths: list[Note] = []
 
-    for category in ("spacing", "shot_creation", "paint_touch", "anchor", "transition"):
+    for category in (
+        "spacing",
+        "shot_creation",
+        "paint_touch",
+        "anchor",
+        "transition",
+        "perimeter_defense",
+        "interior_defense",
+    ):
         strongest = _strongest_player(composites, category)
         if strongest and _composite_value(strongest, category) >= NOTE_ELITE_COMPOSITE_THRESHOLD:
             text_by_category = {
@@ -196,6 +212,8 @@ def _mode_a_strengths(players: list[dict[str, Any]], composites: list[PlayerComp
                 "paint_touch": f"{strongest.name} dominates inside.",
                 "anchor": f"{strongest.name} anchors the paint.",
                 "transition": f"{strongest.name} is a transition force.",
+                "perimeter_defense": f"{strongest.name} applies elite perimeter pressure.",
+                "interior_defense": f"{strongest.name} protects the interior at an elite level.",
             }
             raw_value = _composite_value(strongest, category)
             strengths.append(_note("strength", category, raw_value / 10.0, raw_value, text_by_category[category]))
@@ -272,7 +290,13 @@ def _mode_a_strengths(players: list[dict[str, Any]], composites: list[PlayerComp
 
     for composite in composites:
         offense_values = [composite.spacing, composite.paint_touch, composite.shot_creation, composite.off_ball_impact, composite.transition]
-        defense_values = [composite.anchor, composite.rebounding, composite.bell_amplitude * 2.5]
+        defense_values = [
+            composite.anchor,
+            composite.perimeter_defense,
+            composite.interior_defense,
+            composite.rebounding,
+            composite.bell_amplitude * 2.5,
+        ]
         if max(offense_values, default=0.0) >= 7.5 and max(defense_values, default=0.0) >= 7.5:
             raw_value = min(max(offense_values), max(defense_values))
             strengths.append(_note("strength", "two_way", raw_value / 10.0, raw_value, f"{composite.name} is a two-way force."))
@@ -303,7 +327,16 @@ def _mode_a_strengths(players: list[dict[str, Any]], composites: list[PlayerComp
 def _mode_a_weaknesses(players: list[dict[str, Any]], composites: list[PlayerComposites]) -> list[Note]:
     weaknesses: list[Note] = []
 
-    for category in ("spacing", "shot_creation", "paint_touch", "anchor", "rebounding", "transition"):
+    for category in (
+        "spacing",
+        "shot_creation",
+        "paint_touch",
+        "anchor",
+        "rebounding",
+        "transition",
+        "perimeter_defense",
+        "interior_defense",
+    ):
         total = sum(_composite_value(composite, category) for composite in composites)
         if total < NOTE_MISSING_COMPOSITE_THRESHOLD:
             text_by_category = {
@@ -313,6 +346,8 @@ def _mode_a_weaknesses(players: list[dict[str, Any]], composites: list[PlayerCom
                 "anchor": "No rim protection or paint control.",
                 "rebounding": "Rebounding is nonexistent.",
                 "transition": "No transition game.",
+                "perimeter_defense": "No perimeter pressure at the point of attack.",
+                "interior_defense": "No interior defensive presence.",
             }
             severity = (NOTE_MISSING_COMPOSITE_THRESHOLD - total) / NOTE_MISSING_COMPOSITE_THRESHOLD
             weaknesses.append(_note("weakness", category, severity, total, text_by_category[category]))

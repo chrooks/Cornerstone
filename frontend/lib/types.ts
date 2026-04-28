@@ -532,6 +532,8 @@ export interface CohesionCompositeScores {
   shot_creation: number;
   rebounding: number;
   transition: number;
+  perimeter_defense: number;
+  interior_defense: number;
 }
 
 /** Defensive bell curve parameters for one player. */

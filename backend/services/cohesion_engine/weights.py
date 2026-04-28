@@ -40,6 +40,9 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "transition_high_flyer": 0.7,
     "transition_driver": 0.3,
     "transition_spot_up": 0.2,
+    "perimeter_defense_versatile_defender": 0.7,
+    "interior_defense_versatile_defender": 0.5,
+    "interior_defense_rebounder": 0.3,
 }
 
 COMPOSITE_NAMES: tuple[str, ...] = (
@@ -53,19 +56,23 @@ COMPOSITE_NAMES: tuple[str, ...] = (
     "shot_creation",
     "rebounding",
     "transition",
+    "perimeter_defense",
+    "interior_defense",
 )
 
 THEORETICAL_MAX: dict[str, float] = {
     "spacing": 25.0,
     "finishing": 20.0,
     "paint_touch": 85.8,
-    "anchor": 33.0,
+    "anchor": 41.0,
     "post_game": 17.0,
     "pnr_screener": 50.0,
     "off_ball_impact": 61.0,
     "shot_creation": 60.0,
     "rebounding": 20.0,
     "transition": 42.0,
+    "perimeter_defense": 17.0,
+    "interior_defense": 18.0,
 }
 
 NORMALIZATION_BREAKPOINT_PERCENTILE: float = 0.6
@@ -202,22 +209,24 @@ SYNERGY_CREATOR_THRESHOLD: float = 6.0
 # ---------------------------------------------------------------------------
 
 COHESION_ROLLUP_WEIGHTS: dict[str, float] = {
-    "spacing_creation_ratio": 0.12,
-    "creation_offball_ratio": 0.06,
-    "spacing_paint_touch_ratio": 0.06,
-    "paint_touch_total": 0.08,
+    "spacing_creation_ratio": 0.10,
+    "creation_offball_ratio": 0.05,
+    "spacing_paint_touch_ratio": 0.05,
+    "paint_touch_total": 0.07,
     "post_game_total": 0.03,
     "pnr_pairing": 0.03,
-    "anchor_total": 0.08,
-    "collective_passing": 0.06,
-    "rebounding": 0.06,
-    "transition": 0.06,
+    "anchor_total": 0.07,
+    "collective_passing": 0.05,
+    "rebounding": 0.05,
+    "transition": 0.05,
     "rebound_transition_ratio": 0.04,
     "rebounding_spacing_deficit": 0.03,
-    "defensive_coverage": 0.15,
-    "defensive_gaps": 0.15,
-    "accentuation_strength": 0.05,
-    "accentuation_weakness": 0.05,
+    "defensive_coverage": 0.12,
+    "defensive_gaps": 0.12,
+    "perimeter_defense_total": 0.03,
+    "interior_defense_total": 0.03,
+    "accentuation_strength": 0.04,
+    "accentuation_weakness": 0.04,
 }
 
 
@@ -245,8 +254,11 @@ ACCENTUATION_MIN_STRENGTHS: int = 1
 
 ACCENTUATION_COMPLEMENTARY_PAIRS: tuple[tuple[str, str], ...] = (
     ("spacing", "paint_touch"),
+    ("spacing", "post_game"),
     ("shot_creation", "off_ball_impact"),
     ("shot_creation", "pnr_screener"),
+    ("perimeter_defense", "interior_defense"),
+    ("perimeter_defense", "transition"),
 )
 
 

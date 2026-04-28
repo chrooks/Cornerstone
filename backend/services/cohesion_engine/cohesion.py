@@ -138,6 +138,28 @@ def _collective_anchor(composites: list[PlayerComposites]) -> float:
     )
 
 
+def _collective_perimeter_defense(composites: list[PlayerComposites]) -> float:
+    """Blend primary perimeter defender quality with secondary support and depth."""
+    return _top_two_plus_depth(
+        composites,
+        "perimeter_defense",
+        ANCHOR_PRIMARY_WEIGHT,
+        ANCHOR_SECONDARY_WEIGHT,
+        ANCHOR_DEPTH_WEIGHT,
+    )
+
+
+def _collective_interior_defense(composites: list[PlayerComposites]) -> float:
+    """Blend primary interior defender quality with secondary support and depth."""
+    return _top_two_plus_depth(
+        composites,
+        "interior_defense",
+        ANCHOR_PRIMARY_WEIGHT,
+        ANCHOR_SECONDARY_WEIGHT,
+        ANCHOR_DEPTH_WEIGHT,
+    )
+
+
 def _collective_post_game(composites: list[PlayerComposites]) -> float:
     """Blend primary post player quality with secondary option and depth."""
     return _top_two_plus_depth(
@@ -196,12 +218,14 @@ def _pnr_pairing(lineup: list[dict[str, Any]], composites: list[PlayerComposites
     return min(10.0, balance * quality_gate)
 
 
-def _defensive_transition_boost(lineup: list[dict[str, Any]]) -> float:
-    """Compute DEF-10: guard-height defensive density creates transition chances."""
+def _defensive_transition_boost(lineup: list[dict[str, Any]], perimeter_defense: float) -> float:
+    """Compute DEF-10: perimeter pressure or guard-height density creates transition chances."""
     coverage = compute_lineup_coverage_by_height(lineup)
     start, stop = DEFENSIVE_GUARD_DENSITY_HEIGHT_RANGE
     guard_density = sum(coverage.get(height, 0.0) for height in range(start, stop))
-    return min(DEFENSIVE_TRANSITION_BOOST_CAP, guard_density / DEFENSIVE_TRANSITION_BOOST_DIVISOR)
+    guard_density_boost = guard_density / DEFENSIVE_TRANSITION_BOOST_DIVISOR
+    perimeter_pressure_boost = perimeter_defense / DEFENSIVE_TRANSITION_BOOST_DIVISOR
+    return min(DEFENSIVE_TRANSITION_BOOST_CAP, max(guard_density_boost, perimeter_pressure_boost))
 
 
 def _compute_player_composites(lineup: list[dict[str, Any]]) -> list[PlayerComposites]:
@@ -265,6 +289,8 @@ def evaluate_lineup(players: list[dict[str, Any]]) -> LineupCohesion:
     post_game = _collective_post_game(player_composites)
     pnr_pairing = _pnr_pairing(synergy_players, player_composites)
     anchor = _collective_anchor(player_composites)
+    perimeter_defense = _collective_perimeter_defense(player_composites)
+    interior_defense = _collective_interior_defense(player_composites)
     rebounding = _collective_rebounding(player_composites)
     transition = _average(player_composites, "transition")
     collective_passing = _collective_passing(synergy_players)
@@ -274,7 +300,7 @@ def evaluate_lineup(players: list[dict[str, Any]]) -> LineupCohesion:
     if rebounding < DEFENSIVE_REBOUNDING_MINIMUM:
         defensive_coverage -= (DEFENSIVE_REBOUNDING_MINIMUM - rebounding) * DEFENSIVE_REBOUNDING_PENALTY_SCALE
     defensive_gaps = 10.0 + gap_penalty
-    transition += _defensive_transition_boost(synergy_players)
+    transition += _defensive_transition_boost(synergy_players, perimeter_defense)
 
     accentuation_details = compute_accentuation_details(player_composites)
     accentuation_strength = accentuation_details["strength"]["score"]
@@ -288,6 +314,8 @@ def evaluate_lineup(players: list[dict[str, Any]]) -> LineupCohesion:
         "post_game_total": _clamp_subscore(post_game),
         "pnr_pairing": _clamp_subscore(pnr_pairing),
         "anchor_total": _clamp_subscore(anchor),
+        "perimeter_defense_total": _clamp_subscore(perimeter_defense),
+        "interior_defense_total": _clamp_subscore(interior_defense),
         "collective_passing": _clamp_subscore(collective_passing),
         "rebounding": _clamp_subscore(rebounding),
         "transition": _clamp_subscore(transition),

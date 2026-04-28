@@ -36,6 +36,8 @@ _COMPOSITE_FIELDS = (
     "shot_creation",
     "rebounding",
     "transition",
+    "perimeter_defense",
+    "interior_defense",
 )
 
 _SUBSCORE_LABELS: dict[str, str] = {
@@ -46,6 +48,8 @@ _SUBSCORE_LABELS: dict[str, str] = {
     "pnr_screener_total": "screen-and-roll pressure",
     "pnr_pairing": "pick-and-roll pairing",
     "anchor_total": "interior defensive anchoring",
+    "perimeter_defense_total": "perimeter pressure",
+    "interior_defense_total": "interior defense",
     "collective_passing": "collective passing",
     "rebounding": "rebounding",
     "transition": "transition pressure",

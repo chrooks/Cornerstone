@@ -91,6 +91,8 @@ const COMPOSITE_COLS: { key: keyof CohesionPlayerComposites["base"]; abbr: strin
   { key: "shot_creation", abbr: "SC", label: "Shot Creation" },
   { key: "rebounding", abbr: "Reb", label: "Rebounding" },
   { key: "transition", abbr: "Trn", label: "Transition" },
+  { key: "perimeter_defense", abbr: "PD", label: "Perimeter Defense" },
+  { key: "interior_defense", abbr: "ID", label: "Interior Defense" },
 ];
 
 export const COHESION_SUBSCORE_LABELS: Record<string, string> = {
@@ -104,6 +106,8 @@ export const COHESION_SUBSCORE_LABELS: Record<string, string> = {
   pnr_pairing: "PnR Pairing",
   pnr_screener_total: "PnR Screener",
   anchor_total: "Anchor",
+  perimeter_defense_total: "Perim Defense",
+  interior_defense_total: "Interior Defense",
   collective_passing: "Passing",
   rebounding: "Rebounding",
   transition: "Transition",
@@ -137,6 +141,8 @@ export const COHESION_SUBSCORE_GROUPS: { heading: string; entries: { key: string
   {
     heading: "Defense",
     entries: [
+      { key: "perimeter_defense_total", label: "Perim Defense" },
+      { key: "interior_defense_total", label: "Interior Defense" },
       { key: "defensive_coverage", label: "Def Coverage" },
       { key: "defensive_gaps", label: "Def Gaps" },
     ],

@@ -33,6 +33,8 @@ def test_evaluate_lineup_returns_all_subscores_in_range():
         "post_game_total",
         "pnr_pairing",
         "anchor_total",
+        "perimeter_defense_total",
+        "interior_defense_total",
         "collective_passing",
         "rebounding",
         "transition",
@@ -45,6 +47,8 @@ def test_evaluate_lineup_returns_all_subscores_in_range():
     assert "OFF-28" not in result.synergies_applied
     assert "OFF-02" in result.synergies_applied
     assert result.subscores["pnr_pairing"] > 0.0
+    assert result.subscores["perimeter_defense_total"] > 0.0
+    assert result.subscores["interior_defense_total"] > 0.0
     assert result.accentuation_strength >= 0.0
     assert result.accentuation_weakness >= 0.0
 
@@ -59,3 +63,20 @@ def test_evaluate_lineup_does_not_mutate_input_players():
 
     assert lineup[0]["skills"]["pnr_ball_handler"] == "Elite"
     assert lineup[1]["skills"]["pnr_finisher"] == "Elite"
+
+
+def test_perimeter_defense_can_boost_transition_subscore():
+    pressure_lineup = [
+        make_player(f"Defender {index}", "6-8", {"perimeter_disruptor": "All-Time Great"})
+        for index in range(5)
+    ]
+    neutral_lineup = [
+        make_player(f"Neutral {index}", "6-8", {})
+        for index in range(5)
+    ]
+
+    pressure_result = evaluate_lineup(pressure_lineup)
+    neutral_result = evaluate_lineup(neutral_lineup)
+
+    assert pressure_result.subscores["perimeter_defense_total"] > neutral_result.subscores["perimeter_defense_total"]
+    assert pressure_result.subscores["transition"] > neutral_result.subscores["transition"]

@@ -32,6 +32,8 @@ def sample_skills() -> dict[str, str]:
         "low_post_player": "Capable",
         "mid_post_player": "Elite",
         "rim_protector": "Elite",
+        "perimeter_disruptor": "Proficient",
+        "versatile_defender": "Capable",
         "screen_setter": "Capable",
         "pnr_finisher": "Proficient",
         "passer": "All-Time Great",
@@ -49,10 +51,12 @@ def test_compute_raw_composites_matches_validated_formula_order():
     assert raw["finishing"] == pytest.approx(7.5)
     assert raw["rebounding"] == pytest.approx(4.5)
     assert raw["paint_touch"] == pytest.approx(21.6)
-    assert raw["anchor"] == pytest.approx(12.45)
+    assert raw["anchor"] == pytest.approx(14.1)
     assert raw["post_game"] == pytest.approx(5.7)
     assert raw["pnr_screener"] == pytest.approx(7.2)
     assert raw["transition"] == pytest.approx(21.45)
+    assert raw["perimeter_defense"] == pytest.approx(4.05)
+    assert raw["interior_defense"] == pytest.approx(7.65)
     assert raw["off_ball_impact"] == pytest.approx(17.55)
     assert raw["shot_creation"] == pytest.approx(40.525)
 
@@ -75,13 +79,15 @@ def test_normalize_composites_uses_theoretical_max_when_cache_empty():
             "spacing": 12.5,
             "finishing": 10.0,
             "paint_touch": 42.9,
-            "anchor": 16.5,
+            "anchor": 20.5,
             "post_game": 8.5,
             "pnr_screener": 25.0,
             "off_ball_impact": 30.5,
             "shot_creation": 30.0,
             "rebounding": 10.0,
             "transition": 21.0,
+            "perimeter_defense": 8.5,
+            "interior_defense": 9.0,
         }
     )
 
@@ -96,6 +102,8 @@ def test_normalize_composites_uses_theoretical_max_when_cache_empty():
         "shot_creation": 5.0,
         "rebounding": 5.0,
         "transition": 5.0,
+        "perimeter_defense": 5.0,
+        "interior_defense": 5.0,
     }
 
 
@@ -128,10 +136,12 @@ def test_compute_player_composites_returns_dataclass_with_bell_params():
     assert player.player_id == "p1"
     assert player.name == "Example"
     assert player.spacing == 3.9
+    assert player.perimeter_defense == 2.4
+    assert player.interior_defense == 4.2
     assert player.bell_amplitude == 3.5
-    assert player.bell_peak == 82
-    assert player.bell_range_down == 1
-    assert player.bell_range_up == 4
+    assert player.bell_peak == 80
+    assert player.bell_range_down == 5
+    assert player.bell_range_up == 6
 
 
 def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
@@ -170,4 +180,6 @@ def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
 
     assert distributions["spacing"] == [1.5, 6.0]
     assert distributions["finishing"] == [0.0, 0.0]
+    assert distributions["perimeter_defense"] == [0.0, 0.0]
+    assert distributions["interior_defense"] == [0.0, 0.0]
     assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [1.5, 6.0]

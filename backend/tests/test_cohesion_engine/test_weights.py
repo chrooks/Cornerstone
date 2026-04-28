@@ -4,6 +4,8 @@ Tests that pin Phase 1 cohesion-engine constants to the implementation spec.
 
 from __future__ import annotations
 
+import pytest
+
 from backend.services.cohesion_engine import weights
 
 
@@ -25,6 +27,9 @@ def test_composite_coefficients_match_resolved_formulas():
     assert weights.COMPOSITE_COEFFICIENTS["pnr_screener_secondary_scale"] == 0.15
     assert weights.COMPOSITE_COEFFICIENTS["shot_creation_spacing"] == 0.3
     assert weights.COMPOSITE_COEFFICIENTS["transition_passer_scale"] == 0.2
+    assert weights.COMPOSITE_COEFFICIENTS["perimeter_defense_versatile_defender"] == 0.7
+    assert weights.COMPOSITE_COEFFICIENTS["interior_defense_versatile_defender"] == 0.5
+    assert weights.COMPOSITE_COEFFICIENTS["interior_defense_rebounder"] == 0.3
 
 
 def test_theoretical_maxima_match_impl_spec_fallback_table():
@@ -32,13 +37,15 @@ def test_theoretical_maxima_match_impl_spec_fallback_table():
         "spacing": 25.0,
         "finishing": 20.0,
         "paint_touch": 85.8,
-        "anchor": 33.0,
+        "anchor": 41.0,
         "post_game": 17.0,
         "pnr_screener": 50.0,
         "off_ball_impact": 61.0,
         "shot_creation": 60.0,
         "rebounding": 20.0,
         "transition": 42.0,
+        "perimeter_defense": 17.0,
+        "interior_defense": 18.0,
     }
 
 
@@ -91,14 +98,17 @@ def test_synergy_scale_factors_match_impl_spec_table():
 
 
 def test_cohesion_rollup_weights_match_impl_spec_and_sum_to_one():
-    assert weights.COHESION_ROLLUP_WEIGHTS["spacing_creation_ratio"] == 0.12
-    assert weights.COHESION_ROLLUP_WEIGHTS["spacing_paint_touch_ratio"] == 0.06
+    assert weights.COHESION_ROLLUP_WEIGHTS["spacing_creation_ratio"] == 0.10
+    assert weights.COHESION_ROLLUP_WEIGHTS["spacing_paint_touch_ratio"] == 0.05
     assert "pnr_pairing" in weights.COHESION_ROLLUP_WEIGHTS
     assert "pnr_screener_total" not in weights.COHESION_ROLLUP_WEIGHTS
-    assert weights.COHESION_ROLLUP_WEIGHTS["defensive_coverage"] == 0.15
-    assert weights.COHESION_ROLLUP_WEIGHTS["defensive_gaps"] == 0.15
-    assert weights.COHESION_ROLLUP_WEIGHTS["accentuation_strength"] == 0.05
-    assert weights.COHESION_ROLLUP_WEIGHTS["accentuation_weakness"] == 0.05
+    assert weights.COHESION_ROLLUP_WEIGHTS["defensive_coverage"] == 0.12
+    assert weights.COHESION_ROLLUP_WEIGHTS["defensive_gaps"] == 0.12
+    assert weights.COHESION_ROLLUP_WEIGHTS["perimeter_defense_total"] == 0.03
+    assert weights.COHESION_ROLLUP_WEIGHTS["interior_defense_total"] == 0.03
+    assert weights.COHESION_ROLLUP_WEIGHTS["accentuation_strength"] == 0.04
+    assert weights.COHESION_ROLLUP_WEIGHTS["accentuation_weakness"] == 0.04
+    assert sum(weights.COHESION_ROLLUP_WEIGHTS.values()) == pytest.approx(1.0)
 
 
 def test_ratio_accentuation_note_and_layer_2_constants_exist():
@@ -106,6 +116,8 @@ def test_ratio_accentuation_note_and_layer_2_constants_exist():
     assert weights.REBOUNDING_SPACING_DEFICIT_THRESHOLD == 5.0
     assert weights.ACCENTUATION_STRENGTH_THRESHOLD == 7.5
     assert weights.ACCENTUATION_WEAKNESS_THRESHOLD == 2.5
+    assert ("perimeter_defense", "interior_defense") in weights.ACCENTUATION_COMPLEMENTARY_PAIRS
+    assert ("perimeter_defense", "transition") in weights.ACCENTUATION_COMPLEMENTARY_PAIRS
     assert weights.ACCENTUATION_FALLBACK_STRENGTH_THRESHOLD == 6.0
     assert weights.ACCENTUATION_FALLBACK_WEAKNESS_THRESHOLD == 2.0
     assert weights.NOTE_ELITE_COMPOSITE_THRESHOLD == 8.0

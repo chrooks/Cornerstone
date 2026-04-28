@@ -123,5 +123,5 @@ def test_compute_lineup_defense_empty_lineup_returns_all_gaps():
     coverage, gap_penalty, gaps = compute_lineup_defense([])
 
     assert coverage == 0.0
-    assert gap_penalty == -8.5
+    assert gap_penalty == -38.25
     assert gaps == list(range(72, 89))

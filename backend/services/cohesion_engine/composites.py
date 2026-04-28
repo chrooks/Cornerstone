@@ -80,6 +80,15 @@ def compute_raw_composites(skills: dict[str, str | float]) -> dict[str, float]:
     )
     raw_finishing = tier_value(skills, "high_flyer") + tier_value(skills, "crafty_finisher")
     raw_rebounding = tier_value(skills, "rebounder") + tier_value(skills, "offensive_rebounder")
+    raw_perimeter_defense = (
+        tier_value(skills, "perimeter_disruptor")
+        + c["perimeter_defense_versatile_defender"] * tier_value(skills, "versatile_defender")
+    )
+    raw_interior_defense = (
+        tier_value(skills, "rim_protector")
+        + c["interior_defense_versatile_defender"] * tier_value(skills, "versatile_defender")
+        + c["interior_defense_rebounder"] * tier_value(skills, "rebounder")
+    )
 
     # Step 2: paint touch uses raw finishing as an amplifier.
     finishing_mult = max(1.0, 1.0 + c["paint_touch_finishing_scale"] * raw_finishing)
@@ -93,7 +102,7 @@ def compute_raw_composites(skills: dict[str, str | float]) -> dict[str, float]:
     # Step 3: independent big-man and transition composites.
     raw_anchor = (
         tier_value(skills, "rebounder")
-        + tier_value(skills, "rim_protector")
+        + raw_interior_defense
         + tier_value(skills, "vertical_spacer")
         + c["anchor_screen_setter"] * tier_value(skills, "screen_setter")
     )
@@ -151,6 +160,8 @@ def compute_raw_composites(skills: dict[str, str | float]) -> dict[str, float]:
         "shot_creation": raw_shot_creation,
         "rebounding": raw_rebounding,
         "transition": raw_transition,
+        "perimeter_defense": raw_perimeter_defense,
+        "interior_defense": raw_interior_defense,
     }
 
 
@@ -325,6 +336,8 @@ def compute_player_composites(
         shot_creation=normalized["shot_creation"],
         rebounding=normalized["rebounding"],
         transition=normalized["transition"],
+        perimeter_defense=normalized["perimeter_defense"],
+        interior_defense=normalized["interior_defense"],
         bell_amplitude=float(bell["amplitude"]),
         bell_peak=int(bell["peak_center"]),
         bell_range_down=int(bell["range_down"]),

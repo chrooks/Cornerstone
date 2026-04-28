@@ -33,6 +33,8 @@ class PlayerComposites:
     shot_creation: float
     rebounding: float
     transition: float
+    perimeter_defense: float
+    interior_defense: float
     bell_amplitude: float
     bell_peak: int
     bell_range_down: int

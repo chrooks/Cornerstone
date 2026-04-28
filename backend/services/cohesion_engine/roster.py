@@ -36,6 +36,8 @@ SUBSCORE_ARCHETYPES: dict[str, str] = {
     "pnr_screener_total": "offensive",
     "pnr_pairing": "offensive",
     "anchor_total": "defensive",
+    "perimeter_defense_total": "defensive",
+    "interior_defense_total": "defensive",
     "collective_passing": "offensive",
     "rebounding": "paint",
     "transition": "transition",

@@ -117,6 +117,8 @@ const COMPOSITE_LABELS: { key: string; label: string }[] = [
   { key: "shot_creation", label: "Shot Creation" },
   { key: "rebounding", label: "Rebounding" },
   { key: "transition", label: "Transition" },
+  { key: "perimeter_defense", label: "Perimeter Defense" },
+  { key: "interior_defense", label: "Interior Defense" },
 ];
 
 /** Distinct colors for overlaying bell curves (same as CohesionDebugPanel). */
@@ -149,6 +151,8 @@ const SUBSCORE_LABELS: Record<string, string> = {
   post_game_total: "Post Game",
   pnr_screener_total: "PnR Screener",
   anchor_total: "Anchor",
+  perimeter_defense_total: "Perim Defense",
+  interior_defense_total: "Interior Defense",
   collective_passing: "Passing",
   rebounding: "Rebounding",
   transition: "Transition",
@@ -175,6 +179,8 @@ const FORMULA_LABELS: Record<string, string> = {
   shot_creation: "Shot Creation",
   rebounding: "Rebounding",
   transition: "Transition",
+  perimeter_defense: "Perimeter Defense",
+  interior_defense: "Interior Defense",
 };
 
 const EQUATION_ORDER = [
@@ -188,6 +194,8 @@ const EQUATION_ORDER = [
   "shot_creation",
   "rebounding",
   "transition",
+  "perimeter_defense",
+  "interior_defense",
 ];
 
 const SYNERGY_DESCRIPTIONS: Record<string, string> = {
@@ -235,6 +243,9 @@ interface CohesionExplanationWeights {
 const DEFAULT_COHESION_WEIGHTS: CohesionExplanationWeights = {
   COMPOSITE_COEFFICIENTS: {
     pnr_screener_secondary_scale: 0.15,
+    perimeter_defense_versatile_defender: 0.7,
+    interior_defense_versatile_defender: 0.5,
+    interior_defense_rebounder: 0.3,
   },
   SYNERGY_SCALE_FACTORS: {
     "OFF-02": 0.05,
@@ -666,8 +677,9 @@ function equationTermsFor(composite: string): EquationTerm[] {
       ];
     case "anchor":
       return [
-        { skill: "rebounder" },
+        { skill: "rebounder", multiplier: 1.3 },
         { skill: "rim_protector" },
+        { skill: "versatile_defender", multiplier: 0.5 },
         { skill: "vertical_spacer" },
         { skill: "screen_setter", multiplier: 0.3 },
       ];
@@ -694,6 +706,17 @@ function equationTermsFor(composite: string): EquationTerm[] {
         { skill: "high_flyer", multiplier: 0.7 },
         { skill: "driver", multiplier: 0.3 },
         { skill: "spot_up_shooter", multiplier: 0.2 },
+      ];
+    case "perimeter_defense":
+      return [
+        { skill: "perimeter_disruptor" },
+        { skill: "versatile_defender", multiplier: 0.7 },
+      ];
+    case "interior_defense":
+      return [
+        { skill: "rim_protector" },
+        { skill: "versatile_defender", multiplier: 0.5 },
+        { skill: "rebounder", multiplier: 0.3 },
       ];
     default:
       return [];
@@ -944,6 +967,36 @@ function collectiveAnchorTerms(lineupSlots: LineupSlot[], weights: CohesionExpla
   );
 }
 
+function collectivePerimeterDefenseValue(lineupSlots: LineupSlot[], weights: CohesionExplanationWeights): number {
+  return topTwoPlusDepthValue(
+    lineupSlots,
+    "perimeter_defense",
+    weights.ANCHOR_PRIMARY_WEIGHT,
+    weights.ANCHOR_SECONDARY_WEIGHT,
+    weights.ANCHOR_DEPTH_WEIGHT,
+  );
+}
+
+function collectivePerimeterDefenseTerms(lineupSlots: LineupSlot[], weights: CohesionExplanationWeights): NumericTerm[] {
+  return topTwoPlusDepthTerms(
+    lineupSlots,
+    "perimeter_defense",
+    weights.ANCHOR_PRIMARY_WEIGHT,
+    weights.ANCHOR_SECONDARY_WEIGHT,
+    weights.ANCHOR_DEPTH_WEIGHT,
+  );
+}
+
+function collectiveInteriorDefenseTerms(lineupSlots: LineupSlot[], weights: CohesionExplanationWeights): NumericTerm[] {
+  return topTwoPlusDepthTerms(
+    lineupSlots,
+    "interior_defense",
+    weights.ANCHOR_PRIMARY_WEIGHT,
+    weights.ANCHOR_SECONDARY_WEIGHT,
+    weights.ANCHOR_DEPTH_WEIGHT,
+  );
+}
+
 function collectivePostGameTerms(lineupSlots: LineupSlot[], weights: CohesionExplanationWeights): NumericTerm[] {
   return topTwoPlusDepthTerms(
     lineupSlots,
@@ -1126,6 +1179,24 @@ function explanationForSubscore(
           `It weights the best anchor at ${Math.round(weights.ANCHOR_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.ANCHOR_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.ANCHOR_DEPTH_WEIGHT * 100)}%, so one elite rim presence can define the lineup's interior backbone.`,
         ],
       };
+    case "perimeter_defense_total":
+      return {
+        mode: "model",
+        terms: collectivePerimeterDefenseTerms(lineupSlots, weights),
+        suffix: "primary perimeter defender plus secondary support and depth",
+        detailLines: [
+          `It weights the best perimeter defender at ${Math.round(weights.ANCHOR_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.ANCHOR_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.ANCHOR_DEPTH_WEIGHT * 100)}%.`,
+        ],
+      };
+    case "interior_defense_total":
+      return {
+        mode: "model",
+        terms: collectiveInteriorDefenseTerms(lineupSlots, weights),
+        suffix: "primary interior defender plus secondary support and depth",
+        detailLines: [
+          `It weights the best interior defender at ${Math.round(weights.ANCHOR_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.ANCHOR_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.ANCHOR_DEPTH_WEIGHT * 100)}%.`,
+        ],
+      };
     case "collective_passing":
       return {
         mode: "model",
@@ -1146,8 +1217,19 @@ function explanationForSubscore(
           `It weights the best rebounder at ${Math.round(weights.REBOUNDING_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.REBOUNDING_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.REBOUNDING_DEPTH_WEIGHT * 100)}%, so elite possession finishers can carry the glass.`,
         ],
       };
-    case "transition":
-      return { mode: "average", terms: compositeTerms(lineupSlots, "transition"), suffix: "/ 5 players + defensive boost" };
+    case "transition": {
+      const perimeterDefense = collectivePerimeterDefenseValue(lineupSlots, weights);
+      const defensiveBoost = Math.min(2, perimeterDefense / 15);
+      return {
+        mode: "average",
+        terms: compositeTerms(lineupSlots, "transition"),
+        suffix: `/ 5 players + defensive boost (${defensiveBoost.toFixed(1)})`,
+        detailLines: [
+          "The engine adds the larger of guard-height defensive density or perimeter-defense pressure, capped at 2.0.",
+          `Perimeter pressure check: ${perimeterDefense.toFixed(1)} / 15.0 = ${defensiveBoost.toFixed(1)} before the cap.`,
+        ],
+      };
+    }
     case "rebound_transition_ratio":
       return {
         mode: "ratio",
@@ -2169,6 +2251,8 @@ function lineupSlotsToCompositeRows(lineupSlots: LineupSlot[]): CohesionPlayerCo
         shot_creation: slot.normalizedComposites.shot_creation ?? 0,
         rebounding: slot.normalizedComposites.rebounding ?? 0,
         transition: slot.normalizedComposites.transition ?? 0,
+        perimeter_defense: slot.normalizedComposites.perimeter_defense ?? 0,
+        interior_defense: slot.normalizedComposites.interior_defense ?? 0,
       },
       bell_curve: slot.bellCurve ?? {
         amplitude: 0,

@@ -20,6 +20,8 @@ def make_composites(name: str, **overrides: float) -> PlayerComposites:
         "shot_creation": 1.0,
         "rebounding": 1.0,
         "transition": 1.0,
+        "perimeter_defense": 1.0,
+        "interior_defense": 1.0,
     }
     values.update(overrides)
     return PlayerComposites(
@@ -76,6 +78,24 @@ def test_weakness_coverage_rewards_teammate_same_composite_strength():
     _strength, weakness = compute_accentuation([weak_spacer, strong_spacer])
 
     assert weakness > 0
+
+
+def test_strength_amplification_rewards_perimeter_and_interior_defense_pair():
+    point_of_attack = make_composites("Point of Attack", perimeter_defense=9.0)
+    rim_protector = make_composites("Rim Protector", interior_defense=8.0)
+
+    strength, _weakness = compute_accentuation([point_of_attack, rim_protector])
+
+    assert strength > 0
+
+
+def test_strength_amplification_rewards_perimeter_defense_and_transition_pair():
+    pressure_guard = make_composites("Pressure Guard", perimeter_defense=9.0)
+    runner = make_composites("Runner", transition=8.0)
+
+    strength, _weakness = compute_accentuation([pressure_guard, runner])
+
+    assert strength > 0
 
 
 def test_accentuation_returns_zero_for_single_player():

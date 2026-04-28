@@ -31,6 +31,8 @@ def make_player_composites() -> PlayerComposites:
         shot_creation=7.8,
         rebounding=5.5,
         transition=6.7,
+        perimeter_defense=7.1,
+        interior_defense=8.2,
         bell_amplitude=3.5,
         bell_peak=80,
         bell_range_down=6,
@@ -47,6 +49,8 @@ def test_player_composites_constructs_all_phase_1_fields():
     assert player.name == "Example Player"
     assert player.spacing == 8.5
     assert player.transition == 6.7
+    assert player.perimeter_defense == 7.1
+    assert player.interior_defense == 8.2
     assert player.bell_amplitude == 3.5
     assert player.bell_peak == 80
     assert player.bell_flat_up == 1

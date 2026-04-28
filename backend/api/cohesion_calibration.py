@@ -147,6 +147,8 @@ def _serialize_composites(pc: PlayerComposites) -> dict[str, float]:
         "shot_creation": pc.shot_creation,
         "rebounding": pc.rebounding,
         "transition": pc.transition,
+        "perimeter_defense": pc.perimeter_defense,
+        "interior_defense": pc.interior_defense,
     }
 
 
