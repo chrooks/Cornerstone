@@ -11,6 +11,8 @@ interface PlayerSearchComboboxProps {
   className?: string;
   /** When true, also search legends and show them with a ★ prefix. */
   includeLegends?: boolean;
+  /** Player IDs to hide from the result list. */
+  excludedPlayerIds?: Set<string>;
 }
 
 /**
@@ -39,6 +41,7 @@ export function PlayerSearchCombobox({
   placeholder = "Search players…",
   className,
   includeLegends = false,
+  excludedPlayerIds,
 }: PlayerSearchComboboxProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Player[]>([]);
@@ -91,7 +94,11 @@ export function PlayerSearchCombobox({
         combined = [...matchingLegends, ...combined];
       }
 
-      setResults(combined.slice(0, 12));
+      const filtered = excludedPlayerIds
+        ? combined.filter((player) => !excludedPlayerIds.has(player.id))
+        : combined;
+
+      setResults(filtered.slice(0, 12));
       setOpen(true);
       setHighlightedIndex(-1);
     } catch {
@@ -99,7 +106,7 @@ export function PlayerSearchCombobox({
     } finally {
       setLoading(false);
     }
-  }, [includeLegends]);
+  }, [includeLegends, excludedPlayerIds]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

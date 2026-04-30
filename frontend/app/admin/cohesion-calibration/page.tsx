@@ -11,7 +11,7 @@
  * All state lifted to page level. No global stores.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Toaster, toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
@@ -19,13 +19,16 @@ import { CohesionCompositesTable } from "@/components/cohesion/CohesionResultDet
 import {
   fetchPlayerComposites,
   fetchBellCurve,
+  listPlayersWithSkills,
   evaluateLineup,
+  evaluateRotation,
   fetchCohesionWeights,
   updateCohesionWeights,
 } from "@/lib/api";
+import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import { ALL_SKILL_NAMES, formatSkillName } from "@/lib/skills";
 import { TIER_BADGE_CLASSES, tierToNum } from "@/lib/tiers";
-import type { CohesionPlayerComposites, Player, SkillTier } from "@/lib/types";
+import type { CohesionLineupCombination, CohesionLineupSummary, CohesionPlayerComposites, Player, PlayerWithSkills, SkillTier } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,8 +66,15 @@ interface LineupTestResult {
   playerIds: string[];
   playerNames: string[];
   cohesion_score: number;
+  mode?: "lineup" | "rotation";
   subscores: Record<string, number>;
   synergies_applied: string[];
+  archetype_labels?: string[];
+  archetype_details?: {
+    archetype: string;
+    subscore_key: string | null;
+    subscore_value: number;
+  }[];
   accentuation: { strength_amplification: number; weakness_coverage: number };
   accentuation_details?: {
     strength?: { score: number; credit: number; checks: number; terms: Record<string, unknown>[] };
@@ -74,6 +84,24 @@ interface LineupTestResult {
   boosted_bell_curves?: (PlayerCompositeData["bell_curve"] | null)[];
   /** Teammate perimeter-disruptor boosts created by the lineup's best rim protector. */
   rp_pd_boosts?: RpPdBoostInfo[];
+  star_rating?: number;
+  star_rating_breakdown?: {
+    starting_5: number;
+    depth: number;
+    archetype_diversity: number;
+    floor: number;
+  };
+  theoretical_best_starting_rating?: number;
+  theoretical_best_starting_breakdown?: {
+    starting_5: number;
+    depth: number;
+    archetype_diversity: number;
+    floor: number;
+  };
+  lineup_summary?: CohesionLineupSummary;
+  lineup_combinations?: CohesionLineupCombination[];
+  player_composites?: CohesionPlayerComposites[];
+  selectedCombinationIndex?: number;
 }
 
 interface RpPdBoostInfo {
@@ -1807,34 +1835,179 @@ function LineupBellCurveChart({ lineupSlots, weights, boostedBellCurves, rpPdBoo
 interface LineupTesterProps {
   lineupSlots: LineupSlot[];
   weights: CohesionExplanationWeights;
+  teamOptions: string[];
+  selectedTeam: string;
+  teamFillLoading: boolean;
   onSlotSelect: (index: number, player: Player) => void;
   onSlotRemove: (index: number) => void;
   onSlotReplace: (index: number) => void;
+  swapSourceIndex: number | null;
+  onSwapStart: (index: number) => void;
+  onSwapTarget: (index: number) => void;
+  onSwapCancel: () => void;
+  onTeamChange: (team: string) => void;
+  onFillTeam: () => void;
   onEvaluate: () => void;
   evaluating: boolean;
   latestResult: LineupTestResult | null;
 }
 
 /** 5-player slot picker + evaluate button + result display. */
-function LineupTester({ lineupSlots, weights, onSlotSelect, onSlotRemove, onSlotReplace, onEvaluate, evaluating, latestResult }: LineupTesterProps) {
+function LineupTester({
+  lineupSlots,
+  weights,
+  teamOptions,
+  selectedTeam,
+  teamFillLoading,
+  onSlotSelect,
+  onSlotRemove,
+  onSlotReplace,
+  swapSourceIndex,
+  onSwapStart,
+  onSwapTarget,
+  onSwapCancel,
+  onTeamChange,
+  onFillTeam,
+  onEvaluate,
+  evaluating,
+  latestResult,
+}: LineupTesterProps) {
   const filledCount = lineupSlots.filter((s) => s.player !== null).length;
   const [selectedSynergy, setSelectedSynergy] = useState<string | null>(null);
-  const selectedSynergyLines = selectedSynergy ? synergyCalculationLines(selectedSynergy, lineupSlots, weights) : [];
+  const [selectedCombinationIndex, setSelectedCombinationIndex] = useState(0);
+  const combinations = latestResult?.lineup_combinations ?? [];
+  const selectedCombination = combinations[selectedCombinationIndex] ?? combinations.find((lineup) => lineup.is_starting_lineup) ?? combinations[0];
+  const displaySlots = latestResult?.mode === "rotation"
+    ? lineupSlotsForCombination(lineupSlots, selectedCombination)
+    : lineupSlots.filter((slot) => slot.player !== null).slice(0, 5);
+  const displayResult = latestResult?.mode === "rotation" && selectedCombination
+    ? selectedCombination
+    : latestResult;
+  const selectedSynergyLines = selectedSynergy ? synergyCalculationLines(selectedSynergy, displaySlots, weights) : [];
+
+  useEffect(() => {
+    setSelectedSynergy(null);
+    if (!latestResult?.lineup_combinations?.length) {
+      setSelectedCombinationIndex(0);
+      return;
+    }
+    const startingIndex = latestResult.lineup_combinations.findIndex((lineup) => lineup.is_starting_lineup);
+    setSelectedCombinationIndex(startingIndex >= 0 ? startingIndex : 0);
+  }, [latestResult?.id, latestResult?.lineup_combinations]);
+
+  const selectedPlayerIds = new Set(lineupSlots.map((slot) => slot.player?.id).filter((id): id is string => Boolean(id)));
+  const isRotationResult = latestResult?.mode === "rotation" && combinations.length > 1;
+  const swapActive = swapSourceIndex !== null;
 
   return (
     <div id="cohesion-cal-lineup-tester" className="space-y-4">
-      {/* 5 player slot pickers */}
+      <div id="cohesion-cal-team-fill-controls" className="rounded-md border border-border/70 bg-background/60 p-2">
+        <div id="cohesion-cal-team-fill-row" className="flex items-center gap-2">
+          <label id="cohesion-cal-team-fill-label" htmlFor="cohesion-cal-team-select" className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Team Fill
+          </label>
+          <select
+            id="cohesion-cal-team-select"
+            value={selectedTeam}
+            onChange={(event) => onTeamChange(event.target.value)}
+            className="min-w-0 flex-1 rounded border border-input bg-background px-2 py-1 text-xs"
+          >
+            <option id="cohesion-cal-team-select-empty" value="">Select team...</option>
+            {teamOptions.map((team) => (
+              <option key={team} id={`cohesion-cal-team-option-${team.replace(/[^A-Za-z0-9]+/g, "-").toLowerCase()}`} value={team}>
+                {team}
+              </option>
+            ))}
+          </select>
+          <button
+            id="cohesion-cal-team-fill-btn"
+            type="button"
+            disabled={!selectedTeam || teamFillLoading}
+            onClick={onFillTeam}
+            className={cn(
+              "rounded border px-2 py-1 text-xs font-medium transition-colors cursor-pointer",
+              selectedTeam && !teamFillLoading
+                ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                : "border-border bg-muted text-muted-foreground cursor-not-allowed",
+            )}
+          >
+            {teamFillLoading ? "Filling..." : `Fill Top ${MAX_ROSTER_SLOTS}`}
+          </button>
+        </div>
+        <p id="cohesion-cal-team-fill-help" className="mt-1 text-[9px] text-muted-foreground">
+          Uses active players only, sorted by minutes per game.
+        </p>
+      </div>
+
+      {/* Rotation slot pickers */}
       <div className="space-y-2">
+        {swapActive && (
+          <div id="cohesion-cal-swap-banner" className="flex items-center justify-between rounded-md border border-amber-400/50 bg-amber-100/70 px-2 py-1 text-[10px] text-black">
+            <span id="cohesion-cal-swap-banner-text">
+              Swapping slot {(swapSourceIndex ?? 0) + 1}; click another slot number or name.
+            </span>
+            <button
+              id="cohesion-cal-swap-cancel-btn"
+              type="button"
+              onClick={onSwapCancel}
+              className="rounded border border-amber-500/50 bg-white/70 px-1.5 py-0.5 font-medium hover:bg-white cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
         {lineupSlots.map((slot, i) => (
-          <div key={i} id={`cohesion-cal-lineup-slot-${i}`} className="flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground w-4">{i + 1}.</span>
+          <div
+            key={i}
+            id={`cohesion-cal-lineup-slot-${i}`}
+            className={cn(
+              "flex items-center gap-2 rounded-sm p-2",
+              swapSourceIndex === i && "bg-amber-100/70 ring-1 ring-amber-400/70",
+            )}
+          >
+            <button
+              id={`cohesion-cal-lineup-slot-${i}-number`}
+              type="button"
+              onClick={() => (swapActive ? onSwapTarget(i) : undefined)}
+              disabled={!swapActive}
+              className={cn(
+                "text-[10px] text-muted-foreground w-4 text-left",
+                swapActive && "cursor-pointer hover:text-foreground",
+              )}
+              title={swapActive ? `Swap with slot ${i + 1}` : undefined}
+            >
+              {i + 1}.
+            </button>
             {slot.player && !slot.replacing ? (
               <div id={`cohesion-cal-lineup-player-${i}`} className="flex-1 min-w-0">
                 <div id={`cohesion-cal-lineup-player-${i}-header`} className="flex items-center gap-2">
-                  <span id={`cohesion-cal-lineup-player-${i}-name`} className="text-xs text-foreground font-medium truncate block flex-1">
+                  <button
+                    id={`cohesion-cal-lineup-player-${i}-name`}
+                    type="button"
+                    onClick={() => (swapActive ? onSwapTarget(i) : undefined)}
+                    disabled={!swapActive}
+                    className={cn(
+                      "text-xs text-foreground font-medium truncate block flex-1 text-left",
+                      swapActive && "cursor-pointer hover:underline",
+                    )}
+                    title={swapActive ? `Swap with ${slot.player.name}` : undefined}
+                  >
                     {slot.player.is_legend && <span className="text-amber-500 mr-1" aria-label="Legend">★</span>}
                     {slot.player.name}
-                  </span>
+                  </button>
+                  <button
+                    id={`cohesion-cal-lineup-player-${i}-swap-btn`}
+                    type="button"
+                    onClick={() => (swapSourceIndex === i ? onSwapCancel() : onSwapStart(i))}
+                    className={cn(
+                      "text-[9px] border rounded px-1.5 py-0.5 cursor-pointer",
+                      swapSourceIndex === i
+                        ? "text-black border-amber-500 bg-amber-100"
+                        : "text-muted-foreground hover:text-foreground border-border",
+                    )}
+                  >
+                    {swapSourceIndex === i ? "Cancel" : "Swap"}
+                  </button>
                   <button
                     id={`cohesion-cal-lineup-player-${i}-replace-btn`}
                     type="button"
@@ -1866,6 +2039,7 @@ function LineupTester({ lineupSlots, weights, onSlotSelect, onSlotRemove, onSlot
                   placeholder={slot.player ? `Replace ${slot.player.name}…` : `Slot ${i + 1}…`}
                   className="text-xs"
                   includeLegends
+                  excludedPlayerIds={selectedPlayerIds}
                 />
               </div>
             )}
@@ -1886,46 +2060,171 @@ function LineupTester({ lineupSlots, weights, onSlotSelect, onSlotRemove, onSlot
             : "bg-muted text-muted-foreground border-border cursor-not-allowed",
         )}
       >
-        {evaluating ? "Evaluating…" : `Evaluate Lineup (${filledCount}/5)`}
+        {evaluating ? "Evaluating…" : `Evaluate ${filledCount > 5 ? "Rotation" : "Lineup"} (${filledCount}/${MAX_ROSTER_SLOTS})`}
       </button>
 
       {/* Latest result inline */}
-      {latestResult && (
+      {latestResult && displayResult && (
         <div id="cohesion-cal-lineup-result" className="rounded-lg border border-border bg-card p-3 space-y-3">
+          {latestResult.mode === "rotation" && latestResult.star_rating_breakdown && latestResult.lineup_summary ? (
+            <div id="cohesion-cal-rotation-diagnostics" className="rounded-md border border-border/70 bg-background/60 p-2 space-y-2">
+              <div id="cohesion-cal-rotation-diagnostics-header" className="flex items-center justify-between">
+                <span id="cohesion-cal-rotation-diagnostics-title" className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Rotation Diagnostics
+                </span>
+                <div id="cohesion-cal-rotation-score-comparison" className="flex items-center gap-2">
+                  <span id="cohesion-cal-rotation-score-label" className="text-[9px] text-muted-foreground">actual</span>
+                  <span id="cohesion-cal-rotation-score" className={cn("text-sm font-bold font-mono tabular-nums", subscoreColor((latestResult.star_rating ?? latestResult.cohesion_score) * 2))}>
+                    {(latestResult.star_rating ?? latestResult.cohesion_score).toFixed(2)}
+                  </span>
+                  <span id="cohesion-cal-rotation-theoretical-score-label" className="text-[9px] text-muted-foreground">best-start</span>
+                  <span
+                    id="cohesion-cal-rotation-theoretical-score"
+                    className={cn("text-sm font-bold font-mono tabular-nums", subscoreColor((latestResult.theoretical_best_starting_rating ?? latestResult.star_rating ?? latestResult.cohesion_score) * 2))}
+                    title="Theoretical rotation score if the highest-scoring lineup were the starting lineup."
+                  >
+                    {(latestResult.theoretical_best_starting_rating ?? latestResult.star_rating ?? latestResult.cohesion_score).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              <div id="cohesion-cal-rotation-subscore-grid" className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {[
+                  ["Starting 5", latestResult.star_rating_breakdown.starting_5],
+                  ["Depth", latestResult.star_rating_breakdown.depth],
+                  ["Versatility", latestResult.star_rating_breakdown.archetype_diversity],
+                  ["Floor", latestResult.star_rating_breakdown.floor],
+                ].map(([label, value]) => (
+                  <div key={label} id={`cohesion-cal-rotation-subscore-${String(label).toLowerCase().replace(/\s+/g, "-")}`} className="rounded border border-border/60 bg-card/70 px-2 py-1.5">
+                    <p id={`cohesion-cal-rotation-subscore-${String(label).toLowerCase().replace(/\s+/g, "-")}-label`} className="text-[8px] uppercase tracking-wider text-muted-foreground">{label}</p>
+                    <p id={`cohesion-cal-rotation-subscore-${String(label).toLowerCase().replace(/\s+/g, "-")}-value`} className={cn("text-xs font-mono font-bold tabular-nums", subscoreColor(Number(value) * 10))}>
+                      {(Number(value) * 100).toFixed(0)}%
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div id="cohesion-cal-rotation-summary" className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1 text-[9px] text-muted-foreground">
+                <span id="cohesion-cal-rotation-total-lineups">Total lineups <b id="cohesion-cal-rotation-total-lineups-value" className="text-foreground">{latestResult.lineup_summary.total_lineups}</b></span>
+                <span id="cohesion-cal-rotation-viable-lineups">Viable <b id="cohesion-cal-rotation-viable-lineups-value" className="text-foreground">{latestResult.lineup_summary.viable_lineups}</b></span>
+                <span id="cohesion-cal-rotation-median">Median <b id="cohesion-cal-rotation-median-value" className="text-foreground">{latestResult.lineup_summary.median_score.toFixed(2)}</b></span>
+                <span id="cohesion-cal-rotation-bench-median">Bench median <b id="cohesion-cal-rotation-bench-median-value" className="text-foreground">{(latestResult.lineup_summary.bench_median_score ?? 0).toFixed(2)}</b></span>
+                <span id="cohesion-cal-rotation-best">Best <b id="cohesion-cal-rotation-best-value" className="text-foreground">{(combinations[0]?.cohesion_score ?? 0).toFixed(2)}</b></span>
+                <span id="cohesion-cal-rotation-worst">Worst <b id="cohesion-cal-rotation-worst-value" className="text-foreground">{(combinations[combinations.length - 1]?.cohesion_score ?? 0).toFixed(2)}</b></span>
+                <span id="cohesion-cal-rotation-theoretical-delta">Best-start delta <b id="cohesion-cal-rotation-theoretical-delta-value" className="text-foreground">{((latestResult.theoretical_best_starting_rating ?? latestResult.star_rating ?? latestResult.cohesion_score) - (latestResult.star_rating ?? latestResult.cohesion_score)).toFixed(2)}</b></span>
+                <span id="cohesion-cal-rotation-depth-quality">Depth quality <b id="cohesion-cal-rotation-depth-quality-value" className="text-foreground">{((latestResult.lineup_summary.depth_quality ?? 0) * 100).toFixed(0)}%</b></span>
+                <span id="cohesion-cal-rotation-archetypes">Archetypes <b id="cohesion-cal-rotation-archetypes-value" className="text-foreground">{latestResult.lineup_summary.archetype_labels.join(", ") || "none"}</b></span>
+              </div>
+            </div>
+          ) : (
+            <div id="cohesion-cal-lineup-mode-summary" className="flex items-center justify-between rounded-md border border-border/70 bg-background/60 px-2 py-1.5">
+              <span id="cohesion-cal-lineup-mode-title" className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Single Lineup</span>
+              <span id="cohesion-cal-lineup-mode-count" className="text-[9px] text-muted-foreground">5 selected players</span>
+            </div>
+          )}
+
+          {isRotationResult && (
+            <div id="cohesion-cal-lineup-navigator" className="flex items-center gap-2">
+              <button
+                id="cohesion-cal-lineup-prev"
+                type="button"
+                disabled={selectedCombinationIndex <= 0}
+                onClick={() => setSelectedCombinationIndex((index) => Math.max(0, index - 1))}
+                className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 cursor-pointer"
+                title="Previous ranked lineup"
+              >
+                ←
+              </button>
+              <select
+                id="cohesion-cal-lineup-combination-select"
+                value={selectedCombinationIndex}
+                onChange={(event) => setSelectedCombinationIndex(Number(event.target.value))}
+                className="min-w-0 flex-1 rounded border border-input bg-background px-2 py-1 text-xs"
+              >
+                {combinations.map((lineup, index) => (
+                  <option key={`${lineup.rank}-${lineup.player_ids.join("-")}`} value={index}>
+                    {combinationLabel(lineup)}{lineup.is_starting_lineup ? " · Starting" : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                id="cohesion-cal-lineup-next"
+                type="button"
+                disabled={selectedCombinationIndex >= combinations.length - 1}
+                onClick={() => setSelectedCombinationIndex((index) => Math.min(combinations.length - 1, index + 1))}
+                className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 cursor-pointer"
+                title="Next ranked lineup"
+              >
+                →
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span id="cohesion-cal-current-lineup-score-label" className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Cohesion Score
             </span>
-            <span className={cn("text-lg font-bold font-mono tabular-nums", subscoreColor(latestResult.cohesion_score * 2))}>
-              {latestResult.cohesion_score.toFixed(2)}
+            <span id="cohesion-cal-current-lineup-score-value" className={cn("text-lg font-bold font-mono tabular-nums", subscoreColor(displayResult.cohesion_score * 2))}>
+              {displayResult.cohesion_score.toFixed(2)}
             </span>
           </div>
 
+          {(displayResult.archetype_details?.length ?? 0) > 0 && (
+            <div id="cohesion-cal-lineup-archetypes" className="rounded-md border border-border/70 bg-background/60 p-2 space-y-1.5">
+              <div id="cohesion-cal-lineup-archetypes-header" className="flex items-center justify-between">
+                <span id="cohesion-cal-lineup-archetypes-title" className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Lineup Archetypes
+                </span>
+                <span id="cohesion-cal-lineup-archetypes-method" className="text-[9px] text-muted-foreground">
+                  strongest mapped subscores
+                </span>
+              </div>
+              <div id="cohesion-cal-lineup-archetype-chips" className="flex flex-wrap gap-1">
+                {displayResult.archetype_details?.map((detail, index) => (
+                  <span
+                    key={`${detail.archetype}-${detail.subscore_key ?? index}`}
+                    id={`cohesion-cal-lineup-archetype-${index}`}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[9px]"
+                  >
+                    <span id={`cohesion-cal-lineup-archetype-${index}-label`} className="font-semibold text-foreground">{formatArchetypeLabel(detail.archetype)}</span>
+                    {detail.subscore_key && (
+                      <>
+                        <span id={`cohesion-cal-lineup-archetype-${index}-source-prefix`} className="text-muted-foreground">from</span>
+                        <span id={`cohesion-cal-lineup-archetype-${index}-source`} className="text-muted-foreground">{SUBSCORE_LABELS[detail.subscore_key] ?? detail.subscore_key}</span>
+                        <span id={`cohesion-cal-lineup-archetype-${index}-value`} className={cn("font-mono font-semibold tabular-nums", subscoreColor(detail.subscore_value))}>
+                          {detail.subscore_value.toFixed(1)}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <LineupBellCurveChart
-            lineupSlots={lineupSlots}
+            lineupSlots={displaySlots}
             weights={weights}
-            boostedBellCurves={latestResult.boosted_bell_curves}
-            rpPdBoosts={latestResult.rp_pd_boosts}
+            boostedBellCurves={displayResult.boosted_bell_curves}
+            rpPdBoosts={displayResult.rp_pd_boosts}
           />
 
           {/* Subscores grid */}
           <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-            {Object.entries(latestResult.subscores).map(([key, val]) => (
+            {Object.entries(displayResult.subscores).map(([key, val]) => (
               <CohesionSubscoreEquation
                 key={key}
                 subscoreKey={key}
                 value={val}
-                lineupSlots={lineupSlots}
+                lineupSlots={displaySlots}
                 weights={weights}
               />
             ))}
           </div>
 
           {/* Synergies chips */}
-          {latestResult.synergies_applied.length > 0 && (
+          {displayResult.synergies_applied.length > 0 && (
             <div id="cohesion-cal-lineup-synergies" className="space-y-2">
               <div id="cohesion-cal-lineup-synergy-chips" className="flex flex-wrap gap-1">
-                {latestResult.synergies_applied.map((s, idx) => (
+                {displayResult.synergies_applied.map((s, idx) => (
                   <span
                     key={`${s}-${idx}`}
                     id={`cohesion-cal-lineup-synergy-${s}-${idx}`}
@@ -1975,7 +2274,7 @@ function LineupTester({ lineupSlots, weights, onSlotSelect, onSlotRemove, onSlot
           )}
 
           <CohesionCompositesTable
-            players={lineupSlotsToCompositeRows(lineupSlots)}
+            players={latestResult.mode === "rotation" && latestResult.player_composites ? latestResult.player_composites : lineupSlotsToCompositeRows(displaySlots)}
             idPrefix="cohesion-cal-lineup-result-composites"
           />
         </div>
@@ -2149,6 +2448,9 @@ function ResultsPanel({ testHistory, onLoadLineup }: ResultsPanelProps) {
                   {result.playerNames.slice(0, 3).join(", ")}
                   {result.playerNames.length > 3 && ` +${result.playerNames.length - 3}`}
                 </span>
+                <span className="text-[8px] uppercase tracking-wider text-muted-foreground/60">
+                  {result.mode === "rotation" ? "rotation" : "lineup"}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <span className={cn("text-xs font-mono font-bold tabular-nums", subscoreColor(result.cohesion_score * 2))}>
@@ -2173,7 +2475,7 @@ function ResultsPanel({ testHistory, onLoadLineup }: ResultsPanelProps) {
                   onClick={() => onLoadLineup(result)}
                   className="w-full rounded border border-border bg-background px-2 py-1 text-[9px] font-medium text-foreground hover:bg-muted cursor-pointer"
                 >
-                  Load Lineup
+                  Load {result.mode === "rotation" ? "Rotation" : "Lineup"}
                 </button>
                 {/* Subscores */}
                 <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
@@ -2212,7 +2514,7 @@ function ResultsPanel({ testHistory, onLoadLineup }: ResultsPanelProps) {
 // Main Page
 // ---------------------------------------------------------------------------
 
-const EMPTY_LINEUP: LineupSlot[] = Array.from({ length: 5 }, () => ({
+const EMPTY_LINEUP: LineupSlot[] = Array.from({ length: MAX_ROSTER_SLOTS }, () => ({
   player: null,
   skills: {},
   rawComposites: {},
@@ -2265,6 +2567,27 @@ function lineupSlotsToCompositeRows(lineupSlots: LineupSlot[]): CohesionPlayerCo
     }));
 }
 
+function lineupSlotsForCombination(lineupSlots: LineupSlot[], combination?: CohesionLineupCombination): LineupSlot[] {
+  if (!combination) {
+    return lineupSlots.filter((slot) => slot.player !== null).slice(0, 5);
+  }
+  return combination.player_ids.map((playerId) => {
+    const slot = lineupSlots.find((candidate) => candidate.player?.id === playerId);
+    return slot ?? emptyLineupSlot();
+  });
+}
+
+function combinationLabel(combination: CohesionLineupCombination): string {
+  return `#${combination.rank} · ${combination.cohesion_score.toFixed(2)} · ${combination.player_names.join(" / ")}`;
+}
+
+function formatArchetypeLabel(archetype: string): string {
+  return archetype
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function resultFromStorage(value: unknown): LineupTestResult | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<LineupTestResult>;
@@ -2286,15 +2609,26 @@ function resultFromStorage(value: unknown): LineupTestResult | null {
   return {
     id: candidate.id,
     timestamp: candidate.timestamp,
-    playerIds: candidate.playerIds.map((id) => String(id)).slice(0, 5),
-    playerNames: candidate.playerNames.map((name) => String(name)).slice(0, 5),
+    playerIds: candidate.playerIds.map((id) => String(id)).slice(0, MAX_ROSTER_SLOTS),
+    playerNames: candidate.playerNames.map((name) => String(name)).slice(0, MAX_ROSTER_SLOTS),
     cohesion_score: candidate.cohesion_score,
+    mode: candidate.mode === "rotation" ? "rotation" : "lineup",
     subscores: candidate.subscores as Record<string, number>,
     synergies_applied: candidate.synergies_applied.map((id) => String(id)),
+    archetype_labels: candidate.archetype_labels,
+    archetype_details: candidate.archetype_details,
     accentuation: candidate.accentuation as LineupTestResult["accentuation"],
     accentuation_details: candidate.accentuation_details,
     boosted_bell_curves: candidate.boosted_bell_curves,
     rp_pd_boosts: candidate.rp_pd_boosts,
+    star_rating: candidate.star_rating,
+    star_rating_breakdown: candidate.star_rating_breakdown,
+    theoretical_best_starting_rating: candidate.theoretical_best_starting_rating,
+    theoretical_best_starting_breakdown: candidate.theoretical_best_starting_breakdown,
+    lineup_summary: candidate.lineup_summary,
+    lineup_combinations: candidate.lineup_combinations,
+    player_composites: candidate.player_composites,
+    selectedCombinationIndex: candidate.selectedCombinationIndex,
   };
 }
 
@@ -2312,6 +2646,10 @@ export default function CohesionCalibrationPage() {
   // --- Lineup tester state ---
   const [lineupSlots, setLineupSlots] = useState<LineupSlot[]>(EMPTY_LINEUP);
   const [evaluatingLineup, setEvaluatingLineup] = useState(false);
+  const [teamFillPlayers, setTeamFillPlayers] = useState<PlayerWithSkills[]>([]);
+  const [teamFillLoading, setTeamFillLoading] = useState(false);
+  const [selectedTeam, setSelectedTeam] = useState("");
+  const [swapSourceIndex, setSwapSourceIndex] = useState<number | null>(null);
 
   // --- Results state ---
   const [testHistory, setTestHistory] = useState<LineupTestResult[]>([]);
@@ -2325,6 +2663,14 @@ export default function CohesionCalibrationPage() {
   const latestResult = activeResultId
     ? testHistory.find((result) => result.id === activeResultId) ?? null
     : null;
+  const teamOptions = useMemo(
+    () => Array.from(new Set(
+      teamFillPlayers
+        .filter((player) => !player.is_legend && player.team)
+        .map((player) => player.team as string),
+    )).sort((a, b) => a.localeCompare(b)),
+    [teamFillPlayers],
+  );
 
   // --- Handlers ---
 
@@ -2365,6 +2711,28 @@ export default function CohesionCalibrationPage() {
     loadCohesionWeights();
   }, [loadCohesionWeights]);
 
+  /** Load active player rows for team-fill shortcuts. */
+  useEffect(() => {
+    let cancelled = false;
+
+    listPlayersWithSkills()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setTeamFillPlayers(res.data.filter((player) => !player.is_legend));
+        } else {
+          toast.error(res.error ?? "Failed to load team list");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Failed to load team list");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   /** Restore persisted evaluation history for the right sidebar. */
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -2402,7 +2770,7 @@ export default function CohesionCalibrationPage() {
       try {
         const parsed = JSON.parse(saved);
         if (!Array.isArray(parsed)) return;
-        playerIds = parsed.slice(0, 5).map((id) => (id ? String(id) : null));
+        playerIds = parsed.slice(0, MAX_ROSTER_SLOTS).map((id) => (id ? String(id) : null));
       } catch {
         return;
       }
@@ -2426,8 +2794,8 @@ export default function CohesionCalibrationPage() {
       if (cancelled) return;
       setLineupSlots([
         ...restored,
-        ...Array.from({ length: Math.max(0, 5 - restored.length) }, () => emptyLineupSlot()),
-      ].slice(0, 5));
+        ...Array.from({ length: Math.max(0, MAX_ROSTER_SLOTS - restored.length) }, () => emptyLineupSlot()),
+      ].slice(0, MAX_ROSTER_SLOTS));
     };
 
     restoreLineup();
@@ -2502,6 +2870,11 @@ export default function CohesionCalibrationPage() {
 
   /** Set a player into a lineup slot and fetch their skills. */
   const handleLineupSlotSelect = useCallback(async (index: number, player: Player) => {
+    setSwapSourceIndex(null);
+    if (lineupSlots.some((slot, slotIndex) => slotIndex !== index && slot.player?.id === player.id)) {
+      toast.error("Player already in rotation");
+      return;
+    }
     const hydratedSlot = await hydrateLineupSlot(player);
     if (hydratedSlot) {
       setLineupSlots((prev) =>
@@ -2515,10 +2888,11 @@ export default function CohesionCalibrationPage() {
     } else {
       toast.error("Failed to load player data");
     }
-  }, [hydrateLineupSlot]);
+  }, [hydrateLineupSlot, lineupSlots]);
 
   /** Put an existing slot back into search mode without clearing it yet. */
   const handleLineupSlotReplace = useCallback((index: number) => {
+    setSwapSourceIndex(null);
     setLineupSlots((prev) =>
       prev.map((slot, i) =>
         i === index ? { ...slot, replacing: true } : slot,
@@ -2529,15 +2903,76 @@ export default function CohesionCalibrationPage() {
 
   /** Remove one player from the lineup and clear the active result preview. */
   const handleLineupSlotRemove = useCallback((index: number) => {
+    setSwapSourceIndex(null);
     setLineupSlots((prev) =>
       prev.map((slot, i) => (i === index ? emptyLineupSlot() : slot)),
     );
     setActiveResultId(null);
   }, []);
 
+  /** Swap two rotation slots after the user enters swap mode. */
+  const handleLineupSlotSwapTarget = useCallback((targetIndex: number) => {
+    if (swapSourceIndex === null) return;
+    if (swapSourceIndex === targetIndex) {
+      setSwapSourceIndex(null);
+      return;
+    }
+    setLineupSlots((prev) => {
+      const next = [...prev];
+      const source = next[swapSourceIndex];
+      next[swapSourceIndex] = next[targetIndex];
+      next[targetIndex] = source;
+      return next;
+    });
+    setSwapSourceIndex(null);
+    setActiveResultId(null);
+  }, [swapSourceIndex]);
+
+  /** Fill the rotation with the selected team's top active players by minutes per game. */
+  const handleFillTeamRotation = useCallback(async () => {
+    if (!selectedTeam) return;
+
+    const topPlayers = teamFillPlayers
+      .filter((player) => !player.is_legend && player.team === selectedTeam)
+      .sort((a, b) => (b.minutes_per_game ?? 0) - (a.minutes_per_game ?? 0))
+      .slice(0, MAX_ROSTER_SLOTS);
+
+    if (topPlayers.length < 5) {
+      toast.error(`${selectedTeam} has fewer than 5 active players available`);
+      return;
+    }
+
+    setTeamFillLoading(true);
+    const hydratedSlots = await Promise.all(
+      topPlayers.map(async (player) => {
+        const hydratedSlot = await hydrateLineupSlot({
+          id: player.id,
+          nba_api_id: player.nba_api_id ?? 0,
+          name: player.name,
+          team: player.team,
+          position: player.position,
+          age: player.age,
+          games_played: player.games_played,
+          minutes_per_game: player.minutes_per_game,
+          season: player.season,
+          is_legend: player.is_legend,
+        });
+        return hydratedSlot ?? emptyLineupSlot();
+      }),
+    );
+    setLineupSlots([
+      ...hydratedSlots,
+      ...Array.from({ length: Math.max(0, MAX_ROSTER_SLOTS - hydratedSlots.length) }, () => emptyLineupSlot()),
+    ].slice(0, MAX_ROSTER_SLOTS));
+    setSwapSourceIndex(null);
+    setActiveResultId(null);
+    setTeamFillLoading(false);
+    toast.success(`Filled ${selectedTeam} top ${hydratedSlots.filter((slot) => slot.player).length} by MPG`);
+  }, [hydrateLineupSlot, selectedTeam, teamFillPlayers]);
+
   /** Rehydrate a saved history item into the lineup tester with fresh composite data. */
   const handleLoadTestHistoryLineup = useCallback(async (result: LineupTestResult) => {
-    const restored = await Promise.all(result.playerIds.slice(0, 5).map(async (playerId, index) => {
+    const restored = await Promise.all(result.playerIds.slice(0, MAX_ROSTER_SLOTS).map(async (playerId, index) => {
       const hydratedSlot = await hydrateLineupSlot({
         id: playerId,
         nba_api_id: 0,
@@ -2554,48 +2989,97 @@ export default function CohesionCalibrationPage() {
 
     setLineupSlots([
       ...restored,
-      ...Array.from({ length: Math.max(0, 5 - restored.length) }, () => emptyLineupSlot()),
-    ].slice(0, 5));
+      ...Array.from({ length: Math.max(0, MAX_ROSTER_SLOTS - restored.length) }, () => emptyLineupSlot()),
+    ].slice(0, MAX_ROSTER_SLOTS));
     setActiveResultId(null);
     setCenterTab("lineup");
     toast.success("Lineup loaded");
   }, [hydrateLineupSlot]);
 
-  /** Evaluate the current 5-player lineup. */
+  /** Evaluate the current selected players as a single lineup or full rotation. */
   const handleEvaluateLineup = useCallback(async () => {
-    // Guard against partial lineup even if button disabled state is bypassed
-    if (lineupSlots.some((s) => !s.player)) return;
+    const selectedSlots = lineupSlots.filter((slot) => slot.player !== null);
+    if (selectedSlots.length < 5) return;
 
     setEvaluatingLineup(true);
-    // Build the player array for the API — using name + height
-    const players = lineupSlots.map((slot) => ({
+    const players = selectedSlots.map((slot, index) => ({
       id: slot.player?.id,
       name: slot.player?.name ?? "",
+      slot: index + 1,
       height: slot.height,
       skills: slot.skills,
     }));
 
-    const res = await evaluateLineup(players);
-    if (res.success && res.data) {
+    if (selectedSlots.length === 5) {
+      const res = await evaluateLineup(players);
+      if (!res.success || !res.data) {
+        toast.error(res.error ?? "Evaluation failed");
+        setEvaluatingLineup(false);
+        return;
+      }
       const result: LineupTestResult = {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
-        playerIds: lineupSlots.map((s) => s.player?.id ?? ""),
-        playerNames: lineupSlots.map((s) => s.player?.name ?? "?"),
+        playerIds: selectedSlots.map((s) => s.player?.id ?? ""),
+        playerNames: selectedSlots.map((s) => s.player?.name ?? "?"),
+        mode: "lineup",
         cohesion_score: res.data.cohesion_score,
         subscores: res.data.subscores,
         synergies_applied: res.data.synergies_applied,
+        archetype_labels: res.data.archetype_labels,
+        archetype_details: res.data.archetype_details,
         accentuation: res.data.accentuation,
         accentuation_details: res.data.accentuation_details,
         boosted_bell_curves: res.data.boosted_bell_curves,
         rp_pd_boosts: res.data.rp_pd_boosts,
+        selectedCombinationIndex: 0,
       };
       setTestHistory((prev) => [result, ...prev].slice(0, 20));
       setActiveResultId(result.id);
       toast.success(`Cohesion: ${res.data.cohesion_score.toFixed(2)}`);
-    } else {
-      toast.error(res.error ?? "Lineup evaluation failed");
+      setEvaluatingLineup(false);
+      return;
     }
+
+    const res = await evaluateRotation(players);
+    if (!res.success || !res.data) {
+      toast.error(res.error ?? "Evaluation failed");
+      setEvaluatingLineup(false);
+      return;
+    }
+
+    const selectedCombinationIndex = Math.max(
+      0,
+      res.data.lineup_combinations.findIndex((lineup) => lineup.is_starting_lineup),
+    );
+    const selectedCombination = res.data.lineup_combinations[selectedCombinationIndex] ?? res.data.lineup_combinations[0];
+    const result: LineupTestResult = {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      playerIds: selectedSlots.map((s) => s.player?.id ?? ""),
+      playerNames: selectedSlots.map((s) => s.player?.name ?? "?"),
+      mode: "rotation",
+      cohesion_score: res.data.star_rating,
+      subscores: selectedCombination.subscores,
+      synergies_applied: selectedCombination.synergies_applied,
+      archetype_labels: selectedCombination.archetype_labels,
+      archetype_details: selectedCombination.archetype_details,
+      accentuation: selectedCombination.accentuation,
+      accentuation_details: selectedCombination.accentuation_details,
+      boosted_bell_curves: selectedCombination.boosted_bell_curves,
+      rp_pd_boosts: selectedCombination.rp_pd_boosts,
+      star_rating: res.data.star_rating,
+      star_rating_breakdown: res.data.star_rating_breakdown,
+      theoretical_best_starting_rating: res.data.theoretical_best_starting_rating,
+      theoretical_best_starting_breakdown: res.data.theoretical_best_starting_breakdown,
+      lineup_summary: res.data.lineup_summary,
+      lineup_combinations: res.data.lineup_combinations,
+      player_composites: res.data.player_composites,
+      selectedCombinationIndex,
+    };
+    setTestHistory((prev) => [result, ...prev].slice(0, 20));
+    setActiveResultId(result.id);
+    toast.success(`Rotation: ${res.data.star_rating.toFixed(2)}`);
     setEvaluatingLineup(false);
   }, [lineupSlots]);
 
@@ -2694,12 +3178,12 @@ export default function CohesionCalibrationPage() {
                         handleLineupSlotSelect(emptyIdx, minimalPlayer);
                         setCenterTab("lineup");
                       } else {
-                        toast.error("All lineup slots filled");
+                        toast.error("All rotation slots filled");
                       }
                     }}
                     className="flex-1 text-[10px] font-medium py-1.5 rounded-md border border-border hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
                   >
-                    Set in Lineup
+                    Set in Rotation
                   </button>
                 </div>
 
@@ -2753,9 +3237,18 @@ export default function CohesionCalibrationPage() {
                 <LineupTester
                   lineupSlots={lineupSlots}
                   weights={cohesionWeights}
+                  teamOptions={teamOptions}
+                  selectedTeam={selectedTeam}
+                  teamFillLoading={teamFillLoading}
                   onSlotSelect={handleLineupSlotSelect}
                   onSlotRemove={handleLineupSlotRemove}
                   onSlotReplace={handleLineupSlotReplace}
+                  swapSourceIndex={swapSourceIndex}
+                  onSwapStart={setSwapSourceIndex}
+                  onSwapTarget={handleLineupSlotSwapTarget}
+                  onSwapCancel={() => setSwapSourceIndex(null)}
+                  onTeamChange={setSelectedTeam}
+                  onFillTeam={handleFillTeamRotation}
                   onEvaluate={handleEvaluateLineup}
                   evaluating={evaluatingLineup}
                   latestResult={latestResult}

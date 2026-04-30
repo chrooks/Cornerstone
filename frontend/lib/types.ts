@@ -559,6 +559,12 @@ export interface CohesionLineupData {
   cohesion_score: number;
   subscores: Record<string, number>;
   synergies_applied: string[];
+  archetype_labels?: string[];
+  archetype_details?: {
+    archetype: string;
+    subscore_key: string | null;
+    subscore_value: number;
+  }[];
   accentuation: {
     strength_amplification: number;
     weakness_coverage: number;
@@ -632,11 +638,32 @@ export interface CohesionRosterEvaluation {
     archetype_diversity: number;
     floor: number;
   };
+  theoretical_best_starting_rating?: number;
+  theoretical_best_starting_breakdown?: {
+    starting_5: number;
+    depth: number;
+    archetype_diversity: number;
+    floor: number;
+  };
   starting_lineup: CohesionLineupData;
   player_composites: CohesionPlayerComposites[];
   lineup_summary: CohesionLineupSummary;
   notes: CohesionNote[];
   team_description: string | null;
+}
+
+/** One ranked five-player combination returned by calibration rotation diagnostics. */
+export interface CohesionLineupCombination extends CohesionLineupData {
+  rank: number;
+  combination_index: number;
+  player_ids: string[];
+  player_names: string[];
+  is_starting_lineup: boolean;
+}
+
+/** Full deterministic result from POST /api/cohesion/rotation/evaluate. */
+export interface CohesionRotationEvaluation extends CohesionRosterEvaluation {
+  lineup_combinations: CohesionLineupCombination[];
 }
 
 /** Request payload for POST /api/builder/evaluate */

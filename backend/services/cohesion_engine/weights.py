@@ -41,7 +41,7 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "transition_driver": 0.3,
     "transition_spot_up": 0.2,
     "perimeter_defense_versatile_defender": 0.7,
-    "interior_defense_versatile_defender": 0.5,
+    "interior_defense_versatile_defender": 0.25,
     "interior_defense_rebounder": 0.3,
 }
 

@@ -8,6 +8,7 @@ Endpoints:
   GET  /player/<player_id>/composites — Single player's base composites
   GET  /bell-curve/<player_id>        — Bell curve params + pre-computed curve array
   POST /lineup/evaluate               — Run cohesion evaluation on a 5-player lineup
+  POST /rotation/evaluate             — Run rotation evaluation with ranked lineup diagnostics
   GET  /weights                       — All engine weight constants
   PUT  /weights                       — Apply partial weight overrides (in-memory)
 """
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from itertools import combinations
 from typing import Any
 
 from flask import Blueprint, jsonify, request
@@ -30,7 +32,11 @@ from services.cohesion_engine.bell_curve import (
 from services.cohesion_engine.cohesion import evaluate_lineup
 from services.cohesion_engine.composites import compute_player_composites, compute_raw_composites
 from services.cohesion_engine.composites import ensure_distributions
-from services.cohesion_engine.types import PlayerComposites
+from services.cohesion_engine import evaluate_roster
+from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
+from services.cohesion_engine.types import LineupCohesion, PlayerComposites
+from services.cohesion_engine.weights import ROSTER_ROLLUP_WEIGHTS, STAR_RATING_MAX
+from services.rotation_config import MAX_ROTATION_SLOTS
 from services.cohesion_engine import weights as weights_module
 from services.players_service import CURRENT_SEASON
 from services.supabase_client import get_supabase
@@ -241,6 +247,226 @@ def _rp_pd_boost_details(
     return details
 
 
+def _player_key(player: dict[str, Any], index: int) -> str:
+    """Return a stable identity used for duplicate checks and lineup matching."""
+    return str(player.get("id") or player.get("player_id") or player.get("name") or f"player-{index}")
+
+
+def _compact_rotation_players(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop empty placeholders and compact selected players by submitted slot order."""
+    selected = [player for player in players if isinstance(player, dict) and player]
+    return [
+        {
+            **player,
+            "slot": index + 1,
+            "is_cornerstone": False,
+        }
+        for index, (_original_index, player) in enumerate(
+            sorted(
+                enumerate(selected),
+                key=lambda item: (item[1].get("slot", 999), item[0]),
+            )
+        )
+    ]
+
+
+def _validate_rotation_players(players: Any) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Validate calibration rotation input and return compacted players."""
+    if not isinstance(players, list):
+        return None, "'players' must be an array"
+    if len(players) > MAX_ROTATION_SLOTS:
+        return None, f"'players' must contain at most {MAX_ROTATION_SLOTS} entries"
+    for index, player in enumerate(players):
+        if player and not isinstance(player, dict):
+            return None, f"Player {index} must be an object"
+
+    compacted = _compact_rotation_players(players)
+    if len(compacted) < _MAX_LINEUP_SIZE:
+        return None, f"At least {_MAX_LINEUP_SIZE} players required"
+    if len(compacted) > MAX_ROTATION_SLOTS:
+        return None, f"At most {MAX_ROTATION_SLOTS} selected players allowed"
+
+    seen: set[str] = set()
+    for index, player in enumerate(compacted):
+        if not isinstance(player, dict):
+            return None, f"Player {index} must be an object"
+        name = player.get("name")
+        if not isinstance(name, str) or not name:
+            return None, f"Player {index} must have a non-empty 'name'"
+        if len(name) > _MAX_NAME_LENGTH:
+            return None, f"Player {index} name too long"
+        skills = player.get("skills")
+        if skills is not None and not isinstance(skills, dict):
+            return None, f"Player {index} 'skills' must be an object"
+        if isinstance(skills, dict) and len(skills) > _MAX_SKILLS:
+            return None, f"Player {index} has too many skills"
+
+        key = _player_key(player, index)
+        if key in seen:
+            return None, "Duplicate players are not allowed"
+        seen.add(key)
+
+    return compacted, None
+
+
+def _resolve_player_skills(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Hydrate real skill profiles when callers provide only lightweight metadata."""
+    resolved_players: list[dict[str, Any]] = []
+    for player in players:
+        player_id = player.get("id") or player.get("player_id")
+        skills = player.get("skills") or {}
+        if player_id and not skills:
+            fetched = _fetch_player_with_skills(str(player_id))
+            if fetched:
+                resolved_players.append({
+                    **player,
+                    "height": player.get("height") or fetched.get("height"),
+                    "skills": fetched["skills"],
+                })
+                continue
+        resolved_players.append(player)
+    return resolved_players
+
+
+def _boosted_bell_curves_payload(lineup_players: list[dict[str, Any]]) -> tuple[list[dict[str, Any] | None], list[dict[str, Any]]]:
+    """Compute the boosted bell curves used by a specific lineup evaluation."""
+    boosted_lineup = apply_rp_pd_boost(lineup_players)
+    boosted_bell_curves: list[dict[str, Any] | None] = []
+    for player in boosted_lineup:
+        height_inches = parse_height_inches(player.get("height"))
+        if height_inches is None:
+            boosted_bell_curves.append(None)
+            continue
+        params = compute_bell_params(player.get("skills", {}), height_inches)
+        boosted_bell_curves.append({
+            "amplitude": params["amplitude"],
+            "peak": params["peak_center"],
+            "range_down": params["range_down"],
+            "range_up": params["range_up"],
+            "flat_down": params["flat_top_down"],
+            "flat_up": params["flat_top_up"],
+        })
+    return boosted_bell_curves, _rp_pd_boost_details(lineup_players, boosted_lineup)
+
+
+def _serialize_lineup_result(lineup: LineupCohesion, lineup_players: list[dict[str, Any]]) -> dict[str, Any]:
+    """Serialize one five-player lineup result for calibration diagnostics."""
+    boosted_bell_curves, rp_pd_boosts = _boosted_bell_curves_payload(lineup_players)
+    archetype_details = _lineup_archetype_details(lineup)
+    return {
+        "cohesion_score": lineup.score,
+        "subscores": lineup.subscores,
+        "synergies_applied": list(lineup.synergies_applied),
+        "accentuation": {
+            "strength_amplification": lineup.accentuation_strength,
+            "weakness_coverage": lineup.accentuation_weakness,
+        },
+        "accentuation_details": lineup.accentuation_details,
+        "boosted_bell_curves": boosted_bell_curves,
+        "rp_pd_boosts": rp_pd_boosts,
+        "archetype_labels": [detail["archetype"] for detail in archetype_details],
+        "archetype_details": archetype_details,
+    }
+
+
+def _lineup_archetype_details(lineup: LineupCohesion) -> list[dict[str, Any]]:
+    """
+    Explain the 2-3 lineup archetypes selected from strongest mapped subscores.
+
+    This mirrors services.cohesion_engine.roster._archetypes_for_lineup while
+    preserving the triggering subscore/value for calibration diagnostics.
+    """
+    details: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for subscore, value in sorted(lineup.subscores.items(), key=lambda item: item[1], reverse=True):
+        archetype = SUBSCORE_ARCHETYPES.get(subscore)
+        if not archetype or archetype in seen:
+            continue
+        details.append({
+            "archetype": archetype,
+            "subscore_key": subscore,
+            "subscore_value": value,
+        })
+        seen.add(archetype)
+        if len(details) >= 3:
+            break
+
+    return details or ([{
+        "archetype": "balanced",
+        "subscore_key": None,
+        "subscore_value": 0.0,
+    }] if lineup.subscores else [])
+
+
+def _serialize_player_composites(player: PlayerComposites) -> dict[str, Any]:
+    """Serialize backend-scored player composites in the builder-compatible shape."""
+    return {
+        "player_id": player.player_id,
+        "name": player.name,
+        "base": {
+            "spacing": player.spacing,
+            "finishing": player.finishing,
+            "paint_touch": player.paint_touch,
+            "anchor": player.anchor,
+            "post_game": player.post_game,
+            "pnr_screener": player.pnr_screener,
+            "off_ball_impact": player.off_ball_impact,
+            "shot_creation": player.shot_creation,
+            "rebounding": player.rebounding,
+            "transition": player.transition,
+            "perimeter_defense": player.perimeter_defense,
+            "interior_defense": player.interior_defense,
+        },
+        "bell_curve": {
+            "amplitude": player.bell_amplitude,
+            "peak": player.bell_peak,
+            "range_down": player.bell_range_down,
+            "range_up": player.bell_range_up,
+            "flat_down": player.bell_flat_down,
+            "flat_up": player.bell_flat_up,
+        },
+    }
+
+
+def _ranked_lineup_combinations(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Evaluate, sort, and serialize every five-player combination."""
+    starting_keys = tuple(_player_key(player, index) for index, player in enumerate(players[:_MAX_LINEUP_SIZE]))
+    evaluated: list[dict[str, Any]] = []
+    for combo_index, lineup_players_tuple in enumerate(combinations(players, _MAX_LINEUP_SIZE)):
+        lineup_players = list(lineup_players_tuple)
+        lineup = evaluate_lineup(lineup_players)
+        lineup_keys = tuple(_player_key(player, index) for index, player in enumerate(lineup_players))
+        evaluated.append({
+            **_serialize_lineup_result(lineup, lineup_players),
+            "combination_index": combo_index,
+            "player_ids": [_player_key(player, index) for index, player in enumerate(lineup_players)],
+            "player_names": [str(player.get("name") or _player_key(player, index)) for index, player in enumerate(lineup_players)],
+            "is_starting_lineup": lineup_keys == starting_keys,
+        })
+
+    evaluated.sort(key=lambda item: (-item["cohesion_score"], item["combination_index"]))
+    for rank, item in enumerate(evaluated, start=1):
+        item["rank"] = rank
+    return evaluated
+
+
+def _theoretical_best_starting_rating(
+    actual_breakdown: dict[str, float],
+    lineup_combinations: list[dict[str, Any]],
+) -> tuple[float, dict[str, float]]:
+    """Return the rotation rating if the best lineup occupied the starting-five factor."""
+    best_score = lineup_combinations[0]["cohesion_score"] if lineup_combinations else 0.0
+    breakdown = {
+        **actual_breakdown,
+        "starting_5": round(min(1.0, best_score / STAR_RATING_MAX), 3),
+    }
+    weighted = sum(
+        ROSTER_ROLLUP_WEIGHTS[key] * breakdown.get(key, 0.0)
+        for key in ROSTER_ROLLUP_WEIGHTS
+    )
+    return round(STAR_RATING_MAX * weighted, 2), breakdown
+
+
 # ---------------------------------------------------------------------------
 # GET /player/<player_id>/composites
 # ---------------------------------------------------------------------------
@@ -354,6 +580,67 @@ _MAX_NAME_LENGTH = 100
 _MAX_SKILLS = 25
 
 
+@cohesion_calibration_bp.route("/rotation/evaluate", methods=["POST"])
+@require_admin
+def evaluate_rotation_endpoint() -> tuple:
+    """
+    Evaluate a calibration rotation and return rotation-level plus per-lineup diagnostics.
+
+    Request body:
+      {
+        "players": [
+          { "id": "...", "name": "...", "slot": 1, "height": "6-7", "skills": { ... } },
+          ...
+        ]
+      }
+    """
+    body = request.get_json(silent=True) or {}
+    ensure_distributions(CURRENT_SEASON)
+
+    compacted_players, error = _validate_rotation_players(body.get("players"))
+    if error:
+        return jsonify({"success": False, "data": None, "error": error}), 400
+    assert compacted_players is not None
+
+    resolved_players = _resolve_player_skills(compacted_players)
+
+    try:
+        rotation = evaluate_roster(resolved_players, mode="live")
+        lineup_combinations = _ranked_lineup_combinations(resolved_players)
+    except Exception:
+        logger.exception("Error evaluating rotation")
+        return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500
+
+    starting_lineup = next(
+        (lineup for lineup in lineup_combinations if lineup["is_starting_lineup"]),
+        lineup_combinations[0],
+    )
+    theoretical_rating, theoretical_breakdown = _theoretical_best_starting_rating(
+        rotation.star_breakdown,
+        lineup_combinations,
+    )
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "star_rating": rotation.star_rating,
+            "star_rating_breakdown": rotation.star_breakdown,
+            "theoretical_best_starting_rating": theoretical_rating,
+            "theoretical_best_starting_breakdown": theoretical_breakdown,
+            "starting_lineup": starting_lineup,
+            "player_composites": [
+                _serialize_player_composites(player)
+                for player in rotation.player_composites
+            ],
+            "lineup_summary": rotation.lineup_summary,
+            "lineup_combinations": lineup_combinations,
+            "notes": [dataclasses.asdict(note) for note in rotation.notes],
+            "team_description": None,
+        },
+        "error": None,
+    }), 200
+
+
 @cohesion_calibration_bp.route("/lineup/evaluate", methods=["POST"])
 @require_admin
 def evaluate_lineup_endpoint() -> tuple:
@@ -417,40 +704,11 @@ def evaluate_lineup_endpoint() -> tuple:
         logger.exception("Error evaluating lineup")
         return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500
 
-    # Compute RP-PD boosted bell curves so the frontend chart reflects the
-    # same defensive picture the engine actually uses for scoring.
-    boosted_lineup = apply_rp_pd_boost(resolved_players)
-    rp_pd_boosts = _rp_pd_boost_details(resolved_players, boosted_lineup)
-    boosted_bell_curves: list[dict[str, Any] | None] = []
-    for player in boosted_lineup:
-        height_inches = parse_height_inches(player.get("height"))
-        if height_inches is None:
-            boosted_bell_curves.append(None)
-            continue
-        params = compute_bell_params(player.get("skills", {}), height_inches)
-        boosted_bell_curves.append({
-            "amplitude": params["amplitude"],
-            "peak": params["peak_center"],
-            "range_down": params["range_down"],
-            "range_up": params["range_up"],
-            "flat_down": params["flat_top_down"],
-            "flat_up": params["flat_top_up"],
-        })
+    data = _serialize_lineup_result(result, resolved_players)
 
     return jsonify({
         "success": True,
-        "data": {
-            "cohesion_score": result.score,
-            "subscores": result.subscores,
-            "synergies_applied": list(result.synergies_applied),
-            "accentuation": {
-                "strength_amplification": result.accentuation_strength,
-                "weakness_coverage": result.accentuation_weakness,
-            },
-            "accentuation_details": result.accentuation_details,
-            "boosted_bell_curves": boosted_bell_curves,
-            "rp_pd_boosts": rp_pd_boosts,
-        },
+        "data": data,
         "error": None,
     }), 200
 

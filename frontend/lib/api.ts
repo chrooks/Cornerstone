@@ -29,6 +29,7 @@ import type {
   EvaluatePayload,
   RosterEvaluation,
   CohesionRosterEvaluation,
+  CohesionRotationEvaluation,
 } from "./types";
 
 // Points to the Flask dev server by default; override via env var in production.
@@ -613,6 +614,8 @@ export async function evaluateLineup(
   cohesion_score: number;
   subscores: Record<string, number>;
   synergies_applied: string[];
+  archetype_labels?: string[];
+  archetype_details?: { archetype: string; subscore_key: string | null; subscore_value: number }[];
   accentuation: { strength_amplification: number; weakness_coverage: number };
   accentuation_details?: {
     strength?: { score: number; credit: number; checks: number; terms: Record<string, unknown>[] };
@@ -633,6 +636,16 @@ export async function evaluateLineup(
   }[];
 }>> {
   return apiFetch("/api/cohesion/lineup/evaluate", {
+    method: "POST",
+    body: JSON.stringify({ players }),
+  });
+}
+
+/** Evaluate a 5+ player calibration rotation via the deterministic cohesion engine. */
+export async function evaluateRotation(
+  players: { id?: string; name: string; slot: number; height: string | null; skills: Record<string, string> }[],
+): Promise<ApiResponse<CohesionRotationEvaluation>> {
+  return apiFetch<CohesionRotationEvaluation>("/api/cohesion/rotation/evaluate", {
     method: "POST",
     body: JSON.stringify({ players }),
   });
