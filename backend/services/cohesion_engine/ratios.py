@@ -52,7 +52,7 @@ def spacing_creation_ratio(spacing: float, shot_creation: float) -> float:
 
 
 def spacing_paint_touch_ratio(spacing: float, paint_touch: float) -> float:
-    """Score inside-out balance, penalizing paint touch without spacing harder."""
+    """Score inside-out balance, penalizing rim pressure without spacing harder."""
     return ratio_score(spacing, paint_touch, asymmetric=True)
 
 

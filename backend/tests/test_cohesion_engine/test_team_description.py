@@ -128,7 +128,7 @@ def test_build_prompt_uses_composites_subscores_archetypes_and_notes():
     prompt = team_description._build_prompt(evaluation, players)
 
     assert "Ada Ace (starter): spacing (elite), shot creation (elite)" in prompt
-    assert "Blake Board (bench): finishing (strong), paint touch (strong), anchor (strong)" in prompt
+    assert "Blake Board (bench): finishing (strong), rim pressure (strong), anchor (strong)" in prompt
     assert "Roster archetypes: offensive, defensive" in prompt
     assert "Starting-lineup synergies: OFF-28, DEF-12" in prompt
     assert "spacing-to-creation balance: elite" in prompt

@@ -90,7 +90,7 @@ def compute_raw_composites(skills: dict[str, str | float]) -> dict[str, float]:
         + c["interior_defense_rebounder"] * tier_value(skills, "rebounder")
     )
 
-    # Step 2: paint touch uses raw finishing as an amplifier.
+    # Step 2: rim pressure uses raw finishing as an amplifier.
     finishing_mult = max(1.0, 1.0 + c["paint_touch_finishing_scale"] * raw_finishing)
     raw_paint_touch = finishing_mult * (
         tier_value(skills, "driver")
@@ -139,7 +139,7 @@ def compute_raw_composites(skills: dict[str, str | float]) -> dict[str, float]:
         + tier_value(skills, "passer") * c["off_ball_passer"]
     )
 
-    # Step 5: shot creation references raw spacing and raw paint touch.
+    # Step 5: shot creation references raw spacing and raw rim pressure.
     raw_shot_creation = (
         tier_value(skills, "pnr_ball_handler")
         + tier_value(skills, "passer")

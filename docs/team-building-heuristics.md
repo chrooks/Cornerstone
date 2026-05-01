@@ -42,8 +42,8 @@
 - Cutters need both good Passers and adequate spacing to be effective. Without a passer to find them and space to cut into, they are easily neutralized. Their value is also highest when paired with players who draw defensive attention (Drivers, Post Players, Iso Scorers) — the more the defense is occupied, the more cutting lanes open up.
 - Vertical Spacers need a Passer or Driver capable of throwing the lob to fully activate their value. Without a reliable lob thrower, a Vertical Spacer is reduced to a static finisher and loses much of their lane-opening impact.
 
-### Paint Touches
-- Every team needs a reliable means of getting paint touches, whether through Driving, a Vertical Spacer, or playing in the Post.
+### Rim Pressure
+- Every team needs a reliable means of pressuring the rim, whether through Driving, a Vertical Spacer, or playing in the Post.
 - The value of a good Driver is maximized by their ability to score (Crafty Finishing, High Flyer) and pass. The more drivers the merrier, as long as spacing permits.
 - Good Low Post players need spacing to work effectively. The best are good Crafty Finishers, Passers, and/or Offensive Rebounders.
 - Mid-Post players also need spacing, although slightly less than Low-Post Players and Drivers. The best can Pass, Finish (Crafty Finisher or High Flyer), and/or Shoot Off-Dribble.

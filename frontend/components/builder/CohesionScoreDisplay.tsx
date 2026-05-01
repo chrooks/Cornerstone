@@ -151,10 +151,10 @@ const BREAKDOWN_DESCRIPTIONS: Record<string, string> = {
 const SUBSCORE_DESCRIPTIONS: Record<string, string> = {
   spacing_creation_ratio: "How well lineup spacing and shot creation balance each other.",
   creation_offball_ratio: "Whether on-ball creation has enough off-ball impact around it.",
-  spacing_paint_touch_ratio: "Whether rim pressure and paint touches have enough spacing support.",
+  spacing_paint_touch_ratio: "Whether rim pressure has enough spacing support.",
   rebound_transition_ratio: "Whether rebounding and transition play support each other.",
   rebounding_spacing_deficit: "Whether spacing is adequate or rebounding can offset a spacing deficit.",
-  paint_touch_total: "Lineup-wide ability to pressure the rim and create paint touches.",
+  paint_touch_total: "Lineup-wide ability to pressure the rim.",
   post_game_total: "Top post option, secondary post option, and post depth blended together.",
   pnr_pairing: "How well pick-and-roll handlers and screeners match in both quality and balance.",
   anchor_total: "Primary defensive anchor quality with secondary support and depth.",
@@ -236,7 +236,7 @@ const SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: string 
     entries: [
       { key: "spacing_creation_ratio", label: "Spacing / Creation" },
       { key: "creation_offball_ratio", label: "Creation / Off-Ball" },
-      { key: "spacing_paint_touch_ratio", label: "Spacing / Paint Touch" },
+      { key: "spacing_paint_touch_ratio", label: "Spacing / Rim Pressure" },
       { key: "rebound_transition_ratio", label: "Rebound / Transition" },
       { key: "rebounding_spacing_deficit", label: "Spacing Support" },
     ],
@@ -244,7 +244,7 @@ const SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: string 
   {
     heading: "Lineup Qualities",
     entries: [
-      { key: "paint_touch_total", label: "Paint Touch" },
+      { key: "paint_touch_total", label: "Rim Pressure" },
       { key: "post_game_total", label: "Post Game" },
       { key: "pnr_pairing", label: "PnR Pairing" },
       { key: "anchor_total", label: "Anchor" },

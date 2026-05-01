@@ -83,7 +83,7 @@ const BELL_HEIGHTS = Array.from({ length: BELL_MAX_IN - BELL_MIN_IN + 1 }, (_, i
 const COMPOSITE_COLS: { key: keyof CohesionPlayerComposites["base"]; abbr: string; label: string }[] = [
   { key: "spacing", abbr: "Spc", label: "Spacing" },
   { key: "finishing", abbr: "Fin", label: "Finishing" },
-  { key: "paint_touch", abbr: "PT", label: "Paint Touch" },
+  { key: "paint_touch", abbr: "RP", label: "Rim Pressure" },
   { key: "anchor", abbr: "Anc", label: "Anchor" },
   { key: "post_game", abbr: "Post", label: "Post Game" },
   { key: "pnr_screener", abbr: "PnR", label: "PnR Screener" },
@@ -98,10 +98,10 @@ const COMPOSITE_COLS: { key: keyof CohesionPlayerComposites["base"]; abbr: strin
 export const COHESION_SUBSCORE_LABELS: Record<string, string> = {
   spacing_creation_ratio: "Spacing / Creation",
   creation_offball_ratio: "Creation / Off-Ball",
-  spacing_paint_touch_ratio: "Spacing / Paint Touch",
+  spacing_paint_touch_ratio: "Spacing / Rim Pressure",
   rebound_transition_ratio: "Rebound / Transition",
   rebounding_spacing_deficit: "Spacing Support",
-  paint_touch_total: "Paint Touch",
+  paint_touch_total: "Rim Pressure",
   post_game_total: "Post Game",
   pnr_pairing: "PnR Pairing",
   pnr_screener_total: "PnR Screener",
@@ -121,7 +121,7 @@ export const COHESION_SUBSCORE_GROUPS: { heading: string; entries: { key: string
     entries: [
       { key: "spacing_creation_ratio", label: "Spacing / Creation" },
       { key: "creation_offball_ratio", label: "Creation / Off-Ball" },
-      { key: "spacing_paint_touch_ratio", label: "Spacing / Paint Touch" },
+      { key: "spacing_paint_touch_ratio", label: "Spacing / Rim Pressure" },
       { key: "rebound_transition_ratio", label: "Rebound / Transition" },
       { key: "rebounding_spacing_deficit", label: "Spacing Support" },
     ],
@@ -129,7 +129,7 @@ export const COHESION_SUBSCORE_GROUPS: { heading: string; entries: { key: string
   {
     heading: "Lineup Qualities",
     entries: [
-      { key: "paint_touch_total", label: "Paint Touch" },
+      { key: "paint_touch_total", label: "Rim Pressure" },
       { key: "post_game_total", label: "Post Game" },
       { key: "pnr_pairing", label: "PnR Pairing" },
       { key: "anchor_total", label: "Anchor" },

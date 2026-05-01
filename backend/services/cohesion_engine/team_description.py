@@ -42,8 +42,8 @@ _COMPOSITE_FIELDS = (
 
 _SUBSCORE_LABELS: dict[str, str] = {
     "spacing_creation_ratio": "spacing-to-creation balance",
-    "spacing_paint_touch_ratio": "spacing-to-paint-touch balance",
-    "paint_touch_total": "paint pressure",
+    "spacing_paint_touch_ratio": "spacing-to-rim-pressure balance",
+    "paint_touch_total": "rim pressure",
     "post_game_total": "post creation",
     "pnr_screener_total": "screen-and-roll pressure",
     "pnr_pairing": "pick-and-roll pairing",
@@ -59,6 +59,10 @@ _SUBSCORE_LABELS: dict[str, str] = {
     "defensive_gaps": "defensive gap management",
 }
 
+_COMPOSITE_LABELS: dict[str, str] = {
+    "paint_touch": "rim pressure",
+}
+
 
 def _get_anthropic_client() -> anthropic.Anthropic:
     """Return an Anthropic client, raising clearly if API key is missing."""
@@ -70,6 +74,8 @@ def _get_anthropic_client() -> anthropic.Anthropic:
 
 def _label_key(key: str) -> str:
     """Convert an internal snake_case key into memo-friendly text."""
+    if key in _COMPOSITE_LABELS:
+        return _COMPOSITE_LABELS[key]
     return key.replace("_", " ")
 
 

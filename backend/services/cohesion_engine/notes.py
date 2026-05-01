@@ -35,7 +35,7 @@ DEFENSE_GAP_CATEGORY = "defense_gap"
 SUGGESTION_TEMPLATES: dict[str, str] = {
     "spacing": "Add a spot-up or movement shooter to open the floor.",
     "shot_creation": "Add a ball handler or isolation scorer to generate offense.",
-    "paint_touch": "Add a driver or interior scorer to attack the paint.",
+    "paint_touch": "Add a driver or interior scorer to pressure the rim.",
     "post_game": "Add a low-post or mid-post scorer.",
     "pnr_screener": "Add a PnR roll man or screen setter.",
     "anchor": "Add a rim protector to anchor the paint.",
@@ -52,7 +52,7 @@ SUGGESTION_TEMPLATES: dict[str, str] = {
 COMPOSITE_LABELS: dict[str, str] = {
     "spacing": "spacing",
     "shot_creation": "shot creation",
-    "paint_touch": "paint touch",
+    "paint_touch": "rim pressure",
     "post_game": "post play",
     "pnr_screener": "screen-and-roll play",
     "anchor": "paint defense",
@@ -209,7 +209,7 @@ def _mode_a_strengths(players: list[dict[str, Any]], composites: list[PlayerComp
             text_by_category = {
                 "spacing": f"{strongest.name}'s shooting creates elite floor spacing.",
                 "shot_creation": f"{strongest.name} is an elite shot creator.",
-                "paint_touch": f"{strongest.name} dominates inside.",
+                "paint_touch": f"{strongest.name} creates elite rim pressure.",
                 "anchor": f"{strongest.name} anchors the paint.",
                 "transition": f"{strongest.name} is a transition force.",
                 "perimeter_defense": f"{strongest.name} applies elite perimeter pressure.",
@@ -342,7 +342,7 @@ def _mode_a_weaknesses(players: list[dict[str, Any]], composites: list[PlayerCom
             text_by_category = {
                 "spacing": "No floor spacing - defenders can collapse freely.",
                 "shot_creation": "No primary shot creator on the roster.",
-                "paint_touch": "No interior scoring presence.",
+                "paint_touch": "No rim pressure.",
                 "anchor": "No rim protection or paint control.",
                 "rebounding": "Rebounding is nonexistent.",
                 "transition": "No transition game.",

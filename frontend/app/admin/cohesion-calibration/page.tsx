@@ -137,7 +137,7 @@ type CenterTab = "bell_curves" | "lineup" | "weights";
 const COMPOSITE_LABELS: { key: string; label: string }[] = [
   { key: "spacing", label: "Spacing" },
   { key: "finishing", label: "Finishing" },
-  { key: "paint_touch", label: "Paint Touch" },
+  { key: "paint_touch", label: "Rim Pressure" },
   { key: "anchor", label: "Anchor" },
   { key: "post_game", label: "Post Game" },
   { key: "pnr_screener", label: "PnR Screener" },
@@ -171,11 +171,11 @@ const TEST_HISTORY_STORAGE_KEY = "cohesion-calibration-test-history";
 const SUBSCORE_LABELS: Record<string, string> = {
   spacing_creation_ratio: "Spacing / Creation",
   creation_offball_ratio: "Creation / Off-Ball",
-  spacing_paint_touch_ratio: "Spacing / Paint Touch",
+  spacing_paint_touch_ratio: "Spacing / Rim Pressure",
   rebound_transition_ratio: "Rebound / Transition",
   rebounding_spacing_deficit: "Spacing Support",
   pnr_pairing: "PnR Pairing",
-  paint_touch_total: "Paint Touch",
+  paint_touch_total: "Rim Pressure",
   post_game_total: "Post Game",
   pnr_screener_total: "PnR Screener",
   anchor_total: "Anchor",
@@ -199,7 +199,7 @@ const TIER_VALUES: Record<string, number> = {
 const FORMULA_LABELS: Record<string, string> = {
   spacing: "Spacing",
   finishing: "Finishing",
-  paint_touch: "Paint Touch",
+  paint_touch: "Rim Pressure",
   anchor: "Anchor",
   post_game: "Post Game",
   pnr_screener: "PnR Screener",
