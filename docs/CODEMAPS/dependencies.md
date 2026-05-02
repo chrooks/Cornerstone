@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-22 | Scanned: requirements.txt + package.json | Token estimate: ~780 -->
+<!-- Generated: 2026-05-02 | Scanned: requirements.txt + package.json | Token estimate: ~780 -->
 
 # External Dependencies & Integrations
 
@@ -16,7 +16,7 @@
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `supabase` | 2.15.1 | PostgreSQL client + auth SDK |
+| `supabase` | 2.15.1 | PostgreSQL client + auth SDK (service role key: `SUPABASE_SERVICE_KEY`) |
 | `PyJWT` | ≥2.0.0 | JWT verification (HS256 + RS256 asymmetric) |
 | `cryptography` | ≥41.0.0 | Cryptographic primitives (for JWT + JWKS) |
 
@@ -111,7 +111,7 @@ yarn install
 **Integration**: `backend/services/claude_assessment.py`
 **Authentication**: `ANTHROPIC_API_KEY` environment variable
 **Usage**:
-- `rate_player(player_name, stats_blob)` → evaluates player on 19 skills
+- `rate_player(player_name, stats_blob)` → evaluates player on 21 skills
 - `suggest_skills_for_legend(legend_name, legend_era)` → pre-fills legend skill profile
 
 **Rate Limits**: Anthropic enforces request rate limits based on tier; see https://docs.anthropic.com/en/docs/resources/rate-limits
@@ -138,7 +138,7 @@ yarn install
 **Integration**: `backend/services/supabase_client.py`, `frontend/lib/api.ts`
 **Authentication**:
 - Public anon key: `NEXT_PUBLIC_SUPABASE_ANON_KEY` (frontend, read-only)
-- Service role key: `SUPABASE_SERVICE_ROLE_KEY` (backend, admin queries)
+- Service role key: `SUPABASE_SERVICE_KEY` (backend, admin queries)
 - JWT signing: `SUPABASE_JWT_SECRET` (HS256 only, older projects) or JWKS (RS256, newer)
 
 **Usage**:
@@ -161,8 +161,7 @@ yarn install
 ```bash
 # Required
 SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_KEY=eyJhbGc...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
+SUPABASE_SERVICE_KEY=eyJhbGc...
 ANTHROPIC_API_KEY=sk-ant-...
 
 # Optional
@@ -175,7 +174,7 @@ LOG_LEVEL=INFO
 
 ```bash
 # Required
-NEXT_PUBLIC_BACKEND_URL=http://localhost:5001/api
+NEXT_PUBLIC_API_URL=http://localhost:5001
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGc...
 
@@ -249,7 +248,7 @@ npm audit fix
 ```python
 # backend/services/claude_assessment.py
 response = client.messages.create(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-20250514",
     max_tokens=2000,
     messages=[{
         "role": "user",

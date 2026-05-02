@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-22 | Files scanned: Next.js app structure | Token estimate: ~920 -->
+<!-- Generated: 2026-05-02 | Files scanned: Next.js app structure | Token estimate: ~980 -->
 
 # Frontend Codemap
 
@@ -82,6 +82,11 @@
                                  Edit skills, attributes
                                  Claude suggestion integration
 
+/admin/cohesion-calibration     → app/admin/cohesion-calibration/page.tsx
+                                 Cohesion engine weight editor
+                                 Lineup tester, rotation diagnostics
+                                 Player composites + bell curves
+
 /admin/layout.tsx              → Wrapper layout with admin nav
 ```
 
@@ -132,7 +137,7 @@ export async function apiFetch<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
-  // Prepends NEXT_PUBLIC_BACKEND_URL
+  // Prepends NEXT_PUBLIC_API_URL
   // Injects X-Calibration-Key header for write requests (if set)
   // Handles auth token via Supabase SSR
 }
@@ -148,6 +153,8 @@ export async function apiFetch<T>(
 - `getLegends()`, `getLegend()`, `updateLegendSkills()`, `suggestLegendSkills()`
 - `getRosters()`, `getRoster()`, `createRoster()`, `addRosterPlayer()`, `removeRosterPlayer()`
 - `evaluateRoster()`
+- `getCohesionWeights()`, `updateCohesionWeights()`, `evaluateRotation()`, `evaluateLineup()`
+- `getPlayerComposites()`, `getPlayerBellCurve()`
 
 ### Skill Constants
 
@@ -199,6 +206,7 @@ Key component categories:
 - **Player**: PlayerCard, PlayerStatsTable, SkillHeatmap, SkillBreakdown
 - **Skills**: SkillEditor, ThresholdEditor, ConditionBuilder
 - **Roster**: RosterSlotEditor, RosterEvaluationView, TeamDescription
+- **Cohesion**: CohesionScoreDisplay, CohesionDebugPanel, CohesionResultDetails
 - **Review**: FlagCard, FlagResolver, BulkResolveModal
 - **Legends**: LegendCard, LegendEditor, LegendSkillsEditor
 - **Admin**: PipelineStatus, CalibrationDashboard, ReviewQueue
@@ -272,7 +280,7 @@ Backend @require_admin decorator verifies JWT + admin role
 
 | Variable | Purpose | Example |
 |----------|---------|---------|
-| `NEXT_PUBLIC_BACKEND_URL` | Flask API base URL | `http://localhost:5001/api` |
+| `NEXT_PUBLIC_API_URL` | Flask API base URL | `http://localhost:5001/api` |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | `https://xxx.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key | (from Supabase dashboard) |
 | `NEXT_PUBLIC_CALIBRATION_API_KEY` | Key for write endpoints | (set if calibration endpoint requires it) |
@@ -283,7 +291,8 @@ Backend @require_admin decorator verifies JWT + admin role
 |------|-------|---------|
 | `lib/api.ts` | ~200 | All backend fetch calls |
 | `lib/types.ts` | ~350 | All TypeScript interfaces |
-| `lib/skills.ts` | ~50 | 19-skill taxonomy constants |
+| `lib/skills.ts` | ~50 | 21-skill taxonomy constants |
+| `lib/cohesionHelpers.ts` | ~100 | Cohesion score formatting + display utilities |
 | `app/admin/calibration/page.tsx` | ~400 | Complex threshold editor UI |
 | `app/admin/review/[player_id]/page.tsx` | ~300 | Flag resolver with manual overrides |
 | `app/builder/page.tsx` | ~250 | Roster editor (drag-drop) |
@@ -297,7 +306,7 @@ User navigates to /players/[player_id]
 page.tsx server component
   ↓
 calls apiFetch<Player>('/players/{id}')
-  ├─ Prepends NEXT_PUBLIC_BACKEND_URL
+  ├─ Prepends NEXT_PUBLIC_API_URL
   ├─ Gets auth token from Supabase SSR
   ├─ Sends GET request with JWT
   │

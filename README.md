@@ -4,7 +4,7 @@ A full-stack NBA roster builder and skill evaluation platform built with Next.js
 
 Users select an all-time great as their **cornerstone player**, build an 8-man roster from current NBA players within a salary cap, and receive an AI-generated compatibility evaluation across offensive fit, defensive fit, and role clarity.
 
-All player ratings are grounded in a custom **19-skill taxonomy** rated at three tiers (None, Capable, Elite), generated from live NBA stats and validated via Claude AI.
+All player ratings are grounded in a custom **21-skill taxonomy** rated at three tiers (None, Capable, Elite), generated from live NBA stats and validated via Claude AI.
 
 ---
 
@@ -16,7 +16,7 @@ The app is built in three parts, in dependency order:
 An internal toolset for generating and curating skill profiles for every qualifying current NBA player.
 
 - The Flask backend fetches live stats from NBA.com via `nba_api` — including tracking data, play type splits, and advanced metrics
-- A stat-to-skill mapping system translates raw numbers into ratings on the 19-skill taxonomy
+- A stat-to-skill mapping system translates raw numbers into ratings on the 21-skill taxonomy
 - A Claude API integration independently rates each player on the same taxonomy
 - The two ratings are composited via a confidence system: agreements are auto-accepted, disagreements are flagged for manual review
 - The Next.js frontend provides a **threshold calibration tool**, a **pipeline runner**, and a **review queue** for resolving flagged profiles
@@ -24,7 +24,7 @@ An internal toolset for generating and curating skill profiles for every qualify
 ### Part 2 — Legends Profile Builder
 A manual profile editor for 36 all-time NBA legends who have no modern stats.
 
-- Each legend is rated on the same 19-skill taxonomy via a Next.js UI
+- Each legend is rated on the same 21-skill taxonomy via a Next.js UI
 - A **Claude suggestion feature** pre-populates ratings based on basketball knowledge for the user to accept or override
 
 ### Part 3 — Roster Builder and Evaluator
@@ -33,6 +33,7 @@ The user-facing product.
 - Users browse current players and their skill profiles, and select an all-time great as their cornerstone
 - An 8-man roster is assembled within a salary cap budget
 - A **compatibility engine** evaluates roster cohesion across offensive fit, defensive fit, role clarity, and height coverage
+- A **cohesion engine** scores lineup and rotation chemistry via player composites, PnR pairing, defensive coverage, spacing ratios, and accentuation modifiers
 - A **GM Notes rule engine** (37+ rules) fires contextual observations about roster construction
 - A **cornerstone complement** feature suggests which skill types pair well with the chosen legend
 - A full scoring breakdown and narrative evaluation is generated via the Claude API
@@ -46,14 +47,16 @@ All skill profiles, thresholds, flags, and legend profiles are persisted in Supa
 ```
 cornerstone/
   backend/
-    api/                    Route blueprints (auth, builder, calibration, composite,
-                            health, legends, pipeline, players, review, rosters,
-                            salaries, skills)
+    api/                    Route blueprints (auth, builder, calibration,
+                            cohesion_calibration, composite, health, legends,
+                            pipeline, players, review, rosters, salaries, skills)
     services/
       skill_engine/         Core stat-to-skill evaluation (conditions, transforms,
                             evaluator, cache, history)
       roster_evaluator/     Roster scoring engine (weights, modifiers, GM notes rules,
                             cornerstone complement, hard checks, team description)
+      cohesion_engine/      Lineup/rotation cohesion scoring (composites, synergies,
+                            PnR pairing, accentuation, bell curves, weights)
       claude_assessment.py  Claude API integration for player skill ratings
       compositing.py        Merges stat and Claude ratings, creates flags
       nba_api_client.py     Fetches live stats from NBA.com
@@ -100,7 +103,7 @@ The schema is managed via the Supabase CLI. Migrations live in `supabase/migrati
 |---|---|
 | `players` | Current NBA players with metadata and season info |
 | `player_stats` | Raw stat blobs fetched from NBA.com via `nba_api` |
-| `skill_profiles` | 19-skill ratings per player/season, per source |
+| `skill_profiles` | 21-skill ratings per player/season, per source |
 | `skill_flags` | Disagreements between stat-based and Claude ratings, pending review |
 | `skill_thresholds` | Calibration rules mapping stats to skill tiers (Elite/Capable/None) |
 | `legends` | All-time greats — rated manually via the Legends Profile Builder |

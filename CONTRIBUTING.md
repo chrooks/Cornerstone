@@ -119,7 +119,7 @@ The app is built in three interdependent layers:
 ### Layer 1 — Skill Pipeline (Internal Tooling)
 
 - **Stat fetching**: Flask backend fetches live NBA stats via `nba_api` from NBA.com
-- **Skill mapping**: Raw stats are translated to a 19-skill taxonomy via calibrated thresholds (stored in Supabase)
+- **Skill mapping**: Raw stats are translated to a 21-skill taxonomy via calibrated thresholds (stored in Supabase)
 - **Claude validation**: Each player is independently rated by Claude API on the same taxonomy
 - **Compositing**: Stat and Claude ratings are merged; disagreements create `skill_flags` for manual review
 - **Frontend tools**:
@@ -130,23 +130,25 @@ The app is built in three interdependent layers:
 ### Layer 2 — Legends Builder
 
 - `/legends` page provides a manual editor for 36 all-time NBA greats
-- Each legend is rated on the 19-skill taxonomy
+- Each legend is rated on the 21-skill taxonomy
 - Claude suggests ratings via `POST /api/legends/<id>/suggest` for user acceptance/override
 
 ### Layer 3 — Roster Builder and Evaluator
 
-User-facing product (scaffolded, under development):
+User-facing product:
 - Browse current players and their skill profiles
 - Select an all-time great as cornerstone player
 - Build 8-man roster within salary cap budget
+- Two evaluation engines: `roster_evaluator/` (weights, modifiers, GM Notes) and `cohesion_engine/` (lineup composites, PnR pairing, defensive coverage, accentuation)
 - Receive AI-generated compatibility evaluation via the Claude API
 
 ## Key Concepts
 
 ### 19-Skill Taxonomy
 
-All player ratings use a consistent taxonomy with three tiers:
+All player ratings use a consistent taxonomy with four tiers:
 - **Elite** — Top-tier performance
+- **Proficient** — Above-average proficiency
 - **Capable** — Professional standard
 - **None** — Below threshold
 

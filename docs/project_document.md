@@ -27,43 +27,55 @@ You must have a plausible path to each player via draft, trade, or free agency. 
 
 ## Skill Taxonomy
 
-Every player (including the superstar) is rated on 19 skills across three tiers:
+Every player (including the superstar) is rated on 21 skills across four tiers:
 
 - **None** — the player does not meaningfully possess this skill
 - **Capable** — the player is a competent practitioner of this skill
+- **Proficient** — the player is above average at this skill
 - **Elite** — the player is among the best in the league at this skill
 
 ### Additive Skills
 *More is always better. No penalty for excess.*
 
-- Spot-up Shooter
-- Movement Shooter
-- Versatile Defender
-- Cutter
-- Screen Setter
-- Transition Threat
-- Vertical Spacer / Lob Threat
-- Passer
-- High Flyer
-- Rim Protector
-- Rebounder
-- Offensive Rebounder
+- **Spot Up Shooter** (`spot_up_shooter`) — Hits catch-and-shoot threes and mid-range shots from set positions
+- **Off-Dribble Shooter** (`off_dribble_shooter`) — Creates and converts shots off the dribble, including pull-ups and step-backs
+- **Isolation Scorer** (`isolation_scorer`) — Beats defenders one-on-one in isolation through dribble moves and athleticism
+- **Movement Shooter** (`movement_shooter`) — Hits shots while relocating off screens and handoffs
+- **Cutter** (`cutter`) — Scores effectively by cutting to the basket off-ball
+- **Transition Threat** (`transition_threat`) — Scores effectively in the open court on fast breaks
+- **PnR Ball Handler** (`pnr_ball_handler`) — Initiates and scores/creates as the ball handler in pick-and-roll
+- **PnR Finisher** (`pnr_finisher`) — Scores as the screener in PnR actions (rolling, popping, slipping)
+- **Crafty Finisher** (`crafty_finisher`) — Scores at the rim using touch and body control rather than pure athleticism
+- **Passer** (`passer`) — Creates quality shot opportunities through vision and passing skill
+- **Offensive Rebounder** (`offensive_rebounder`) — Crashes offensive boards and converts second-chance opportunities
+- **Vertical Spacer** (`vertical_spacer`) — Threatens vertically as a lob target, creating driving lanes for teammates
 
 ### Threshold-Based Skills
 *You need at least one. Soft penalty if absent, diminishing returns beyond two.*
 
-- Point of Attack Defender
-- Crafty Finisher
-- Mid Post Player
-- Low Post Player
-- PnR Finisher (includes rollers, poppers, and slippers — any screener who scores in PnR actions)
+- **Rebounder** (`rebounder`) — Consistently grabs boards through positioning and effort
+- **Rim Protector** (`rim_protector`) — Deters and blocks shots at the rim
+- **Screen Setter** (`screen_setter`) — Sets quality screens that free teammates
+- **Driver** (`driver`) — Attacks the paint from the perimeter, generating driving lane pressure
+- **Mid-Post Player** (`mid_post_player`) — Scores from the mid-post/elbow area using face-up moves
+- **Low-Post Player** (`low_post_player`) — Scores with back-to-basket moves in the low post
 
 ### Zero-Sum Skills
 *Must be distributed carefully. Excess creates conflict.*
 
-- Ball Dominator
-- PnR Ball Handler
-- Off-Dribble Shooter
+- **Versatile Defender** (`versatile_defender`) — Guards multiple positional groups effectively when switched
+- **Perimeter Disruptor** (`perimeter_disruptor`) — Disrupts ball handlers through active hands and pressure at point of attack
+- **High Flyer** (`high_flyer`) — Elite explosive athleticism for above-the-rim plays and transition finishes
+
+### Skill Confidence Tiers
+
+Skills are also classified by how reliably the stat pipeline can evaluate them:
+
+| Confidence | Skills | Claude Behavior |
+|---|---|---|
+| **High** | spot_up_shooter, off_dribble_shooter, isolation_scorer, rebounder, offensive_rebounder, rim_protector | Claude is NOT called |
+| **Moderate** | movement_shooter, cutter, transition_threat, pnr_ball_handler, pnr_finisher, crafty_finisher, driver, vertical_spacer, screen_setter, passer, mid_post_player, low_post_player | Claude runs blind (sees stats, not stat tier) |
+| **Low** | versatile_defender, perimeter_disruptor, high_flyer | Claude runs informed (sees stats AND stat tier) |
 
 ---
 
@@ -72,41 +84,43 @@ Every player (including the superstar) is rated on 19 skills across three tiers:
 Not all skills carry equal weight for every superstar. The star's own profile determines what the roster most needs.
 
 Examples:
-- An elite PnR Ball Handler elevates the value of Vertical Spacer / Lob Threat and PnR Finisher
-- A low post scorer elevates the value of Spot-up Shooters and Cutters around them
+- An elite PnR Ball Handler elevates the value of Vertical Spacer and PnR Finisher
+- A low post scorer elevates the value of Spot Up Shooters and Cutters around them
 - A pass-first point guard elevates the value of High Flyers, Cutters, and Transition Threats
 
 ---
 
-## Compatibility Scoring Logic
+## Evaluation Engines
 
-### Additive Skills
-Score based on cumulative tier ratings across the roster. Higher is always better. No cap on benefit.
+### Legacy Evaluator (`roster_evaluator/`)
+Skill-weight scoring system:
+- **Base scores** — per-skill weight contributions
+- **Dynamic modifiers** — playoff, era, tier-scaled adjustments
+- **Hard checks** — physical constraints, draft-pick rules
+- **Cornerstone complement** — how well supporting players complement the legend
+- **GM Notes** — 37+ contextual rules that fire observations about roster construction
+- **Team description** — Claude-generated narrative evaluation
 
-### Threshold-Based Skills
-- Threshold met (at least one Capable or Elite) → no penalty
-- Threshold not met → soft penalty only. A team of elite shooters around an elite finisher should not be penalized for lacking a post player.
+### Cohesion Engine (`cohesion_engine/`)
+Lineup and rotation chemistry scoring:
+- **Player composites** — normalized 0.0-10.0 scores per player (spacing, finishing, anchor, defense, etc.)
+- **Defensive bell curves** — height-based coverage modeling with rim protector → perimeter disruptor boosts
+- **Lineup subscores** — spacing, PnR pairing, defensive coverage, transition, rebounding
+- **Synergies** — pairwise bonuses (PnR handler+finisher, rim protector+perimeter defenders)
+- **Accentuation** — amplifying roster strengths and covering weaknesses
+- **Star rating** — 0.0-5.0 final score with per-dimension breakdown
+- **Notes & narrative** — structured feedback + Claude-generated team description
 
-### Zero-Sum Skills
-The superstar pre-fills zero-sum slots before roster building begins. Additional players with zero-sum skills trigger a conflict check:
-
-**Conflict detected → evaluate mitigating factors:**
-- Do the overlapping players have additive secondary skills that allow off-ball coexistence? (e.g. cutting, transition threat, spacing)
-- Is there sufficient spacing on the roster to absorb the overlap?
-- Can one player credibly operate off-ball?
-
-**If mitigating factors exist** → soft penalty
-**If no mitigating factors** → heavy penalty
-
-*Example: LeBron and Wade on the 2012 Heat were both Ball Dominators but coexisted because both were Elite cutters and transition threats, and the roster had sufficient spacing. Wade also gradually conceded to a more off-ball role as the team matured. Contrast with the 2024-25 Suns (Beal, KD, Booker) — three primary scorers with minimal playmaking, spacing, or defensive versatility, and no mitigating secondary skills to resolve the overlap.*
+The active engine is selected via the `EVAL_ENGINE` environment variable (`"legacy"` or `"cohesion"`).
 
 ---
 
 ## Evaluator Output
 
 The compatibility engine produces:
-1. **A cohesion score** broken down by offensive fit, defensive fit, role clarity, and depth
-2. **A narrative evaluation** describing the team's strengths, weaknesses, and how the supporting cast complements or conflicts with the superstar's profile
+1. **A cohesion/compatibility score** broken down by dimension (offense, defense, spacing, etc.)
+2. **Structured notes** describing strengths, weaknesses, and suggestions
+3. **A narrative evaluation** describing the team's identity and how the supporting cast complements or conflicts with the superstar's profile
 
 ---
 
@@ -114,10 +128,10 @@ The compatibility engine produces:
 
 ---
 
-## Part 3a — Current Player Skill Profile Pipeline
+## Player Skill Profile Pipeline
 
 ### Step 1 — Filter Valid Players
-Minimum MPG threshold (TBD, suggested 15-20 MPG) to exclude garbage time players and two-way contracts with insufficient sample size.
+Minimum MPG threshold to exclude garbage time players and two-way contracts with insufficient sample size.
 
 ### Step 2 — Stat Selection
 Pull from four layers:
@@ -127,13 +141,13 @@ Pull from four layers:
 - **Play type data** — PnR ball handler vs. roll man frequency, spot-up frequency, post-up frequency
 
 ### Step 3 — Stat-to-Skill Mapping
-Deterministic rules map stat thresholds to skill tiers. Fully automated and auditable. Example: if catch-and-shoot 3P% > 38% and catch-and-shoot attempts > 3 per game → Spot-up Shooter: Elite.
+Deterministic rules map stat thresholds to skill tiers. Fully automated and auditable. Thresholds stored as JSONB in `skill_thresholds` table, editable via calibration UI. Volume gates use per-game conditions (~70 games divisor).
 
 ### Step 4 — Claude Pass
-Feed the same statistical profile to Claude with a prompt asking it to independently rate the player on all 19 skills at None/Capable/Elite. Claude contributes contextual knowledge that stats don't capture.
+Feed the statistical profile to Claude with a prompt asking it to independently rate the player on all 21 skills at None/Capable/Proficient/Elite. Claude contributes contextual knowledge that stats don't capture. The confidence tier determines whether Claude sees the stat-based rating.
 
 ### Step 5 — Notability Score
-Before compositing the two ratings, calculate a notability score (0-100) to determine how much weight Claude's assessment carries. Higher notability = more weight to Claude.
+Before compositing, calculate a notability score (0-100) to determine how much weight Claude's assessment carries. Higher notability = more weight to Claude.
 
 **Notability Score Components:**
 - Minutes per game (0-30 pts) — scaled linearly, 20 MPG = 15pts, 35+ MPG = 30pts
@@ -158,7 +172,7 @@ Additional rule: players scoring 0-39 on notability are flagged wholesale regard
 When auto-accepting a one-tier disagreement, default to the more conservative (lower) rating.
 
 ### Step 7 — Review Queue
-Flagged players enter a review queue. UI should display:
+Flagged players enter a review queue. UI displays:
 - Player's relevant stat line
 - Stat-based rating and reasoning
 - Claude's rating and explanation
@@ -167,14 +181,14 @@ Flagged players enter a review queue. UI should display:
 
 ---
 
-## Part 3b — All-Time Greats Skill Profiles
-No modern stats exist for historical legends. Profiles are manually curated. The list is finite (estimated 30-50 legends). This is where personal basketball knowledge and opinions matter most. Same 19-skill taxonomy and None/Capable/Elite tiers apply.
+## All-Time Greats Skill Profiles
+No modern stats exist for historical legends. Profiles are manually curated. The list is finite (36 legends). Same 21-skill taxonomy and None/Capable/Proficient/Elite tiers apply.
 
 ---
 
 ## Legends List (36 Players)
 
-One profile per player representing their peak era. All 36 are manually profiled using the 19-skill taxonomy at None/Capable/Elite tiers.
+One profile per player representing their peak era. All 36 are manually profiled using the 21-skill taxonomy at None/Capable/Proficient/Elite tiers.
 
 1. Michael Jordan (Early 90s)
 2. LeBron James (Mid 2010s — Heat & 2nd Cavs)
@@ -215,29 +229,10 @@ One profile per player representing their peak era. All 36 are manually profiled
 
 ---
 
-## App Architecture Overview
-
-The project breaks into three parts with a clear dependency order:
-
-**Part 3 (first) — Player Skill Profiles**
-Foundation for everything else. Splits into:
-- 3a: Automated pipeline for current players (stats + Claude hybrid)
-- 3b: Manual profiling for 36 legends
-
-**Part 1 (second) — Roster Builder**
-UI for selecting a superstar, browsing current players, and assembling a roster within the salary cap. Displays real-time budget tracking.
-
-**Part 2 (third) — Compatibility Evaluator**
-Runs compatibility logic against skill profiles and outputs a cohesion score with narrative evaluation generated via the Claude API.
-
----
-
 ## Data Sources
 
 **nba_api** (github.com/swar/nba_api) — Python wrapper around NBA.com endpoints. Surfaces tracking data, play type splits, catch-and-shoot vs pull-up breakdowns, PnR frequency. Unofficial but well maintained.
 
-**pbpstats** (api.pbpstats.com) — Built on play-by-play data. Useful for contextual stats like shot quality, finishing at the rim in traffic, and lineup-level data.
-
-Both sources together are expected to cover most stat inputs needed for the skill mapping pipeline. Investigation needed to map each of the 19 skills to specific endpoints and identify any gaps.
+Both stat and tracking data are used to cover most stat inputs needed for the skill mapping pipeline. Stats are assembled by `stats_assembler.py` into a comprehensive JSONB blob per player/season.
 
 Note: Second Spectrum and Synergy Sports are not accessible via public API — both are B2B products gated behind enterprise contracts.

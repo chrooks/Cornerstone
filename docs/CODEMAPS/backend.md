@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-22 | Files scanned: 14 API files | Token estimate: ~980 -->
+<!-- Generated: 2026-05-02 | Files scanned: 15 API files | Token estimate: ~1100 -->
 
 # Backend Codemap
 
@@ -6,7 +6,7 @@
 
 **File**: `backend/app.py` (145 lines)
 - Flask application factory
-- Registers 11 blueprints
+- Registers 12 blueprints
 - CORS restricted to `FRONTEND_ORIGIN` env var
 - Max payload: 64 KB
 - Colored logging with truncation for long httpx requests
@@ -29,6 +29,7 @@ app.register_blueprint(review_bp)       # /review
 app.register_blueprint(legends_bp)      # /legends
 app.register_blueprint(rosters_bp)      # /rosters
 app.register_blueprint(builder_bp)      # /builder
+app.register_blueprint(cohesion_calibration_bp)  # /cohesion
 ```
 
 ## API Routes by Domain
@@ -135,7 +136,19 @@ Note: Rosters store legend (cornerstone) + up to 7 supporting players
 ```
 POST   /builder/evaluate                        → evaluate complete roster
 ```
-Depends: `roster_evaluator`, `supabase_client`
+Depends: `roster_evaluator`, `cohesion_engine`, `supabase_client`
+
+### Cohesion Calibration (780 lines)
+```
+GET    /cohesion/weights                         → fetch cohesion subscore weights
+PUT    /cohesion/weights                         → update cohesion weights
+POST   /cohesion/evaluate-rotation               → score a full rotation (ranked lineups)
+POST   /cohesion/evaluate-lineup                 → score a single 5-man lineup
+GET    /cohesion/player/<player_id>/composites   → player composite breakdown
+GET    /cohesion/player/<player_id>/bell-curve   → bell curve normalization data
+```
+Depends: `cohesion_engine`, `supabase_client`
+Note: Requires `@require_admin` JWT decorator
 
 ## Middleware
 
@@ -173,6 +186,12 @@ Configured in `create_app()` — allowed origins from `FRONTEND_ORIGIN` env var 
 | `skill_engine/evaluator.py` | Tier assignment + tier bumps | `evaluate_skill()`, `apply_auto_promotions()` |
 | `skill_engine/transforms.py` | Stat pre-processing | `apply_pre_adjustments()`, `compute_derived_stats()`, `apply_stabilization()` |
 | `skill_engine/history.py` | Multi-season blending | `get_weighted_stats()`, `_blend_blobs()` |
+| `cohesion_engine/` | Lineup/rotation cohesion scoring | `evaluate_lineup()`, `evaluate_roster()` |
+| `cohesion_engine/composites.py` | Player composite scores | Offense, defense, shooting, playmaking composites |
+| `cohesion_engine/synergies.py` | Pairwise synergy bonuses | PnR pairing, defensive coverage, spacing |
+| `cohesion_engine/accentuation.py` | Strength/weakness modifiers | Accentuation strength and weakness multipliers |
+| `cohesion_engine/weights.py` | Configurable subscore weights | Fetched from Supabase `cohesion_weights` table |
+| `cohesion_engine/bell_curve.py` | Bell curve normalization | Normalizes composites to expected distribution |
 | `roster_evaluator/` | Roster scoring engine | `RosterEvaluator.evaluate_roster()` |
 | `roster_evaluator/evaluator.py` | Core scoring (770 lines) | Computes roster score via weights + modifiers + synergies |
 | `roster_evaluator/weights.py` | Per-skill weights | Base score contributions |
@@ -190,7 +209,7 @@ Configured in `create_app()` — allowed origins from `FRONTEND_ORIGIN` env var 
 | `players_service.py` | Player CRUD | `get_player()`, `list_players()`, `create_player()`, `delete_player()` |
 | `notability.py` | Signal detection | Identifies notable/fringe players |
 | `supabase_client.py` | DB client singleton | `get_supabase()` |
-| `skills.py` | Skill constants | `SKILL_LIST`, `SKILL_LABELS` (19 skills) |
+| `skills.py` | Skill constants | `SKILL_LIST`, `SKILL_LABELS` (21 skills) |
 | `stats_schema.py` | Stat validation | Schema for raw stat blobs |
 
 ## Request Flow Example: Evaluate Player Skills
@@ -201,7 +220,7 @@ POST /api/players/<player_id>/skills
 skills_bp handler
   ↓
 skill_engine.evaluate_all_skills(stats_blob)
-  ├─ loops 19 skills
+  ├─ loops 21 skills
   ├─ for each:
   │  ├─ apply pre_adjustments
   │  ├─ check volume_gate
@@ -228,8 +247,7 @@ Returned as JSON:
 | Var | Purpose | Required |
 |-----|---------|----------|
 | `SUPABASE_URL` | Supabase project URL | Yes |
-| `SUPABASE_KEY` | Supabase anon key (public) | Yes |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (admin queries) | Yes |
+| `SUPABASE_SERVICE_KEY` | Service role key (admin queries) | Yes |
 | `SUPABASE_JWT_SECRET` | JWT signing secret (HS256 only) | No (newer projects use RS256) |
 | `ANTHROPIC_API_KEY` | Claude API key | Yes |
 | `FRONTEND_ORIGIN` | CORS allowed origins | Yes (default: localhost:3000) |
@@ -249,6 +267,7 @@ skills.py         286 lines   — skill evaluation endpoint
 builder.py        194 lines   — roster evaluation endpoint
 auth.py           176 lines   — JWT + admin auth
 salaries.py        59 lines   — salary fetching
+cohesion_cal.py   780 lines   — cohesion engine calibration
 health.py          15 lines   — health check
 ```
 

@@ -1,10 +1,10 @@
-<!-- Generated: 2026-04-22 | Files scanned: 13 migrations | Token estimate: ~850 -->
+<!-- Generated: 2026-05-02 | Files scanned: 25 migrations | Token estimate: ~900 -->
 
 # Database Schema
 
 ## Overview
 
-PostgreSQL via Supabase. 13 migrations, 8 core tables, 20+ columns with JSONB flexibility.
+PostgreSQL via Supabase. 25 migrations, 9 core tables, 20+ columns with JSONB flexibility.
 
 ## Core Tables
 
@@ -87,7 +87,7 @@ Indexes:
   "Scorer": "Elite",
   "Playmaker": "Proficient",
   "Defender": "Capable",
-  // ... 19 skills total
+  // ... 21 skills total
 }
 ```
 
@@ -245,6 +245,21 @@ Constraints:
   cornerstone slot (slot_number=1) has is_cornerstone=true, salary=$54M
 ```
 
+### cohesion_weights
+
+Configurable weights for the cohesion engine subscore rollup.
+
+```sql
+CREATE TABLE cohesion_weights (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  key        text UNIQUE NOT NULL,
+  weights    jsonb NOT NULL,
+  updated_at timestamptz DEFAULT now()
+);
+```
+
+**Note**: Updated via cohesion calibration API (`PUT /api/cohesion/weights`), not migrations. Weights control how offense, defense, spacing, PnR pairing, and other subscores contribute to the final cohesion score.
+
 ### user_roles (Auth)
 
 Admin role tracking for calibration/review access.
@@ -274,7 +289,7 @@ NBA.com stats
          ├─→ stats_assembler.build_blob() ─→ processes into sections
          │
     ┌────▼──────────────────────────────┐
-    │  skill_engine.evaluate_all_skills  │  ← loops 19 skills
+    │  skill_engine.evaluate_all_skills  │  ← loops 21 skills
     │  - apply_pre_adjustments           │
     │  - check volume_gate               │
     │  - evaluate conditions             │
@@ -336,6 +351,8 @@ NBA.com stats
 | `20260407000001_add_driver_skill.sql` | Apr 7 | Added "Driver" skill to taxonomy |
 | `20260408000000_update_crafty_finisher.sql` | Apr 8 | Crafty Finisher thresholds |
 | `20260408000001_rename_defender_skills.sql` | Apr 8 | Defender → TeamDefender, etc. |
+| `20260408000002_rename_poa_defender.sql` | Apr 8 | POA Defender rename |
+| `20260408000003_off_dribble_shooter_fg3_penalty.sql` | Apr 8 | OffDribbShooter FG3 penalty adjustment |
 | `20260410000000_add_legend_physical_fields.sql` | Apr 10 | height_cm, weight_kg, birth_year on legends |
 | `20260410000001_add_legend_team.sql` | Apr 10 | team column on legends |
 | `20260410000002_add_legend_position.sql` | Apr 10 | position column on legends |
@@ -352,7 +369,7 @@ NBA.com stats
 
 1. **Per-game volume gates** — conditions use games_played as divisor (~70 games for season conversion)
 2. **JSONB thresholds** — never use migrations for threshold updates, use calibration API
-3. **Immutable skill list** — 19 skills defined in code (`backend/services/skills.py`, `frontend/lib/skills.ts`)
+3. **Immutable skill list** — 21 skills defined in code (`backend/services/skills.py`, `frontend/lib/skills.ts`)
 4. **Admin writes** — most write endpoints require `@require_admin` JWT decorator
 5. **Cascading deletes** — player deletion cascades to player_stats, skill_profiles, skill_flags, anchor_players, roster_slots
 

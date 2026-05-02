@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-22 | Cornerstone Codemap Index -->
+<!-- Generated: 2026-05-02 | Cornerstone Codemap Index -->
 
 # Cornerstone Codemaps Index
 
@@ -27,7 +27,7 @@ What you'll find:
 - Layer 3 (Roster Builder): roster scoring + synergies
 - Data flow diagram for skill evaluation
 - External service dependencies
-- Key constraints (19-skill taxonomy, per-game volume gates, JSONB thresholds)
+- Key constraints (21-skill taxonomy, per-game volume gates, JSONB thresholds)
 
 **Use this when**: Understanding the overall system, explaining to stakeholders, planning integrations
 
@@ -58,7 +58,7 @@ What you'll find:
 - Authentication flow (Supabase SSR)
 - Environment variables
 - Data fetching patterns
-- 21 dependencies with version + purpose
+- 25 dependencies with version + purpose
 
 **Use this when**: Adding a new page, understanding auth flow, integrating API client
 
@@ -83,7 +83,7 @@ What you'll find:
 
 What you'll find:
 - Backend: 12 Python packages (Flask, Supabase, nba_api, anthropic)
-- Frontend: 21 npm packages (Next.js, React, shadcn/ui, @dnd-kit)
+- Frontend: 25 npm packages (Next.js, React, shadcn/ui, @dnd-kit)
 - External services: NBA.com API, Anthropic Claude, Supabase PostgreSQL + Auth
 - Environment variable checklist (backend + frontend)
 - Integration code examples (Claude API, Supabase query, nba_api)
@@ -120,14 +120,14 @@ What you'll find:
 
 | Component | Metric | Value |
 |-----------|--------|-------|
-| Backend | Total API endpoints | 66 routes across 11 blueprints |
-| Backend | Total service files | 25+ (.py files in backend/services/) |
-| Backend | Code size | ~9,500 lines of API code |
+| Backend | Total API endpoints | 72+ routes across 12 blueprints |
+| Backend | Total service files | 37+ (.py files in backend/services/) |
+| Backend | Code size | ~11,000 lines of API code |
 | Frontend | Page routes | 14 (public + protected + admin) |
 | Frontend | Components | ~3,000 lines (shadcn/ui + custom) |
 | Database | Tables | 8 core + 1 auth (user_roles) |
-| Database | Migrations | 23 incremental schema changes |
-| Skill Taxonomy | Total skills | 19 (Scorer, Playmaker, Defender, ...) |
+| Database | Migrations | 25 incremental schema changes |
+| Skill Taxonomy | Total skills | 21 (spot_up_shooter, isolation_scorer, rim_protector, ...) |
 | External APIs | Services | 3 (NBA.com, Anthropic Claude, Supabase) |
 
 ## Key Files by Purpose
@@ -138,6 +138,7 @@ What you'll find:
 backend/app.py (145)                    — Flask factory + blueprint registration
 backend/services/skill_engine/          — Stat→skill evaluation (5 files)
 backend/services/roster_evaluator/      — Roster scoring (8 files)
+backend/services/cohesion_engine/       — Lineup/rotation cohesion (12 files)
 backend/services/claude_assessment.py   — Claude API client
 backend/services/compositing.py         — Stat + Claude merge
 backend/api/players.py (981)            — Player CRUD + stats
@@ -152,7 +153,7 @@ backend/api/calibration.py (576)        — Threshold tuning
 frontend/app/                           — Next.js 14 App Router pages
 frontend/lib/api.ts                     — Backend fetch client
 frontend/lib/types.ts                   — TypeScript interfaces
-frontend/lib/skills.ts                  — 19-skill constants
+frontend/lib/skills.ts                  — 21-skill constants
 frontend/components/                    — shadcn/ui + custom UI
 frontend/app/admin/                     — Admin tools (calibration, review, pipeline)
 ```
@@ -160,7 +161,7 @@ frontend/app/admin/                     — Admin tools (calibration, review, pi
 ### Database
 
 ```
-supabase/migrations/                    — 23 schema migrations (Mar 25 - Apr 13)
+supabase/migrations/                    — 25 schema migrations (Mar 25 - Apr 26)
 -- Initial: players, player_stats, skill_profiles, skill_flags, thresholds, legends
 -- Incremental: physical attributes, tiers, skills, constraints, auth
 ```
@@ -181,7 +182,7 @@ supabase/migrations/                    — 23 schema migrations (Mar 25 - Apr 1
 4. Update freshness header (date + file count)
 5. Keep token estimate under 1000 per file
 
-**Last Updated**: 2026-04-22
+**Last Updated**: 2026-05-02
 
 ## Related Documentation
 
@@ -199,4 +200,4 @@ supabase/migrations/                    — 23 schema migrations (Mar 25 - Apr 1
 ---
 
 **Maintained by**: Documentation specialist agent
-**Last scan**: 2026-04-22 | ~30 source files analyzed
+**Last scan**: 2026-05-02 | ~42 source files analyzed

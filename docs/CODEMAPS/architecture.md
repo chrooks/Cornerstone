@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-22 | Files scanned: 30+ | Token estimate: ~850 -->
+<!-- Generated: 2026-05-02 | Files scanned: 42+ | Token estimate: ~950 -->
 
 # Cornerstone Architecture
 
@@ -17,7 +17,8 @@ Three-layer NBA skill evaluation + roster builder platform with AI-assisted eval
 │ Backend (Flask)                                                  │
 │ ┌────────────────────────────────────────────────────────────┐ │
 │ │ API Blueprints: players, skills, composite, calibration,  │ │
-│ │ pipeline, review, legends, rosters, builder, health       │ │
+│ │ cohesion_calibration, pipeline, review, legends, rosters, │ │
+│ │ builder, health                                           │ │
 │ └────────────────────────────────────────────────────────────┘ │
 │ ┌────────────────────────────────────────────────────────────┐ │
 │ │ Services:                                                  │ │
@@ -25,6 +26,8 @@ Three-layer NBA skill evaluation + roster builder platform with AI-assisted eval
 │ │   conditions, evaluator, history, transforms)             │ │
 │ │ • roster_evaluator/ — roster scoring (evaluator,          │ │
 │ │   weights, modifiers, hard_checks, cornerstone_complement)│ │
+│ │ • cohesion_engine/ — lineup/rotation cohesion scoring    │ │
+│ │   (composites, synergies, PnR, accentuation, bell curves)│ │
 │ │ • claude_assessment.py — Claude API for skill ratings     │ │
 │ │ • compositing.py — merges stat + Claude ratings          │ │
 │ │ • nba_api_client.py — fetches live NBA.com stats         │ │
@@ -38,19 +41,20 @@ Three-layer NBA skill evaluation + roster builder platform with AI-assisted eval
 ┌────────────────────▼────────────────────────────────────────────┐
 │ Database (Supabase PostgreSQL)                                  │
 │ players, player_stats, skill_profiles, skill_flags,             │
-│ skill_thresholds, legends, anchor_players, rosters              │
+│ skill_thresholds, legends, anchor_players, rosters,             │
+│ cohesion_weights                                                │
 │ user_roles (admin auth)                                         │
 └────────────────────────────────────────────────────────────────┘
 ```
 
 ## Layer 1: Skill Pipeline
 
-**Purpose**: Evaluate players on 19-skill taxonomy (stat-driven + Claude AI)
+**Purpose**: Evaluate players on 21-skill taxonomy (stat-driven + Claude AI)
 
 **Flow**:
 1. Backend fetches stats from NBA.com via `nba_api` → `player_stats` table
 2. `skill_engine` evaluates each skill using thresholds (JSONB conditions)
-3. `claude_assessment` asks Claude API for same 19-skill ratings
+3. `claude_assessment` asks Claude API for same 21-skill ratings
 4. `compositing.py` merges both ratings: agreements auto-accepted, disagreements create `skill_flags`
 5. Frontend review tool (`/review`) lets admins resolve flags manually
 
@@ -62,7 +66,7 @@ Three-layer NBA skill evaluation + roster builder platform with AI-assisted eval
 
 ## Layer 2: Legends Builder
 
-**Purpose**: Manually curate 36 all-time greats on the same 19-skill taxonomy
+**Purpose**: Manually curate 36 all-time greats on the same 21-skill taxonomy
 
 **Flow**:
 1. Admin selects a legend from `legends` table
@@ -76,23 +80,25 @@ Three-layer NBA skill evaluation + roster builder platform with AI-assisted eval
 - `frontend/app/admin/legends/` — legend editor pages
 - `supabase/migrations/*legends*` — schema for legends, nba_api_id, physical attributes
 
-## Layer 3: Roster Builder (Phase 4)
+## Layer 3: Roster Builder
 
 **Purpose**: Users build 8-man rosters (cornerstone + 7 players within salary cap)
 
 **Flow**:
 1. User picks a legend (cornerstone) with $54M salary
 2. Adds up to 7 more players, staying under total cap
-3. `roster_evaluator` scores the roster:
-   - Base skill contributions (weights + modifiers)
-   - Roster synergies (complement scores, hard checks)
-   - Team description, GM notes system
+3. Two evaluation engines score the roster:
+   - `roster_evaluator`: base skill contributions, modifiers, GM Notes (37+ rules), cornerstone complement
+   - `cohesion_engine`: lineup composites, PnR pairing, defensive coverage, spacing ratios, accentuation
 4. Rosters persisted in `rosters` table with player slots
 
 **Key Files**:
-- `backend/services/roster_evaluator/` — scoring engine
+- `backend/services/roster_evaluator/` — skill-weight scoring engine
+- `backend/services/cohesion_engine/` — lineup/rotation cohesion scoring
 - `backend/api/rosters.py`, `api/builder.py` — persistence + evaluation
+- `backend/api/cohesion_calibration.py` — cohesion weight tuning + rotation testing
 - `frontend/app/builder/` — roster assembly UI
+- `frontend/app/admin/cohesion-calibration/` — cohesion weight editor + lineup tester
 
 ## Data Flow: Skill Evaluation
 
@@ -143,7 +149,7 @@ stat ratings      claude ratings       │
 
 ## Key Constraints
 
-- **19-skill taxonomy** — immutable list, defined in `frontend/lib/skills.ts` and `backend/services/skills.py`
+- **21-skill taxonomy** — immutable list, defined in `frontend/lib/skills.ts` and `backend/services/skills.py`
 - **Skill thresholds** — stored as JSONB in `skill_thresholds` table, edited via calibration UI (not migrations)
 - **Volume gates** — conditions use per-game divisors (~70 games for full season conversion)
 - **Supabase RLS** — some tables use RLS, write endpoints protected by `@require_admin` decorator + Bearer JWT

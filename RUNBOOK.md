@@ -84,6 +84,23 @@ Example threshold JSON:
 }
 ```
 
+### Tune Cohesion Engine Weights
+
+The cohesion engine scores lineup and rotation chemistry. Weights are stored in Supabase (`cohesion_weights` table) and edited via the calibration UI:
+
+1. Navigate to `http://localhost:3000/admin/calibration` and open the cohesion tab
+2. Adjust subscore weights (offense, defense, spacing, PnR pairing, etc.)
+3. Use the lineup tester to evaluate sample rotations in real-time
+4. View player composites and bell curves to understand individual contributions
+
+**API endpoints** (all require `@require_admin`):
+- `GET /api/cohesion/weights` — fetch current weights
+- `PUT /api/cohesion/weights` — update weights
+- `POST /api/cohesion/evaluate-rotation` — score a rotation
+- `POST /api/cohesion/evaluate-lineup` — score a 5-man lineup
+- `GET /api/cohesion/player/<id>/composites` — player composite breakdown
+- `GET /api/cohesion/player/<id>/bell-curve` — bell curve normalization data
+
 ### Run the Skill Pipeline
 
 The pipeline evaluates all players across both stat-based and Claude evaluation:
@@ -201,11 +218,12 @@ EOF
 |---|---|---|
 | `players` | Current NBA players | `id`, `name`, `nba_position`, `nba_team`, `salary` |
 | `player_stats` | Raw stat blobs from NBA.com | `player_id`, `season`, `stats_json` (JSONB) |
-| `skill_profiles` | Evaluated 19-skill ratings | `player_id`, `season`, `source` (stat\|claude), `skills_json` (JSONB) |
+| `skill_profiles` | Evaluated 21-skill ratings | `player_id`, `season`, `source` (stat\|claude), `skills_json` (JSONB) |
 | `skill_flags` | Disagreements pending review | `player_id`, `season`, `skill_name`, `stat_rating`, `claude_rating`, `resolved` |
 | `skill_thresholds` | Calibration rules | `skill_name`, `thresholds` (JSONB) |
 | `legends` | 36 all-time greats | `id`, `name`, `nba_position`, `era`, `skills_json` (JSONB) |
 | `anchor_players` | Known-good tier assignments | `player_id`, `skill_name`, `expected_tier`, `reason` |
+| `cohesion_weights` | Cohesion engine subscore weights | `key`, `weights` (JSONB) |
 
 ### Creating a New Migration
 
