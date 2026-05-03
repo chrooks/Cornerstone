@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { listPlayers, listLegends } from "@/lib/api";
+import { searchPlayers, listLegends } from "@/lib/api";
 import type { Player, LegendSummary } from "@/lib/types";
 
 interface PlayerSearchComboboxProps {
@@ -75,15 +75,28 @@ export function PlayerSearchCombobox({
     }
     setLoading(true);
     try {
-      const res = await listPlayers(q);
+      // Use /api/players/search — DB-only, no MPG filter, so manually
+      // created players (e.g. Kyrie Irving, Haliburton) are included.
+      const res = await searchPlayers(q);
       const normalizedQuery = strip(q);
       let combined: Player[] = [];
 
       if (res.success && res.data) {
-        // Filter client-side by name since the backend may not support ?search param.
-        combined = res.data.filter((p) =>
-          strip(p.name).includes(normalizedQuery)
-        );
+        // Pad partial search results into full Player shape for onSelect consumers
+        combined = res.data
+          .filter((p) => strip(p.name).includes(normalizedQuery))
+          .map((p) => ({
+            id: p.id,
+            nba_api_id: 0,
+            name: p.name,
+            team: p.team,
+            position: p.position,
+            age: null,
+            games_played: null,
+            minutes_per_game: null,
+            season: "",
+            is_legend: false,
+          }));
       }
 
       // Merge matching legends (client-side filter from cached list)
