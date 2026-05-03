@@ -2,14 +2,19 @@
 api/pipeline.py — Pipeline status and stats-fetch endpoints.
 
 Endpoints:
-  GET  /api/pipeline/status       — aggregate counts for the pipeline dashboard
-  POST /api/pipeline/fetch-stats  — fetch and cache NBA stats for all qualifying players
+  GET  /api/pipeline/status              — aggregate counts for the pipeline dashboard
+  POST /api/pipeline/fetch-stats         — kick off background stats fetch, returns job_id
+  GET  /api/pipeline/job-status/<job_id> — poll progress of a background fetch job
 
 The skill-mapping and composite pipeline runs use the existing /api/skills/batch
 and /api/composite/batch endpoints (called directly from the frontend).
 """
 
 import logging
+import threading
+import uuid
+from datetime import datetime, timezone
+from typing import Any
 
 from flask import Blueprint, jsonify, request
 
@@ -26,6 +31,14 @@ from services.players_service import (
 logger = logging.getLogger(__name__)
 
 pipeline_bp = Blueprint("pipeline", __name__, url_prefix="/api")
+
+# ---------------------------------------------------------------------------
+# In-memory background job registry.
+# Each job is a dict with: status, progress, total, result, error, started_at,
+# finished_at.  Only one fetch-stats job runs at a time (guarded by _job_lock).
+# ---------------------------------------------------------------------------
+_jobs: dict[str, dict[str, Any]] = {}
+_job_lock = threading.Lock()
 
 
 def _ok(data) -> tuple:
@@ -171,24 +184,103 @@ def pipeline_status():
 # ---------------------------------------------------------------------------
 
 
+def _run_fetch_stats_job(
+    job_id: str,
+    player_ids: list[str],
+    season: str,
+    refresh: bool,
+) -> None:
+    """Background worker: fetch stats for each player and update job progress."""
+    job = _jobs[job_id]
+    try:
+        supabase = get_supabase()
+
+        # Resolve player list if none supplied (all qualifying players)
+        if not player_ids:
+            all_players = get_or_fetch_players(
+                season, DEFAULT_MIN_MPG, False, supabase,
+            )
+            player_ids = [p["id"] for p in all_players]
+            logger.info(
+                "fetch-stats [%s]: %d qualifying players for season %s",
+                job_id, len(player_ids), season,
+            )
+
+        total   = len(player_ids)
+        fetched = 0
+        errors  = 0
+
+        # Store total so the polling endpoint can report progress
+        job["total"] = total
+
+        for idx, pid in enumerate(player_ids, start=1):
+            logger.info("fetch-stats [%s] %d/%d: player %s", job_id, idx, total, pid)
+            try:
+                blob = get_or_fetch_player_stats(pid, season, supabase, refresh=refresh)
+                if blob:
+                    fetched += 1
+                else:
+                    errors += 1
+            except Exception:
+                logger.exception(
+                    "fetch-stats [%s]: error fetching player %s", job_id, pid,
+                )
+                errors += 1
+
+            # Update progress after each player so polls see real-time counts
+            job["progress"] = idx
+            job["fetched"]  = fetched
+            job["errors"]   = errors
+
+        logger.info(
+            "fetch-stats [%s] complete: %d fetched, %d errors out of %d",
+            job_id, fetched, errors, total,
+        )
+
+        # Scrape salaries from ESPN (~30-45s) and upsert into Supabase
+        salary_matched   = 0
+        salary_unmatched = 0
+        try:
+            salary_result    = run_bulk_salary_scrape(None, supabase)
+            salary_matched   = salary_result.get("matched", 0)
+            salary_unmatched = salary_result.get("unmatched", 0)
+            logger.info(
+                "fetch-stats [%s] salary scrape: %d matched, %d unmatched",
+                job_id, salary_matched, salary_unmatched,
+            )
+        except Exception:
+            logger.exception(
+                "fetch-stats [%s]: salary scrape failed (non-fatal)", job_id,
+            )
+
+        # Mark job complete with final results
+        job["status"] = "complete"
+        job["result"] = {
+            "total":            total,
+            "fetched":          fetched,
+            "skipped":          0,
+            "errors":           errors,
+            "salary_matched":   salary_matched,
+            "salary_unmatched": salary_unmatched,
+        }
+
+    except Exception as exc:
+        logger.exception("fetch-stats [%s]: fatal error", job_id)
+        job["status"] = "error"
+        job["error"]  = str(exc)
+
+    finally:
+        job["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+
 @pipeline_bp.route("/pipeline/fetch-stats", methods=["POST"])
 @require_admin
 def fetch_stats_batch():
     """
-    Fetch and cache NBA stats for all qualifying players.
+    Kick off a background stats fetch for all qualifying players.
 
-    This is Step 0 of the pipeline — it must be run before /api/skills/batch
-    because the skill mapping service reads from the player_stats table.
-
-    For each qualifying player the endpoint calls get_or_fetch_player_stats,
-    which:
-      - Pulls league-wide bulk stats (one bulk nba_api call, ~10s, then cached)
-      - Fetches per-player ShotChartDetail and LeagueSeasonMatchups (~5–15s each)
-      - Assembles and persists the full stats blob to player_stats
-
-    WARNING: This is a long-running synchronous request. For a full league sweep
-    (~300 players) it can take 30–60 minutes due to per-player API calls.
-    Pass player_ids to process a subset first as a spot-check.
+    Returns immediately with a job_id. Poll GET /api/pipeline/job-status/<job_id>
+    to track progress.
 
     Request body (JSON, all optional):
       {
@@ -198,80 +290,75 @@ def fetch_stats_batch():
       }
 
     Response data:
+      { "job_id": str }
+    """
+    # Only allow one fetch-stats job at a time
+    with _job_lock:
+        active = [
+            jid for jid, j in _jobs.items()
+            if j.get("status") == "running"
+        ]
+        if active:
+            return _err(
+                f"A stats fetch is already running (job {active[0]}). "
+                "Wait for it to finish or check its status.",
+                409,
+            )
+
+        body       = request.get_json(silent=True) or {}
+        player_ids = body.get("player_ids") or []
+        season     = body.get("season", CURRENT_SEASON)
+        refresh    = bool(body.get("refresh", False))
+
+        job_id = str(uuid.uuid4())
+        _jobs[job_id] = {
+            "status":      "running",
+            "progress":    0,
+            "total":       0,
+            "fetched":     0,
+            "errors":      0,
+            "result":      None,
+            "error":       None,
+            "started_at":  datetime.now(timezone.utc).isoformat(),
+            "finished_at": None,
+        }
+
+    # Spawn background thread — Flask's threaded=True lets this run
+    # without blocking other request handlers
+    thread = threading.Thread(
+        target=_run_fetch_stats_job,
+        args=(job_id, player_ids, season, refresh),
+        daemon=True,
+    )
+    thread.start()
+
+    return _ok({"job_id": job_id})
+
+
+# ---------------------------------------------------------------------------
+# GET /api/pipeline/job-status/<job_id>
+# ---------------------------------------------------------------------------
+
+
+@pipeline_bp.route("/pipeline/job-status/<job_id>", methods=["GET"])
+def job_status(job_id: str):
+    """
+    Poll the progress of a background fetch-stats job.
+
+    Response data:
       {
-        "total":            int,   // players attempted
-        "fetched":          int,   // stats blobs successfully retrieved/cached
-        "skipped":          int,   // already cached (and refresh=false)
-        "errors":           int,   // fetch failures
-        "salary_matched":   int,   // players whose salary was updated from ESPN
-        "salary_unmatched": int,   // qualifying players with no ESPN salary match
+        "status":      "running" | "complete" | "error",
+        "progress":    int,    // players processed so far
+        "total":       int,    // total players to process
+        "fetched":     int,    // successful fetches so far
+        "errors":      int,    // fetch errors so far
+        "result":      {...},  // final result dict (null while running)
+        "error":       str,    // error message if status == "error"
+        "started_at":  str,
+        "finished_at": str | null,
       }
     """
-    body       = request.get_json(silent=True) or {}
-    player_ids = body.get("player_ids") or []
-    season     = body.get("season", CURRENT_SEASON)
-    refresh    = bool(body.get("refresh", False))
-
-    try:
-        supabase = get_supabase()
-
-        # Resolve player list — empty means "all qualifying players"
-        if not player_ids:
-            # Ensure the players table is populated first (lightweight bulk fetch)
-            all_players = get_or_fetch_players(season, DEFAULT_MIN_MPG, False, supabase)
-            player_ids = [p["id"] for p in all_players]
-            logger.info(
-                "fetch-stats: %d qualifying players for season %s",
-                len(player_ids), season,
-            )
-
-        total   = len(player_ids)
-        fetched = 0
-        skipped = 0
-        errors  = 0
-
-        for idx, pid in enumerate(player_ids, start=1):
-            logger.info("fetch-stats %d/%d: player %s", idx, total, pid)
-            try:
-                blob = get_or_fetch_player_stats(pid, season, supabase, refresh=refresh)
-                if blob:
-                    fetched += 1
-                else:
-                    # Player not found in DB (shouldn't happen if we got it from players table)
-                    errors += 1
-            except Exception:
-                logger.exception("fetch-stats: error fetching player %s", pid)
-                errors += 1
-
-        logger.info(
-            "fetch-stats complete: %d fetched, %d skipped, %d errors out of %d",
-            fetched, skipped, errors, total,
-        )
-
-        # Scrape salaries from ESPN for all teams (~30–45s) and upsert into Supabase.
-        # We run this after stats so both steps complete in one pipeline trigger.
-        salary_matched   = 0
-        salary_unmatched = 0
-        try:
-            salary_result    = run_bulk_salary_scrape(None, supabase)
-            salary_matched   = salary_result.get("matched", 0)
-            salary_unmatched = salary_result.get("unmatched", 0)
-            logger.info(
-                "fetch-stats salary scrape: %d matched, %d unmatched",
-                salary_matched, salary_unmatched,
-            )
-        except Exception:
-            logger.exception("fetch-stats: salary scrape failed (non-fatal)")
-
-        return _ok({
-            "total":            total,
-            "fetched":          fetched,
-            "skipped":          skipped,
-            "errors":           errors,
-            "salary_matched":   salary_matched,
-            "salary_unmatched": salary_unmatched,
-        })
-
-    except Exception:
-        logger.exception("Error in POST /api/pipeline/fetch-stats")
-        return _err("Internal server error")
+    job = _jobs.get(job_id)
+    if not job:
+        return _err(f"Unknown job: {job_id}", 404)
+    return _ok(dict(job))

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Toaster, toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getPipelineStatus, runStatsFetch, runSkillsBatch, runCompositeBatch } from "@/lib/api";
+import { getPipelineStatus, runStatsFetch, getJobStatus, runSkillsBatch, runCompositeBatch } from "@/lib/api";
 import type { PipelineStatus } from "@/lib/types";
 
 // Current season — keep in sync with CURRENT_SEASON in players_service.py
@@ -56,6 +56,7 @@ function StepCard({
   onRun,
   disabled,
   headerExtra,
+  progressNode,
 }: {
   step: number;
   title: string;
@@ -66,6 +67,8 @@ function StepCard({
   disabled?: boolean;
   /** Optional controls rendered to the left of the Run button (e.g. checkboxes). */
   headerExtra?: React.ReactNode;
+  /** Optional live progress display shown while running (replaces generic spinner). */
+  progressNode?: React.ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -93,14 +96,16 @@ function StepCard({
         </button>
       </div>
 
-      {/* Result / spinner */}
+      {/* Result / spinner / progress */}
       <div className="px-5 py-4 min-h-[3rem]">
         {running ? (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-            {/* Simple CSS spinner */}
-            <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            Processing — this may take several minutes for all players…
-          </div>
+          progressNode ?? (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              {/* Simple CSS spinner */}
+              <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              Processing — this may take several minutes for all players…
+            </div>
+          )
         ) : lastResult ? (
           <div className="text-sm">{lastResult}</div>
         ) : (
@@ -115,11 +120,14 @@ export default function PipelinePage() {
   const [status, setStatus]             = useState<PipelineStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
 
-  // Step 0: Fetch Player Stats
+  // Step 0: Fetch Player Stats (background job with polling)
   const [step0Running, setStep0Running]         = useState(false);
   const [step0Result, setStep0Result]           = useState<React.ReactNode | null>(null);
+  const [step0Progress, setStep0Progress]       = useState<{ progress: number; total: number; fetched: number; errors: number } | null>(null);
   // When true, bypass the 24-hour cache and re-fetch all stats from nba_api.
   const [step0ForceRefresh, setStep0ForceRefresh] = useState(false);
+  // Ref to hold the polling interval so we can clear it on unmount
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Step 1: Skill Mapping
   const [step1Running, setStep1Running] = useState(false);
@@ -143,43 +151,91 @@ export default function PipelinePage() {
     refreshStatus();
   }, [refreshStatus]);
 
-  // Run Step 0: fetch NBA stats from the API for all qualifying players
+  // Clean up polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  // Run Step 0: kick off background stats fetch and poll for progress
   const handleRunStep0 = useCallback(async () => {
     setStep0Running(true);
     setStep0Result(null);
+    setStep0Progress(null);
+
     try {
       const res = await runStatsFetch(CURRENT_SEASON, step0ForceRefresh);
-      if (res.success && res.data) {
-        const d = res.data;
-        setStep0Result(
-          <div className="space-y-2">
-            <p className="text-green-700 font-medium">Stats &amp; salary fetch complete</p>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-muted-foreground">
-              <span>Total players: <strong className="text-foreground">{d.total}</strong></span>
-              <span>Stats fetched: <strong className="text-foreground">{d.fetched}</strong></span>
-              <span>Errors: <strong className="text-foreground">{d.errors}</strong></span>
-            </div>
-            {(d.salary_matched != null || d.salary_unmatched != null) && (
-              <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-muted-foreground border-t border-border pt-1.5">
-                <span>Salaries matched: <strong className="text-foreground">{d.salary_matched ?? "—"}</strong></span>
-                <span>Unmatched: <strong className="text-foreground">{d.salary_unmatched ?? "—"}</strong></span>
-              </div>
-            )}
-          </div>
-        );
-        toast.success(`Stats fetch complete — ${d.fetched}/${d.total} players, ${d.salary_matched ?? 0} salaries updated`);
-      } else {
+      if (!res.success || !res.data) {
         setStep0Result(
           <p className="text-destructive text-sm">{res.error ?? "Unknown error"}</p>
         );
         toast.error(res.error ?? "Stats fetch failed");
+        setStep0Running(false);
+        return;
       }
+
+      const jobId = res.data.job_id;
+
+      // Poll every 3 seconds for job progress
+      pollRef.current = setInterval(async () => {
+        try {
+          const poll = await getJobStatus(jobId);
+          if (!poll.success || !poll.data) return;
+
+          const j = poll.data;
+
+          // Update live progress counters
+          setStep0Progress({
+            progress: j.progress,
+            total:    j.total,
+            fetched:  j.fetched,
+            errors:   j.errors,
+          });
+
+          // Job finished — stop polling and show final result
+          if (j.status === "complete" || j.status === "error") {
+            if (pollRef.current) clearInterval(pollRef.current);
+            pollRef.current = null;
+            setStep0Running(false);
+            setStep0Progress(null);
+
+            if (j.status === "complete" && j.result) {
+              const d = j.result;
+              setStep0Result(
+                <div className="space-y-2">
+                  <p className="text-green-700 font-medium">Stats &amp; salary fetch complete</p>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-muted-foreground">
+                    <span>Total players: <strong className="text-foreground">{d.total}</strong></span>
+                    <span>Stats fetched: <strong className="text-foreground">{d.fetched}</strong></span>
+                    <span>Errors: <strong className="text-foreground">{d.errors}</strong></span>
+                  </div>
+                  {(d.salary_matched != null || d.salary_unmatched != null) && (
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-muted-foreground border-t border-border pt-1.5">
+                      <span>Salaries matched: <strong className="text-foreground">{d.salary_matched ?? "—"}</strong></span>
+                      <span>Unmatched: <strong className="text-foreground">{d.salary_unmatched ?? "—"}</strong></span>
+                    </div>
+                  )}
+                </div>
+              );
+              toast.success(`Stats fetch complete — ${d.fetched}/${d.total} players, ${d.salary_matched ?? 0} salaries updated`);
+            } else {
+              setStep0Result(
+                <p className="text-destructive text-sm">{j.error ?? "Job failed — check backend logs"}</p>
+              );
+              toast.error(j.error ?? "Stats fetch failed");
+            }
+
+            await refreshStatus();
+          }
+        } catch {
+          // Polling error — keep trying, transient network blip
+        }
+      }, 3000);
     } catch {
       setStep0Result(<p className="text-destructive text-sm">Request failed — check backend logs</p>);
       toast.error("Request failed");
-    } finally {
       setStep0Running(false);
-      await refreshStatus();
     }
   }, [refreshStatus, step0ForceRefresh]);
 
@@ -355,7 +411,7 @@ export default function PipelinePage() {
         <StepCard
           step={0}
           title="Fetch Player Stats"
-          description="Pull raw stats from nba_api and scrape ESPN salaries for every qualifying player. Stats are cached in player_stats; salaries are upserted into the players table. Required before Step 1. Long-running — expect 30–60 min."
+          description="Pull raw stats from nba_api and scrape ESPN salaries for every qualifying player. Stats are cached in player_stats; salaries are upserted into the players table. Required before Step 1. Runs in background — you can navigate away."
           running={step0Running}
           lastResult={step0Result}
           onRun={handleRunStep0}
@@ -373,6 +429,30 @@ export default function PipelinePage() {
               />
               Force refresh
             </label>
+          }
+          progressNode={
+            step0Progress ? (
+              <div id="pipeline-step-0-progress" className="space-y-2">
+                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                  <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <span>
+                    Fetching player stats… {step0Progress.progress}/{step0Progress.total}
+                  </span>
+                </div>
+                {step0Progress.total > 0 && (
+                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{ width: `${Math.round((step0Progress.progress / step0Progress.total) * 100)}%` }}
+                    />
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-x-6 text-xs text-muted-foreground">
+                  <span>Fetched: <strong className="text-foreground">{step0Progress.fetched}</strong></span>
+                  <span>Errors: <strong className="text-foreground">{step0Progress.errors}</strong></span>
+                </div>
+              </div>
+            ) : undefined
           }
         />
         </div>

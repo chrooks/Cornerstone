@@ -293,24 +293,38 @@ export async function getPipelineStatus(
 }
 
 /**
- * Step 0: Fetch and cache NBA stats for all qualifying players.
- * Must be run before runSkillsBatch if player_stats table is empty.
- * WARNING: Long-running — can take 30–60 minutes for a full league sweep.
+ * Step 0: Kick off a background stats fetch for all qualifying players.
+ * Returns immediately with a job_id — poll with getJobStatus() for progress.
  */
 export async function runStatsFetch(season?: string, refresh = false): Promise<ApiResponse<{
-  total: number;
-  fetched: number;
-  skipped: number;
-  errors: number;
-  /** Players whose ESPN salary was successfully matched and upserted. */
-  salary_matched: number;
-  /** Players in Supabase with no ESPN salary match (name mismatch or below MPG threshold). */
-  salary_unmatched: number;
+  job_id: string;
 }>> {
   return apiFetch("/api/pipeline/fetch-stats", {
     method: "POST",
     body: JSON.stringify({ season: season ?? undefined, refresh }),
   });
+}
+
+/** Poll the progress of a background fetch-stats job. */
+export async function getJobStatus(jobId: string): Promise<ApiResponse<{
+  status: "running" | "complete" | "error";
+  progress: number;
+  total: number;
+  fetched: number;
+  errors: number;
+  result: {
+    total: number;
+    fetched: number;
+    skipped: number;
+    errors: number;
+    salary_matched: number;
+    salary_unmatched: number;
+  } | null;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+}>> {
+  return apiFetch(`/api/pipeline/job-status/${encodeURIComponent(jobId)}`);
 }
 
 /**
