@@ -44,23 +44,6 @@ const TIER_NUMERIC: Record<string, number> = {
   None: 0,
 };
 
-/** Map a numeric average back to the nearest tier label for display. */
-function avgTierLabel(avg: number): string {
-  if (avg < 0.25) return "—";
-  if (avg < 1.5) return "C";
-  if (avg < 2.5) return "P";
-  if (avg < 3.5) return "E";
-  return "ATG";
-}
-
-/** Color class for an average tier value. */
-function avgTierClass(avg: number): string {
-  if (avg < 0.25) return "text-muted-foreground/30";
-  if (avg < 1.5) return "text-amber-700";
-  if (avg < 2.5) return "text-sky-700";
-  if (avg < 3.5) return "text-emerald-700 font-semibold";
-  return "text-violet-700 font-semibold";
-}
 
 /** Colored square for a tier value. Shows tier name on hover via native title tooltip. */
 function TierSquare({ tier }: { tier: string | null | undefined }) {
@@ -74,6 +57,49 @@ function TierSquare({ tier }: { tier: string | null | undefined }) {
       className={cn("inline-block size-4 rounded-sm cursor-default", TIER_BG_CLASSES[resolved] ?? "bg-muted")}
       title={resolved}
     />
+  );
+}
+
+/** Ordered tier list for mapping numeric averages to half-tier splits. */
+const TIER_ORDER = ["None", "Capable", "Proficient", "Elite", "All-Time Great"] as const;
+
+/**
+ * Average tier square — supports half-tier display.
+ * Whole tiers render a solid square; half-tiers render a left/right split
+ * with the lower tier on the left and upper tier on the right.
+ */
+function AvgTierSquare({ avg }: { avg: number }) {
+  if (avg < 0.25) {
+    return <span className="inline-block size-4 rounded-sm bg-muted/40" />;
+  }
+
+  // Round to nearest 0.5 for half-tier granularity
+  const rounded = Math.round(avg * 2) / 2;
+  const lowerIdx = Math.floor(rounded);
+  const isHalf = rounded % 1 !== 0;
+
+  if (!isHalf) {
+    // Solid square — exact tier
+    const tier = TIER_ORDER[lowerIdx];
+    return (
+      <span
+        className={cn("inline-block size-4 rounded-sm cursor-default", TIER_BG_CLASSES[tier] ?? "bg-muted")}
+        title={tier}
+      />
+    );
+  }
+
+  // Half-tier — split square with lower tier left, upper tier right
+  const lowerTier = TIER_ORDER[lowerIdx];
+  const upperTier = TIER_ORDER[lowerIdx + 1];
+  return (
+    <span
+      className="inline-flex size-4 rounded-sm overflow-hidden cursor-default"
+      title={`${lowerTier} / ${upperTier}`}
+    >
+      <span className={cn("w-1/2 h-full", TIER_BG_CLASSES[lowerTier] || "bg-muted/40")} />
+      <span className={cn("w-1/2 h-full", TIER_BG_CLASSES[upperTier] || "bg-muted/40")} />
+    </span>
   );
 }
 
@@ -182,6 +208,8 @@ export function SkillGrid({
 
                   {/* Average tier across filled slots */}
                   {(() => {
+                    // Include all filled slots in the average — None (0) counts toward
+                    // the denominator so one Proficient + four Nones ≠ Proficient average.
                     const tiers = visibleIndices
                       .map((i) => {
                         const p = allSlots[i];
@@ -190,16 +218,14 @@ export function SkillGrid({
                         const tier = isCornerstone ? legendProfile?.[skill] : p.skills?.[skill];
                         return TIER_NUMERIC[tier ?? "None"] ?? 0;
                       })
-                      .filter((v): v is number => v !== null && v > 0);
+                      .filter((v): v is number => v !== null);
                     const avg = tiers.length > 0 ? tiers.reduce((a, b) => a + b, 0) / tiers.length : 0;
                     return (
                       <td
                         id={`builder-skill-grid-avg-${skill}`}
                         className={cn("sticky right-0 z-10 px-2 py-1 text-center border-l border-border/60 bg-background", rowIdx % 2 !== 0 && "bg-muted/20")}
                       >
-                        <span className={cn("whitespace-nowrap text-[10px]", avgTierClass(avg))}>
-                          {avgTierLabel(avg)}
-                        </span>
+                        <AvgTierSquare avg={avg} />
                       </td>
                     );
                   })()}
