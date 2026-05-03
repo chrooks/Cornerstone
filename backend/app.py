@@ -137,7 +137,7 @@ def create_app() -> Flask:
     # Falls back to localhost in development. A wildcard is intentionally avoided
     # now that write endpoints carry JWTs — any origin could otherwise make
     # credentialed cross-origin requests to the API.
-    raw_origins = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000", "http://localhost:3001", "http://localhost:3002")
+    raw_origins = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000, http://localhost:3001, http://localhost:3002")
     allowed_origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
     CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
 
