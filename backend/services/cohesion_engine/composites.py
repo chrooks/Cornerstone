@@ -140,13 +140,16 @@ def compute_raw_composites(skills: dict[str, str | float]) -> dict[str, float]:
     )
 
     # Step 5: shot creation references raw spacing and raw rim pressure.
+    # Paint touch scaled to 0.5 — rim finishing contributes to creation but
+    # shouldn't dominate; a player's creation score should reflect actual
+    # shot-making ability, not just paint finishing.
     raw_shot_creation = (
         tier_value(skills, "pnr_ball_handler")
         + tier_value(skills, "passer")
         + tier_value(skills, "off_dribble_shooter")
         + tier_value(skills, "isolation_scorer")
         + c["shot_creation_spacing"] * raw_spacing
-        + raw_paint_touch
+        + c["shot_creation_paint_touch"] * raw_paint_touch
     )
 
     return {

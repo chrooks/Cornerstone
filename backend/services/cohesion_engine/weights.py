@@ -45,6 +45,7 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "off_ball_finishing_scale": 0.08,          # finishing bonus for off-ball impact
     "off_ball_passer": 0.3,                   # passing adds secondary off-ball value
     "shot_creation_spacing": 0.3,             # spacing bonus layered into shot creation
+    "shot_creation_paint_touch": 0.5,         # rim pressure scaled down — finishing ≠ creation
     "transition_passer_scale": 0.2,           # transition passing as fraction of transition composite
     "transition_high_flyer": 0.7,             # athleticism dominates transition scoring
     "transition_driver": 0.3,                 # driving adds secondary transition value
@@ -82,7 +83,7 @@ THEORETICAL_MAX: dict[str, float] = {
     "post_game": 17.0,
     "pnr_screener": 50.0,
     "off_ball_impact": 61.0,
-    "shot_creation": 60.0,
+    "shot_creation": 50.0,
     "rebounding": 20.0,
     "transition": 42.0,
     "perimeter_defense": 17.0,
