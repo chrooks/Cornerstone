@@ -689,13 +689,14 @@ function PlayersPageContent() {
               onPageSizeChange={setPageSize}
               onSkillOverride={isAdmin ? handleSkillOverride : undefined}
               onRemoveManualPlayer={isAdmin ? handleRemoveManualPlayer : undefined}
+              isAdmin={isAdmin}
             />
           ) : (
             <>
               {/* Card grid — auto-fill responsive columns */}
               <div id="players-cards-grid" className="grid grid-cols-[repeat(auto-fill,_minmax(280px,_1fr))] gap-4">
                 {paginatedPlayers.map((player) => (
-                  <PlayerCard key={player.id} player={player} />
+                  <PlayerCard key={player.id} player={player} isAdmin={isAdmin} />
                 ))}
                 {paginatedPlayers.length === 0 && (
                   <p className="col-span-full text-center text-sm text-muted-foreground py-12">

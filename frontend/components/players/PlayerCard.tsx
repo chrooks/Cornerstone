@@ -51,9 +51,11 @@ function getTopSkills(skills: Record<string, string>): SkillEntry[] {
 
 interface PlayerCardProps {
   player: PlayerWithSkills;
+  /** When true, clicking navigates to /admin/players/[id] instead of /players/[id]. */
+  isAdmin?: boolean;
 }
 
-export function PlayerCard({ player }: PlayerCardProps) {
+export function PlayerCard({ player, isAdmin }: PlayerCardProps) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
 
@@ -72,16 +74,18 @@ export function PlayerCard({ player }: PlayerCardProps) {
     .join(" · ");
 
   const isLegend = player.is_legend === true;
+  // Admin users navigate to /admin/players/[id]; everyone else to /players/[id]
+  const profilePath = isAdmin ? `/admin/players/${player.id}` : `/players/${player.id}`;
 
   return (
     <div
       id={`player-card-${player.id}`}
       onClick={isLegend ? undefined : (e) => {
         if (e.metaKey || e.ctrlKey) {
-          window.open(`/players/${player.id}`, "_blank");
+          window.open(profilePath, "_blank");
           return;
         }
-        router.push(`/players/${player.id}`);
+        router.push(profilePath);
       }}
       className={cn(
         "group rounded-lg border border-border bg-card transition-all p-4 flex flex-col gap-3",

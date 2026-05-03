@@ -126,6 +126,8 @@ interface PlayerPickerPanelProps {
    * the CourtLineup face hover into the picker list.
    */
   highlightedPlayerId?: string | null;
+  /** When true, profile links route to /admin/players/[id]. */
+  isAdmin?: boolean;
 }
 
 export function PlayerPickerPanel({
@@ -143,6 +145,7 @@ export function PlayerPickerPanel({
   onPlayerHover,
   onPlayerHoverEnd,
   highlightedPlayerId,
+  isAdmin,
 }: PlayerPickerPanelProps) {
   // ── View mode ─────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<ViewMode>("table");
@@ -313,8 +316,9 @@ export function PlayerPickerPanel({
   // ── Right-click — open player profile in new tab with from=builder marker ──
   const handleRowContextMenu = useCallback((e: React.MouseEvent, player: PlayerWithSkills) => {
     e.preventDefault();
-    window.open(`/players/${player.id}?from=builder`, "_blank");
-  }, []);
+    const prefix = isAdmin ? "/admin/players" : "/players";
+    window.open(`${prefix}/${player.id}?from=builder`, "_blank");
+  }, [isAdmin]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -436,6 +440,7 @@ export function PlayerPickerPanel({
               onRowHover={onPlayerHover ? (player) => onPlayerHover(player.salary ?? null) : undefined}
               onRowHoverEnd={onPlayerHoverEnd}
               highlightedPlayerId={highlightedPlayerId}
+              isAdmin={isAdmin}
             />
           ) : (
             <>

@@ -843,6 +843,7 @@ export function BuilderPage() {
             onPlayerHover={(salary) => setPickerHoveredSalary(salary)}
             onPlayerHoverEnd={() => setPickerHoveredSalary(null)}
             highlightedPlayerId={hoveredCourtPlayerId}
+            isAdmin={isAdmin}
           />
         </div>
       </div>

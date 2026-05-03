@@ -160,6 +160,8 @@ interface PlayerTableProps {
    * when it's disabled. Used by the builder to mirror CourtLineup face hovers.
    */
   highlightedPlayerId?: string | null;
+  /** When true, row clicks navigate to /admin/players/[id] instead of /players/[id]. */
+  isAdmin?: boolean;
 }
 
 export function PlayerTable({
@@ -180,6 +182,7 @@ export function PlayerTable({
   onRowHover,
   onRowHoverEnd,
   highlightedPlayerId,
+  isAdmin,
 }: PlayerTableProps) {
   const router = useRouter();
 
@@ -353,7 +356,7 @@ export function PlayerTable({
               <span className="font-medium text-foreground">{player.name}</span>
             ) : (
               <Link
-                href={`/players/${player.id}`}
+                href={isAdmin ? `/admin/players/${player.id}` : `/players/${player.id}`}
                 onClick={(e) => e.stopPropagation()}
                 className="font-medium text-foreground hover:underline"
               >
@@ -546,16 +549,18 @@ export function PlayerTable({
                 const isLegend = player.is_legend === true;
                 const isDisabled = disabledPlayerIds?.has(player.id) ?? false;
                 // onRowClick overrides navigation (used by builder picker); blocked for disabled rows
+                // Admin users navigate to /admin/players/[id]; everyone else to /players/[id]
+                const profilePath = isAdmin ? `/admin/players/${player.id}` : `/players/${player.id}`;
                 const handleRowClick = onRowClick
                   ? isDisabled ? undefined : () => onRowClick(player)
                   : isLegend
                   ? undefined
                   : (e: React.MouseEvent) => {
                       if (e.metaKey || e.ctrlKey) {
-                        window.open(`/players/${player.id}`, "_blank");
+                        window.open(profilePath, "_blank");
                         return;
                       }
-                      router.push(`/players/${player.id}`);
+                      router.push(profilePath);
                     };
                 const isHighlighted = highlightedPlayerId != null && highlightedPlayerId === player.id;
                 return (
