@@ -406,16 +406,29 @@ export function AssistantGmNotes({
   // Tracks previous slot layout to derive the change subject line on the next eval
   const prevSlotsRef = useRef<(PlayerWithSkills | null)[] | null>(null);
 
-  // Stable key: changes on player add/remove OR slot reorder, so swapping slots triggers re-eval
-  // (slot position affects slot weight, which directly affects scores)
+  // Stable key: changes on player add/remove OR starter↔bench boundary crossing.
+  // Swaps *within* starters (slots 1-5) or *within* bench (slots 6-9) do NOT
+  // trigger re-eval — only moving a player across the starting-lineup boundary does.
+  // Each group is sorted by player ID so intra-group reordering is invisible.
   // Legend ID is prefixed so switching cornerstones triggers re-eval even with 0 supporting players.
   const rosterKey = useMemo(() => {
     const legendPart = legendDetail ? `legend:${legendDetail.id}` : "legend:none";
-    const slotPart = allSlots
-      .map((p, i) => (p ? `${i}:${p.id}` : null))
+    // allSlots indices 0-4 = starting lineup (cornerstone + co-star + starters)
+    // allSlots indices 5-8 = bench
+    const STARTER_BOUNDARY = 5;
+    const starterIds = allSlots
+      .slice(0, STARTER_BOUNDARY)
       .filter(Boolean)
+      .map((p) => p!.id)
+      .sort()
       .join(",");
-    return `${legendPart}|${slotPart}`;
+    const benchIds = allSlots
+      .slice(STARTER_BOUNDARY)
+      .filter(Boolean)
+      .map((p) => p!.id)
+      .sort()
+      .join(",");
+    return `${legendPart}|s:${starterIds}|b:${benchIds}`;
   }, [allSlots, legendDetail]);
 
   const runEval = useCallback(async () => {
