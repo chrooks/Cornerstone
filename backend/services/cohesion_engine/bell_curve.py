@@ -14,7 +14,12 @@ from typing import Any
 from .weights import (
     AMPLITUDE_MAP,
     BELL_BASE_RANGE,
+    BELL_DOWN_STEEPNESS_BASE,
+    BELL_DOWN_STEEPNESS_SCALE,
     BELL_FLAT_TOP_DIVISOR,
+    BELL_STEEPNESS_MIDPOINT,
+    BELL_UP_STEEPNESS_BASE,
+    BELL_UP_STEEPNESS_SCALE,
     DEFENSIVE_GAP_PENALTY_SCALE,
     DEFENSIVE_GAP_THRESHOLD,
     HEIGHT_MAX_INCHES,
@@ -67,21 +72,33 @@ def defensive_value_at_height(
     range_up: int,
     flat_top_down: int,
     flat_top_up: int,
+    player_height: int = 78,
 ) -> float:
     """
     Return one defender's value against a target height.
 
-    This is a trapezoid with a quadratic taper: full value near the peak, then
-    a curved decline to zero at the coverage boundary.
+    This is a trapezoid with a height-dependent power taper: full value near
+    the peak, then a (1-t)^exponent decline to zero at the coverage boundary.
+    The (1-t)^exp shape drops fast from peak and tapers gently near zero —
+    modeling how defensive effectiveness degrades quickly outside a player's
+    natural matchup range. The exponent varies by direction and player height:
+    tall players drop off faster going short, short players drop off faster
+    going tall. At the midpoint height, taper is linear (exponent=1.0).
     """
     if target_height > peak_center:
         distance = target_height - peak_center
         flat = flat_top_up
         total = range_up
+        # Upward taper: shorter players get steeper exponent going up
+        inches_from_mid = max(0, BELL_STEEPNESS_MIDPOINT - player_height)
+        exponent = BELL_UP_STEEPNESS_BASE + inches_from_mid * BELL_UP_STEEPNESS_SCALE
     else:
         distance = peak_center - target_height
         flat = flat_top_down
         total = range_down
+        # Downward taper: taller players get steeper exponent going down
+        inches_from_mid = max(0, player_height - BELL_STEEPNESS_MIDPOINT)
+        exponent = BELL_DOWN_STEEPNESS_BASE + inches_from_mid * BELL_DOWN_STEEPNESS_SCALE
 
     if distance <= flat:
         return amplitude
@@ -91,7 +108,7 @@ def defensive_value_at_height(
         return 0.0
 
     t = (distance - flat) / taper
-    return amplitude * max(0.0, 1.0 - t * t)
+    return amplitude * max(0.0, (1.0 - t) ** exponent)
 
 
 def compute_bell_params(skills: dict[str, str], height_inches: int) -> dict[str, float | int]:
@@ -122,15 +139,18 @@ def compute_bell_params(skills: dict[str, str], height_inches: int) -> dict[str,
         peak_center = height_inches
     peak_center = _clamp_height(peak_center)
 
+    # Cross-height bonuses: RP-only bigs extend downward, PD-only guards extend upward.
+    # Using round() instead of int() so small fractional values (e.g. 0.75) aren't
+    # truncated to zero — this was causing tall rim protectors to get no downward reach.
     rp_cross_down = 0
     if height_inches >= RP_CROSS_HEIGHT_MIN and not has_vd and not has_pd:
         scale = min(1.0, (height_inches - RP_CROSS_HEIGHT_MIN) / RP_CROSS_HEIGHT_WINDOW)
-        rp_cross_down = int(RP_UP.get(rp, 0) * RP_CROSS_SCALE * scale)
+        rp_cross_down = round(RP_UP.get(rp, 0) * RP_CROSS_SCALE * scale)
 
     pd_cross_up = 0
     if height_inches <= PD_CROSS_HEIGHT_MAX and not has_vd and not has_rp:
         scale = min(1.0, (PD_CROSS_HEIGHT_MAX - height_inches) / PD_CROSS_HEIGHT_WINDOW)
-        pd_cross_up = int(PD_DOWN.get(pd, 0) * PD_CROSS_SCALE * scale)
+        pd_cross_up = round(PD_DOWN.get(pd, 0) * PD_CROSS_SCALE * scale)
 
     range_down = BELL_BASE_RANGE + VD_EXT.get(vd, 0) + PD_DOWN.get(pd, 0) + rp_cross_down
     range_up = BELL_BASE_RANGE + VD_EXT.get(vd, 0) + RP_UP.get(rp, 0) + pd_cross_up
@@ -142,6 +162,7 @@ def compute_bell_params(skills: dict[str, str], height_inches: int) -> dict[str,
         "range_up": range_up,
         "flat_top_down": max(0, range_down // BELL_FLAT_TOP_DIVISOR),
         "flat_top_up": max(0, range_up // BELL_FLAT_TOP_DIVISOR),
+        "player_height": height_inches,
     }
 
 
@@ -216,6 +237,7 @@ def _player_defensive_values(player: dict[str, Any]) -> list[float]:
             range_up=int(params["range_up"]),
             flat_top_down=int(params["flat_top_down"]),
             flat_top_up=int(params["flat_top_up"]),
+            player_height=int(params["player_height"]),
         )
         for height in range(HEIGHT_MIN_INCHES, HEIGHT_MAX_INCHES + 1)
     ]

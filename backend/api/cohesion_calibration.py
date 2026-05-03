@@ -551,6 +551,7 @@ def get_bell_curve(player_id: str) -> tuple:
             range_up=int(params["range_up"]),
             flat_top_down=int(params["flat_top_down"]),
             flat_top_up=int(params["flat_top_up"]),
+            player_height=int(params["player_height"]),
         )
         curve.append({
             "height": h,

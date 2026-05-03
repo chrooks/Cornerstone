@@ -1522,10 +1522,13 @@ function PnrPairingEquation({ value, lineupSlots, weights }: PnrPairingEquationP
 interface BellCurveChartProps {
   overlayPlayers: BellCurveData[];
   onRemovePlayer: (playerId: string) => void;
+  /** Re-fetch all overlay players' bell curves (e.g., after weight changes). */
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }
 
 /** SVG bell curve overlay chart — one line per player. */
-function BellCurveChart({ overlayPlayers, onRemovePlayer }: BellCurveChartProps) {
+function BellCurveChart({ overlayPlayers, onRemovePlayer, onRefresh, refreshing }: BellCurveChartProps) {
   // Chart dimensions
   const width = 600;
   const height = 300;
@@ -1544,6 +1547,21 @@ function BellCurveChart({ overlayPlayers, onRemovePlayer }: BellCurveChartProps)
 
   return (
     <div id="cohesion-cal-bellcurve-chart">
+      {/* Refresh button — always visible so curves can be refreshed after weight changes */}
+      {onRefresh && (
+        <div className="flex justify-end mb-1">
+          <button
+            id="cohesion-cal-bellcurve-refresh"
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing || overlayPlayers.length === 0}
+            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Re-fetch all bell curves (after weight changes)"
+          >
+            {refreshing ? "Refreshing…" : "Refresh curves"}
+          </button>
+        </div>
+      )}
       <svg
         width={width}
         height={height}
@@ -1596,7 +1614,7 @@ function BellCurveChart({ overlayPlayers, onRemovePlayer }: BellCurveChartProps)
 
       {/* Player legend with remove buttons */}
       {overlayPlayers.length > 0 && (
-        <div id="cohesion-cal-bellcurve-legend" className="flex flex-wrap gap-2 mt-2">
+        <div id="cohesion-cal-bellcurve-legend" className="flex flex-wrap items-center gap-2 mt-2">
           {overlayPlayers.map((player, idx) => (
             <button
               key={player.player_id}
@@ -2868,6 +2886,27 @@ export default function CohesionCalibrationPage() {
     setOverlayPlayers((prev) => prev.filter((p) => p.player_id !== playerId));
   }, []);
 
+  /** Re-fetch all overlay players' bell curves after weight/constant changes. */
+  const [refreshingCurves, setRefreshingCurves] = useState(false);
+  const handleRefreshBellCurves = useCallback(async () => {
+    if (overlayPlayers.length === 0) return;
+    setRefreshingCurves(true);
+    try {
+      // Fetch all curves in parallel
+      const results = await Promise.all(
+        overlayPlayers.map((p) => fetchBellCurve(p.player_id))
+      );
+      // Replace overlay with fresh data, keeping only successful fetches
+      const refreshed: BellCurveData[] = [];
+      for (const res of results) {
+        if (res.success && res.data) refreshed.push(res.data);
+      }
+      setOverlayPlayers(refreshed);
+    } finally {
+      setRefreshingCurves(false);
+    }
+  }, [overlayPlayers]);
+
   /** Set a player into a lineup slot and fetch their skills. */
   const handleLineupSlotSelect = useCallback(async (index: number, player: Player) => {
     setSwapSourceIndex(null);
@@ -3231,7 +3270,7 @@ export default function CohesionCalibrationPage() {
             {/* Tab content */}
             <div className="flex-1 min-h-0 overflow-y-auto p-4">
               {centerTab === "bell_curves" && (
-                <BellCurveChart overlayPlayers={overlayPlayers} onRemovePlayer={handleRemoveBellCurvePlayer} />
+                <BellCurveChart overlayPlayers={overlayPlayers} onRemovePlayer={handleRemoveBellCurvePlayer} onRefresh={handleRefreshBellCurves} refreshing={refreshingCurves} />
               )}
               {centerTab === "lineup" && (
                 <LineupTester
