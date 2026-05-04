@@ -71,12 +71,15 @@ function SwsColumn({
   notes,
   variant = "default",
   onSuggestionFilter,
+  showDebug = false,
 }: {
   config: ColumnConfig;
   notes: Note[];
   variant?: "default" | "email";
   /** If provided, suggestion note text becomes a clickable link that injects a player-search filter. */
   onSuggestionFilter?: (filter: SuggestionFilter, note: Note) => void;
+  /** Show engine debug info per note (admin only). */
+  showDebug?: boolean;
 }) {
   const isEmail = variant === "email";
 
@@ -140,23 +143,33 @@ function SwsColumn({
                   {config.sign}
                 </span>
                 {/* Render as text — never innerHTML — note.text may contain player names */}
-                {filter && onSuggestionFilter ? (
-                  <button
-                    type="button"
-                    id={`note-suggestion-link-${note.trace_key}-${i}`}
-                    onClick={() => onSuggestionFilter(filter, note)}
-                    className={cn(
-                      "text-left underline decoration-dashed underline-offset-[3px] decoration-amber-500/50 hover:decoration-amber-500 transition-colors cursor-pointer",
-                      "text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400",
-                      isEmail && "leading-6",
-                    )}
-                    title="Filter player search by this need"
-                  >
-                    {note.text}
-                  </button>
-                ) : (
-                  <span className={cn("text-muted-foreground", isEmail && "leading-6")}>{note.text}</span>
-                )}
+                <div className="min-w-0">
+                  {filter && onSuggestionFilter ? (
+                    <button
+                      type="button"
+                      id={`note-suggestion-link-${note.trace_key}-${i}`}
+                      onClick={() => onSuggestionFilter(filter, note)}
+                      className={cn(
+                        "text-left underline decoration-dashed underline-offset-[3px] decoration-amber-500/50 hover:decoration-amber-500 transition-colors cursor-pointer",
+                        "text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400",
+                        isEmail && "leading-6",
+                      )}
+                      title="Filter player search by this need"
+                    >
+                      {note.text}
+                    </button>
+                  ) : (
+                    <span className={cn("text-muted-foreground", isEmail && "leading-6")}>{note.text}</span>
+                  )}
+                  {showDebug && note.engine_category != null && (
+                    <p
+                      id={`note-debug-${note.trace_key}-${i}`}
+                      className="mt-0.5 font-mono text-[9px] text-muted-foreground/50"
+                    >
+                      {note.engine_category} · sev {note.engine_severity?.toFixed(2)} · raw {note.engine_raw_value?.toFixed(2)}
+                    </p>
+                  )}
+                </div>
               </li>
             );
           })}
@@ -177,6 +190,8 @@ interface NotesListProps {
   variant?: "default" | "email";
   /** Called when a suggestion note is clicked — parent injects the filter into the player picker. */
   onSuggestionFilter?: (filter: SuggestionFilter, note: Note) => void;
+  /** Show engine debug info per note (admin only). */
+  showDebug?: boolean;
 }
 
 export function NotesList({
@@ -185,6 +200,7 @@ export function NotesList({
   strengths,
   variant = "default",
   onSuggestionFilter,
+  showDebug = false,
 }: NotesListProps) {
   const isEmail = variant === "email";
 
@@ -192,12 +208,12 @@ export function NotesList({
     <div id="notes-list">
       {/* Three-column S/W/S layout — stacks on narrow viewports */}
       <div className={cn("flex flex-col sm:flex-row gap-4 sm:gap-5 items-stretch", isEmail && "gap-3 sm:gap-3")}>
-        <SwsColumn config={COLUMNS.strengths} notes={strengths} variant={variant} />
+        <SwsColumn config={COLUMNS.strengths} notes={strengths} variant={variant} showDebug={showDebug} />
 
         {/* Vertical divider (hidden when stacked) */}
         <div className={cn("hidden sm:block w-px bg-border/60 flex-shrink-0", isEmail && "bg-border/40")} />
 
-        <SwsColumn config={COLUMNS.issues} notes={issues} variant={variant} />
+        <SwsColumn config={COLUMNS.issues} notes={issues} variant={variant} showDebug={showDebug} />
 
         {/* Vertical divider */}
         <div className={cn("hidden sm:block w-px bg-border/60 flex-shrink-0", isEmail && "bg-border/40")} />
@@ -208,6 +224,7 @@ export function NotesList({
           notes={suggestions}
           variant={variant}
           onSuggestionFilter={onSuggestionFilter}
+          showDebug={showDebug}
         />
       </div>
     </div>

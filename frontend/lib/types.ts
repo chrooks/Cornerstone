@@ -452,6 +452,12 @@ export interface Note {
   presence_type: "presence" | "absence";
   /** Which scoring dimension this note affects (e.g. "spacing", "defense"). Null for dimension-agnostic notes. */
   dimension: string | null;
+  /** Original engine category key (e.g. "spacing", "defense_gap"). Admin debug only. */
+  engine_category?: string;
+  /** Numeric severity from the engine (0.0-1.0). Admin debug only. */
+  engine_severity?: number;
+  /** Raw value that triggered the note (e.g. composite average). Admin debug only. */
+  engine_raw_value?: number;
 }
 
 /** Per-player entry in the height coverage map */
@@ -627,6 +633,7 @@ export interface CohesionLineupSummary {
   depth_viable_ratio?: number;
   depth_quality?: number;
   depth_score?: number;
+  rotation_median_subscores?: Record<string, number>;
 }
 
 /** Full evaluation result from POST /api/builder/evaluate when EVAL_ENGINE=cohesion. */

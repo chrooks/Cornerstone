@@ -98,5 +98,8 @@ export function normalizeCohesionNotes(notes: CohesionNote[]): Note[] {
     trace_key: `cohesion_${note.type}_${note.category}`,
     presence_type: "presence" as const,
     dimension: note.category,
+    engine_category: note.category,
+    engine_severity: note.severity,
+    engine_raw_value: note.raw_value,
   }));
 }

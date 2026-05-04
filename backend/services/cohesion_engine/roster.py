@@ -107,6 +107,29 @@ def _archetypes_for_lineup(lineup: LineupCohesion) -> list[str]:
     return labels or ["balanced"]
 
 
+def _rotation_median_subscores(lineups: list[LineupCohesion]) -> dict[str, float]:
+    """Compute the median of each subscore across viable lineups only."""
+    viable = [lu for lu in lineups if lu.score >= VIABLE_LINEUP_THRESHOLD]
+    if not viable:
+        return {}
+
+    # Collect all subscore keys present across viable lineups.
+    all_keys: set[str] = set()
+    for lu in viable:
+        all_keys.update(lu.subscores.keys())
+
+    medians: dict[str, float] = {}
+    for key in sorted(all_keys):
+        values = [lu.subscores.get(key, 0.0) for lu in viable]
+        medians[key] = round(median(values), 2)
+
+    # Include accentuation scores — stored as separate fields, not in subscores.
+    medians["accentuation_strength"] = round(median([lu.accentuation_strength for lu in viable]), 2)
+    medians["accentuation_weakness"] = round(median([lu.accentuation_weakness for lu in viable]), 2)
+
+    return medians
+
+
 def _lineup_summary(lineups: list[LineupCohesion], archetypes: set[str]) -> dict[str, Any]:
     """Build the compact lineup summary used by API serialization later."""
     scores = [lineup.score for lineup in lineups]
@@ -123,6 +146,7 @@ def _lineup_summary(lineups: list[LineupCohesion], archetypes: set[str]) -> dict
         "depth_viable_ratio": depth["viable_ratio"],
         "depth_quality": depth["quality"],
         "depth_score": depth["score"],
+        "rotation_median_subscores": _rotation_median_subscores(lineups),
     }
 
 
@@ -235,6 +259,7 @@ def evaluate_roster(players: list[dict[str, Any]], mode: str = "live") -> Roster
             "starting_lineup": starting_lineup,
             "lineup_summary": lineup_summary,
             "star_breakdown": breakdown,
+            "all_lineups": lineups,
         },
     )
 

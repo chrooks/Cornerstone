@@ -361,7 +361,10 @@ NOTE_LIMIT_PER_TYPE: int = 3                      # max notes per category (stre
 NOTE_ELITE_COMPOSITE_THRESHOLD: float = 8.0       # composite ≥ this triggers a "strength" note
 NOTE_STACKED_COMPOSITE_THRESHOLD: float = 6.0     # if N players exceed this in same composite → "stacked" note
 NOTE_STACKED_PLAYER_COUNT: int = 2                 # how many players needed to trigger stacked note
-NOTE_MISSING_COMPOSITE_THRESHOLD: float = 2.0     # composite ≤ this triggers a "missing" warning
+NOTE_MISSING_COMPOSITE_THRESHOLD: float = 2.0     # composite total ≤ this triggers a "missing" (catastrophic) warning
+NOTE_WEAK_COMPOSITE_AVG_THRESHOLD: float = 4.0   # per-player composite avg below this triggers a "weak" warning
+NOTE_COVERED_COMPOSITE_THRESHOLD: float = 6.0    # if any player exceeds this, the category is "covered" for opportunity ranking
+NOTE_MIN_ROSTER_SIZE: int = 5                     # fewer players than this triggers a depth warning
 NOTE_CAPABLE_PASSER_THRESHOLD: float = 3.0        # passing composite below this → playmaking warning
 NOTE_ELITE_BELL_AMPLITUDE_THRESHOLD: float = 3.5  # bell curve peak ≥ this → elite defender callout
 NOTE_SEVERITY_MIN: float = 0.0                    # severity range floor (0 = informational)

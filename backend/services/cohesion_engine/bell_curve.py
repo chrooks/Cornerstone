@@ -9,6 +9,7 @@ edges. Lineup defense stacks those curves with diminishing returns.
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any
 
 from .weights import (
@@ -290,3 +291,91 @@ def compute_lineup_defense(lineup: list[dict[str, Any]]) -> tuple[float, float, 
 
     average_coverage = sum(coverage_by_height.values()) / len(coverage_by_height)
     return round(average_coverage, 2), round(gap_penalty, 2), gap_positions
+
+
+@dataclass(frozen=True)
+class DefenseGapCluster:
+    """A contiguous band of under-covered heights in the stacked bell curve."""
+
+    start: int          # first uncovered inch (inclusive)
+    end: int            # last uncovered inch (inclusive)
+    deepest_inch: int   # inch with lowest coverage within the cluster
+    deepest_coverage: float  # coverage value at the deepest inch
+
+
+def cluster_defense_gaps(
+    coverage_by_height: dict[int, float],
+    gap_threshold: float,
+) -> list[DefenseGapCluster]:
+    """
+    Split the coverage contour into clusters of consecutive under-covered inches.
+
+    Each cluster represents a distinct defensive need — a band where adding a
+    defender of the right height would have the most impact.
+    """
+    # Collect inches below threshold in sorted order.
+    gap_inches = sorted(h for h, cov in coverage_by_height.items() if cov < gap_threshold)
+    if not gap_inches:
+        return []
+
+    # Walk the sorted inches and split into clusters whenever consecutive
+    # inches are more than 1 apart (i.e., a covered band separates them).
+    clusters: list[DefenseGapCluster] = []
+    run_start = gap_inches[0]
+    prev = gap_inches[0]
+
+    for inch in gap_inches[1:]:
+        if inch > prev + 1:
+            # Gap in the gap — finish current cluster, start new one.
+            clusters.append(_build_cluster(coverage_by_height, run_start, prev))
+            run_start = inch
+        prev = inch
+
+    # Close final cluster.
+    clusters.append(_build_cluster(coverage_by_height, run_start, prev))
+    return clusters
+
+
+# Height bands for archetype mapping. The deepest inch in a cluster
+# determines which archetype the suggestion recommends. Bands overlap
+# slightly so boundary clusters get the more specific label.
+_ARCHETYPE_BANDS: list[tuple[range, str, str]] = [
+    (range(72, 77),  "perimeter_disruptor", "a defensive guard"),
+    (range(77, 81),  "versatile_defender",  "a defensive wing"),
+    (range(81, 84),  "versatile_defender",  "a switchable forward"),
+    (range(84, 89),  "rim_protector",       "a rim protector"),
+]
+
+
+def gap_cluster_archetype(cluster: DefenseGapCluster) -> tuple[str, str]:
+    """
+    Map a gap cluster to (skill_key, human_label) based on its deepest inch.
+
+    Returns the skill most likely to cover the gap and a label for suggestion
+    text. Falls back to versatile_defender for edge cases.
+    """
+    for height_range, skill, label in _ARCHETYPE_BANDS:
+        if cluster.deepest_inch in height_range:
+            return skill, label
+    return "versatile_defender", "a versatile defender"
+
+
+def _build_cluster(
+    coverage_by_height: dict[int, float],
+    start: int,
+    end: int,
+) -> DefenseGapCluster:
+    """Build a cluster from a contiguous run of under-covered inches."""
+    deepest_inch = start
+    deepest_coverage = coverage_by_height[start]
+    for inch in range(start + 1, end + 1):
+        cov = coverage_by_height[inch]
+        if cov < deepest_coverage:
+            deepest_inch = inch
+            deepest_coverage = cov
+    return DefenseGapCluster(
+        start=start,
+        end=end,
+        deepest_inch=deepest_inch,
+        deepest_coverage=round(deepest_coverage, 2),
+    )

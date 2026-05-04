@@ -445,6 +445,21 @@ export function EvaluatePage() {
               heightCoverage={evaluation.height_coverage}
             />
           )}
+          {/* Raw notes JSON dump */}
+          {isAdmin && (
+            <details id="eval-debug-notes-json" className="mt-4">
+              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground">
+                Raw Notes JSON
+              </summary>
+              <pre id="eval-debug-notes-json-content" className="mt-2 max-h-[400px] overflow-auto rounded border border-border/60 bg-muted/30 p-2 text-[9px] font-mono text-muted-foreground whitespace-pre-wrap">
+                {JSON.stringify(
+                  isCohesionEvaluation(evaluation) ? evaluation.notes : evaluation.notes,
+                  null,
+                  2,
+                )}
+              </pre>
+            </details>
+          )}
         </div>
       )}
     </main>

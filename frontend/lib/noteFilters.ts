@@ -47,10 +47,13 @@ const DIMENSION_FALLBACK: Record<string, SuggestionFilter> = {
   anchor:         { skill: "rim_protector",      tier: "Capable or higher" },
   post_game:      { skill: "low_post_player",    tier: "Capable or higher" },
   pnr_screener:   { skill: "pnr_finisher",       tier: "Capable or higher" },
-  off_ball:       { skill: "cutter",             tier: "Capable or higher" },
-  rebounding:     { skill: "rebounder",          tier: "Capable or higher" },
-  passing:        { skill: "passer",             tier: "Capable or higher" },
-  defense_gap:    { skill: "versatile_defender", tier: "Capable or higher" },
+  off_ball:           { skill: "cutter",             tier: "Capable or higher" },
+  off_ball_impact:    { skill: "cutter",             tier: "Capable or higher" },
+  rebounding:         { skill: "rebounder",          tier: "Capable or higher" },
+  passing:            { skill: "passer",             tier: "Capable or higher" },
+  perimeter_defense:  { skill: "perimeter_disruptor", tier: "Capable or higher" },
+  interior_defense:   { skill: "rim_protector",      tier: "Capable or higher" },
+  defense_gap:        { skill: "versatile_defender", tier: "Capable or higher" },
 };
 
 /**

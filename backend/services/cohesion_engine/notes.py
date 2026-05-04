@@ -10,27 +10,38 @@ mutation of incoming player dictionaries.
 from __future__ import annotations
 
 from dataclasses import is_dataclass
+from statistics import median
 from typing import Any, Iterable
 
-from .bell_curve import compute_lineup_defense
+from .bell_curve import (
+    cluster_defense_gaps,
+    compute_lineup_coverage_by_height,
+    gap_cluster_archetype,
+)
 from .composites import tier_value
 from .types import LineupCohesion, Note, PlayerComposites
 from .weights import (
+    DEFENSIVE_GAP_THRESHOLD,
     HEIGHT_MAX_INCHES,
     HEIGHT_MIN_INCHES,
     NOTE_CAPABLE_PASSER_THRESHOLD,
     NOTE_ELITE_BELL_AMPLITUDE_THRESHOLD,
     NOTE_ELITE_COMPOSITE_THRESHOLD,
     NOTE_LIMIT_PER_TYPE,
+    NOTE_COVERED_COMPOSITE_THRESHOLD,
+    NOTE_MIN_ROSTER_SIZE,
     NOTE_MISSING_COMPOSITE_THRESHOLD,
     NOTE_SEVERITY_MAX,
     NOTE_SEVERITY_MIN,
     NOTE_STACKED_COMPOSITE_THRESHOLD,
     NOTE_STACKED_PLAYER_COUNT,
+    NOTE_WEAK_COMPOSITE_AVG_THRESHOLD,
+    VIABLE_LINEUP_THRESHOLD,
 )
 
 PASSING_CATEGORY = "passing"
 DEFENSE_GAP_CATEGORY = "defense_gap"
+DEPTH_CATEGORY = "depth"
 
 SUGGESTION_TEMPLATES: dict[str, str] = {
     "spacing": "Add a spot-up or movement shooter to open the floor.",
@@ -46,7 +57,23 @@ SUGGESTION_TEMPLATES: dict[str, str] = {
     "transition": "Add a transition athlete for fast-break scoring.",
     "off_ball": "Add an off-ball threat - a cutter or movement shooter.",
     "off_ball_impact": "Add an off-ball threat - a cutter or movement shooter.",
-    DEFENSE_GAP_CATEGORY: "Add a versatile defender around {height} to close the gap.",
+    DEFENSE_GAP_CATEGORY: "Add a versatile defender to close the gap.",
+    DEPTH_CATEGORY: "Add more players to fill out the rotation.",
+}
+
+# Maps composite categories to archetype labels for opportunity suggestions.
+OPPORTUNITY_ARCHETYPES: dict[str, str] = {
+    "spacing": "a shooter",
+    "shot_creation": "a ball handler",
+    "paint_touch": "a rim attacker",
+    "anchor": "a rim protector",
+    "rebounding": "a rebounder",
+    "transition": "a transition athlete",
+    "perimeter_defense": "a perimeter defender",
+    "interior_defense": "an interior defender",
+    "off_ball_impact": "an off-ball threat",
+    "post_game": "a post scorer",
+    "pnr_screener": "a roll man",
 }
 
 COMPOSITE_LABELS: dict[str, str] = {
@@ -133,6 +160,28 @@ def _get_pipeline_value(pipeline_data: Any, *keys: str, default: Any = None) -> 
         if value is default:
             return default
     return value
+
+
+def _lineup_score(lineup: Any) -> float:
+    """Extract the cohesion score from a LineupCohesion or raw dict."""
+    if isinstance(lineup, LineupCohesion):
+        return lineup.score
+    if isinstance(lineup, dict):
+        return float(lineup.get("score", lineup.get("cohesion_score", 0.0)))
+    if is_dataclass(lineup):
+        return float(getattr(lineup, "score", 0.0))
+    return 0.0
+
+
+def _lineup_subscores(lineup: Any) -> dict[str, float]:
+    """Extract subscores dict from a LineupCohesion or raw dict."""
+    if isinstance(lineup, LineupCohesion):
+        return lineup.subscores
+    if isinstance(lineup, dict):
+        return dict(lineup.get("subscores", {}))
+    if is_dataclass(lineup):
+        return dict(getattr(lineup, "subscores", {}))
+    return {}
 
 
 def _composite_value(composite: PlayerComposites, category: str) -> float:
@@ -327,6 +376,31 @@ def _mode_a_strengths(players: list[dict[str, Any]], composites: list[PlayerComp
 def _mode_a_weaknesses(players: list[dict[str, Any]], composites: list[PlayerComposites]) -> list[Note]:
     weaknesses: list[Note] = []
 
+    # Text for catastrophic absence (total near zero across all players).
+    missing_text: dict[str, str] = {
+        "spacing": "No floor spacing - defenders can collapse freely.",
+        "shot_creation": "No primary shot creator on the roster.",
+        "paint_touch": "No rim pressure.",
+        "anchor": "No rim protection or paint control.",
+        "rebounding": "Rebounding is nonexistent.",
+        "transition": "No transition game.",
+        "perimeter_defense": "No perimeter pressure at the point of attack.",
+        "interior_defense": "No interior defensive presence.",
+    }
+
+    # Text for per-player weakness (average is below the weak threshold).
+    weak_text: dict[str, str] = {
+        "spacing": "Roster lacks floor spacing - need more shooting.",
+        "shot_creation": "Shot creation is thin - need a primary ball handler.",
+        "paint_touch": "Limited rim pressure - need more interior scoring.",
+        "anchor": "Paint protection is undersized - need an anchor.",
+        "rebounding": "Rebounding is a liability.",
+        "transition": "No reliable transition scoring.",
+        "perimeter_defense": "Perimeter defense is exposed.",
+        "interior_defense": "Interior defense is soft.",
+    }
+
+    n_players = max(len(composites), 1)
     for category in (
         "spacing",
         "shot_creation",
@@ -338,19 +412,16 @@ def _mode_a_weaknesses(players: list[dict[str, Any]], composites: list[PlayerCom
         "interior_defense",
     ):
         total = sum(_composite_value(composite, category) for composite in composites)
+        avg = total / n_players
+
+        # Catastrophic: virtually no contribution from any player.
         if total < NOTE_MISSING_COMPOSITE_THRESHOLD:
-            text_by_category = {
-                "spacing": "No floor spacing - defenders can collapse freely.",
-                "shot_creation": "No primary shot creator on the roster.",
-                "paint_touch": "No rim pressure.",
-                "anchor": "No rim protection or paint control.",
-                "rebounding": "Rebounding is nonexistent.",
-                "transition": "No transition game.",
-                "perimeter_defense": "No perimeter pressure at the point of attack.",
-                "interior_defense": "No interior defensive presence.",
-            }
             severity = (NOTE_MISSING_COMPOSITE_THRESHOLD - total) / NOTE_MISSING_COMPOSITE_THRESHOLD
-            weaknesses.append(_note("weakness", category, severity, total, text_by_category[category]))
+            weaknesses.append(_note("weakness", category, severity, total, missing_text[category]))
+        # Weak average: roster has some coverage but not enough per player.
+        elif avg < NOTE_WEAK_COMPOSITE_AVG_THRESHOLD:
+            severity = (NOTE_WEAK_COMPOSITE_AVG_THRESHOLD - avg) / NOTE_WEAK_COMPOSITE_AVG_THRESHOLD
+            weaknesses.append(_note("weakness", category, severity, avg, weak_text[category]))
 
     best_passer_value = max(
         (tier_value(player.get("skills", {}), "passer") for player in players),
@@ -361,17 +432,19 @@ def _mode_a_weaknesses(players: list[dict[str, Any]], composites: list[PlayerCom
         weaknesses.append(_note("weakness", PASSING_CATEGORY, severity, best_passer_value, "No capable playmaker."))
 
     if players:
-        _coverage, _penalty, gaps = compute_lineup_defense(players)
-        if gaps:
-            label = _height_range_label(gaps)
-            severity = min(1.0, len(gaps) / (HEIGHT_MAX_INCHES - HEIGHT_MIN_INCHES + 1))
+        coverage_by_height = compute_lineup_coverage_by_height(players)
+        clusters = cluster_defense_gaps(coverage_by_height, DEFENSIVE_GAP_THRESHOLD)
+        for cluster in clusters:
+            _, archetype_label = gap_cluster_archetype(cluster)
+            band_label = _height_range_label(list(range(cluster.start, cluster.end + 1)))
+            severity = min(1.0, (cluster.end - cluster.start + 1) / (HEIGHT_MAX_INCHES - HEIGHT_MIN_INCHES + 1))
             weaknesses.append(
                 _note(
                     "weakness",
                     DEFENSE_GAP_CATEGORY,
                     severity,
-                    len(gaps),
-                    f"Defensive gap at {label} - opponents there find easy matchups.",
+                    cluster.deepest_coverage,
+                    f"Defensive gap at {band_label} \u2014 add {archetype_label} to close it.",
                 )
             )
 
@@ -380,17 +453,110 @@ def _mode_a_weaknesses(players: list[dict[str, Any]], composites: list[PlayerCom
 
 def _suggestions_from_weaknesses(weaknesses: Iterable[Note]) -> list[Note]:
     suggestions: list[Note] = []
+    has_defense_gap = any(w.category == DEFENSE_GAP_CATEGORY for w in weaknesses)
+
     for weakness in weaknesses:
+        # Skip generic defensive suggestions when a defense_gap suggestion
+        # already covers the need with a specific size band.
+        if has_defense_gap and weakness.category in ("perimeter_defense", "interior_defense"):
+            continue
+
+        # Defense gap weaknesses already contain the archetype action —
+        # extract it directly instead of using the generic template.
+        if weakness.category == DEFENSE_GAP_CATEGORY:
+            # Text format: "Defensive gap at X — add {archetype} to close it."
+            # Extract everything after "add " as the suggestion.
+            if " add " in weakness.text:
+                archetype_part = weakness.text.split(" add ", maxsplit=1)[1]
+                text = f"Add {archetype_part}"
+            else:
+                text = "Add a versatile defender to close the gap."
+            suggestions.append(_note("suggestion", weakness.category, weakness.severity, weakness.raw_value, text))
+            continue
+
         template = SUGGESTION_TEMPLATES.get(weakness.category)
         if not template:
             continue
         text = template
-        if "{height}" in text:
-            height = "that size"
-            if weakness.category == DEFENSE_GAP_CATEGORY and " at " in weakness.text:
-                height = weakness.text.split(" at ", maxsplit=1)[1].split(" - ", maxsplit=1)[0]
-            text = text.format(height=height)
-        suggestions.append(_note("suggestion", weakness.category, weakness.severity, weakness.raw_value, text))
+        # Depth suggestion is always last — the user already sees the depth
+        # weakness; actionable roster-building suggestions matter more.
+        severity = NOTE_SEVERITY_MIN if weakness.category == DEPTH_CATEGORY else weakness.severity
+        suggestions.append(_note("suggestion", weakness.category, severity, weakness.raw_value, text))
+    return suggestions
+
+
+# Categories eligible for opportunity suggestions. Excludes passing
+# (handled separately) and defense_gap / depth (not composite-based).
+_OPPORTUNITY_CATEGORIES = (
+    "spacing",
+    "shot_creation",
+    "paint_touch",
+    "anchor",
+    "rebounding",
+    "transition",
+    "perimeter_defense",
+    "interior_defense",
+)
+
+
+def _opportunity_suggestions(
+    composites: list[PlayerComposites],
+    existing_suggestion_categories: set[str],
+) -> list[Note]:
+    """
+    Rank composites by how much the roster would benefit from adding a player
+    in that role, then return suggestion notes for the top opportunities not
+    already covered by weakness-based suggestions.
+
+    Ranking uses a hybrid score: per-player average is the primary signal, but
+    categories where at least one player already exceeds the "covered" threshold
+    are deprioritized — a roster with an elite rim protector doesn't need
+    another anchor even if the average is low.
+    """
+    if not composites:
+        return []
+
+    n_players = len(composites)
+
+    # Build (category, priority_score) pairs. Lower score = bigger opportunity.
+    scored: list[tuple[str, float]] = []
+    for category in _OPPORTUNITY_CATEGORIES:
+        # Skip categories that already have a weakness-based suggestion.
+        if category in existing_suggestion_categories:
+            continue
+
+        values = [_composite_value(c, category) for c in composites]
+        avg = sum(values) / n_players
+        best = max(values)
+
+        # Deprioritize covered categories by pushing their score up.
+        # A covered category still gets ranked, just behind uncovered ones.
+        covered_penalty = 5.0 if best >= NOTE_COVERED_COMPOSITE_THRESHOLD else 0.0
+        priority = avg + covered_penalty
+
+        scored.append((category, priority))
+
+    # Sort ascending — lowest priority score = biggest opportunity.
+    scored.sort(key=lambda item: item[1])
+
+    suggestions: list[Note] = []
+    for category, priority in scored:
+        archetype = OPPORTUNITY_ARCHETYPES.get(category)
+        if not archetype:
+            continue
+        # Severity scales inversely with priority — lower avg = higher severity.
+        avg = priority if priority < 5.0 else priority - 5.0
+        severity = max(0.1, (10.0 - avg) / 10.0)
+        suggestions.append(
+            _note(
+                "suggestion",
+                category,
+                severity,
+                avg,
+                f"{archetype.capitalize()} would most improve this rotation.",
+            )
+        )
+
     return suggestions
 
 
@@ -412,7 +578,10 @@ def _lineup_from_pipeline(pipeline_data: Any) -> LineupCohesion | None:
     return None
 
 
-def _mode_b_notes(pipeline_data: Any) -> list[Note]:
+def _mode_b_notes(
+    pipeline_data: Any,
+    composites: list[PlayerComposites] | None = None,
+) -> list[Note]:
     lineup = _lineup_from_pipeline(pipeline_data)
     if lineup is None:
         return []
@@ -466,6 +635,44 @@ def _mode_b_notes(pipeline_data: Any) -> list[Note]:
             text = f"Lineup-level {label} is thin."
         notes.append(_note("weakness", category, severity, value, text))
 
+    # Rotation-wide check: median subscores across viable lineups.
+    # Catches roster composition issues (e.g., 4 non-shooting bigs on bench)
+    # that the starting 5's subscores alone won't reveal.
+    all_lineups = _get_pipeline_value(pipeline_data, "all_lineups")
+    if isinstance(all_lineups, list):
+        viable = [lu for lu in all_lineups if _lineup_score(lu) >= VIABLE_LINEUP_THRESHOLD]
+        if viable:
+            # Collect all subscore keys across viable lineups.
+            all_keys: set[str] = set()
+            for lu in viable:
+                all_keys.update(_lineup_subscores(lu).keys())
+
+            starting_weak_categories = {n.category for n in notes if n.type == "weakness"}
+            for key in sorted(all_keys):
+                # Skip categories already flagged by the starting-lineup check.
+                if key in starting_weak_categories:
+                    continue
+                values = [_lineup_subscores(lu).get(key, 0.0) for lu in viable]
+                med = median(values)
+                threshold = 4.0
+                if key.endswith("_ratio") or key in {"spacing_creation_ratio", "spacing_paint_touch_ratio", "rebound_transition_ratio"}:
+                    threshold = 5.0
+                if key == "defensive_gaps":
+                    threshold = 6.0
+                if med >= threshold:
+                    continue
+                label = SUBSCORE_LABELS.get(key, key.replace("_", " "))
+                severity = (threshold - med) / threshold
+                notes.append(
+                    _note(
+                        "weakness",
+                        key,
+                        severity * 0.8,  # slightly lower than starting-lineup weaknesses
+                        med,
+                        f"Rotation-wide {label} is a concern across viable lineups.",
+                    )
+                )
+
     if lineup.accentuation_weakness < 4.0:
         notes.append(
             _note(
@@ -496,6 +703,14 @@ def _mode_b_notes(pipeline_data: Any) -> list[Note]:
         )
     notes.extend(suggestions)
 
+    # Fill remaining suggestion slots with opportunity-based recommendations.
+    if composites:
+        existing_categories = {s.category for s in suggestions}
+        if DEFENSE_GAP_CATEGORY in existing_categories:
+            existing_categories.update(("perimeter_defense", "interior_defense"))
+        opportunities = _opportunity_suggestions(composites, existing_categories)
+        notes.extend(opportunities)
+
     return notes
 
 
@@ -512,11 +727,36 @@ def generate_notes(
     pipeline data is available, falling back to Mode A if called standalone.
     """
     if len(players) >= 5 and pipeline_data is not None:
-        notes = _mode_b_notes(pipeline_data)
+        notes = _mode_b_notes(pipeline_data, composites)
         if notes:
             return _limit_by_type(notes)
 
     strengths = _mode_a_strengths(players, composites)
     weaknesses = _mode_a_weaknesses(players, composites)
+
+    # Always flag incomplete rosters so users know more depth is needed.
+    if len(players) < NOTE_MIN_ROSTER_SIZE:
+        weaknesses.insert(
+            0,
+            _note(
+                "weakness",
+                DEPTH_CATEGORY,
+                1.0,
+                float(len(players)),
+                f"Only {len(players)} player{'s' if len(players) != 1 else ''} in the rotation"
+                f" \u2014 need at least {NOTE_MIN_ROSTER_SIZE} for a viable lineup.",
+            ),
+        )
+
     suggestions = _suggestions_from_weaknesses(weaknesses)
+
+    # Fill remaining suggestion slots with opportunity-based recommendations
+    # for categories not already covered by weakness suggestions.
+    existing_categories = {s.category for s in suggestions}
+    # Defense gap subsumes perimeter/interior defense suggestions.
+    if DEFENSE_GAP_CATEGORY in existing_categories:
+        existing_categories.update(("perimeter_defense", "interior_defense"))
+    opportunities = _opportunity_suggestions(composites, existing_categories)
+    suggestions.extend(opportunities)
+
     return _limit_by_type([*strengths, *weaknesses, *suggestions])

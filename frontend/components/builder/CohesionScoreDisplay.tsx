@@ -198,19 +198,46 @@ function BreakdownBar({ id, label, value, description }: { id: string; label: st
 }
 
 /** A labeled horizontal bar for 0-10 subscore values. */
-function SubscoreBar({ id, label, score, description }: { id: string; label: string; score: number; description: string }) {
+function SubscoreBar({
+  id,
+  label,
+  score,
+  rotationScore,
+  description,
+}: {
+  id: string;
+  label: string;
+  score: number;
+  rotationScore?: number;
+  description: string;
+}) {
   const rounded = Math.round(score * 10) / 10;
   const widthPct = Math.max(0, Math.min(100, (score / 10) * 100));
+  const hasRotation = rotationScore != null;
+  const rotRounded = hasRotation ? Math.round(rotationScore * 10) / 10 : 0;
+  const rotWidthPct = hasRotation ? Math.max(0, Math.min(100, (rotationScore / 10) * 100)) : 0;
   return (
     <div id={id} className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
         <span id={`${id}-label`} className="text-xs font-medium text-muted-foreground cursor-help" title={description}>
           {label}
         </span>
-        <span className={cn("text-xs font-mono font-bold tabular-nums", subscoreColorClass(score))}>
-          {rounded.toFixed(1)}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={cn("text-xs font-mono font-bold tabular-nums", subscoreColorClass(score))}>
+            {rounded.toFixed(1)}
+          </span>
+          {hasRotation && (
+            <span
+              id={`${id}-rotation`}
+              className={cn("text-[10px] font-mono tabular-nums", subscoreColorClass(rotationScore))}
+              title="Rotation median (viable lineups)"
+            >
+              / {rotRounded.toFixed(1)}
+            </span>
+          )}
+        </div>
       </div>
+      {/* Starting 5 bar */}
       <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
         <div
           className={cn("h-full rounded-full transition-all duration-500", subscoreBarColor(score))}
@@ -222,6 +249,20 @@ function SubscoreBar({ id, label, score, description }: { id: string; label: str
           aria-label={label}
         />
       </div>
+      {/* Rotation median bar — thinner, below the starting 5 bar */}
+      {hasRotation && (
+        <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
+          <div
+            className={cn("h-full rounded-full transition-all duration-500 opacity-50", subscoreBarColor(rotationScore))}
+            style={{ width: `${rotWidthPct}%` }}
+            role="progressbar"
+            aria-valuenow={rotRounded}
+            aria-valuemin={0}
+            aria-valuemax={10}
+            aria-label={`${label} rotation median`}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -273,7 +314,8 @@ interface CohesionScoreDisplayProps {
 }
 
 export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) {
-  const { star_rating, star_rating_breakdown, starting_lineup } = evaluation;
+  const { star_rating, star_rating_breakdown, starting_lineup, lineup_summary } = evaluation;
+  const rotationMedian = lineup_summary.rotation_median_subscores;
   const colorClass = starColorClass(star_rating);
 
   return (
@@ -312,9 +354,16 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
 
       {/* 13 Subscore Grid (0-10 scale, grouped) */}
       <div id="cohesion-subscores" className="space-y-4">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Subscores
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Subscores
+          </p>
+          {rotationMedian && Object.keys(rotationMedian).length > 0 && (
+            <p id="cohesion-subscores-legend" className="text-[9px] text-muted-foreground/60">
+              Starting 5 / <span className="opacity-50">Rotation Median</span>
+            </p>
+          )}
+        </div>
         {SUBSCORE_GROUPS.map((group) => (
           <div key={group.heading} className="space-y-2">
             <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider">
@@ -327,6 +376,7 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
                   id={`cohesion-subscore-${entry.key}`}
                   label={entry.label}
                   score={starting_lineup.subscores[entry.key] ?? 0}
+                  rotationScore={rotationMedian?.[entry.key]}
                   description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
                 />
               ))}
@@ -347,12 +397,14 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
             id="cohesion-accentuation-strength"
             label="Strength Amp"
             score={starting_lineup.accentuation.strength_amplification}
+            rotationScore={rotationMedian?.accentuation_strength}
             description={SUBSCORE_DESCRIPTIONS.accentuation_strength}
           />
           <SubscoreBar
             id="cohesion-accentuation-weakness"
             label="Weakness Cover"
             score={starting_lineup.accentuation.weakness_coverage}
+            rotationScore={rotationMedian?.accentuation_weakness}
             description={SUBSCORE_DESCRIPTIONS.accentuation_weakness}
           />
         </div>

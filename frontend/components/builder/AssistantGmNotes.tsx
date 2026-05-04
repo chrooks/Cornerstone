@@ -264,6 +264,7 @@ function ExpandedHistoryEntry({
   changedNotes,
   onCollapse,
   onSuggestionFilter,
+  showDebug = false,
 }: {
   entry: HistoryEntry;
   isCurrent: boolean;
@@ -272,6 +273,8 @@ function ExpandedHistoryEntry({
   /** Only shown on non-current entries; clicking dismisses this one back to the latest. */
   onCollapse?: () => void;
   onSuggestionFilter?: (filter: SuggestionFilter, note: Note) => void;
+  /** Show engine debug info per note (admin only). */
+  showDebug?: boolean;
 }) {
   return (
     <div
@@ -331,6 +334,7 @@ function ExpandedHistoryEntry({
           strengths={entry.strengths}
           variant="email"
           onSuggestionFilter={onSuggestionFilter}
+          showDebug={showDebug}
         />
       )}
     </div>
@@ -586,6 +590,7 @@ export function AssistantGmNotes({
                   changedNotes={isLatest ? changedNotes : null}
                   onCollapse={!isLatest ? () => setExpandedEntryId(null) : undefined}
                   onSuggestionFilter={onSuggestionFilter}
+                  showDebug={isAdmin}
                 />
               );
             }
