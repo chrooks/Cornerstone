@@ -27,118 +27,28 @@ import {
 import { subscoreColor, subscoreBarFill, synergyChipClass } from "@/lib/cohesion-colors";
 import { bellValueAtHeight } from "@/lib/cohesion-bell-curve";
 import {
+  DEFAULT_COHESION_WEIGHTS,
+  normalizeCohesionExplanationWeights,
+  pnrScreenerSecondaryScale,
+  pnrPairingQualityGate,
+  defensiveCoverageSubscoreFromRaw,
+} from "@/lib/cohesion-weights";
+import type { CohesionExplanationWeights } from "@/lib/cohesion-weights";
+import {
   fetchPlayerComposites,
   fetchBellCurve,
   listPlayersWithSkills,
   evaluateLineup,
   evaluateRotation,
   fetchCohesionWeights,
-  updateCohesionWeights,
 } from "@/lib/api";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import { ALL_SKILL_NAMES, formatSkillName } from "@/lib/skills";
 import { TIER_BADGE_CLASSES, tierToNum } from "@/lib/tiers";
-import type { CohesionLineupCombination, CohesionLineupSummary, CohesionPlayerComposites, Player, PlayerWithSkills, SkillTier } from "@/lib/types";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/** Composite data for one player, fetched from GET /api/cohesion/player/<id>/composites. */
-interface PlayerCompositeData {
-  player_id: string;
-  name: string;
-  height: string | null;
-  skills: Record<string, string>;
-  composites_raw: Record<string, number>;
-  composites_normalized: Record<string, number>;
-  bell_curve: {
-    amplitude: number;
-    peak: number;
-    range_down: number;
-    range_up: number;
-    flat_down: number;
-    flat_up: number;
-  };
-}
-
-/** Bell curve data for one player, fetched from GET /api/cohesion/bell-curve/<id>. */
-interface BellCurveData {
-  player_id: string;
-  name: string;
-  curve: { height: number; height_display: string; value: number }[];
-}
-
-/** Lineup test result from POST /api/cohesion/lineup/evaluate. */
-interface LineupTestResult {
-  id: string;
-  timestamp: number;
-  playerIds: string[];
-  playerNames: string[];
-  cohesion_score: number;
-  mode?: "lineup" | "rotation";
-  subscores: Record<string, number>;
-  synergies_applied: string[];
-  archetype_labels?: string[];
-  archetype_details?: {
-    archetype: string;
-    subscore_key: string | null;
-    subscore_value: number;
-  }[];
-  accentuation: { strength_amplification: number; weakness_coverage: number };
-  accentuation_details?: {
-    strength?: { score: number; credit: number; checks: number; terms: Record<string, unknown>[] };
-    weakness?: { score: number; credit: number; checks: number; terms: Record<string, unknown>[] };
-  };
-  /** RP-PD boosted bell curves — reflects the actual defensive picture the engine scores. */
-  boosted_bell_curves?: (PlayerCompositeData["bell_curve"] | null)[];
-  /** Teammate perimeter-disruptor boosts created by the lineup's best rim protector. */
-  rp_pd_boosts?: RpPdBoostInfo[];
-  star_rating?: number;
-  star_rating_breakdown?: {
-    starting_5: number;
-    depth: number;
-    archetype_diversity: number;
-    floor: number;
-  };
-  theoretical_best_starting_rating?: number;
-  theoretical_best_starting_breakdown?: {
-    starting_5: number;
-    depth: number;
-    archetype_diversity: number;
-    floor: number;
-  };
-  lineup_summary?: CohesionLineupSummary;
-  lineup_combinations?: CohesionLineupCombination[];
-  player_composites?: CohesionPlayerComposites[];
-  selectedCombinationIndex?: number;
-}
-
-interface RpPdBoostInfo {
-  player_index: number;
-  player_name: string;
-  provider_index: number;
-  provider_name: string;
-  provider_rim_protector_tier: string;
-  boost: number;
-  original_pd_tier: string;
-  effective_pd_tier: string;
-  original_pd_value: number;
-  effective_pd_value: number;
-}
-
-/** A player slot in the lineup tester. */
-interface LineupSlot {
-  player: Player | null;
-  skills: Record<string, string>;
-  rawComposites: Record<string, number>;
-  normalizedComposites: Record<string, number>;
-  bellCurve: PlayerCompositeData["bell_curve"] | null;
-  height: string | null;
-  replacing: boolean;
-}
-
-type CenterTab = "bell_curves" | "lineup" | "weights";
+import type { CohesionLineupCombination, CohesionPlayerComposites, Player, PlayerWithSkills, SkillTier } from "@/lib/types";
+import type { PlayerCompositeData, BellCurveData, LineupTestResult, RpPdBoostInfo, LineupSlot, CenterTab } from "./types";
+import { WeightsEditor } from "./components/WeightsEditor";
+import { ResultsPanel } from "./components/ResultsPanel";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -199,82 +109,9 @@ const EQUATION_ORDER = [
 
 // SYNERGY_DESCRIPTIONS imported from @/lib/cohesion-constants
 
-interface CohesionExplanationWeights {
-  COMPOSITE_COEFFICIENTS: Record<string, number>;
-  SYNERGY_SCALE_FACTORS: Record<string, number>;
-  SYNERGY_PENALTY_SEVERITY: number;
-  STACKING_RETURNS: number[];
-  DEFENSIVE_COVERAGE_SATURATION_RAW: number;
-  PASSING_PRIMARY_CREATOR_WEIGHT: number;
-  PASSING_DEPTH_WEIGHT: number;
-  REBOUNDING_PRIMARY_WEIGHT: number;
-  REBOUNDING_SECONDARY_WEIGHT: number;
-  REBOUNDING_DEPTH_WEIGHT: number;
-  ANCHOR_PRIMARY_WEIGHT: number;
-  ANCHOR_SECONDARY_WEIGHT: number;
-  ANCHOR_DEPTH_WEIGHT: number;
-  POST_GAME_PRIMARY_WEIGHT: number;
-  POST_GAME_SECONDARY_WEIGHT: number;
-  POST_GAME_DEPTH_WEIGHT: number;
-  PNR_HANDLER_SUPPORT_SCALE: number;
-  PNR_HANDLER_PRIMARY_WEIGHT: number;
-  PNR_HANDLER_SECONDARY_WEIGHT: number;
-  PNR_HANDLER_DEPTH_WEIGHT: number;
-  PNR_SCREENER_PRIMARY_WEIGHT: number;
-  PNR_SCREENER_SECONDARY_WEIGHT: number;
-  PNR_SCREENER_DEPTH_WEIGHT: number;
-  PNR_PAIRING_QUALITY_GATE_FLOOR: number;
-  PNR_PAIRING_QUALITY_GATE_SCALE: number;
-}
+// CohesionExplanationWeights imported from @/lib/cohesion-weights
 
-const DEFAULT_COHESION_WEIGHTS: CohesionExplanationWeights = {
-  COMPOSITE_COEFFICIENTS: {
-    pnr_screener_secondary_scale: 0.15,
-    perimeter_defense_versatile_defender: 0.7,
-    interior_defense_versatile_defender: 0.5,
-    interior_defense_rebounder: 0.3,
-    paint_touch_finishing_scale: 0.08,
-    off_ball_finishing_scale: 0.08,
-    off_ball_passer: 0.3,
-    shot_creation_spacing: 0.3,
-    shot_creation_paint_touch: 0.5,
-  },
-  SYNERGY_SCALE_FACTORS: {
-    "OFF-02": 0.05,
-    "OFF-03": 0.03,
-    "OFF-04": 0.04,
-    "OFF-12": 0.05,
-    "OFF-13": 0.03,
-    "OFF-14": 0.04,
-    "OFF-15": 0.05,
-    "OFF-16": 0.05,
-    "OFF-31": 0.04,
-    "OFF-32": 0.03,
-  },
-  SYNERGY_PENALTY_SEVERITY: 5,
-  STACKING_RETURNS: [1, 0.5, 0.25, 0.1],
-  DEFENSIVE_COVERAGE_SATURATION_RAW: 1.4,
-  PASSING_PRIMARY_CREATOR_WEIGHT: 0.6,
-  PASSING_DEPTH_WEIGHT: 0.4,
-  REBOUNDING_PRIMARY_WEIGHT: 0.45,
-  REBOUNDING_SECONDARY_WEIGHT: 0.35,
-  REBOUNDING_DEPTH_WEIGHT: 0.2,
-  ANCHOR_PRIMARY_WEIGHT: 0.6,
-  ANCHOR_SECONDARY_WEIGHT: 0.3,
-  ANCHOR_DEPTH_WEIGHT: 0.1,
-  POST_GAME_PRIMARY_WEIGHT: 0.5,
-  POST_GAME_SECONDARY_WEIGHT: 0.35,
-  POST_GAME_DEPTH_WEIGHT: 0.15,
-  PNR_HANDLER_SUPPORT_SCALE: 0.35,
-  PNR_HANDLER_PRIMARY_WEIGHT: 0.65,
-  PNR_HANDLER_SECONDARY_WEIGHT: 0.25,
-  PNR_HANDLER_DEPTH_WEIGHT: 0.1,
-  PNR_SCREENER_PRIMARY_WEIGHT: 0.55,
-  PNR_SCREENER_SECONDARY_WEIGHT: 0.3,
-  PNR_SCREENER_DEPTH_WEIGHT: 0.15,
-  PNR_PAIRING_QUALITY_GATE_FLOOR: 0.7,
-  PNR_PAIRING_QUALITY_GATE_SCALE: 0.3,
-};
+// DEFAULT_COHESION_WEIGHTS imported from @/lib/cohesion-weights
 
 // ---------------------------------------------------------------------------
 // Color utilities
@@ -327,77 +164,7 @@ function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function numberFromWeights(weights: Record<string, unknown>, key: string, fallback: number): number {
-  const value = weights[key];
-  return typeof value === "number" ? value : fallback;
-}
-
-function numberArrayFromWeights(weights: Record<string, unknown>, key: string, fallback: number[]): number[] {
-  const value = weights[key];
-  if (!Array.isArray(value)) return fallback;
-  const numbers = value.filter((item): item is number => typeof item === "number");
-  return numbers.length > 0 ? numbers : fallback;
-}
-
-function numberRecordFromWeights(weights: Record<string, unknown>, key: string, fallback: Record<string, number>): Record<string, number> {
-  const value = weights[key];
-  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).filter((entry): entry is [string, number] => typeof entry[1] === "number"),
-  );
-}
-
-function normalizeCohesionExplanationWeights(data: Record<string, unknown> | null | undefined): CohesionExplanationWeights {
-  const weights = data ?? {};
-  return {
-    COMPOSITE_COEFFICIENTS: {
-      ...DEFAULT_COHESION_WEIGHTS.COMPOSITE_COEFFICIENTS,
-      ...numberRecordFromWeights(weights, "COMPOSITE_COEFFICIENTS", {}),
-    },
-    SYNERGY_SCALE_FACTORS: {
-      ...DEFAULT_COHESION_WEIGHTS.SYNERGY_SCALE_FACTORS,
-      ...numberRecordFromWeights(weights, "SYNERGY_SCALE_FACTORS", {}),
-    },
-    SYNERGY_PENALTY_SEVERITY: numberFromWeights(weights, "SYNERGY_PENALTY_SEVERITY", DEFAULT_COHESION_WEIGHTS.SYNERGY_PENALTY_SEVERITY),
-    STACKING_RETURNS: numberArrayFromWeights(weights, "STACKING_RETURNS", DEFAULT_COHESION_WEIGHTS.STACKING_RETURNS),
-    DEFENSIVE_COVERAGE_SATURATION_RAW: numberFromWeights(weights, "DEFENSIVE_COVERAGE_SATURATION_RAW", DEFAULT_COHESION_WEIGHTS.DEFENSIVE_COVERAGE_SATURATION_RAW),
-    PASSING_PRIMARY_CREATOR_WEIGHT: numberFromWeights(weights, "PASSING_PRIMARY_CREATOR_WEIGHT", DEFAULT_COHESION_WEIGHTS.PASSING_PRIMARY_CREATOR_WEIGHT),
-    PASSING_DEPTH_WEIGHT: numberFromWeights(weights, "PASSING_DEPTH_WEIGHT", DEFAULT_COHESION_WEIGHTS.PASSING_DEPTH_WEIGHT),
-    REBOUNDING_PRIMARY_WEIGHT: numberFromWeights(weights, "REBOUNDING_PRIMARY_WEIGHT", DEFAULT_COHESION_WEIGHTS.REBOUNDING_PRIMARY_WEIGHT),
-    REBOUNDING_SECONDARY_WEIGHT: numberFromWeights(weights, "REBOUNDING_SECONDARY_WEIGHT", DEFAULT_COHESION_WEIGHTS.REBOUNDING_SECONDARY_WEIGHT),
-    REBOUNDING_DEPTH_WEIGHT: numberFromWeights(weights, "REBOUNDING_DEPTH_WEIGHT", DEFAULT_COHESION_WEIGHTS.REBOUNDING_DEPTH_WEIGHT),
-    ANCHOR_PRIMARY_WEIGHT: numberFromWeights(weights, "ANCHOR_PRIMARY_WEIGHT", DEFAULT_COHESION_WEIGHTS.ANCHOR_PRIMARY_WEIGHT),
-    ANCHOR_SECONDARY_WEIGHT: numberFromWeights(weights, "ANCHOR_SECONDARY_WEIGHT", DEFAULT_COHESION_WEIGHTS.ANCHOR_SECONDARY_WEIGHT),
-    ANCHOR_DEPTH_WEIGHT: numberFromWeights(weights, "ANCHOR_DEPTH_WEIGHT", DEFAULT_COHESION_WEIGHTS.ANCHOR_DEPTH_WEIGHT),
-    POST_GAME_PRIMARY_WEIGHT: numberFromWeights(weights, "POST_GAME_PRIMARY_WEIGHT", DEFAULT_COHESION_WEIGHTS.POST_GAME_PRIMARY_WEIGHT),
-    POST_GAME_SECONDARY_WEIGHT: numberFromWeights(weights, "POST_GAME_SECONDARY_WEIGHT", DEFAULT_COHESION_WEIGHTS.POST_GAME_SECONDARY_WEIGHT),
-    POST_GAME_DEPTH_WEIGHT: numberFromWeights(weights, "POST_GAME_DEPTH_WEIGHT", DEFAULT_COHESION_WEIGHTS.POST_GAME_DEPTH_WEIGHT),
-    PNR_HANDLER_SUPPORT_SCALE: numberFromWeights(weights, "PNR_HANDLER_SUPPORT_SCALE", DEFAULT_COHESION_WEIGHTS.PNR_HANDLER_SUPPORT_SCALE),
-    PNR_HANDLER_PRIMARY_WEIGHT: numberFromWeights(weights, "PNR_HANDLER_PRIMARY_WEIGHT", DEFAULT_COHESION_WEIGHTS.PNR_HANDLER_PRIMARY_WEIGHT),
-    PNR_HANDLER_SECONDARY_WEIGHT: numberFromWeights(weights, "PNR_HANDLER_SECONDARY_WEIGHT", DEFAULT_COHESION_WEIGHTS.PNR_HANDLER_SECONDARY_WEIGHT),
-    PNR_HANDLER_DEPTH_WEIGHT: numberFromWeights(weights, "PNR_HANDLER_DEPTH_WEIGHT", DEFAULT_COHESION_WEIGHTS.PNR_HANDLER_DEPTH_WEIGHT),
-    PNR_SCREENER_PRIMARY_WEIGHT: numberFromWeights(weights, "PNR_SCREENER_PRIMARY_WEIGHT", DEFAULT_COHESION_WEIGHTS.PNR_SCREENER_PRIMARY_WEIGHT),
-    PNR_SCREENER_SECONDARY_WEIGHT: numberFromWeights(weights, "PNR_SCREENER_SECONDARY_WEIGHT", DEFAULT_COHESION_WEIGHTS.PNR_SCREENER_SECONDARY_WEIGHT),
-    PNR_SCREENER_DEPTH_WEIGHT: numberFromWeights(weights, "PNR_SCREENER_DEPTH_WEIGHT", DEFAULT_COHESION_WEIGHTS.PNR_SCREENER_DEPTH_WEIGHT),
-    PNR_PAIRING_QUALITY_GATE_FLOOR: numberFromWeights(weights, "PNR_PAIRING_QUALITY_GATE_FLOOR", DEFAULT_COHESION_WEIGHTS.PNR_PAIRING_QUALITY_GATE_FLOOR),
-    PNR_PAIRING_QUALITY_GATE_SCALE: numberFromWeights(weights, "PNR_PAIRING_QUALITY_GATE_SCALE", DEFAULT_COHESION_WEIGHTS.PNR_PAIRING_QUALITY_GATE_SCALE),
-  };
-}
-
-function pnrScreenerSecondaryScale(weights: CohesionExplanationWeights): number {
-  return weights.COMPOSITE_COEFFICIENTS.pnr_screener_secondary_scale ?? DEFAULT_COHESION_WEIGHTS.COMPOSITE_COEFFICIENTS.pnr_screener_secondary_scale;
-}
-
-function pnrPairingQualityGate(handlerQuality: number, screenerQuality: number, weights: CohesionExplanationWeights): number {
-  if (handlerQuality <= 0 || screenerQuality <= 0) return 0;
-  const rawGate = Math.sqrt(handlerQuality * screenerQuality) / 10;
-  return Math.min(1, weights.PNR_PAIRING_QUALITY_GATE_FLOOR + weights.PNR_PAIRING_QUALITY_GATE_SCALE * rawGate);
-}
-
-function defensiveCoverageSubscoreFromRaw(rawCoverage: number, weights: CohesionExplanationWeights): number {
-  if (rawCoverage <= 0) return 0;
-  return 10 * (1 - Math.exp(-rawCoverage / weights.DEFENSIVE_COVERAGE_SATURATION_RAW));
-}
+// Weights normalization and utility functions imported from @/lib/cohesion-weights
 
 function synergyDescription(synergyId: string): string {
   return SYNERGY_DESCRIPTIONS[synergyId] ?? "No description available for this synergy.";
@@ -2391,232 +2158,8 @@ function LineupTester({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sub-components: Weights Editor
-// ---------------------------------------------------------------------------
-
-interface WeightsEditorProps {
-  onWeightsUpdated: () => void;
-}
-
-/** Monaco JSON editor for weight overrides with test/save/reset. */
-function WeightsEditor({ onWeightsUpdated }: WeightsEditorProps) {
-  const [editorContent, setEditorContent] = useState<string>("{}");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  // Lazy import Monaco to avoid SSR issues
-  const [MonacoEditor, setMonacoEditor] = useState<typeof import("@monaco-editor/react").default | null>(null);
-
-  // Load Monaco lazily on mount
-  useEffect(() => {
-    import("@monaco-editor/react").then((mod) => setMonacoEditor(() => mod.default));
-  }, []);
-
-  // Fetch current weights on mount
-  useEffect(() => {
-    fetchCohesionWeights().then((res) => {
-      if (res.success && res.data) {
-        setEditorContent(JSON.stringify(res.data, null, 2));
-      }
-      setLoading(false);
-    });
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    setSaving(true);
-    try {
-      const parsed = JSON.parse(editorContent);
-      const res = await updateCohesionWeights(parsed);
-      if (res.success) {
-        toast.success("Weight overrides applied");
-        onWeightsUpdated();
-      } else {
-        toast.error(res.error ?? "Failed to save weights");
-      }
-    } catch {
-      toast.error("Invalid JSON");
-    } finally {
-      setSaving(false);
-    }
-  }, [editorContent, onWeightsUpdated]);
-
-  const handleReset = useCallback(async () => {
-    // Reset by sending empty overrides, then refetch
-    const res = await updateCohesionWeights({});
-    if (res.success && res.data) {
-      setEditorContent(JSON.stringify(res.data, null, 2));
-      toast.success("Weights reset to defaults");
-      onWeightsUpdated();
-    } else {
-      toast.error(res.error ?? "Failed to reset weights");
-    }
-  }, [onWeightsUpdated]);
-
-  if (loading) {
-    return <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">Loading weights…</div>;
-  }
-
-  return (
-    <div id="cohesion-cal-weights-editor" className="space-y-3 h-full flex flex-col">
-      {/* Monaco editor */}
-      <div className="flex-1 min-h-0 rounded-md border border-border overflow-hidden">
-        {MonacoEditor ? (
-          <MonacoEditor
-            height="100%"
-            language="json"
-            theme="vs-dark"
-            value={editorContent}
-            onChange={(v) => setEditorContent(v ?? "{}")}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 11,
-              lineNumbers: "on",
-              scrollBeyondLastLine: false,
-              wordWrap: "on",
-              tabSize: 2,
-            }}
-          />
-        ) : (
-          <textarea
-            id="cohesion-cal-weights-textarea"
-            value={editorContent}
-            onChange={(e) => setEditorContent(e.target.value)}
-            className="w-full h-full bg-background text-foreground font-mono text-xs p-3 resize-none focus:outline-none"
-            spellCheck={false}
-          />
-        )}
-      </div>
-
-      {/* Action buttons */}
-      <div className="flex gap-2">
-        <button
-          id="cohesion-cal-weights-save-btn"
-          type="button"
-          disabled={saving}
-          onClick={handleSave}
-          className="flex-1 text-xs font-medium py-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save Overrides"}
-        </button>
-        <button
-          id="cohesion-cal-weights-reset-btn"
-          type="button"
-          onClick={handleReset}
-          className="text-xs font-medium py-1.5 px-3 rounded-md border border-border hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
-        >
-          Reset
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components: Results Panel
-// ---------------------------------------------------------------------------
-
-interface ResultsPanelProps {
-  testHistory: LineupTestResult[];
-  onLoadLineup: (result: LineupTestResult) => void;
-}
-
-/** Session history of lineup evaluations (LIFO, collapsible). */
-function ResultsPanel({ testHistory, onLoadLineup }: ResultsPanelProps) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  if (testHistory.length === 0) {
-    return (
-      <div id="cohesion-cal-results-empty" className="flex items-center justify-center h-full text-xs text-muted-foreground/50">
-        No test results yet
-      </div>
-    );
-  }
-
-  return (
-    <div id="cohesion-cal-results" className="space-y-1.5 overflow-y-auto">
-      {testHistory.map((result, idx) => {
-        const isExpanded = expandedId === result.id;
-        const prevResult = testHistory[idx + 1]; // older result (LIFO)
-        const delta = prevResult ? result.cohesion_score - prevResult.cohesion_score : null;
-
-        return (
-          <button
-            key={result.id}
-            type="button"
-            onClick={() => setExpandedId(isExpanded ? null : result.id)}
-            className="w-full text-left rounded-md border border-border bg-card hover:bg-muted/50 transition-colors p-2.5 cursor-pointer"
-          >
-            {/* Summary row */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[9px] text-muted-foreground tabular-nums">
-                  {new Date(result.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-                <span className="text-[10px] text-foreground truncate">
-                  {result.playerNames.slice(0, 3).join(", ")}
-                  {result.playerNames.length > 3 && ` +${result.playerNames.length - 3}`}
-                </span>
-                <span className="text-[8px] uppercase tracking-wider text-muted-foreground/60">
-                  {result.mode === "rotation" ? "rotation" : "lineup"}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <span className={cn("text-xs font-mono font-bold tabular-nums", subscoreColor(result.cohesion_score * 2))}>
-                  {result.cohesion_score.toFixed(2)}
-                </span>
-                {delta !== null && (
-                  <span className={cn("text-[9px] font-mono tabular-nums", delta >= 0 ? "text-green-400" : "text-red-400")}>
-                    {delta >= 0 ? "+" : ""}{delta.toFixed(2)}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Expanded detail */}
-            {isExpanded && (
-              <div className="mt-2 pt-2 border-t border-border/50 space-y-2" onClick={(e) => e.stopPropagation()}>
-                {/* Full player names */}
-                <p className="text-[9px] text-muted-foreground">{result.playerNames.join(" / ")}</p>
-                <button
-                  id={`cohesion-cal-history-load-${result.id}`}
-                  type="button"
-                  onClick={() => onLoadLineup(result)}
-                  className="w-full rounded border border-border bg-background px-2 py-1 text-[9px] font-medium text-foreground hover:bg-muted cursor-pointer"
-                >
-                  Load {result.mode === "rotation" ? "Rotation" : "Lineup"}
-                </button>
-                {/* Subscores */}
-                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                  {Object.entries(result.subscores).map(([key, val]) => (
-                    <div key={key} className="flex items-center justify-between">
-                      <span className="text-[8px] text-muted-foreground">{SUBSCORE_LABELS[key] ?? key}</span>
-                      <span className={cn("text-[8px] font-mono tabular-nums", subscoreColor(val))}>{val.toFixed(1)}</span>
-                    </div>
-                  ))}
-                </div>
-                {/* Synergies */}
-                {result.synergies_applied.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {result.synergies_applied.map((s, i) => (
-                      <span
-                        key={`${s}-${i}`}
-                        id={`cohesion-cal-history-synergy-${result.id}-${s}-${i}`}
-                        className={cn("text-[7px] font-mono px-1 rounded border", synergyChipClass(s))}
-                        title={synergyDescription(s)}
-                      >
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+// WeightsEditor imported from ./components/WeightsEditor
+// ResultsPanel imported from ./components/ResultsPanel
 
 // ---------------------------------------------------------------------------
 // Main Page
