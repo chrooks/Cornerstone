@@ -17,6 +17,16 @@ import { cn } from "@/lib/utils";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
 import { CohesionCompositesTable } from "@/components/cohesion/CohesionResultDetails";
 import {
+  COMPOSITE_COLUMNS,
+  SUBSCORE_LABELS,
+  SYNERGY_DESCRIPTIONS,
+  PLAYER_COLORS,
+  BELL_MIN_IN,
+  BELL_MAX_IN,
+} from "@/lib/cohesion-constants";
+import { subscoreColor, subscoreBarFill, synergyChipClass } from "@/lib/cohesion-colors";
+import { bellValueAtHeight } from "@/lib/cohesion-bell-curve";
+import {
   fetchPlayerComposites,
   fetchBellCurve,
   listPlayersWithSkills,
@@ -134,30 +144,9 @@ type CenterTab = "bell_curves" | "lineup" | "weights";
 // Constants
 // ---------------------------------------------------------------------------
 
-const COMPOSITE_LABELS: { key: string; label: string }[] = [
-  { key: "spacing", label: "Spacing" },
-  { key: "finishing", label: "Finishing" },
-  { key: "paint_touch", label: "Rim Pressure" },
-  { key: "anchor", label: "Anchor" },
-  { key: "post_game", label: "Post Game" },
-  { key: "pnr_screener", label: "PnR Screener" },
-  { key: "off_ball_impact", label: "Off-Ball Impact" },
-  { key: "shot_creation", label: "Shot Creation" },
-  { key: "rebounding", label: "Rebounding" },
-  { key: "transition", label: "Transition" },
-  { key: "perimeter_defense", label: "Perimeter Defense" },
-  { key: "interior_defense", label: "Interior Defense" },
-];
-
-/** Distinct colors for overlaying bell curves (same as CohesionDebugPanel). */
-const PLAYER_COLORS = [
-  "#3b82f6", "#ef4444", "#22c55e", "#f59e0b",
-  "#a855f7", "#ec4899", "#06b6d4", "#f97316",
-];
-
-// Bell curve chart range: 6'0" (72in) to 7'4" (88in)
-const BELL_MIN_IN = 72;
-const BELL_MAX_IN = 88;
+// COMPOSITE_COLUMNS, PLAYER_COLORS, BELL_MIN_IN, BELL_MAX_IN imported from @/lib/cohesion-constants
+// Alias for backward compat within this file
+const COMPOSITE_LABELS = COMPOSITE_COLUMNS;
 
 const CENTER_TABS: { key: CenterTab; label: string }[] = [
   { key: "lineup", label: "Lineup Tester" },
@@ -168,25 +157,7 @@ const CENTER_TABS: { key: CenterTab; label: string }[] = [
 const LINEUP_STORAGE_KEY = "cohesion-calibration-lineup-player-ids";
 const TEST_HISTORY_STORAGE_KEY = "cohesion-calibration-test-history";
 
-const SUBSCORE_LABELS: Record<string, string> = {
-  spacing_creation_ratio: "Spacing / Creation",
-  creation_offball_ratio: "Creation / Off-Ball",
-  spacing_paint_touch_ratio: "Spacing / Rim Pressure",
-  rebound_transition_ratio: "Rebound / Transition",
-  rebounding_spacing_deficit: "Spacing Support",
-  pnr_pairing: "PnR Pairing",
-  paint_touch_total: "Rim Pressure",
-  post_game_total: "Post Game",
-  pnr_screener_total: "PnR Screener",
-  anchor_total: "Anchor",
-  perimeter_defense_total: "Perim Defense",
-  interior_defense_total: "Interior Defense",
-  collective_passing: "Passing",
-  rebounding: "Rebounding",
-  transition: "Transition",
-  defensive_coverage: "Def Coverage",
-  defensive_gaps: "Def Gaps",
-};
+// SUBSCORE_LABELS imported from @/lib/cohesion-constants
 
 const TIER_VALUES: Record<string, number> = {
   None: 0,
@@ -226,19 +197,7 @@ const EQUATION_ORDER = [
   "interior_defense",
 ];
 
-const SYNERGY_DESCRIPTIONS: Record<string, string> = {
-  "OFF-02": "Screeners boost movement shooters by freeing them off the ball.",
-  "OFF-03": "Movement shooters are penalized when no screener is available.",
-  "OFF-04": "Screeners boost cutters by opening off-ball lanes.",
-  "OFF-12": "Cutters are penalized when the lineup has no passer to find them.",
-  "OFF-13": "Cutters are penalized when lineup spacing is too cramped.",
-  "OFF-14": "Creators boost cutters by bending the defense.",
-  "OFF-15": "Vertical spacers are penalized without passers or drivers to activate them.",
-  "OFF-16": "Passers or drivers boost vertical spacers as lob and rim-pressure targets.",
-  "OFF-31": "Passers boost transition threats in the open court.",
-  "OFF-32": "Transition threats and passers boost high flyers.",
-  "OFF-37": "Only one passer is present, making playmaking fragile.",
-};
+// SYNERGY_DESCRIPTIONS imported from @/lib/cohesion-constants
 
 interface CohesionExplanationWeights {
   COMPOSITE_COEFFICIENTS: Record<string, number>;
@@ -329,17 +288,7 @@ function compositeBarColor(score: number): string {
   return "bg-red-600";
 }
 
-function subscoreColor(score: number): string {
-  if (score >= 7) return "text-green-400";
-  if (score >= 4) return "text-amber-400";
-  return "text-red-400";
-}
-
-function subscoreBarFill(score: number): string {
-  if (score >= 7) return "bg-green-500";
-  if (score >= 4) return "bg-amber-500";
-  return "bg-red-500";
-}
+// subscoreColor and subscoreBarFill imported from @/lib/cohesion-colors
 
 function skillTier(skills: Record<string, string>, skill: string): SkillTier {
   const tier = skills[skill];
@@ -454,11 +403,7 @@ function synergyDescription(synergyId: string): string {
   return SYNERGY_DESCRIPTIONS[synergyId] ?? "No description available for this synergy.";
 }
 
-function synergyChipClass(synergyId: string): string {
-  if (synergyId.startsWith("OFF")) return "bg-blue-200 text-black border-blue-400";
-  if (synergyId.startsWith("DEF")) return "bg-violet-200 text-black border-violet-400";
-  return "bg-amber-200 text-black border-amber-400";
-}
+// synergyChipClass imported from @/lib/cohesion-colors
 
 function skillLineupValue(lineupSlots: LineupSlot[], index: number, skill: string): number {
   return skillValue(lineupSlots[index]?.skills ?? {}, skill);
@@ -1797,23 +1742,7 @@ function BellCurveChart({ overlayPlayers, onRemovePlayer, onRefresh, refreshing 
   );
 }
 
-function bellValueAtHeight(
-  targetHeight: number,
-  curve: PlayerCompositeData["bell_curve"],
-): number {
-  const abovePeak = targetHeight > curve.peak;
-  const distance = abovePeak ? targetHeight - curve.peak : curve.peak - targetHeight;
-  const flat = abovePeak ? curve.flat_up : curve.flat_down;
-  const total = abovePeak ? curve.range_up : curve.range_down;
-
-  if (distance <= flat) return curve.amplitude;
-
-  const taper = total - flat;
-  if (taper <= 0 || distance > total) return 0;
-
-  const t = (distance - flat) / taper;
-  return curve.amplitude * Math.max(0, 1 - t * t);
-}
+// bellValueAtHeight imported from @/lib/cohesion-bell-curve
 
 /** Compact defensive bell curve overlay for the current five-player lineup. */
 function LineupBellCurveChart({ lineupSlots, weights, boostedBellCurves, rpPdBoosts = [] }: {

@@ -2,6 +2,17 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import {
+  COMPOSITE_COLUMNS,
+  SUBSCORE_LABELS,
+  SUBSCORE_GROUPS,
+  SYNERGY_DESCRIPTIONS,
+  PLAYER_COLORS,
+  BELL_MIN_IN,
+  BELL_MAX_IN,
+} from "@/lib/cohesion-constants";
+import { subscoreColor, subscoreBarFill, compositeHeatColor, synergyChipClass } from "@/lib/cohesion-colors";
+import { bellValueAtHeight, inToLabel } from "@/lib/cohesion-bell-curve";
 import type { CohesionBellCurve, CohesionLineupSummary, CohesionPlayerComposites } from "@/lib/types";
 
 export interface CohesionRpPdBoostInfo {
@@ -65,147 +76,17 @@ export interface CohesionStarBreakdownData {
   floor: number;
 }
 
-const PLAYER_COLORS = [
-  "#3b82f6",
-  "#ef4444",
-  "#22c55e",
-  "#f59e0b",
-  "#a855f7",
-  "#ec4899",
-  "#06b6d4",
-  "#f97316",
-];
+// Re-export for backward compatibility (other files may import from here)
+export { SUBSCORE_LABELS as COHESION_SUBSCORE_LABELS, SUBSCORE_GROUPS as COHESION_SUBSCORE_GROUPS } from "@/lib/cohesion-constants";
+export { subscoreColor as cohesionSubscoreColor, subscoreBarFill as cohesionSubscoreBarFill } from "@/lib/cohesion-colors";
 
-const BELL_MIN_IN = 72;
-const BELL_MAX_IN = 88;
+// Local aliases for use within this file (preserves existing internal references)
+const COHESION_SUBSCORE_LABELS = SUBSCORE_LABELS;
+const COHESION_SUBSCORE_GROUPS = SUBSCORE_GROUPS;
+const cohesionSubscoreColor = subscoreColor;
+const cohesionSubscoreBarFill = subscoreBarFill;
+
 const BELL_HEIGHTS = Array.from({ length: BELL_MAX_IN - BELL_MIN_IN + 1 }, (_, i) => BELL_MIN_IN + i);
-
-const COMPOSITE_COLS: { key: keyof CohesionPlayerComposites["base"]; abbr: string; label: string }[] = [
-  { key: "spacing", abbr: "Spc", label: "Spacing" },
-  { key: "finishing", abbr: "Fin", label: "Finishing" },
-  { key: "paint_touch", abbr: "RP", label: "Rim Pressure" },
-  { key: "anchor", abbr: "Anc", label: "Anchor" },
-  { key: "post_game", abbr: "Post", label: "Post Game" },
-  { key: "pnr_screener", abbr: "PnR", label: "PnR Screener" },
-  { key: "off_ball_impact", abbr: "OBI", label: "Off-Ball Impact" },
-  { key: "shot_creation", abbr: "SC", label: "Shot Creation" },
-  { key: "rebounding", abbr: "Reb", label: "Rebounding" },
-  { key: "transition", abbr: "Trn", label: "Transition" },
-  { key: "perimeter_defense", abbr: "PD", label: "Perimeter Defense" },
-  { key: "interior_defense", abbr: "ID", label: "Interior Defense" },
-];
-
-export const COHESION_SUBSCORE_LABELS: Record<string, string> = {
-  spacing_creation_ratio: "Spacing / Creation",
-  creation_offball_ratio: "Creation / Off-Ball",
-  spacing_paint_touch_ratio: "Spacing / Rim Pressure",
-  rebound_transition_ratio: "Rebound / Transition",
-  rebounding_spacing_deficit: "Spacing Support",
-  paint_touch_total: "Rim Pressure",
-  post_game_total: "Post Game",
-  pnr_pairing: "PnR Pairing",
-  pnr_screener_total: "PnR Screener",
-  anchor_total: "Anchor",
-  perimeter_defense_total: "Perim Defense",
-  interior_defense_total: "Interior Defense",
-  collective_passing: "Passing",
-  rebounding: "Rebounding",
-  transition: "Transition",
-  defensive_coverage: "Def Coverage",
-  defensive_gaps: "Def Gaps",
-};
-
-export const COHESION_SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: string }[] }[] = [
-  {
-    heading: "Fit Ratios",
-    entries: [
-      { key: "spacing_creation_ratio", label: "Spacing / Creation" },
-      { key: "creation_offball_ratio", label: "Creation / Off-Ball" },
-      { key: "spacing_paint_touch_ratio", label: "Spacing / Rim Pressure" },
-      { key: "rebound_transition_ratio", label: "Rebound / Transition" },
-      { key: "rebounding_spacing_deficit", label: "Spacing Support" },
-    ],
-  },
-  {
-    heading: "Lineup Qualities",
-    entries: [
-      { key: "paint_touch_total", label: "Rim Pressure" },
-      { key: "post_game_total", label: "Post Game" },
-      { key: "pnr_pairing", label: "PnR Pairing" },
-      { key: "anchor_total", label: "Anchor" },
-      { key: "collective_passing", label: "Passing" },
-      { key: "rebounding", label: "Rebounding" },
-      { key: "transition", label: "Transition" },
-    ],
-  },
-  {
-    heading: "Defense",
-    entries: [
-      { key: "perimeter_defense_total", label: "Perim Defense" },
-      { key: "interior_defense_total", label: "Interior Defense" },
-      { key: "defensive_coverage", label: "Def Coverage" },
-      { key: "defensive_gaps", label: "Def Gaps" },
-    ],
-  },
-];
-
-const SYNERGY_DESCRIPTIONS: Record<string, string> = {
-  "OFF-02": "Screeners boost movement shooters by freeing them off the ball.",
-  "OFF-03": "Movement shooters are penalized when no screener is available.",
-  "OFF-04": "Screeners boost cutters by opening off-ball lanes.",
-  "OFF-12": "Cutters are penalized when the lineup has no passer to find them.",
-  "OFF-13": "Cutters are penalized when lineup spacing is too cramped.",
-  "OFF-14": "Creators boost cutters by bending the defense.",
-  "OFF-15": "Vertical spacers are penalized without passers or drivers to activate them.",
-  "OFF-16": "Passers or drivers boost vertical spacers as lob and rim-pressure targets.",
-  "OFF-31": "Passers boost transition threats in the open court.",
-  "OFF-32": "Transition threats and passers boost high flyers.",
-  "OFF-37": "Only one passer is present, making playmaking fragile.",
-};
-
-export function cohesionSubscoreColor(score: number): string {
-  if (score >= 7) return "text-green-400";
-  if (score >= 4) return "text-amber-400";
-  return "text-red-400";
-}
-
-export function cohesionSubscoreBarFill(score: number): string {
-  if (score >= 7) return "bg-green-500";
-  if (score >= 4) return "bg-amber-500";
-  return "bg-red-500";
-}
-
-function compositeHeatColor(score: number): string {
-  if (score >= 8) return "bg-green-400 text-black font-semibold";
-  if (score >= 6) return "bg-green-300 text-black";
-  if (score >= 4) return "bg-amber-300 text-black";
-  if (score >= 2) return "bg-red-300 text-black";
-  return "bg-red-400 text-black";
-}
-
-function inToLabel(inches: number): string {
-  const ft = Math.floor(inches / 12);
-  const inch = inches % 12;
-  return `${ft}'${inch}"`;
-}
-
-function bellValueAtHeight(targetHeight: number, params: CohesionBellCurve): number {
-  const { amplitude, peak, range_down, range_up, flat_down, flat_up } = params;
-  const distance = Math.abs(targetHeight - peak);
-  const flat = targetHeight > peak ? flat_up : flat_down;
-  const total = targetHeight > peak ? range_up : range_down;
-  if (distance <= flat) return amplitude;
-  const taper = total - flat;
-  if (taper <= 0 || distance > total) return 0;
-  const t = (distance - flat) / taper;
-  return amplitude * Math.max(0, 1 - t * t);
-}
-
-function synergyChipClass(synergyId: string): string {
-  if (synergyId.startsWith("OFF")) return "bg-blue-200 text-black border-blue-400";
-  if (synergyId.startsWith("DEF")) return "bg-violet-200 text-black border-violet-400";
-  return "bg-amber-200 text-black border-amber-400";
-}
 
 function compositeLabel(value: string): string {
   return COHESION_SUBSCORE_LABELS[value] ?? value.replaceAll("_", " ");
@@ -227,7 +108,7 @@ export function CohesionCompositesTable({
         <thead>
           <tr id={`${idPrefix}-header-row`}>
             <th id={`${idPrefix}-header-player`} className="text-left text-muted-foreground font-medium pr-2 py-1">Player</th>
-            {COMPOSITE_COLS.map((col) => (
+            {COMPOSITE_COLUMNS.map((col) => (
               <th
                 key={col.key}
                 id={`${idPrefix}-header-${col.key}`}
@@ -245,8 +126,8 @@ export function CohesionCompositesTable({
               <td id={`${idPrefix}-player-${player.player_id}-name`} className="text-foreground font-medium pr-2 py-1.5 whitespace-nowrap max-w-[120px] truncate">
                 {player.name}
               </td>
-              {COMPOSITE_COLS.map((col) => {
-                const score = player.base[col.key] ?? 0;
+              {COMPOSITE_COLUMNS.map((col) => {
+                const score = (player.base as unknown as Record<string, number>)[col.key] ?? 0;
                 return (
                   <td
                     key={col.key}

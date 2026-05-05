@@ -17,10 +17,12 @@
 
 import { useId } from "react";
 import { cn } from "@/lib/utils";
+import { SUBSCORE_GROUPS } from "@/lib/cohesion-constants";
+import { subscoreColor, subscoreBarFill } from "@/lib/cohesion-colors";
 import type { RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
-// Color utilities
+// Color utilities (component-specific scales not shared elsewhere)
 // ---------------------------------------------------------------------------
 
 /** Color class for star rating (1-5 scale). */
@@ -30,19 +32,9 @@ function starColorClass(rating: number): string {
   return "text-red-400";
 }
 
-/** Color class for 0-10 subscore bars. */
-function subscoreColorClass(score: number): string {
-  if (score >= 7) return "text-green-400";
-  if (score >= 4) return "text-amber-400";
-  return "text-red-400";
-}
-
-/** Bar fill color for 0-10 subscore bars. */
-function subscoreBarColor(score: number): string {
-  if (score >= 7) return "bg-green-500";
-  if (score >= 4) return "bg-amber-500";
-  return "bg-red-500";
-}
+// Alias shared functions with names used locally in this component
+const subscoreColorClass = subscoreColor;
+const subscoreBarColor = subscoreBarFill;
 
 /** Color class for 0-1 breakdown bars. */
 function breakdownColorClass(value: number): string {
@@ -267,43 +259,7 @@ function SubscoreBar({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Subscore key → display label mapping, grouped by category
-// ---------------------------------------------------------------------------
-
-const SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: string }[] }[] = [
-  {
-    heading: "Fit Ratios",
-    entries: [
-      { key: "spacing_creation_ratio", label: "Spacing / Creation" },
-      { key: "creation_offball_ratio", label: "Creation / Off-Ball" },
-      { key: "spacing_paint_touch_ratio", label: "Spacing / Rim Pressure" },
-      { key: "rebound_transition_ratio", label: "Rebound / Transition" },
-      { key: "rebounding_spacing_deficit", label: "Spacing Support" },
-    ],
-  },
-  {
-    heading: "Lineup Qualities",
-    entries: [
-      { key: "paint_touch_total", label: "Rim Pressure" },
-      { key: "post_game_total", label: "Post Game" },
-      { key: "pnr_pairing", label: "PnR Pairing" },
-      { key: "anchor_total", label: "Anchor" },
-      { key: "collective_passing", label: "Passing" },
-      { key: "rebounding", label: "Rebounding" },
-      { key: "transition", label: "Transition" },
-    ],
-  },
-  {
-    heading: "Defense",
-    entries: [
-      { key: "perimeter_defense_total", label: "Perim Defense" },
-      { key: "interior_defense_total", label: "Interior Defense" },
-      { key: "defensive_coverage", label: "Def Coverage" },
-      { key: "defensive_gaps", label: "Def Gaps" },
-    ],
-  },
-];
+// SUBSCORE_GROUPS imported from @/lib/cohesion-constants
 
 // ---------------------------------------------------------------------------
 // CohesionScoreDisplay
