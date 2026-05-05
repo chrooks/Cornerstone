@@ -20,15 +20,9 @@ Deleted `skill_mapping_service.py`. Orchestration functions moved to `skill_engi
 
 ---
 
-## 4. compositing.py — Complex Decision Matrix as Nested Conditionals
+## ~~4. compositing.py — Complex Decision Matrix as Nested Conditionals~~ — RESOLVED
 
-**Files:** `backend/services/compositing.py` (478 lines)
-
-**Problem:** A 4×3 compositing matrix (confidence level × agreement level) is implemented as deeply nested `if/elif` blocks (lines 86–253). Side-effects depend on check order. Low-notability override happens *before* the agreement check — an invariant invisible at the top of the function. Adding a new case requires reading the entire function to find the insertion point.
-
-**Solution:** Make the matrix declarative — a data structure mapping `(confidence, agreement, modifiers)` → `outcome`. The execution engine becomes a simple lookup + override application. Each cell is independently testable.
-
-**Benefits:** Leverage — adding a new compositing rule is adding a row, not tracing 170 lines of conditionals. Locality — each decision cell is self-documenting. Tests become exhaustive matrix coverage instead of path-specific.
+Replaced 170 lines of nested `if/elif` with a declarative `_COMPOSITING_RULES` table — 8 priority-ordered rows mapping predicates to outcomes. Adding a rule = adding a row. All 88 existing tests pass unchanged (2026-05-05).
 
 ---
 

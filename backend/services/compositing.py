@@ -34,6 +34,7 @@ Persistence:
 """
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from supabase import Client
@@ -79,6 +80,84 @@ def _lower_tier(tier_a: str | None, tier_b: str | None) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Compositing matrix — declarative decision table
+# ---------------------------------------------------------------------------
+#
+# Each rule is a (predicate, outcome_factory) pair. The engine evaluates rules
+# in priority order and returns the first match. This makes the decision policy
+# readable at a glance and independently testable per cell.
+#
+# Outcome fields:
+#   source      — "stats_only" | "auto_accepted" | "flagged"
+#   flagged     — bool
+#   flag_reason — str | None
+#   use_lower   — if True, final_tier = lower(stat, claude); else final_tier = stat_tier
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class _Outcome:
+    """Declarative outcome for a single matrix cell."""
+    source: str
+    flagged: bool
+    flag_reason: str | None = None
+    use_lower: bool = False
+
+
+# Priority-ordered compositing rules. First match wins.
+# Each entry: (human-readable label, predicate function, outcome)
+_COMPOSITING_RULES: list[tuple[str, Any, _Outcome]] = [
+    # --- Rule 1: High-confidence skills bypass Claude entirely ---
+    (
+        "high_confidence",
+        lambda ctx: ctx["is_high_confidence"],
+        _Outcome(source="stats_only", flagged=False),
+    ),
+    # --- Rule 2: Claude data missing or failed ---
+    (
+        "data_missing",
+        lambda ctx: ctx["claude_missing"],
+        _Outcome(source="flagged", flagged=True, flag_reason="data_missing"),
+    ),
+    # --- Rule 3: Low-notability override — flags all non-high skills ---
+    (
+        "low_notability",
+        lambda ctx: ctx["low_notability"],
+        _Outcome(source="flagged", flagged=True, flag_reason="low_notability", use_lower=True),
+    ),
+    # --- Rule 4: Exact agreement — always auto-accept ---
+    (
+        "exact_agreement",
+        lambda ctx: ctx["agreement"] == "exact",
+        _Outcome(source="auto_accepted", flagged=False),
+    ),
+    # --- Rule 5: One-tier + low confidence (skill is inherently low-confidence) ---
+    (
+        "one_tier_low_confidence_skill",
+        lambda ctx: ctx["agreement"] == "one_tier" and ctx["is_low_confidence_skill"],
+        _Outcome(source="flagged", flagged=True, flag_reason="one_tier_low_confidence", use_lower=True),
+    ),
+    # --- Rule 6: One-tier + Claude self-reports low confidence on moderate skill ---
+    (
+        "one_tier_claude_low_confidence",
+        lambda ctx: ctx["agreement"] == "one_tier" and ctx["claude_reports_low"],
+        _Outcome(source="flagged", flagged=True, flag_reason="claude_low_confidence", use_lower=True),
+    ),
+    # --- Rule 7: One-tier + moderate confidence — auto-accept lower tier ---
+    (
+        "one_tier_moderate",
+        lambda ctx: ctx["agreement"] == "one_tier",
+        _Outcome(source="auto_accepted", flagged=False, use_lower=True),
+    ),
+    # --- Rule 8: Two-tier (or more) disagreement — always flag ---
+    (
+        "two_tier_disagreement",
+        lambda ctx: ctx["agreement"] == "two_tier",
+        _Outcome(source="flagged", flagged=True, flag_reason="two_tier_disagreement", use_lower=True),
+    ),
+]
+
+
+# ---------------------------------------------------------------------------
 # Single-skill compositing
 # ---------------------------------------------------------------------------
 
@@ -92,61 +171,32 @@ def composite_skill(
     """
     Composite a single skill from the stat result and Claude result.
 
+    Evaluates the declarative _COMPOSITING_RULES matrix in priority order.
+    First matching rule determines the outcome.
+
     Args:
         skill_name:      Snake_case skill key.
-        stat_result:     Dict from Prompt 4's evaluate_skill (has "tier", "stat_confidence", etc.).
-        claude_result:   Dict from claude_assessment.get_claude_assessment (has "tier",
-                         "confidence", "claude_failed"). None if skill is high-confidence.
+        stat_result:     Dict from evaluate_skill (has "tier", "stat_confidence", etc.).
+        claude_result:   Dict from claude_assessment (has "tier", "confidence",
+                         "claude_failed"). None if skill is high-confidence.
         notability_score: Player notability score (0–100).
 
     Returns:
         Dict with all composite fields per the spec schema.
     """
-    stat_tier       = stat_result.get("tier", "None")
+    # Extract raw values from inputs
+    stat_tier = stat_result.get("tier", "None")
     stat_confidence = stat_result.get("stat_confidence", "low")
+    is_high_confidence = skill_name in HIGH_CONFIDENCE_SKILLS
 
-    low_notability = notability_score < NOTABILITY_MEDIUM
-
-    # -----------------------------------------------------------------------
-    # High confidence skills — Claude was not called
-    # -----------------------------------------------------------------------
-    if skill_name in HIGH_CONFIDENCE_SKILLS:
-        return {
-            "final_tier":      stat_tier,
-            "stat_tier":       stat_tier,
-            "claude_tier":     None,
-            "source":          "stats_only",
-            "stat_confidence": stat_confidence,
-            "claude_confidence": None,
-            "agreement":       "skipped",
-            "flagged":         False,
-            "flag_reason":     None,
-        }
-
-    # -----------------------------------------------------------------------
-    # Moderate / low confidence skills — Claude was called
-    # -----------------------------------------------------------------------
-    claude_failed    = (claude_result or {}).get("claude_failed", True)
-    claude_tier      = (claude_result or {}).get("tier") if not claude_failed else None
+    claude_failed = (claude_result or {}).get("claude_failed", True)
+    claude_tier = (claude_result or {}).get("tier") if not claude_failed else None
     claude_confidence = (claude_result or {}).get("confidence") if not claude_failed else None
 
-    # If Claude data is missing (failed or null tier), treat as data_missing flag
-    if claude_failed or claude_tier is None:
-        return {
-            "final_tier":       stat_tier,
-            "stat_tier":        stat_tier,
-            "claude_tier":      None,
-            "source":           "flagged",
-            "stat_confidence":  stat_confidence,
-            "claude_confidence": None,
-            "agreement":        "skipped",
-            "flagged":          True,
-            "flag_reason":      "data_missing",
-        }
+    # Derived context for rule predicates
+    claude_missing = not is_high_confidence and (claude_failed or claude_tier is None)
 
-    diff = _tier_diff(stat_tier, claude_tier)
-
-    # Convert diff to agreement label
+    diff = _tier_diff(stat_tier, claude_tier) if claude_tier is not None else 0
     if diff == 0:
         agreement = "exact"
     elif diff == 1:
@@ -154,96 +204,53 @@ def composite_skill(
     else:
         agreement = "two_tier"
 
-    # Determine effective confidence level for compositing:
-    # Claude self-reporting "low" escalates to low-confidence rules.
-    claude_reports_low = (claude_confidence == "low")
-    is_low_confidence_skill = skill_name in LOW_CONFIDENCE_SKILLS
+    # Build the context dict that predicates evaluate against
+    ctx = {
+        "is_high_confidence": is_high_confidence,
+        "claude_missing": claude_missing,
+        "low_notability": (not is_high_confidence) and (notability_score < NOTABILITY_MEDIUM),
+        "agreement": agreement,
+        "is_low_confidence_skill": skill_name in LOW_CONFIDENCE_SKILLS,
+        "claude_reports_low": claude_confidence == "low",
+    }
 
-    # Effective behavior: treat as low-confidence if skill IS low-confidence
-    # OR if Claude self-reports low confidence on a moderate-confidence skill.
-    act_as_low_confidence = is_low_confidence_skill or claude_reports_low
+    # Find first matching rule
+    outcome: _Outcome | None = None
+    for _, predicate, rule_outcome in _COMPOSITING_RULES:
+        if predicate(ctx):
+            outcome = rule_outcome
+            break
 
-    # -----------------------------------------------------------------------
-    # Notability override — flag everything for low-notability players
-    # -----------------------------------------------------------------------
-    if low_notability:
-        return {
-            "final_tier":       _lower_tier(stat_tier, claude_tier),
-            "stat_tier":        stat_tier,
-            "claude_tier":      claude_tier,
-            "source":           "flagged",
-            "stat_confidence":  stat_confidence,
-            "claude_confidence": claude_confidence,
-            "agreement":        agreement,
-            "flagged":          True,
-            "flag_reason":      "low_notability",
-        }
+    # Should never happen — two_tier rule is a catch-all for non-exact, non-one-tier
+    if outcome is None:  # pragma: no cover
+        raise ValueError(f"No compositing rule matched for skill={skill_name}, ctx={ctx}")
 
-    # -----------------------------------------------------------------------
-    # Agreement-based resolution
-    # -----------------------------------------------------------------------
-    if agreement == "exact":
-        # Both sources agree — auto-accept
-        return {
-            "final_tier":       stat_tier,
-            "stat_tier":        stat_tier,
-            "claude_tier":      claude_tier,
-            "source":           "auto_accepted",
-            "stat_confidence":  stat_confidence,
-            "claude_confidence": claude_confidence,
-            "agreement":        agreement,
-            "flagged":          False,
-            "flag_reason":      None,
-        }
-
-    elif agreement == "one_tier":
-        lower = _lower_tier(stat_tier, claude_tier)
-
-        if act_as_low_confidence:
-            # Low-confidence skill OR Claude self-reports low: flag one-tier disagreements
-            flag_reason = (
-                "claude_low_confidence"
-                if (claude_reports_low and not is_low_confidence_skill)
-                else "one_tier_low_confidence"
-            )
-            return {
-                "final_tier":       lower,
-                "stat_tier":        stat_tier,
-                "claude_tier":      claude_tier,
-                "source":           "flagged",
-                "stat_confidence":  stat_confidence,
-                "claude_confidence": claude_confidence,
-                "agreement":        agreement,
-                "flagged":          True,
-                "flag_reason":      flag_reason,
-            }
-        else:
-            # Moderate confidence — auto-accept the lower (more conservative) tier
-            return {
-                "final_tier":       lower,
-                "stat_tier":        stat_tier,
-                "claude_tier":      claude_tier,
-                "source":           "auto_accepted",
-                "stat_confidence":  stat_confidence,
-                "claude_confidence": claude_confidence,
-                "agreement":        agreement,
-                "flagged":          False,
-                "flag_reason":      None,
-            }
-
+    # Determine final tier based on outcome
+    if is_high_confidence or claude_tier is None:
+        # High-confidence or missing Claude: final tier is always stat tier
+        final_tier = stat_tier
+    elif outcome.use_lower:
+        final_tier = _lower_tier(stat_tier, claude_tier)
     else:
-        # Two-tier disagreement — always flag
-        return {
-            "final_tier":       _lower_tier(stat_tier, claude_tier),
-            "stat_tier":        stat_tier,
-            "claude_tier":      claude_tier,
-            "source":           "flagged",
-            "stat_confidence":  stat_confidence,
-            "claude_confidence": claude_confidence,
-            "agreement":        agreement,
-            "flagged":          True,
-            "flag_reason":      "two_tier_disagreement",
-        }
+        final_tier = stat_tier
+
+    # Determine agreement label for output
+    if is_high_confidence or claude_missing:
+        output_agreement = "skipped"
+    else:
+        output_agreement = agreement
+
+    return {
+        "final_tier": final_tier,
+        "stat_tier": stat_tier,
+        "claude_tier": claude_tier if not is_high_confidence else None,
+        "source": outcome.source,
+        "stat_confidence": stat_confidence,
+        "claude_confidence": claude_confidence if not is_high_confidence else None,
+        "agreement": output_agreement,
+        "flagged": outcome.flagged,
+        "flag_reason": outcome.flag_reason,
+    }
 
 
 # ---------------------------------------------------------------------------
