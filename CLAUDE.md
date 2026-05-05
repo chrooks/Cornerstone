@@ -192,3 +192,19 @@ frontend/
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public anon key |
 | `NEXT_PUBLIC_API_URL` | Yes | Flask backend URL (default: `http://localhost:5001`) |
 | `NEXT_PUBLIC_CALIBRATION_API_KEY` | No | Key for calibration write endpoints |
+
+---
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on chrooks/Cornerstone. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout. See `docs/agents/domain.md`.
