@@ -15,16 +15,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { listPlayersWithSkills, getLegend, evaluateRoster } from "@/lib/api";
-import { isCohesionEvaluation, normalizeCohesionNotes } from "@/lib/cohesionHelpers";
+import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
-import { ScoreDisplay } from "./ScoreDisplay";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { NotesList } from "./NotesList";
-import { DebugPanel } from "./DebugPanel";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
-import type { CohesionRosterEvaluation, LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
+import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // TeamDescriptionCard — LLM-generated GM-memo narrative (final mode only)
@@ -283,7 +281,7 @@ export function EvaluatePage() {
   const [evalState, setEvalState] = useState<EvalState>("loading");
   const [errorMsg, setErrorMsg]   = useState<string | null>(null);
   const [dataReady, setDataReady] = useState<DataReady | null>(null);
-  const [evaluation, setEvaluation] = useState<RosterEvaluation | CohesionRosterEvaluation | null>(null);
+  const [evaluation, setEvaluation] = useState<RosterEvaluation | null>(null);
 
   // Capture searchParams at mount — stable ref avoids closure staleness
   const paramsRef = useRef(searchParams.toString());
@@ -342,12 +340,10 @@ export function EvaluatePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataReady, adminLoading]);
 
-  // Normalize cohesion notes into legacy Note shape so bucketing works for both engines
+  // Normalize cohesion notes into legacy Note shape so bucketing works
   const normalizedNotes = useMemo(() => {
     if (!evaluation) return [];
-    return isCohesionEvaluation(evaluation)
-      ? normalizeCohesionNotes(evaluation.notes)
-      : evaluation.notes;
+    return normalizeCohesionNotes(evaluation.notes);
   }, [evaluation]);
 
   // Note buckets — split into issues, suggestions, strengths
@@ -419,11 +415,8 @@ export function EvaluatePage() {
       {evalState === "ready" && evaluation && (
         <div id="eval-results" className="space-y-6">
 
-          {/* Score display — branch on engine type */}
-          {isCohesionEvaluation(evaluation)
-            ? <CohesionScoreDisplay evaluation={evaluation} />
-            : <ScoreDisplay scores={evaluation.scores} />
-          }
+          {/* Score display */}
+          <CohesionScoreDisplay evaluation={evaluation} />
 
           {/* Team Identity — LLM GM-memo narrative (final mode only) */}
           <TeamDescriptionCard
@@ -434,16 +427,9 @@ export function EvaluatePage() {
           {/* Notes — issues, suggestions, strengths in collapsible sections */}
           <NotesList issues={issues} suggestions={suggestions} strengths={strengths} />
 
-          {/* Admin debug panel — branch on engine type */}
-          {isAdmin && isCohesionEvaluation(evaluation) && (
+          {/* Admin debug panel */}
+          {isAdmin && (
             <CohesionDebugPanel evaluation={evaluation} />
-          )}
-          {isAdmin && !isCohesionEvaluation(evaluation) && (evaluation.player_traces || evaluation.aggregate_traces || evaluation.height_coverage) && (
-            <DebugPanel
-              playerTraces={evaluation.player_traces}
-              aggregateTraces={evaluation.aggregate_traces}
-              heightCoverage={evaluation.height_coverage}
-            />
           )}
           {/* Raw notes JSON dump */}
           {isAdmin && (
@@ -452,11 +438,7 @@ export function EvaluatePage() {
                 Raw Notes JSON
               </summary>
               <pre id="eval-debug-notes-json-content" className="mt-2 max-h-[400px] overflow-auto rounded border border-border/60 bg-muted/30 p-2 text-[9px] font-mono text-muted-foreground whitespace-pre-wrap">
-                {JSON.stringify(
-                  isCohesionEvaluation(evaluation) ? evaluation.notes : evaluation.notes,
-                  null,
-                  2,
-                )}
+                {JSON.stringify(evaluation.notes, null, 2)}
               </pre>
             </details>
           )}

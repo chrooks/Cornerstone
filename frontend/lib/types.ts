@@ -418,21 +418,8 @@ export interface LegendClaudeSuggestion {
 }
 
 // ---------------------------------------------------------------------------
-// Roster Evaluator — Scores, GM Notes, Evaluation
+// Evaluation Types
 // ---------------------------------------------------------------------------
-
-/** The 9 numeric dimension scores produced by the 4-layer scoring pipeline (all 0–100) */
-export interface Scores {
-  overall: number;
-  offense: number;
-  defense: number;
-  spacing: number;
-  creation: number;
-  paint: number;
-  transition: number;
-  optionality: number;
-  robustness: number;
-}
 
 export type NoteSeverity = "critical" | "warning" | "suggestion" | "strength";
 
@@ -460,59 +447,8 @@ export interface Note {
   engine_raw_value?: number;
 }
 
-/** Per-player entry in the height coverage map */
-export interface PlayerCoverageEntry {
-  name: string;
-  is_cornerstone: boolean;
-  /** Height in inches, null if no height provided */
-  height_in: number | null;
-  /** Height as "6-8" string, null if no height provided */
-  height_str: string | null;
-  /** Versatile defender tier — sets the base guard range */
-  vd_tier: string;
-  /** Perimeter disruptor tier — extends the lower bound of the guard range */
-  pd_tier: string;
-  /** Low end of guard range in inches, null if no height provided */
-  range_low: number | null;
-  /** High end of guard range in inches, null if no height provided */
-  range_high: number | null;
-}
-
-/** Height coverage map — shows which guard heights are covered by the roster */
-export interface HeightCoverageData {
-  players: PlayerCoverageEntry[];
-  /** Low end of target coverage window in inches (72 = 6'0") */
-  target_low: number;
-  /** High end of target coverage window in inches (86 = 7'2") */
-  target_high: number;
-  /** List of inches in the target window that are NOT covered by any player */
-  holes: number[];
-  /** True when every inch in [target_low, target_high] is covered */
-  full_coverage: boolean;
-}
-
-/** Per-player dimension contribution entry in the impact summary */
-export interface PlayerImpactEntry {
-  dimension: string;
-  pct: number;
-}
-
-/** Full evaluation result from POST /api/builder/evaluate */
-export interface RosterEvaluation {
-  scores: Scores;
-  notes: Note[];
-  player_traces: Record<string, Record<string, unknown>> | null;
-  aggregate_traces: Record<string, unknown> | null;
-  /** Always populated — height guard coverage across the 6'0"–7'2" window */
-  height_coverage: HeightCoverageData | null;
-  /** LLM-generated GM-memo narrative; only present in final mode, null on failure or live mode */
-  team_description?: string | null;
-  /** Per-player top dimension contributions as % of theoretical max */
-  player_impact_summary: Record<string, PlayerImpactEntry[]> | null;
-}
-
 // ---------------------------------------------------------------------------
-// Cohesion Engine — additive response types used when EVAL_ENGINE=cohesion
+// Cohesion Engine Types
 // ---------------------------------------------------------------------------
 
 export type CohesionNoteType = "strength" | "weakness" | "suggestion";
@@ -636,8 +572,8 @@ export interface CohesionLineupSummary {
   rotation_median_subscores?: Record<string, number>;
 }
 
-/** Full evaluation result from POST /api/builder/evaluate when EVAL_ENGINE=cohesion. */
-export interface CohesionRosterEvaluation {
+/** Full evaluation result from POST /api/builder/evaluate. */
+export interface RosterEvaluation {
   star_rating: number;
   star_rating_breakdown: {
     starting_5: number;
@@ -669,7 +605,7 @@ export interface CohesionLineupCombination extends CohesionLineupData {
 }
 
 /** Full deterministic result from POST /api/cohesion/rotation/evaluate. */
-export interface CohesionRotationEvaluation extends CohesionRosterEvaluation {
+export interface CohesionRotationEvaluation extends RosterEvaluation {
   lineup_combinations: CohesionLineupCombination[];
 }
 

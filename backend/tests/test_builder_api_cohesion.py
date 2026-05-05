@@ -1,5 +1,5 @@
 """
-Integration tests for POST /api/builder/evaluate with EVAL_ENGINE=cohesion.
+Integration tests for POST /api/builder/evaluate.
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ import json
 import pytest
 
 from app import create_app
-from api import builder
 
 
 @pytest.fixture()
@@ -49,22 +48,7 @@ def cohesion_roster() -> list[dict]:
     ]
 
 
-def test_default_engine_still_returns_legacy_shape(client):
-    players = [
-        make_player("Cornerstone", 0, {}, "6-6"),
-        make_player("Support", 1, {}, "6-5"),
-    ]
-
-    resp, data = post_evaluate(client, {"players": players, "mode": "live", "debug": False})
-
-    assert resp.status_code == 200
-    assert data["success"] is True
-    assert "scores" in data["data"]
-    assert "star_rating" not in data["data"]
-
-
-def test_cohesion_engine_returns_new_response_shape(client, monkeypatch):
-    monkeypatch.setattr(builder, "EVAL_ENGINE", "cohesion")
+def test_evaluate_returns_cohesion_response_shape(client):
 
     resp, data = post_evaluate(
         client,
@@ -92,8 +76,7 @@ def test_cohesion_engine_returns_new_response_shape(client, monkeypatch):
     assert isinstance(payload["notes"], list)
 
 
-def test_cohesion_engine_partial_roster_returns_mode_a_notes(client, monkeypatch):
-    monkeypatch.setattr(builder, "EVAL_ENGINE", "cohesion")
+def test_partial_roster_returns_mode_a_notes(client):
     players = [
         make_player("Cornerstone", 0, {"spot_up_shooter": "Elite"}, "6-6"),
         make_player("Support", 1, {}, "6-5"),

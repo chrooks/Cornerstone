@@ -20,26 +20,22 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-import os
 from typing import Any
 
 from flask import Blueprint, jsonify, request
 
-from services.cohesion_engine import evaluate_roster as evaluate_cohesion_roster
+from services.cohesion_engine import evaluate_roster
 from services.cohesion_engine import weights as cohesion_weights
 from services.cohesion_engine.bell_curve import apply_rp_pd_boost, compute_bell_params, parse_height_inches
 from services.cohesion_engine.composites import ensure_distributions
-from services.cohesion_engine.types import RosterEvaluation as CohesionRosterEvaluation
+from services.cohesion_engine.types import RosterEvaluation
 from services.players_service import CURRENT_SEASON
-from services.roster_evaluator.evaluator import evaluate_roster as evaluate_legacy_roster
-from services.roster_evaluator.types import RosterEvaluation, Scores
 
 logger = logging.getLogger(__name__)
 
 builder_bp = Blueprint("builder", __name__, url_prefix="/api/builder")
 
 _VALID_MODES = {"live", "final"}
-EVAL_ENGINE = os.environ.get("EVAL_ENGINE", "legacy").lower()
 
 # Input size limits — prevents CPU amplification on this unauthenticated endpoint
 _MAX_PLAYERS = 20
@@ -62,21 +58,6 @@ def _err(msg: str, status: int = 400) -> tuple:
 # ---------------------------------------------------------------------------
 # Serialization
 # ---------------------------------------------------------------------------
-
-def _serialize_evaluation(evaluation: RosterEvaluation) -> dict:
-    """Serialize a RosterEvaluation to a plain dict for JSON output."""
-    return {
-        "scores":                 dataclasses.asdict(evaluation.scores),
-        "notes":                  [dataclasses.asdict(note) for note in evaluation.notes],
-        "player_traces":          evaluation.player_traces,
-        "aggregate_traces":       evaluation.aggregate_traces,
-        "height_coverage":        evaluation.height_coverage,
-        # LLM narrative: string in final mode (or None on API failure), always None in live mode
-        "team_description":       evaluation.team_description,
-        # Per-player dimension contributions (always populated when supporting players exist)
-        "player_impact_summary":  evaluation.player_impact_summary,
-    }
-
 
 def _cohesion_players_in_slot_order(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Match cohesion roster.py ordering so starting-lineup debug data lines up."""
@@ -210,8 +191,8 @@ def _serialize_player_composites(player) -> dict:
     }
 
 
-def _serialize_cohesion_evaluation(evaluation: CohesionRosterEvaluation, players: list[dict[str, Any]]) -> dict:
-    """Serialize a cohesion-engine RosterEvaluation to the new response shape."""
+def _serialize_evaluation(evaluation: RosterEvaluation, players: list[dict[str, Any]]) -> dict:
+    """Serialize a RosterEvaluation to the API response shape."""
     starting_players = _cohesion_players_in_slot_order(players)[:5]
     return {
         "star_rating": evaluation.star_rating,
@@ -346,13 +327,9 @@ def evaluate():
         return _err("'debug' must be a boolean")
 
     try:
-        if EVAL_ENGINE == "cohesion":
-            ensure_distributions(CURRENT_SEASON)
-            result = evaluate_cohesion_roster(body["players"], mode=mode)
-            return _ok(_serialize_cohesion_evaluation(result, body["players"]))
-
-        result = evaluate_legacy_roster(body["players"], mode=mode, debug=debug)
-        return _ok(_serialize_evaluation(result))
+        ensure_distributions(CURRENT_SEASON)
+        result = evaluate_roster(body["players"], mode=mode)
+        return _ok(_serialize_evaluation(result, body["players"]))
     except Exception:
         logger.exception("Error in POST /api/builder/evaluate")
         return _err("Internal server error", status=500)

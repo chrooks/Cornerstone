@@ -9,10 +9,10 @@
  */
 
 import { CohesionResultDetails } from "@/components/cohesion/CohesionResultDetails";
-import type { CohesionRosterEvaluation } from "@/lib/types";
+import type { RosterEvaluation } from "@/lib/types";
 
 interface CohesionDebugPanelProps {
-  evaluation: CohesionRosterEvaluation;
+  evaluation: RosterEvaluation;
 }
 
 export function CohesionDebugPanel({ evaluation }: CohesionDebugPanelProps) {

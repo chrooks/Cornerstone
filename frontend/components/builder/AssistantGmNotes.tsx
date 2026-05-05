@@ -24,8 +24,8 @@ import { cn } from "@/lib/utils";
 import { evaluateRoster } from "@/lib/api";
 import { NotesList } from "./NotesList";
 import type { SuggestionFilter } from "@/lib/noteFilters";
-import type { CohesionRosterEvaluation, LegendDetail, Note, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
-import { isCohesionEvaluation, normalizeCohesionNotes } from "@/lib/cohesionHelpers";
+import type { LegendDetail, Note, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
+import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,7 +50,7 @@ interface AssistantGmNotesProps {
   legendDetail: LegendDetail | null;
   isAdmin: boolean;
   /** Called after every successful evaluation — used by parent to lift eval data for the Debug tab. */
-  onEvaluation?: (evaluation: RosterEvaluation | CohesionRosterEvaluation) => void;
+  onEvaluation?: (evaluation: RosterEvaluation) => void;
   /** Called when the user clicks a suggestion note — parent injects a filter into the player picker. */
   onSuggestionFilter?: (filter: SuggestionFilter, note: Note) => void;
 }
@@ -451,9 +451,7 @@ export function AssistantGmNotes({
       if (res.success && res.data) {
         // Normalize cohesion notes into legacy Note shape so bucketing and
         // diff logic work identically for both engine responses
-        const newNotes: Note[] = isCohesionEvaluation(res.data)
-          ? normalizeCohesionNotes(res.data.notes)
-          : res.data.notes;
+        const newNotes: Note[] = normalizeCohesionNotes(res.data.notes);
 
         // Compute what-changed diff: which specific notes appeared or disappeared
         const prevN = prevNotesRef.current;

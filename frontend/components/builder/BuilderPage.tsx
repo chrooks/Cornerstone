@@ -36,13 +36,10 @@ import { SalaryGauge } from "./SalaryGauge";
 import { CourtLineup } from "./CourtLineup";
 import { SkillGrid } from "./SkillGrid";
 import { AssistantGmNotes } from "./AssistantGmNotes";
-import { ScoringBreakdown } from "./ScoringBreakdown";
-import { HeightCoverageChart } from "./HeightCoverageChart";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
 import type { SuggestionFilter } from "@/lib/noteFilters";
-import type { CohesionRosterEvaluation, LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
-import { isCohesionEvaluation } from "@/lib/cohesionHelpers";
+import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // URL param helpers
@@ -497,7 +494,7 @@ export function BuilderPage() {
   const [leftTab, setLeftTab] = useState<"skills" | "notes" | "debug">("notes");
 
   // ── Latest evaluation — lifted from AssistantGmNotes for the Debug tab ────
-  const [latestEval, setLatestEval] = useState<RosterEvaluation | CohesionRosterEvaluation | null>(null);
+  const [latestEval, setLatestEval] = useState<RosterEvaluation | null>(null);
 
   // ── Scroll position preservation across tab switches ──────────────────────
   // Each scrollable panel gets a ref; positions are cached in a stable ref object.
@@ -776,23 +773,9 @@ export function BuilderPage() {
                   leftTab !== "debug" && "hidden",
                 )}
               >
-                {/* Debug panel — branch on engine type */}
-                {latestEval && isCohesionEvaluation(latestEval) && (
+                {/* Debug panel — cohesion engine breakdown */}
+                {latestEval && (
                   <CohesionDebugPanel evaluation={latestEval} />
-                )}
-                {latestEval && !isCohesionEvaluation(latestEval) && (
-                  <>
-                    <ScoringBreakdown
-                      playerTraces={latestEval.player_traces ?? null}
-                      aggregateTraces={latestEval.aggregate_traces ?? null}
-                    />
-                    {/* Height coverage chart — always shown when eval data exists */}
-                    {latestEval.height_coverage && (
-                      <div className="mt-4">
-                        <HeightCoverageChart data={latestEval.height_coverage} />
-                      </div>
-                    )}
-                  </>
                 )}
                 {/* Raw notes JSON dump */}
                 {latestEval && (
@@ -801,11 +784,7 @@ export function BuilderPage() {
                       Raw Notes JSON
                     </summary>
                     <pre id="builder-debug-notes-json-content" className="mt-2 max-h-[400px] overflow-auto rounded border border-border/60 bg-muted/30 p-2 text-[9px] font-mono text-muted-foreground whitespace-pre-wrap">
-                      {JSON.stringify(
-                        isCohesionEvaluation(latestEval) ? latestEval.notes : (latestEval as RosterEvaluation).notes,
-                        null,
-                        2,
-                      )}
+                      {JSON.stringify(latestEval.notes, null, 2)}
                     </pre>
                   </details>
                 )}

@@ -1,15 +1,13 @@
 /**
  * cohesionHelpers.ts — Adapter layer between cohesion engine responses and
- * the existing legacy UI components.
+ * the UI components.
  *
- * Provides a type guard to detect which engine produced the evaluation,
- * and a normalizer that converts CohesionNote[] into Note[] so NotesList
+ * Provides a normalizer that converts CohesionNote[] into Note[] so NotesList
  * can consume them without modification.
  */
 
 import type {
   CohesionNote,
-  CohesionRosterEvaluation,
   Note,
   NoteCategory,
   NoteSeverity,
@@ -46,23 +44,6 @@ const TYPE_TO_SEVERITY: Record<CohesionNote["type"], NoteSeverity> = {
   weakness: "warning",
   suggestion: "suggestion",
 };
-
-/**
- * Type guard that distinguishes a cohesion evaluation from a legacy one.
- *
- * The two response shapes are structurally non-overlapping: cohesion has
- * `star_rating`, legacy has `scores`. No backend discriminator field needed.
- */
-export function isCohesionEvaluation(
-  data: unknown,
-): data is CohesionRosterEvaluation {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "star_rating" in data &&
-    !("scores" in data)
-  );
-}
 
 /**
  * Derive the NoteCategory bucket from a cohesion category string.

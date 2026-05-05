@@ -17,7 +17,7 @@
 
 import { useId } from "react";
 import { cn } from "@/lib/utils";
-import type { CohesionRosterEvaluation } from "@/lib/types";
+import type { RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Color utilities
@@ -310,7 +310,7 @@ const SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: string 
 // ---------------------------------------------------------------------------
 
 interface CohesionScoreDisplayProps {
-  evaluation: CohesionRosterEvaluation;
+  evaluation: RosterEvaluation;
 }
 
 export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) {
