@@ -21,17 +21,21 @@ import pytest
 # ---------------------------------------------------------------------------
 # Service functions under test
 # ---------------------------------------------------------------------------
-from services.skill_mapping_service import (
-    resolve_stat,
+from services.skill_engine.conditions import (
     evaluate_condition,
     evaluate_conditions_block,
-    apply_stabilization,
-    apply_pre_adjustments,
-    compute_derived_stats,
-    evaluate_skill,
-    evaluate_all_skills,
+    resolve_stat,
+)
+from services.skill_engine.evaluator import (
     apply_auto_promotions,
-    _blend_blobs,
+    evaluate_all_skills,
+    evaluate_skill,
+)
+from services.skill_engine.history import _blend_blobs
+from services.skill_engine.transforms import (
+    apply_pre_adjustments,
+    apply_stabilization,
+    compute_derived_stats,
 )
 
 

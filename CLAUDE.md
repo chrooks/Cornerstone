@@ -99,7 +99,7 @@ backend/
       notes.py                    # Cohesion-specific note generation
       team_description.py         # Claude-powered cohesion narrative
       types.py                    # LineupCohesion, PlayerComposites, RosterEvaluation types
-    skill_mapping_service.py      # Orchestrates skill_engine + compositing + Claude API
+    skill_engine/pipeline.py      # Orchestrates fetch → evaluate → persist for skill profiles
     claude_assessment.py          # rate_player(), suggest_skills_for_legend()
     compositing.py                # merge_ratings(), create_flags()
     nba_api_client.py             # Fetches live stats from NBA.com

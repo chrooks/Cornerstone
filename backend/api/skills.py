@@ -10,7 +10,7 @@ All responses use the standard envelope: {success, data, error}.
 player_id params are Supabase UUIDs.
 
 The skill engine is fully data-driven: all tier logic lives in the
-skill_thresholds table, not in this file. See skill_mapping_service.py.
+skill_thresholds table, not in this file. See skill_engine.py.
 """
 
 import logging
@@ -21,7 +21,7 @@ from flask import Blueprint, jsonify, request
 
 from api.auth import require_admin
 from services.supabase_client import get_supabase
-from services import skill_mapping_service
+from services import skill_engine
 from services.players_service import CURRENT_SEASON
 
 # Maximum number of player_ids accepted by the batch endpoint in a single request.
@@ -102,7 +102,7 @@ def player_skills(player_id: str):
     try:
         supabase = get_supabase()
 
-        skills_result = skill_mapping_service.get_player_skills(
+        skills_result = skill_engine.get_player_skills(
             player_id=player_id,
             season=season,
             use_history=use_history,
@@ -189,7 +189,7 @@ def batch_skills():
     try:
         supabase = get_supabase()
 
-        results = skill_mapping_service.batch_evaluate_skills(
+        results = skill_engine.batch_evaluate_skills(
             player_ids=player_ids,
             season=season,
             use_history=use_history,
@@ -250,7 +250,7 @@ def league_averages():
         if refresh:
             # Recompute league averages from source data and persist
             logger.info("Recomputing league averages for season %s", season)
-            skill_mapping_service.compute_and_store_league_averages(season, supabase)
+            skill_engine.compute_and_store_league_averages(season, supabase)
 
         # Fetch the full rows from the league_averages table (includes sample_size/updated_at)
         rows = (
@@ -268,7 +268,7 @@ def league_averages():
             logger.info(
                 "No league averages found for season %s — computing on-the-fly", season
             )
-            skill_mapping_service.compute_and_store_league_averages(season, supabase)
+            skill_engine.compute_and_store_league_averages(season, supabase)
 
             rows = (
                 supabase.table("league_averages")

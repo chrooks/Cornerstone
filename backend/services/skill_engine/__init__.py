@@ -1,9 +1,15 @@
 """
-skill_engine/__init__.py — Public API for the skill evaluation sub-package.
+skill_engine/ — Skill evaluation package.
 
-Re-exports everything that external code (skill_mapping_service, tests, api/)
-imported directly from the old monolithic skill_mapping_service.py so that
-existing import paths continue to work unchanged.
+Public API:
+  - get_player_skills:      evaluate all skills for one player (fetch → evaluate → return)
+  - batch_evaluate_skills:  evaluate + persist for a list of players
+  - evaluate_all_skills:    pure evaluation given stats blob + thresholds + league averages
+  - evaluate_skill:         evaluate a single skill
+  - apply_auto_promotions:  cross-skill tier promotion pass
+  - get_thresholds:         cached threshold rules from Supabase
+  - get_league_averages:    cached league averages from Supabase
+  - compute_and_store_league_averages: recompute and persist league averages
 """
 
 from services.skill_engine.cache import (
@@ -11,54 +17,26 @@ from services.skill_engine.cache import (
     get_league_averages,
     get_thresholds,
 )
-from services.skill_engine.conditions import (
-    evaluate_condition,
-    evaluate_conditions_block,
-    resolve_stat,
-)
 from services.skill_engine.evaluator import (
-    _collect_driving_stats,
     apply_auto_promotions,
     evaluate_all_skills,
     evaluate_skill,
 )
-from services.skill_engine.history import (
-    _blend_blobs,
-    _HISTORY_WEIGHTS,
-    _PREV_SEASON,
-    _TWO_AGO_SEASON,
-    _prev_season,
-    get_weighted_stats,
-)
-from services.skill_engine.transforms import (
-    apply_pre_adjustments,
-    apply_stabilization,
-    compute_derived_stats,
+from services.skill_engine.pipeline import (
+    batch_evaluate_skills,
+    get_player_skills,
 )
 
 __all__ = [
+    # pipeline orchestration
+    "get_player_skills",
+    "batch_evaluate_skills",
+    # evaluation
+    "evaluate_skill",
+    "evaluate_all_skills",
+    "apply_auto_promotions",
     # cache
     "get_thresholds",
     "get_league_averages",
     "compute_and_store_league_averages",
-    # conditions
-    "resolve_stat",
-    "evaluate_condition",
-    "evaluate_conditions_block",
-    # transforms
-    "apply_pre_adjustments",
-    "compute_derived_stats",
-    "apply_stabilization",
-    # evaluator
-    "evaluate_skill",
-    "_collect_driving_stats",
-    "evaluate_all_skills",
-    "apply_auto_promotions",
-    # history
-    "get_weighted_stats",
-    "_blend_blobs",
-    "_prev_season",
-    "_PREV_SEASON",
-    "_TWO_AGO_SEASON",
-    "_HISTORY_WEIGHTS",
 ]

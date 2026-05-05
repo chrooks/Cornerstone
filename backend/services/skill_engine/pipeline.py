@@ -1,54 +1,25 @@
 """
-skill_mapping_service.py — Service entry points for skill evaluation.
+skill_engine/pipeline.py — Orchestration: fetch stats → evaluate → persist.
 
-This module is intentionally thin. All rule-engine logic lives in the
-skill_engine/ sub-package; this file only exposes the public service API
-(get_player_skills, batch_evaluate_skills) and the DB upsert helper.
-
-Sub-package layout:
-  skill_engine/cache.py      — TTL-cached threshold + league-average reads
-  skill_engine/conditions.py — stat resolution and condition evaluation
-  skill_engine/transforms.py — pre-adjustments, derived stats, stabilization
-  skill_engine/evaluator.py  — per-skill and all-skill evaluation, auto-promotions
-  skill_engine/history.py    — multi-season historical blending
-
-All public names from those modules are re-exported here so that existing
-import paths (e.g. "from services.skill_mapping_service import resolve_stat")
-continue to work without modification.
+Entry points:
+  - get_player_skills:      evaluate all skills for a single player
+  - batch_evaluate_skills:  evaluate + persist for a list of players
 """
 
 import logging
 
 from supabase import Client
 
-from services.players_service import CURRENT_SEASON, DEFAULT_MIN_MPG
-from services.skill_engine import (  # noqa: F401 — re-export for backwards compat
-    _blend_blobs,
-    _collect_driving_stats,
-    _HISTORY_WEIGHTS,
-    _prev_season,
-    _PREV_SEASON,
-    _TWO_AGO_SEASON,
-    apply_auto_promotions,
-    apply_pre_adjustments,
-    apply_stabilization,
-    compute_and_store_league_averages,
-    compute_derived_stats,
-    evaluate_all_skills,
-    evaluate_condition,
-    evaluate_conditions_block,
-    evaluate_skill,
-    get_league_averages,
-    get_thresholds,
-    get_weighted_stats,
-    resolve_stat,
-)
+from services.players_service import DEFAULT_MIN_MPG
+from services.skill_engine.cache import get_league_averages, get_thresholds
+from services.skill_engine.evaluator import apply_auto_promotions, evaluate_all_skills
+from services.skill_engine.history import get_weighted_stats
 
 logger = logging.getLogger(__name__)
 
 
 # ===========================================================================
-# Service entry points
+# Public entry points
 # ===========================================================================
 
 
@@ -189,6 +160,11 @@ def batch_evaluate_skills(
         "batch_evaluate_skills complete: %d/%d players processed", len(results), total
     )
     return results
+
+
+# ===========================================================================
+# Internal helpers
+# ===========================================================================
 
 
 def _upsert_skill_profile(

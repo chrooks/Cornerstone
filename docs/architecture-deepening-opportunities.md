@@ -14,15 +14,9 @@ Removed `roster_evaluator/`, deleted `EVAL_ENGINE` switch, unified frontend type
 
 ---
 
-## 3. skill_mapping_service.py — Pass-Through Layer
+## ~~3. skill_mapping_service.py — Pass-Through Layer~~ — RESOLVED
 
-**Files:** `backend/services/skill_mapping_service.py` (266 lines), `backend/services/skill_engine/__init__.py`
-
-**Problem:** Deletion test fails. `skill_mapping_service.py` re-exports functions from `skill_engine/` and orchestrates fetch→cache→evaluate. But the "orchestration" is just sequential calls — no deep logic. The 6 callers could import `skill_engine` directly with identical behavior. The layer adds naming indirection without hiding complexity.
-
-**Solution:** Collapse into `skill_engine` as a proper deep module with a clean `evaluate_player(player_id) → SkillProfile` interface that owns fetching, caching, and evaluation internally.
-
-**Benefits:** Locality — tracing skill evaluation no longer requires 3 module hops. The interface shrinks (one call vs. manually orchestrating cache + thresholds + evaluate).
+Deleted `skill_mapping_service.py`. Orchestration functions moved to `skill_engine/pipeline.py`, 20 re-exports removed. Callers now import from `skill_engine` directly (2026-05-05).
 
 ---
 

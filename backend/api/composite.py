@@ -23,7 +23,7 @@ from supabase import Client
 from api.auth import require_admin
 from services.supabase_client import get_supabase
 from services.players_service import CURRENT_SEASON, DEFAULT_MIN_MPG
-from services import skill_mapping_service
+from services import skill_engine
 from services.notability import get_notability_score, notability_tier
 from services.claude_assessment import (
     get_claude_assessment,
@@ -94,7 +94,7 @@ def _get_stat_skills(player_id: str, season: str, supabase: Client) -> dict:
         logger.exception("DB lookup failed for stat profile — will recompute")
 
     # Recompute from the skill mapping service
-    return skill_mapping_service.get_player_skills(
+    return skill_engine.get_player_skills(
         player_id=player_id,
         season=season,
         use_history=False,
@@ -365,8 +365,8 @@ def composite_batch():
             })
 
         # Pre-load thresholds and league averages once for the batch
-        thresholds  = skill_mapping_service.get_thresholds(main_supabase)
-        league_avgs = skill_mapping_service.get_league_averages(season, main_supabase)
+        thresholds  = skill_engine.get_thresholds(main_supabase)
+        league_avgs = skill_engine.get_league_averages(season, main_supabase)
 
         # Thread-safe accumulators — all mutations happen inside results_lock
         results_lock      = threading.Lock()
@@ -412,10 +412,10 @@ def composite_batch():
                     return
 
                 # Evaluate stat skills using pre-loaded thresholds/averages
-                stat_skills = skill_mapping_service.evaluate_all_skills(
+                stat_skills = skill_engine.evaluate_all_skills(
                     stats_blob, thresholds, league_avgs
                 )
-                stat_skills = skill_mapping_service.apply_auto_promotions(stat_skills, thresholds)
+                stat_skills = skill_engine.apply_auto_promotions(stat_skills, thresholds)
 
                 # Compute notability (result cached in-process after first call)
                 notability = get_notability_score(pid, season, worker_supabase)
