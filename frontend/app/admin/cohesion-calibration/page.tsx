@@ -8,34 +8,31 @@
  *   Center (flex):  Tabbed — "Bell Curves" | "Lineup Tester" | "Weights"
  *   Right (~320px): ResultsPanel — test history with before/after comparison
  *
- * All state lifted to page level. No global stores.
+ * All state lifted to page level via custom hooks. No global stores.
  */
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { Toaster, toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
 import {
-  DEFAULT_COHESION_WEIGHTS,
-  normalizeCohesionExplanationWeights,
-} from "@/lib/cohesion-weights";
-import type { CohesionExplanationWeights } from "@/lib/cohesion-weights";
-import {
   fetchPlayerComposites,
   fetchBellCurve,
-  listPlayersWithSkills,
   evaluateLineup,
   evaluateRotation,
-  fetchCohesionWeights,
 } from "@/lib/api";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
-import type { Player, PlayerWithSkills } from "@/lib/types";
-import type { PlayerCompositeData, BellCurveData, LineupTestResult, LineupSlot, CenterTab } from "./types";
+import type { Player } from "@/lib/types";
+import type { PlayerCompositeData, BellCurveData, LineupTestResult, CenterTab } from "./types";
 import { WeightsEditor } from "./components/WeightsEditor";
 import { ResultsPanel } from "./components/ResultsPanel";
 import { CompositeBars, PlayerSkillsPanel } from "./components/PlayerInspection";
 import { LineupTester, emptyLineupSlot } from "./components/LineupTester";
 import { BellCurveChart } from "./components/BellCurveCharts";
+import { useLineupSlots } from "./hooks/useLineupSlots";
+import { useTestHistory } from "./hooks/useTestHistory";
+import { useTeamFill } from "./hooks/useTeamFill";
+import { useCohesionWeights } from "./hooks/useCohesionWeights";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -47,257 +44,57 @@ const CENTER_TABS: { key: CenterTab; label: string }[] = [
   { key: "weights", label: "Weights" },
 ];
 
-const LINEUP_STORAGE_KEY = "cohesion-calibration-lineup-player-ids";
-const TEST_HISTORY_STORAGE_KEY = "cohesion-calibration-test-history";
-
 // ---------------------------------------------------------------------------
 // Main Page
 // ---------------------------------------------------------------------------
 
-const EMPTY_LINEUP: LineupSlot[] = Array.from({ length: MAX_ROSTER_SLOTS }, () => emptyLineupSlot());
-
-function resultFromStorage(value: unknown): LineupTestResult | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as Partial<LineupTestResult>;
-  if (
-    typeof candidate.id !== "string"
-    || typeof candidate.timestamp !== "number"
-    || !Array.isArray(candidate.playerIds)
-    || !Array.isArray(candidate.playerNames)
-    || typeof candidate.cohesion_score !== "number"
-    || !candidate.subscores
-    || typeof candidate.subscores !== "object"
-    || !Array.isArray(candidate.synergies_applied)
-    || !candidate.accentuation
-    || typeof candidate.accentuation !== "object"
-  ) {
-    return null;
-  }
-
-  return {
-    id: candidate.id,
-    timestamp: candidate.timestamp,
-    playerIds: candidate.playerIds.map((id) => String(id)).slice(0, MAX_ROSTER_SLOTS),
-    playerNames: candidate.playerNames.map((name) => String(name)).slice(0, MAX_ROSTER_SLOTS),
-    cohesion_score: candidate.cohesion_score,
-    mode: candidate.mode === "rotation" ? "rotation" : "lineup",
-    subscores: candidate.subscores as Record<string, number>,
-    synergies_applied: candidate.synergies_applied.map((id) => String(id)),
-    archetype_labels: candidate.archetype_labels,
-    archetype_details: candidate.archetype_details,
-    accentuation: candidate.accentuation as LineupTestResult["accentuation"],
-    accentuation_details: candidate.accentuation_details,
-    boosted_bell_curves: candidate.boosted_bell_curves,
-    rp_pd_boosts: candidate.rp_pd_boosts,
-    star_rating: candidate.star_rating,
-    star_rating_breakdown: candidate.star_rating_breakdown,
-    theoretical_best_starting_rating: candidate.theoretical_best_starting_rating,
-    theoretical_best_starting_breakdown: candidate.theoretical_best_starting_breakdown,
-    lineup_summary: candidate.lineup_summary,
-    lineup_combinations: candidate.lineup_combinations,
-    player_composites: candidate.player_composites,
-    selectedCombinationIndex: candidate.selectedCombinationIndex,
-  };
-}
-
 export default function CohesionCalibrationPage() {
+  // --- Custom hooks ---
+  const {
+    lineupSlots,
+    swapSourceIndex,
+    setSwapSourceIndex,
+    hydrateLineupSlot,
+    handleSlotSelect,
+    handleSlotReplace,
+    handleSlotRemove,
+    handleSwapTarget,
+    fillSlots,
+  } = useLineupSlots();
+
+  const {
+    testHistory,
+    setActiveResultId,
+    latestResult,
+    addResult,
+  } = useTestHistory();
+
+  const {
+    teamFillPlayers,
+    teamFillLoading,
+    setTeamFillLoading,
+    selectedTeam,
+    setSelectedTeam,
+    teamOptions,
+  } = useTeamFill();
+
+  const { cohesionWeights, reloadWeights } = useCohesionWeights();
+
   // --- Left panel state ---
   const [selectedComposites, setSelectedComposites] = useState<PlayerCompositeData | null>(null);
   const [loadingComposites, setLoadingComposites] = useState(false);
 
   // --- Bell curve overlay state ---
   const [overlayPlayers, setOverlayPlayers] = useState<BellCurveData[]>([]);
+  const [refreshingCurves, setRefreshingCurves] = useState(false);
 
   // --- Center tab state ---
   const [centerTab, setCenterTab] = useState<CenterTab>("lineup");
 
-  // --- Lineup tester state ---
-  const [lineupSlots, setLineupSlots] = useState<LineupSlot[]>(EMPTY_LINEUP);
+  // --- Evaluation state ---
   const [evaluatingLineup, setEvaluatingLineup] = useState(false);
-  const [teamFillPlayers, setTeamFillPlayers] = useState<PlayerWithSkills[]>([]);
-  const [teamFillLoading, setTeamFillLoading] = useState(false);
-  const [selectedTeam, setSelectedTeam] = useState("");
-  const [swapSourceIndex, setSwapSourceIndex] = useState<number | null>(null);
-
-  // --- Results state ---
-  const [testHistory, setTestHistory] = useState<LineupTestResult[]>([]);
-  const [activeResultId, setActiveResultId] = useState<string | null>(null);
-  const [historyStorageLoaded, setHistoryStorageLoaded] = useState(false);
-
-  // --- Cohesion weights state ---
-  const [cohesionWeights, setCohesionWeights] = useState<CohesionExplanationWeights>(DEFAULT_COHESION_WEIGHTS);
-
-  // --- Derived ---
-  const latestResult = activeResultId
-    ? testHistory.find((result) => result.id === activeResultId) ?? null
-    : null;
-  const teamOptions = useMemo(
-    () => Array.from(new Set(
-      teamFillPlayers
-        .filter((player) => !player.is_legend && player.team)
-        .map((player) => player.team as string),
-    )).sort((a, b) => a.localeCompare(b)),
-    [teamFillPlayers],
-  );
 
   // --- Handlers ---
-
-  /** Build a fresh lineup slot from persisted player id metadata. */
-  const hydrateLineupSlot = useCallback(async (player: Player): Promise<LineupSlot | null> => {
-    const res = await fetchPlayerComposites(player.id);
-    if (!res.success || !res.data) return null;
-
-    const compositeData = res.data;
-    const hydratedPlayer = {
-      ...player,
-      id: compositeData.player_id,
-      name: compositeData.name,
-    };
-
-    return {
-      player: hydratedPlayer,
-      skills: compositeData.skills,
-      rawComposites: compositeData.composites_raw,
-      normalizedComposites: compositeData.composites_normalized,
-      bellCurve: compositeData.bell_curve,
-      height: compositeData.height,
-      replacing: false,
-    };
-  }, []);
-
-  /** Load backend engine weights so explanation math mirrors weights.py and runtime overrides. */
-  const loadCohesionWeights = useCallback(async () => {
-    const res = await fetchCohesionWeights();
-    if (res.success) {
-      setCohesionWeights(normalizeCohesionExplanationWeights(res.data));
-    } else {
-      toast.error(res.error ?? "Failed to load cohesion weights");
-    }
-  }, []);
-
-  useEffect(() => {
-    loadCohesionWeights();
-  }, [loadCohesionWeights]);
-
-  /** Load active player rows for team-fill shortcuts. */
-  useEffect(() => {
-    let cancelled = false;
-
-    listPlayersWithSkills()
-      .then((res) => {
-        if (cancelled) return;
-        if (res.success && res.data) {
-          setTeamFillPlayers(res.data.filter((player) => !player.is_legend));
-        } else {
-          toast.error(res.error ?? "Failed to load team list");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) toast.error("Failed to load team list");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  /** Restore persisted evaluation history for the right sidebar. */
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      setHistoryStorageLoaded(true);
-      return;
-    }
-    const saved = window.localStorage.getItem(TEST_HISTORY_STORAGE_KEY);
-    if (!saved) {
-      setHistoryStorageLoaded(true);
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        setTestHistory(parsed.map(resultFromStorage).filter((result): result is LineupTestResult => result !== null).slice(0, 20));
-      }
-    } catch {
-      window.localStorage.removeItem(TEST_HISTORY_STORAGE_KEY);
-    } finally {
-      setHistoryStorageLoaded(true);
-    }
-  }, []);
-
-  /** Restore persisted lineup ids and refetch fresh composite data on load. */
-  useEffect(() => {
-    let cancelled = false;
-
-    const restoreLineup = async () => {
-      if (typeof window === "undefined") return;
-      const saved = window.localStorage.getItem(LINEUP_STORAGE_KEY);
-      if (!saved) return;
-
-      let playerIds: Array<string | null>;
-      try {
-        const parsed = JSON.parse(saved);
-        if (!Array.isArray(parsed)) return;
-        playerIds = parsed.slice(0, MAX_ROSTER_SLOTS).map((id) => (id ? String(id) : null));
-      } catch {
-        return;
-      }
-
-      const restored = await Promise.all(playerIds.map(async (playerId) => {
-        if (!playerId) return emptyLineupSlot();
-        const hydratedSlot = await hydrateLineupSlot({
-          id: playerId,
-          nba_api_id: 0,
-          name: "",
-          team: null,
-          position: null,
-          age: null,
-          games_played: null,
-          minutes_per_game: null,
-          season: "",
-        });
-        return hydratedSlot ?? emptyLineupSlot();
-      }));
-
-      if (cancelled) return;
-      setLineupSlots([
-        ...restored,
-        ...Array.from({ length: Math.max(0, MAX_ROSTER_SLOTS - restored.length) }, () => emptyLineupSlot()),
-      ].slice(0, MAX_ROSTER_SLOTS));
-    };
-
-    restoreLineup();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [hydrateLineupSlot]);
-
-  /** Persist selected player ids only; composites are refetched fresh on reload. */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const playerIds = lineupSlots.map((slot) => slot.player?.id ?? null);
-
-    if (playerIds.every((id) => id === null)) {
-      window.localStorage.removeItem(LINEUP_STORAGE_KEY);
-      return;
-    }
-
-    window.localStorage.setItem(LINEUP_STORAGE_KEY, JSON.stringify(playerIds));
-  }, [lineupSlots]);
-
-  /** Persist evaluated lineup history so the sidebar survives refreshes. */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!historyStorageLoaded) return;
-
-    if (testHistory.length === 0) {
-      window.localStorage.removeItem(TEST_HISTORY_STORAGE_KEY);
-      return;
-    }
-
-    window.localStorage.setItem(TEST_HISTORY_STORAGE_KEY, JSON.stringify(testHistory.slice(0, 20)));
-  }, [historyStorageLoaded, testHistory]);
 
   /** Fetch composites when a player is selected in the left panel search. */
   const handlePlayerSelect = useCallback(async (player: Player) => {
@@ -337,7 +134,6 @@ export default function CohesionCalibrationPage() {
   }, []);
 
   /** Re-fetch all overlay players' bell curves after weight/constant changes. */
-  const [refreshingCurves, setRefreshingCurves] = useState(false);
   const handleRefreshBellCurves = useCallback(async () => {
     if (overlayPlayers.length === 0) return;
     setRefreshingCurves(true);
@@ -357,65 +153,29 @@ export default function CohesionCalibrationPage() {
     }
   }, [overlayPlayers]);
 
-  /** Set a player into a lineup slot and fetch their skills. */
+  /** Wrapper for slot select that also clears the active result. */
   const handleLineupSlotSelect = useCallback(async (index: number, player: Player) => {
-    setSwapSourceIndex(null);
-    if (lineupSlots.some((slot, slotIndex) => slotIndex !== index && slot.player?.id === player.id)) {
-      toast.error("Player already in rotation");
-      return;
-    }
-    const hydratedSlot = await hydrateLineupSlot(player);
-    if (hydratedSlot) {
-      setLineupSlots((prev) =>
-        prev.map((slot, i) =>
-          i === index
-            ? hydratedSlot
-            : slot,
-        ),
-      );
-      setActiveResultId(null);
-    } else {
-      toast.error("Failed to load player data");
-    }
-  }, [hydrateLineupSlot, lineupSlots]);
+    await handleSlotSelect(index, player);
+    setActiveResultId(null);
+  }, [handleSlotSelect, setActiveResultId]);
 
-  /** Put an existing slot back into search mode without clearing it yet. */
+  /** Wrapper for slot replace that also clears the active result. */
   const handleLineupSlotReplace = useCallback((index: number) => {
-    setSwapSourceIndex(null);
-    setLineupSlots((prev) =>
-      prev.map((slot, i) =>
-        i === index ? { ...slot, replacing: true } : slot,
-      ),
-    );
+    handleSlotReplace(index);
     setActiveResultId(null);
-  }, []);
+  }, [handleSlotReplace, setActiveResultId]);
 
-  /** Remove one player from the lineup and clear the active result preview. */
+  /** Wrapper for slot remove that also clears the active result. */
   const handleLineupSlotRemove = useCallback((index: number) => {
-    setSwapSourceIndex(null);
-    setLineupSlots((prev) =>
-      prev.map((slot, i) => (i === index ? emptyLineupSlot() : slot)),
-    );
+    handleSlotRemove(index);
     setActiveResultId(null);
-  }, []);
+  }, [handleSlotRemove, setActiveResultId]);
 
-  /** Swap two rotation slots after the user enters swap mode. */
+  /** Wrapper for swap that also clears the active result. */
   const handleLineupSlotSwapTarget = useCallback((targetIndex: number) => {
-    if (swapSourceIndex === null) return;
-    if (swapSourceIndex === targetIndex) {
-      setSwapSourceIndex(null);
-      return;
-    }
-    setLineupSlots((prev) => {
-      const next = [...prev];
-      const source = next[swapSourceIndex];
-      next[swapSourceIndex] = next[targetIndex];
-      next[targetIndex] = source;
-      return next;
-    });
-    setSwapSourceIndex(null);
+    handleSwapTarget(targetIndex);
     setActiveResultId(null);
-  }, [swapSourceIndex]);
+  }, [handleSwapTarget, setActiveResultId]);
 
   /** Fill the rotation with the selected team's top active players by minutes per game. */
   const handleFillTeamRotation = useCallback(async () => {
@@ -449,15 +209,11 @@ export default function CohesionCalibrationPage() {
         return hydratedSlot ?? emptyLineupSlot();
       }),
     );
-    setLineupSlots([
-      ...hydratedSlots,
-      ...Array.from({ length: Math.max(0, MAX_ROSTER_SLOTS - hydratedSlots.length) }, () => emptyLineupSlot()),
-    ].slice(0, MAX_ROSTER_SLOTS));
-    setSwapSourceIndex(null);
+    fillSlots(hydratedSlots);
     setActiveResultId(null);
     setTeamFillLoading(false);
     toast.success(`Filled ${selectedTeam} top ${hydratedSlots.filter((slot) => slot.player).length} by MPG`);
-  }, [hydrateLineupSlot, selectedTeam, teamFillPlayers]);
+  }, [hydrateLineupSlot, selectedTeam, teamFillPlayers, fillSlots, setActiveResultId, setTeamFillLoading]);
 
   /** Rehydrate a saved history item into the lineup tester with fresh composite data. */
   const handleLoadTestHistoryLineup = useCallback(async (result: LineupTestResult) => {
@@ -476,14 +232,11 @@ export default function CohesionCalibrationPage() {
       return hydratedSlot ?? emptyLineupSlot();
     }));
 
-    setLineupSlots([
-      ...restored,
-      ...Array.from({ length: Math.max(0, MAX_ROSTER_SLOTS - restored.length) }, () => emptyLineupSlot()),
-    ].slice(0, MAX_ROSTER_SLOTS));
+    fillSlots(restored);
     setActiveResultId(null);
     setCenterTab("lineup");
     toast.success("Lineup loaded");
-  }, [hydrateLineupSlot]);
+  }, [hydrateLineupSlot, fillSlots, setActiveResultId]);
 
   /** Evaluate the current selected players as a single lineup or full rotation. */
   const handleEvaluateLineup = useCallback(async () => {
@@ -500,13 +253,14 @@ export default function CohesionCalibrationPage() {
     }));
 
     if (selectedSlots.length === 5) {
+      // Single lineup evaluation
       const res = await evaluateLineup(players);
       if (!res.success || !res.data) {
         toast.error(res.error ?? "Evaluation failed");
         setEvaluatingLineup(false);
         return;
       }
-      const result: LineupTestResult = {
+      addResult({
         id: crypto.randomUUID(),
         timestamp: Date.now(),
         playerIds: selectedSlots.map((s) => s.player?.id ?? ""),
@@ -522,14 +276,13 @@ export default function CohesionCalibrationPage() {
         boosted_bell_curves: res.data.boosted_bell_curves,
         rp_pd_boosts: res.data.rp_pd_boosts,
         selectedCombinationIndex: 0,
-      };
-      setTestHistory((prev) => [result, ...prev].slice(0, 20));
-      setActiveResultId(result.id);
+      });
       toast.success(`Cohesion: ${res.data.cohesion_score.toFixed(2)}`);
       setEvaluatingLineup(false);
       return;
     }
 
+    // Rotation evaluation (6+ players)
     const res = await evaluateRotation(players);
     if (!res.success || !res.data) {
       toast.error(res.error ?? "Evaluation failed");
@@ -542,7 +295,7 @@ export default function CohesionCalibrationPage() {
       res.data.lineup_combinations.findIndex((lineup) => lineup.is_starting_lineup),
     );
     const selectedCombination = res.data.lineup_combinations[selectedCombinationIndex] ?? res.data.lineup_combinations[0];
-    const result: LineupTestResult = {
+    addResult({
       id: crypto.randomUUID(),
       timestamp: Date.now(),
       playerIds: selectedSlots.map((s) => s.player?.id ?? ""),
@@ -565,20 +318,15 @@ export default function CohesionCalibrationPage() {
       lineup_combinations: res.data.lineup_combinations,
       player_composites: res.data.player_composites,
       selectedCombinationIndex,
-    };
-    setTestHistory((prev) => [result, ...prev].slice(0, 20));
-    setActiveResultId(result.id);
+    });
     toast.success(`Rotation: ${res.data.star_rating.toFixed(2)}`);
     setEvaluatingLineup(false);
-  }, [lineupSlots]);
+  }, [lineupSlots, addResult]);
 
   /** Notify results panel when weights change (for before/after comparison). */
   const handleWeightsUpdated = useCallback(() => {
-    // Refresh explanation weights after runtime overrides are saved or reset.
-    loadCohesionWeights();
-  }, [loadCohesionWeights]);
-
-  // --- Tab data (module-level constant, no memo needed) ---
+    reloadWeights();
+  }, [reloadWeights]);
 
   return (
     <>

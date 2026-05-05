@@ -26,15 +26,19 @@ Replaced 170 lines of nested `if/elif` with a declarative `_COMPOSITING_RULES` t
 
 ---
 
-## 5. BuilderPage.tsx — 867 Lines, 10+ Concerns
+## ~~5. BuilderPage.tsx — 867 Lines, 10+ Concerns~~ — RESOLVED
 
-**Files:** `frontend/components/builder/BuilderPage.tsx` (867 lines)
+Decomposed into `BuilderHeader`, `BuilderLeftPanel`, hooks (`useRosterSlots`, `useBuilderSalary`, `useResizablePanel`), and shared `roster-utils.ts`. Page is now a thin layout orchestrator (2026-05-05).
 
-**Problem:** URL parsing, 8-slot state, resizable layout, tab switching, salary calculations, drag-drop, legend fetching, filter propagation, mobile toggle — all in one component. Duplicates `buildPlayerPayload` and `readSlotsFromParams` with `EvaluatePage.tsx`. Can't test roster logic without rendering the entire layout.
+---
 
-**Solution:** Extract domain logic (roster slot management, payload construction, URL sync) into a custom hook or utility module. Split layout concerns (resize panels, tabs) from data concerns (slots, evaluation triggers).
+## ~~5b. CohesionCalibrationPage — 3,481 Lines, 14 useState, 25 Utilities~~ — RESOLVED
 
-**Benefits:** Locality — roster state bugs isolated from layout bugs. Leverage — shared `buildPlayerPayload` eliminates divergence risk. Testable without rendering 867 lines of UI.
+Decomposed across 6 commits (2026-05-05):
+- **Shared modules:** `cohesion-constants.ts`, `cohesion-colors.ts`, `cohesion-bell-curve.ts`, `cohesion-weights.ts` — eliminated duplication across 3 consumer files
+- **Route-colocated components:** `BellCurveCharts`, `SubscoreEquations`, `LineupTester`, `PlayerInspection`, `WeightsEditor`, `ResultsPanel`
+- **Custom hooks:** `useLineupSlots`, `useTestHistory`, `useTeamFill`, `useCohesionWeights`
+- **Page reduced from 3,481 → 518 lines** (85% reduction). Now a thin orchestrator wiring hooks to components.
 
 ---
 
