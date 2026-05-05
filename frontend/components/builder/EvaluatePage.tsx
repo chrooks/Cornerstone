@@ -17,7 +17,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { listPlayersWithSkills, getLegend, evaluateRoster } from "@/lib/api";
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
-import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { readSlotsFromParams, buildPlayerPayload } from "@/lib/roster-utils";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { NotesList } from "./NotesList";
@@ -101,76 +101,7 @@ function TeamDescriptionCard({ description, isLoading }: TeamDescriptionCardProp
   );
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function readSlotsFromParams(
-  params: URLSearchParams,
-  cornerstoneId: string | null,
-  playerMap: Map<string, PlayerWithSkills>,
-): (PlayerWithSkills | null)[] {
-  const slots: (PlayerWithSkills | null)[] = Array(MAX_ROSTER_SLOTS).fill(null);
-  if (params.has("s1")) {
-    for (let i = 1; i <= MAX_ROSTER_SLOTS; i++) {
-      const id = params.get(`s${i}`);
-      if (id) slots[i - 1] = playerMap.get(id) ?? null;
-    }
-  } else {
-    if (cornerstoneId) slots[0] = playerMap.get(cornerstoneId) ?? null;
-    for (let i = 2; i <= MAX_ROSTER_SLOTS; i++) {
-      const id = params.get(`s${i}`);
-      if (id) slots[i - 1] = playerMap.get(id) ?? null;
-    }
-  }
-  return slots;
-}
-
-/**
- * Build the player payload for POST /api/builder/evaluate.
- *
- * The cornerstone legend (from legendDetail) gets slot=0, is_cornerstone=true.
- * allSlots is 0-indexed; allSlots[0] corresponds to slot 1, allSlots[1] to slot 2, etc.
- * The legend itself occupies slot 0 in the URL params but may appear in allSlots[0] as a
- * PlayerWithSkills entry with is_legend=true.
- */
-function buildPlayerPayload(
-  allSlots: (PlayerWithSkills | null)[],
-  legendDetail: LegendDetail,
-) {
-  const result: Array<{
-    name: string;
-    slot: number;
-    is_cornerstone: boolean;
-    height: string | null;
-    skills: Record<string, string>;
-  }> = [];
-
-  // The cornerstone legend always goes as slot=0, is_cornerstone=true
-  result.push({
-    name: legendDetail.name,
-    slot: 0,
-    is_cornerstone: true,
-    height: legendDetail.height,
-    skills: Object.fromEntries(
-      Object.entries(legendDetail.profile).map(([k, v]) => [k, v ?? "None"]),
-    ),
-  });
-
-  // Supporting players from allSlots (0-indexed in the array → slot = index + 1)
-  allSlots.forEach((p, index) => {
-    if (p === null || p.is_legend) return; // skip nulls and legend entries
-    result.push({
-      name: p.name,
-      slot: index + 1,
-      is_cornerstone: false,
-      height: p.height,
-      skills: (p.skills ?? {}) as Record<string, string>,
-    });
-  });
-
-  return result;
-}
+// readSlotsFromParams and buildPlayerPayload imported from @/lib/roster-utils
 
 // ---------------------------------------------------------------------------
 // Sub-components
