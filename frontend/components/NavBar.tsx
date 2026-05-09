@@ -51,7 +51,6 @@ export function NavBar() {
 
   const publicNav = [
     { href: "/lab", label: "Lab" },
-    { href: "/builder", label: "Builder" },
     { href: "/players", label: "Players" },
     { href: "/players?f=Legend|Yes|AND|0", label: "Legends" },
   ];
