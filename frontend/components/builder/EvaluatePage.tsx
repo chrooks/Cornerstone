@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { listPlayersWithSkills, getLegend, evaluateRoster } from "@/lib/api";
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
@@ -203,11 +203,16 @@ function writeCachedTeamDescription(cacheKey: string, description: string | null
 export function EvaluatePage() {
   const searchParams = useSearchParams();
   const router       = useRouter();
+  const params       = useParams();
   const { isAdmin, loading: adminLoading, email } = useAdminStatus();
   const isLoggedIn = email !== null;
 
+  // Ruleset from route params when under /lab/[ruleset]/eval; absent on legacy /builder/evaluate
+  const ruleset = (params.ruleset as string) ?? null;
   const cornerstoneId = searchParams.get("cornerstone");
-  const backHref = `/builder?${searchParams.toString()}`;
+  // Back link routes into Lab flow when ruleset is known, otherwise falls back to legacy /builder
+  const buildPath = ruleset ? `/lab/${ruleset}/build` : "/builder";
+  const backHref = `${buildPath}?${searchParams.toString()}`;
 
   const [evalState, setEvalState] = useState<EvalState>("loading");
   const [errorMsg, setErrorMsg]   = useState<string | null>(null);
@@ -219,7 +224,7 @@ export function EvaluatePage() {
 
   // Phase 1: load players + legend
   useEffect(() => {
-    if (!cornerstoneId) { router.replace("/builder"); return; }
+    if (!cornerstoneId) { router.replace(buildPath); return; }
 
     Promise.all([listPlayersWithSkills(), getLegend(cornerstoneId)])
       .then(([playersRes, legendRes]) => {
