@@ -33,7 +33,7 @@ export interface SortKey {
 // ---------------------------------------------------------------------------
 
 /** Human-readable label for each sortable field. */
-const FIELD_LABELS: Record<string, string> = {
+export const SORT_FIELD_LABELS: Record<string, string> = {
   name: "Name",
   team: "Team",
   position: "Position",
@@ -53,7 +53,7 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 /** Ordered list of all sortable field keys for the dropdown. */
-const SORT_FIELD_OPTIONS: string[] = [
+export const SORT_FIELD_OPTIONS: string[] = [
   "name",
   "team",
   "position",
@@ -80,9 +80,16 @@ interface SortControlsProps {
   onSortKeysChange: (keys: SortKey[]) => void;
   /** When provided, sort options are limited to visible (non-hidden) columns. */
   hiddenColumns?: Set<string>;
+  /** Context-specific sortable field allowlist. Defaults to all fields. */
+  sortFieldOptions?: string[];
 }
 
-export function SortControls({ sortKeys, onSortKeysChange, hiddenColumns }: SortControlsProps) {
+export function SortControls({
+  sortKeys,
+  onSortKeysChange,
+  hiddenColumns,
+  sortFieldOptions = SORT_FIELD_OPTIONS,
+}: SortControlsProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -102,8 +109,8 @@ export function SortControls({ sortKeys, onSortKeysChange, hiddenColumns }: Sort
 
   // Only offer sort options for visible columns
   const availableFields = hiddenColumns
-    ? SORT_FIELD_OPTIONS.filter((f) => !hiddenColumns.has(f))
-    : SORT_FIELD_OPTIONS;
+    ? sortFieldOptions.filter((f) => !hiddenColumns.has(f))
+    : sortFieldOptions;
 
   // Add a new sort key
   const addSortKey = (field: string) => {
@@ -143,7 +150,7 @@ export function SortControls({ sortKeys, onSortKeysChange, hiddenColumns }: Sort
             </span>
           )}
           {/* Field label */}
-          <span>{FIELD_LABELS[key.field] ?? key.field}</span>
+          <span>{SORT_FIELD_LABELS[key.field] ?? key.field}</span>
           {/* Direction toggle */}
           <button
             type="button"
@@ -190,7 +197,7 @@ export function SortControls({ sortKeys, onSortKeysChange, hiddenColumns }: Sort
                     field === ALL_SKILL_NAMES[0] ? "border-t border-border mt-1 pt-2" : "",
                   )}
                 >
-                  {FIELD_LABELS[field] ?? field}
+                  {SORT_FIELD_LABELS[field] ?? field}
                 </button>
               ))}
             </div>

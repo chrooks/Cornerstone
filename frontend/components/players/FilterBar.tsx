@@ -11,7 +11,7 @@
  * their combined value as "skill_name|tier_option".
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -230,6 +230,8 @@ function SortableParenPill({
 interface FilterBarProps {
   /** All loaded players — used to derive dynamic select options (e.g. team names). */
   players: PlayerWithSkills[];
+  /** Filter types exposed for this PlayerPool. Defaults to all player filters. */
+  availableFilters?: PlayerFilterType[];
   filters: FilterEntry[];
   nextConnector: FilterConnector;
   onAddFilter: (filter: PlayerFilterType, value: string) => void;
@@ -244,6 +246,7 @@ interface FilterBarProps {
 
 export function FilterBar({
   players,
+  availableFilters = AVAILABLE_FILTERS,
   filters,
   nextConnector,
   onAddFilter,
@@ -255,7 +258,7 @@ export function FilterBar({
   onClearFilters,
   onAddParens,
 }: FilterBarProps) {
-  const [currentFilter, setCurrentFilter] = useState<PlayerFilterType>(AVAILABLE_FILTERS[0]);
+  const [currentFilter, setCurrentFilter] = useState<PlayerFilterType>(availableFilters[0] ?? AVAILABLE_FILTERS[0]);
   // Text/number value for text, numeric, and skill_count filters
   const [localValue, setLocalValue] = useState("");
   // Operator for numeric and skill_count filters (default ≥)
@@ -264,6 +267,12 @@ export function FilterBar({
   const [skillName, setSkillName] = useState<string>("spot_up_shooter");
   // Tier dropdown shared by skill_tier and skill_count filters
   const [tierOption, setTierOption] = useState<string>("Elite or higher");
+
+  useEffect(() => {
+    if (availableFilters.some((filter) => filter.label === currentFilter.label)) return;
+    setCurrentFilter(availableFilters[0] ?? AVAILABLE_FILTERS[0]);
+    setLocalValue("");
+  }, [availableFilters, currentFilter.label]);
 
   // Configure dnd-kit pointer sensor — stops propagation so remove/NOT buttons still work
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -321,14 +330,14 @@ export function FilterBar({
           className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           value={currentFilter.label}
           onChange={(e) => {
-            const selected = AVAILABLE_FILTERS.find((f) => f.label === e.target.value);
+            const selected = availableFilters.find((f) => f.label === e.target.value);
             if (selected) {
               setCurrentFilter(selected);
               setLocalValue("");
             }
           }}
         >
-          {AVAILABLE_FILTERS.map((f) => (
+          {availableFilters.map((f) => (
             <option key={f.label} value={f.label}>
               {f.label}
             </option>

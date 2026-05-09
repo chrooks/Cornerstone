@@ -15,25 +15,14 @@ import { cn } from "@/lib/utils";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { listLegends, getLegend } from "@/lib/api";
 import { formatSkillName, PUBLIC_SKILL_CATEGORIES } from "@/lib/skills";
-import { TIER_BADGE_CLASSES, tierToNum as libTierToNum } from "@/lib/tiers";
-import { FilterBar } from "@/components/players/FilterBar";
-import { SortControls, type SortKey } from "@/components/players/SortControls";
-import { PlayerTable, DEFAULT_PAGE_SIZE } from "@/components/players/PlayerTable";
+import { TIER_BADGE_CLASSES } from "@/lib/tiers";
+import { PlayerPoolBrowser, type PlayerPoolBrowserCounts, type PlayerPoolViewMode } from "@/components/players/PlayerPoolBrowser";
+import { SORT_FIELD_OPTIONS, type SortKey } from "@/components/players/SortControls";
+import { DEFAULT_PAGE_SIZE } from "@/components/players/PlayerTable";
 import {
-  evalFilterEntries,
-  type FilterEntry,
-  type FilterConnector,
-  type PlayerFilterType,
-  type ActiveFilter,
-  type ParenMarker,
-  MAX_ACTIVE_FILTERS,
-  POSITION_ORDER,
-  parseHeight,
+  AVAILABLE_FILTERS,
 } from "@/components/players/playerFilters";
 import type { LegendSummary, LegendDetail, LegendTier, PlayerWithSkills } from "@/lib/types";
-
-/* ── View mode ── */
-type ViewMode = "cards" | "table";
 
 /* ── Transform a LegendDetail into PlayerWithSkills so the shared
      filter/sort/table infra works without modification ── */
@@ -67,61 +56,6 @@ function legendToPlayerWithSkills(
     skills: Object.keys(skills).length > 0 ? skills : null,
     flag_summary: { total: 0, unresolved: 0 },
   };
-}
-
-/* ── Sort comparator — mirrors Players page exactly ── */
-function compareByKey(a: PlayerWithSkills, b: PlayerWithSkills, key: SortKey): number {
-  const dir = key.direction === "asc" ? 1 : -1;
-
-  const getVal = (p: PlayerWithSkills): number | string | null => {
-    switch (key.field) {
-      case "name":              return p.name;
-      case "team":              return p.team ?? "";
-      case "position":          return POSITION_ORDER[p.position ?? ""] ?? 99;
-      case "age":               return p.age;
-      case "height":            return parseHeight(p.height);
-      case "weight":            return p.weight;
-      case "salary":            return p.salary;
-      case "games_played":      return p.games_played;
-      case "minutes_per_game":  return p.minutes_per_game;
-      case "peak_year":         return p.peak_year ?? null;
-      case "capable_plus_count":
-        return p.skills ? Object.values(p.skills).filter((t) => libTierToNum(t) >= 1).length : 0;
-      case "proficient_plus_count":
-        return p.skills ? Object.values(p.skills).filter((t) => libTierToNum(t) >= 2).length : 0;
-      case "elite_plus_count":
-        return p.skills ? Object.values(p.skills).filter((t) => libTierToNum(t) >= 3).length : 0;
-      case "alltime_plus_count":
-        return p.skills ? Object.values(p.skills).filter((t) => libTierToNum(t) >= 4).length : 0;
-      default:
-        /* Skill column — sort by tier numeric value */
-        return p.skills ? libTierToNum(p.skills[key.field]) : 0;
-    }
-  };
-
-  const av = getVal(a);
-  const bv = getVal(b);
-
-  /* Nulls always sort to the end regardless of direction */
-  if (av == null && bv == null) return 0;
-  if (av == null) return 1;
-  if (bv == null) return -1;
-
-  if (typeof av === "string" && typeof bv === "string") {
-    return av.localeCompare(bv) * dir;
-  }
-  return ((av as number) - (bv as number)) * dir;
-}
-
-function stableMultiSort(players: PlayerWithSkills[], keys: SortKey[]): PlayerWithSkills[] {
-  if (keys.length === 0) return players;
-  return [...players].sort((a, b) => {
-    for (const key of keys) {
-      const cmp = compareByKey(a, b, key);
-      if (cmp !== 0) return cmp;
-    }
-    return 0;
-  });
 }
 
 /* ── Tier badge — reuses canonical TIER_BADGE_CLASSES ── */
@@ -293,11 +227,13 @@ function ScoutingReportCard({
   );
 }
 
-/* ── Unique filter ID counter ── */
-let _filterId = 0;
-function nextFilterId(): string {
-  return `lf-${++_filterId}`;
-}
+const LEGEND_FILTERS = AVAILABLE_FILTERS.filter(
+  (filter) => !["Games Played", "MPG", "Legend"].includes(filter.label),
+);
+const LEGEND_SORT_FIELDS = SORT_FIELD_OPTIONS.filter(
+  (field) => !["games_played", "minutes_per_game"].includes(field),
+);
+const LEGEND_HIDDEN_COLUMNS = ["games_played"];
 
 /* ── Main page component ── */
 export default function LegendsPage() {
@@ -314,21 +250,14 @@ export default function LegendsPage() {
     return legends.map((l) => legendToPlayerWithSkills(l, details[l.id] ?? null));
   }, [legends, details]);
 
-  /* ── Filter state (same shape as Players page) ── */
-  const [filterEntries, setFilterEntries] = useState<FilterEntry[]>([]);
-  const [nextConnector, setNextConnector] = useState<FilterConnector>("AND");
-
   /* ── Sort state ── */
-  const [sortKeys, setSortKeys] = useState<SortKey[]>([
-    { field: "name", direction: "asc" },
-  ]);
-
-  /* ── View mode ── */
-  const [viewMode, setViewMode] = useState<ViewMode>("cards");
-
-  /* ── Pagination (for table view) ── */
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const defaultSortKeys: SortKey[] = [{ field: "name", direction: "asc" }];
+  const [browserCounts, setBrowserCounts] = useState<PlayerPoolBrowserCounts>({
+    totalCount: 0,
+    filteredCount: 0,
+    sortedCount: 0,
+    pageCount: 0,
+  });
 
   /* ── Fetch legends on mount ── */
   useEffect(() => {
@@ -356,80 +285,6 @@ export default function LegendsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  /* ── Derived data: filter → sort → paginate ── */
-  const filteredPlayers = useMemo(() => {
-    if (filterEntries.length === 0) return playersProjection;
-    return playersProjection.filter((p) => evalFilterEntries(p, filterEntries));
-  }, [playersProjection, filterEntries]);
-
-  const sortedPlayers = useMemo(
-    () => stableMultiSort(filteredPlayers, sortKeys),
-    [filteredPlayers, sortKeys],
-  );
-
-  const paginatedPlayers = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sortedPlayers.slice(start, start + pageSize);
-  }, [sortedPlayers, page, pageSize]);
-
-  /* Reset page on filter/sort change */
-  useEffect(() => { setPage(1); }, [filterEntries, sortKeys]);
-
-  /* ── Filter handlers (same as Players page) ── */
-  const handleAddFilter = useCallback(
-    (filter: PlayerFilterType, value: string) => {
-      if (filterEntries.length >= MAX_ACTIVE_FILTERS) return;
-      const entry: ActiveFilter = {
-        id: nextFilterId(),
-        filter,
-        value,
-        connector: nextConnector,
-        negated: false,
-      };
-      setFilterEntries((prev) => [...prev, entry]);
-    },
-    [filterEntries.length, nextConnector],
-  );
-
-  const handleRemoveFilter = useCallback((index: number) => {
-    setFilterEntries((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const handleToggleConnector = useCallback((index: number) => {
-    setFilterEntries((prev) =>
-      prev.map((entry, i) =>
-        i !== index ? entry : { ...entry, connector: entry.connector === "AND" ? "OR" : "AND" },
-      ),
-    );
-  }, []);
-
-  const handleToggleNegated = useCallback((index: number) => {
-    setFilterEntries((prev) =>
-      prev.map((entry, i) => {
-        if (i !== index || "paren" in entry) return entry;
-        return { ...entry, negated: !entry.negated };
-      }),
-    );
-  }, []);
-
-  const handleReorderFilters = useCallback((oldIndex: number, newIndex: number) => {
-    setFilterEntries((prev) => {
-      const next = [...prev];
-      const [moved] = next.splice(oldIndex, 1);
-      next.splice(newIndex, 0, moved);
-      return next;
-    });
-  }, []);
-
-  const handleAddParens = useCallback(() => {
-    if (filterEntries.length + 2 > MAX_ACTIVE_FILTERS) return;
-    const open: ParenMarker = { id: nextFilterId(), paren: "(", connector: nextConnector };
-    const close: ParenMarker = { id: nextFilterId(), paren: ")", connector: "AND" };
-    setFilterEntries((prev) => [...prev, open, close]);
-  }, [filterEntries.length, nextConnector]);
-
-  const handleClearFilters = useCallback(() => setFilterEntries([]), []);
-
   /* ── Row click in table → navigate to build with this cornerstone ── */
   const handleRowClick = useCallback(
     (player: PlayerWithSkills) => {
@@ -454,41 +309,11 @@ export default function LegendsPage() {
             </h1>
             {!loading && (
               <p className="text-[0.8125rem] text-[#0e0907]/45 mt-1">
-                {filteredPlayers.length === playersProjection.length
-                  ? `${playersProjection.length} legends`
-                  : `${filteredPlayers.length} of ${playersProjection.length} legends`}
+                {browserCounts.filteredCount === browserCounts.totalCount
+                  ? `${browserCounts.totalCount} legends`
+                  : `${browserCounts.filteredCount} of ${browserCounts.totalCount} legends`}
               </p>
             )}
-          </div>
-
-          {/* View toggle */}
-          <div id="legends-view-toggle" className="flex rounded-md border border-[#d9d0c9] overflow-hidden text-xs font-medium">
-            <button
-              id="legends-view-table-btn"
-              type="button"
-              onClick={() => setViewMode("table")}
-              className={cn(
-                "px-3 py-1.5 transition-colors",
-                viewMode === "table"
-                  ? "bg-[#0e0907] text-[#f7f7f7]"
-                  : "text-[#0e0907]/45 hover:text-[#0e0907]/70 hover:bg-[#0e0907]/[0.04]",
-              )}
-            >
-              Table
-            </button>
-            <button
-              id="legends-view-cards-btn"
-              type="button"
-              onClick={() => setViewMode("cards")}
-              className={cn(
-                "px-3 py-1.5 border-l border-[#d9d0c9] transition-colors",
-                viewMode === "cards"
-                  ? "bg-[#0e0907] text-[#f7f7f7]"
-                  : "text-[#0e0907]/45 hover:text-[#0e0907]/70 hover:bg-[#0e0907]/[0.04]",
-              )}
-            >
-              Cards
-            </button>
           </div>
         </div>
       </section>
@@ -504,68 +329,55 @@ export default function LegendsPage() {
 
       {!loading && (
         <div className="max-w-screen-xl mx-auto px-6 pb-16 md:pb-24 space-y-4">
-          {/* ── Filter bar (reused from Players page) ── */}
-          <FilterBar
+          <PlayerPoolBrowser
+            id="legends-pool-browser"
             players={playersProjection}
-            filters={filterEntries}
-            nextConnector={nextConnector}
-            onAddFilter={handleAddFilter}
-            onRemoveFilter={handleRemoveFilter}
-            onToggleConnector={handleToggleConnector}
-            onToggleNegated={handleToggleNegated}
-            onReorderFilters={handleReorderFilters}
-            onSetNextConnector={setNextConnector}
-            onClearFilters={handleClearFilters}
-            onAddParens={handleAddParens}
-          />
-
-          {/* ── Sort controls ── */}
-          <SortControls sortKeys={sortKeys} onSortKeysChange={setSortKeys} />
-
-          {/* ── Content: table or card stack ── */}
-          {viewMode === "table" ? (
-            <PlayerTable
-              players={paginatedPlayers}
-              sortKeys={sortKeys}
-              onSortKeysChange={setSortKeys}
-              totalCount={sortedPlayers.length}
-              page={page}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              onRowClick={handleRowClick}
-            />
-          ) : (
-            <>
-              {sortedPlayers.length === 0 ? (
-                <div className="text-center py-16">
-                  <p className="text-[0.9375rem] text-[#0e0907]/40">No legends match your filters.</p>
+            defaultSortKeys={defaultSortKeys}
+            defaultPageSize={DEFAULT_PAGE_SIZE}
+            pageSizeOptions={[8, 16, 32]}
+            viewModes={["report", "table"]}
+            defaultViewMode="report"
+            defaultHiddenColumns={LEGEND_HIDDEN_COLUMNS}
+            availableFilters={LEGEND_FILTERS}
+            sortFieldOptions={LEGEND_SORT_FIELDS}
+            emptyMessage="No legends match your filters."
+            clearFiltersLabel="Clear filters"
+            onCountsChange={setBrowserCounts}
+            onRowClick={handleRowClick}
+            renderViewToggle={({ viewMode, setViewMode }) => (
+              <div id="legends-view-toggle" className="flex w-fit rounded-md border border-[#d9d0c9] overflow-hidden text-xs font-medium">
+                {(["table", "report"] as PlayerPoolViewMode[]).map((mode, index) => (
                   <button
+                    key={mode}
+                    id={`legends-view-${mode === "report" ? "cards" : mode}-btn`}
                     type="button"
-                    onClick={handleClearFilters}
-                    className="mt-3 text-[0.8125rem] font-medium text-[#fe6d34] hover:text-[#fe6d34]/70 transition-colors"
+                    onClick={() => setViewMode(mode)}
+                    className={cn(
+                      "px-3 py-1.5 transition-colors",
+                      index > 0 && "border-l border-[#d9d0c9]",
+                      viewMode === mode
+                        ? "bg-[#0e0907] text-[#f7f7f7]"
+                        : "text-[#0e0907]/45 hover:text-[#0e0907]/70 hover:bg-[#0e0907]/[0.04]",
+                    )}
                   >
-                    Clear filters
+                    {mode === "report" ? "Cards" : "Table"}
                   </button>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-6">
-                  {sortedPlayers.map((player) => {
-                    const legend = legends.find((l) => l.id === player.id);
-                    if (!legend) return null;
-                    return (
-                      <ScoutingReportCard
-                        key={legend.id}
-                        legend={legend}
-                        detail={details[legend.id] ?? null}
-                        ruleset={ruleset}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
+                ))}
+              </div>
+            )}
+            renderReport={(player) => {
+              const legend = legends.find((item) => item.id === player.id);
+              if (!legend) return null;
+              return (
+                <ScoutingReportCard
+                  key={legend.id}
+                  legend={legend}
+                  detail={details[legend.id] ?? null}
+                  ruleset={ruleset}
+                />
+              );
+            }}
+          />
         </div>
       )}
     </main>
