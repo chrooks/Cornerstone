@@ -69,7 +69,7 @@ export function NavBar() {
           <Link
             id="navbar-home-link"
             href="/"
-            className="font-semibold text-sm text-foreground hover:text-foreground/80 transition-colors"
+            className="font-display font-semibold text-sm tracking-[-0.01em] text-foreground hover:text-foreground/80 transition-colors"
           >
             Cornerstone
           </Link>
