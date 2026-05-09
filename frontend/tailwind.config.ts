@@ -11,6 +11,11 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "system-ui", "sans-serif"],
+        mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
+      },
       // Map shadcn/ui CSS variables to Tailwind color utilities (HSL format)
       colors: {
         background: "hsl(var(--background))",
@@ -48,9 +53,9 @@ const config: Config = {
         ring: "hsl(var(--ring))",
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "6px",
+        md: "4px",
+        sm: "2px",
       },
       // Score delta chip: fade in briefly then fade out after 3s
       keyframes: {

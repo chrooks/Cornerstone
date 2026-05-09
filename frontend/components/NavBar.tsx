@@ -60,7 +60,7 @@ export function NavBar() {
   return (
     <nav
       id="navbar"
-      className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+      className="sticky top-0 z-50 border-b border-[#0e0907]/10 bg-[#ffa05c] backdrop-blur supports-[backdrop-filter]:bg-[#ffa05c]/95"
     >
       <div className="max-w-screen-2xl mx-auto px-4 flex h-12 items-center justify-between">
 

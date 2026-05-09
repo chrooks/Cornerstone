@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Space_Grotesk } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { NavBar } from "@/components/NavBar";
 
-// Inter is a reliable system font available in Next.js 14 via next/font/google
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+/* Display/headline font: Space Grotesk — geometric with quirky terminals */
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-display",
+});
 
 export const metadata: Metadata = {
   title: "Cornerstone",
-  description: "NBA analytics platform",
+  description: "NBA skill evaluation and roster builder",
 };
 
 export default function RootLayout({
@@ -17,7 +22,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html
+      lang="en"
+      className={`${GeistSans.variable} ${GeistMono.variable} ${spaceGrotesk.variable}`}
+    >
       <body id="app-body" className="font-sans antialiased">
         {/* Global navigation — shown on all pages */}
         <NavBar />

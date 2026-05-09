@@ -1,28 +1,46 @@
 # Cornerstone
 
-Cornerstone evaluates NBA roster construction around a cornerstone player, with tooling for both user-facing team building and admin calibration of the cohesion engine.
+Cornerstone is the engine for the barbershop argument. It turns hypothetical roster debates ("$15 to build a starting five," "five eras of LeBron, which years?", "best roster around prime Hakeem?") into something you can build, test, and compare against others under the same rules.
+
+The product evaluates NBA roster construction around a cornerstone player, with tooling for both user-facing team building and admin calibration of the cohesion engine.
 
 ## Language
 
+**Team**:
+The universal unit. Any group of 5 or more players submitted for evaluation, regardless of RuleSet. A Team is what the engine scores. Lineup, Rotation, and Roster are all specific sizes of Team.
+_Avoid_: Using Lineup, Rotation, or Roster when the concept is size-agnostic
+
 **Lineup**:
-A five-player group evaluated as a single on-court unit.
-_Avoid_: Rotation, roster
+A 5-player Team. The atomic evaluation unit. The engine always scores at the Lineup level. Larger Teams are broken into Lineup Combinations.
+_Avoid_: Rotation, Roster
 
 **Rotation**:
-A selected group of at least five players whose five-player lineup combinations are evaluated together.
-_Avoid_: Lineup
-
-**Starting Lineup**:
-The first five selected rotation slots used as the primary displayed lineup.
-_Avoid_: Best lineup
+A 9-player Team. The Standard RuleSet default: 1 mandatory Legend (Cornerstone) + 8 supporting players. Evaluated by its Lineup Combinations (C(9,5) = 126).
+_Avoid_: Lineup, Roster
 
 **Roster**:
-The complete team construction concept in the builder, including the cornerstone and supporting rotation.
-_Avoid_: Lineup
+A 12-player Team. A full squad. Evaluated by its Lineup Combinations (C(12,5) = 792).
+_Avoid_: Lineup, Rotation
 
-**Team**:
-An informal synonym for the selected builder roster or calibration rotation, depending on context.
-_Avoid_: Use Rotation or Roster when precision matters.
+**Starting Lineup**:
+The first five selected slots in a Rotation or Roster, used as the primary displayed Lineup.
+_Avoid_: Best lineup
+
+**Cornerstone**:
+The (ideally best) player in the first slot of a Team. The player you build the rest of the Team around. In the Standard RuleSet, the Cornerstone must be a Legend and is paid $54M.
+_Avoid_: Star, anchor
+
+**PlayerPool**:
+The set of players available for selection in a given RuleSet. In the Standard RuleSet, the PlayerPool is all active NBA players from the current season's Snapshot plus the Legend pool.
+_Avoid_: Player list, available players
+
+**SalaryCap**:
+The total spending limit for a Team under a given RuleSet. In the Standard RuleSet, the SalaryCap is $195M ($54M consumed by the mandatory Legend Cornerstone, leaving $141M for supporting players). Not all RuleSets require a SalaryCap.
+_Avoid_: Budget, cap (without context)
+
+**RookieDeal**:
+A player contract designation indicating below-market salary. In the Standard RuleSet, a maximum of 2 RookieDeal players are allowed per Team.
+_Avoid_: Rookie contract (when referring to the builder constraint)
 
 **Rotation Diagnostic**:
 A calibration view that explains the rotation-level score before drilling into individual lineup combinations.
@@ -36,18 +54,48 @@ _Avoid_: Permutation
 The rotation-level variety of viable lineup archetypes.
 _Avoid_: Archetype diversity in user-facing UI
 
+**Build**:
+The in-progress, pre-persistence state of an assembled roster in the builder. A configuration of cornerstone + supporting players being tested and iterated on before saving. Borrows from NBA 2K nomenclature where a "build" is a configuration of attributes before it becomes a usable entity.
+_Avoid_: Draft, assembly
+
+**RuleSet**:
+A published configuration that defines the constraints of a builder session. Includes: Team size, SalaryCap (if any), Cornerstone rules, PlayerPool source, RookieDeal limit, and any additional restrictions. Users build Teams under a specific RuleSet; Teams built under different RuleSets are not directly comparable.
+_Avoid_: Mode, settings, config
+
+**Standard RuleSet** (initial):
+- 9 players (Rotation)
+- 1 mandatory Legend as Cornerstone ($54M)
+- SalaryCap: $195M ($141M effective after Cornerstone)
+- PlayerPool: current season Snapshot + Legend pool
+- Max 2 RookieDeal players
+_Avoid_: Default rules
+
+**Skill Profile**:
+A player's complete dictionary of Skills at their evaluated Tier. Generated from the player's stat snapshot via the skill pipeline (stat thresholds + AI assessment + compositing).
+_Avoid_: Skill set (ambiguous with the general concept of "skills")
+
+**Snapshot**:
+A point-in-time capture of a player's stats used as input to the skill pipeline. Currently sourced from the 2024-25 NBA season, approximately monthly.
+_Avoid_: Stats, raw stats
+
 ## Relationships
 
-- A **Rotation** contains one or more **Lineups**.
-- A **Lineup** contains exactly five players.
-- A **Rotation** with exactly five players has exactly one **Lineup**.
-- A **Rotation** with more than five players is evaluated by its five-player lineup combinations.
-- The **Starting Lineup** is the first five selected slots in a **Rotation**.
-- A **Team** may refer informally to either a **Roster** or a **Rotation**.
+### Team hierarchy
+- **Team** is the universal concept. **Lineup** (5), **Rotation** (9), and **Roster** (12) are size-specific Team types.
+- A **Lineup** is the atomic evaluation unit. All larger Teams are broken into **Lineup Combinations** (all C(N,5) combinations of 5 from N players).
+- The **Starting Lineup** is the first five selected slots in any Team larger than 5.
+- A **Cornerstone** occupies the first slot. In the Standard RuleSet, it must be a Legend.
+
+### Engine
+- The engine always evaluates at the **Lineup** level. A 5-player Team = 1 Lineup. A 9-player Team = C(9,5) = 126 Lineup Combinations. A 12-player Team = C(12,5) = 792 Lineup Combinations.
+- **Lineup Combinations** are ranked by cohesion score descending.
 - A **Rotation Diagnostic** summarizes rotation-level factors before showing one selected **Lineup Combination**.
-- **Lineup Combinations** are ranked by cohesion score descending in calibration diagnostics.
-- A **Rotation Diagnostic** result is self-contained and includes backend-scored player composites plus every scored **Lineup Combination**.
-- The maximum visible **Rotation** size is configurable and should track the builder's current rotation-slot limit.
+
+### RuleSet governs the Build
+- A **RuleSet** defines: Team size, **SalaryCap**, **Cornerstone** rules, **PlayerPool**, **RookieDeal** limit.
+- Every saved Team is associated with the **RuleSet** it was built under.
+- The **PlayerPool** available in the builder is determined by the active **RuleSet**.
+- A **Skill Profile** is generated from a **Snapshot** via the skill pipeline.
 
 ## Example dialogue
 
@@ -63,4 +111,6 @@ _Avoid_: Archetype diversity in user-facing UI
 - Calibration rotation diagnostics default to the **Starting Lineup**, even though the **Lineup Combination** navigator is sorted by score rank.
 - Calibration rotation navigator arrows move through **Lineup Combinations** in score-rank order.
 - The backend key `archetype_diversity` is labeled as **Versatility** in user-facing calibration diagnostics.
-- The current builder rotation-slot limit is 9, but that number is a rule/configuration value rather than a permanent domain definition.
+- The current builder rotation-slot limit is 9, but that number is a rule/configuration value rather than a permanent domain definition. This will be governed by **RuleSet** once implemented.
+- The current builder constraints (9-man roster, $195M cap, $54M cornerstone, 36 legends, 2024-25 player pool) represent the initial "Standard" **RuleSet**. A "Free For All" RuleSet is planned as the second option.
+- The pre-persistence state of an assembled roster is a **Build**. Resolved: borrows from NBA 2K nomenclature where a "build" is a configuration of attributes before it becomes a usable player. Same thought exercise: assembling a hypothetical configuration, testing it, iterating. Large audience overlap expected between Cornerstone users and 2K MyPlayer builders.

@@ -19,9 +19,11 @@ frontend/.env.*.local
 npm-debug.log*
 TODO.md
 
-.vscode
-.claude
+.vscode/
+.claude/
 .codex/
+.agents/
+.impeccable/
 .mcp.json
 prompts/
 

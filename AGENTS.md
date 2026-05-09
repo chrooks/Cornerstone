@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Development Commands
 
@@ -46,17 +46,17 @@ Frontend (Next.js) ──HTTP + JWT──▶ Backend (Flask) ──SQL──▶ 
 **Layer 1 — Skill Pipeline** (admin tooling at `/admin/*`)
 - Stats fetched from NBA.com via `nba_api` → assembled by `stats_assembler.py` → stored in `player_stats`
 - `skill_engine/` evaluates each of 21 skills against JSONB threshold rules → `skill_profiles` (source: `"stats"`)
-- `claude_assessment.py` asks Claude API for the same 21 ratings → `skill_profiles` (source: `"claude"`)
+- `claude_assessment.py` asks Codex API for the same 21 ratings → `skill_profiles` (source: `"Codex"`)
 - `compositing.py` merges both: agreements auto-accepted, disagreements create `skill_flags` for manual review
 - Frontend tools: `/admin/calibration` (threshold editor), `/admin/pipeline` (stat fetch trigger), `/admin/review` (flag resolver)
 
 **Layer 2 — Legends Builder** (`/admin/legends`)
 - Manual editor for all-time greats rated on the same 21-skill taxonomy
-- `POST /api/legends/<id>/claude-suggestion` pre-populates ratings; admin accepts or overrides
+- `POST /api/legends/<id>/Codex-suggestion` pre-populates ratings; admin accepts or overrides
 
 **Layer 3 — Roster Builder** (`/builder`)
 - Users pick a legend cornerstone ($54M salary), add up to 7 supporting players within a salary cap
-- `POST /api/builder/evaluate` runs `roster_evaluator/` to score the roster: base skill weights, dynamic modifiers, hard checks, cornerstone complement synergies, GM Notes (37+ rules), and a Claude-generated team description
+- `POST /api/builder/evaluate` runs `roster_evaluator/` to score the roster: base skill weights, dynamic modifiers, hard checks, cornerstone complement synergies, GM Notes (37+ rules), and a Codex-generated team description
 
 ---
 
@@ -70,9 +70,9 @@ backend/
     builder.py                    # POST /builder/evaluate
     calibration.py                # GET/PUT /skills/thresholds, /anchors
     cohesion_calibration.py       # Cohesion engine calibration: weights, rotation eval, composites
-    composite.py                  # POST /players/<id>/composite-profile, /claude-assessment
+    composite.py                  # POST /players/<id>/composite-profile, /Codex-assessment
     health.py                     # GET /health
-    legends.py                    # CRUD + /claude-suggestion
+    legends.py                    # CRUD + /Codex-suggestion
     pipeline.py                   # GET /pipeline/status, POST /pipeline/fetch-stats
     players.py                    # Full player management (search, stats, profile, bio)
     review.py                     # GET /review/queue, POST /review/<id>/resolve
@@ -91,7 +91,7 @@ backend/
       modifiers.py                # Dynamic modifiers (playoff, era, tier-scaled) — 1600 lines
       hard_checks.py              # Validation (physical constraints, draft-pick rules)
       cornerstone_complement.py   # Synergy scores: how well players complement cornerstone
-      team_description.py         # Claude-powered narrative generation
+      team_description.py         # Codex-powered narrative generation
       types.py                    # RosterEvaluation dataclass + related types
     cohesion_engine/              # Lineup/rotation cohesion scoring (newer eval system)
       cohesion.py                 # evaluate_lineup() — subscores, composites, PnR pairing
@@ -103,7 +103,7 @@ backend/
       bell_curve.py               # Bell curve normalization for composite values
       ratios.py                   # Spacing, rim pressure, and other ratio calculations
       notes.py                    # Cohesion-specific note generation
-      team_description.py         # Claude-powered cohesion narrative
+      team_description.py         # Codex-powered cohesion narrative
       types.py                    # LineupCohesion, PlayerComposites, RosterEvaluation types
     skill_engine/pipeline.py      # Orchestrates fetch → evaluate → persist for skill profiles
     claude_assessment.py          # rate_player(), suggest_skills_for_legend()
@@ -187,9 +187,9 @@ frontend/
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_SERVICE_KEY` | Yes | Service role key — server only |
 | `SUPABASE_JWT_SECRET` | Yes | For HS256 JWT verification (newer projects use JWKS/RS256 auto-fetched) |
-| `ANTHROPIC_API_KEY` | Yes | Claude API key |
+| `ANTHROPIC_API_KEY` | Yes | Codex API key |
 | `FRONTEND_ORIGIN` | No | CORS origin (default: `http://localhost:3000`) |
-| `CLAUDE_MODEL` | No | Model override (default: `claude-sonnet-4-20250514`) |
+| `CLAUDE_MODEL` | No | Model override (default: `Codex-sonnet-4-20250514`) |
 
 ### frontend/.env.local
 | Variable | Required | Notes |
