@@ -17,8 +17,8 @@ import { listLegends, getLegend } from "@/lib/api";
 import { formatSkillName, PUBLIC_SKILL_CATEGORIES } from "@/lib/skills";
 import { TIER_BADGE_CLASSES } from "@/lib/tiers";
 import { PlayerPoolBrowser, type PlayerPoolBrowserCounts, type PlayerPoolViewMode } from "@/components/players/PlayerPoolBrowser";
+import { RandomPlayerButton } from "@/components/players/RandomPlayerButton";
 import { SORT_FIELD_OPTIONS, type SortKey } from "@/components/players/SortControls";
-import { DEFAULT_PAGE_SIZE } from "@/components/players/PlayerTable";
 import {
   AVAILABLE_FILTERS,
 } from "@/components/players/playerFilters";
@@ -234,6 +234,7 @@ const LEGEND_SORT_FIELDS = SORT_FIELD_OPTIONS.filter(
   (field) => !["games_played", "minutes_per_game"].includes(field),
 );
 const LEGEND_HIDDEN_COLUMNS = ["games_played"];
+const LEGENDS_PAGE_SIZE = 16;
 
 /* ── Main page component ── */
 export default function LegendsPage() {
@@ -251,13 +252,14 @@ export default function LegendsPage() {
   }, [legends, details]);
 
   /* ── Sort state ── */
-  const defaultSortKeys: SortKey[] = [{ field: "name", direction: "asc" }];
+  const defaultSortKeys: SortKey[] = [{ field: "alltime_plus_count", direction: "desc" }];
   const [browserCounts, setBrowserCounts] = useState<PlayerPoolBrowserCounts>({
     totalCount: 0,
     filteredCount: 0,
     sortedCount: 0,
     pageCount: 0,
   });
+  const [visibleLegendPlayers, setVisibleLegendPlayers] = useState<PlayerWithSkills[]>([]);
 
   /* ── Fetch legends on mount ── */
   useEffect(() => {
@@ -315,6 +317,15 @@ export default function LegendsPage() {
               </p>
             )}
           </div>
+          {!loading && (
+            <RandomPlayerButton
+              id="legends-random-cornerstone-btn"
+              players={visibleLegendPlayers}
+              label="Random Cornerstone"
+              emptyLabel="No Legends"
+              onPick={handleRowClick}
+            />
+          )}
         </div>
       </section>
 
@@ -333,7 +344,7 @@ export default function LegendsPage() {
             id="legends-pool-browser"
             players={playersProjection}
             defaultSortKeys={defaultSortKeys}
-            defaultPageSize={DEFAULT_PAGE_SIZE}
+            defaultPageSize={LEGENDS_PAGE_SIZE}
             pageSizeOptions={[8, 16, 32]}
             viewModes={["report", "table"]}
             defaultViewMode="report"
@@ -343,6 +354,7 @@ export default function LegendsPage() {
             emptyMessage="No legends match your filters."
             clearFiltersLabel="Clear filters"
             onCountsChange={setBrowserCounts}
+            onVisiblePlayersChange={setVisibleLegendPlayers}
             onRowClick={handleRowClick}
             renderViewToggle={({ viewMode, setViewMode }) => (
               <div id="legends-view-toggle" className="flex w-fit rounded-md border border-[#d9d0c9] overflow-hidden text-xs font-medium">

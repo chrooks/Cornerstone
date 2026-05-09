@@ -83,8 +83,24 @@ _Avoid_: Mode, settings, config, tier (use RuleSet to avoid confusion with skill
 _Avoid_: Default rules
 
 **PlayerView**:
-The visual representation of a single Player at a given density. Three densities: row (compact, single line: name, position, team, tier summary), card (medium, standalone: adds physical attributes, top skills, CTA), and report (full scouting report: adds complete categorized Skill Profile). All three densities render the same Player data (`PlayerWithSkills`); they differ only in how much they reveal. A PlayerPoolBrowser renders a collection of PlayerViews at the active density.
+The visual representation of a single Player at a given size. Four sizes: Row, Card, Panel, and Profile. All four sizes render the same Player data (`PlayerWithSkills`); they differ only in how much space they use, how much of the Skill Profile they reveal, and how much interaction they support. A PlayerPoolBrowser renders a collection of PlayerViews at the active size.
 _Avoid_: PlayerCard, PlayerRow, LegendCard as independent unrelated components
+
+**Row**:
+The compact PlayerView size for dense scanning in tables and pickers. A Row keeps the Player on one horizontal line and prioritizes identity, position, salary or era context, and compact skill summaries. Used by table views in the Players explorer, Legends picker, and Build picker.
+_Avoid_: Table row, PlayerRow
+
+**Card**:
+The medium PlayerView size for grid browsing. A Card is standalone and shows Player identity, physical attributes, salary or era context, top skills, and a primary action or click target. Used by card views in the Players explorer and Build picker.
+_Avoid_: PlayerCard as a separate concept
+
+**Panel**:
+The large PlayerView size for comparison and selection surfaces. A Panel has enough room for identity, key context, tier counts, call-to-action, and categorized Skill Profile detail without taking over the whole page. Used by the Legends picker scouting report layout.
+_Avoid_: Report, LegendCard, scouting card
+
+**Profile**:
+The full PlayerView size for complete inspection. A Profile shows the full Player record and Skill Profile with the same information architecture as the Player profile page. It may render as a standalone page or as a dismissible full-screen modal when the user needs profile depth without leaving the current flow.
+_Avoid_: Modal-only profile, profile card
 
 **Skill Profile**:
 A Player's complete dictionary of Skills at their evaluated Tier. Generated from the Player's stat Snapshot via the skill pipeline (for active Players) or manually curated (for Legends).
@@ -117,7 +133,7 @@ _Avoid_: Stats, raw stats
 - **Player** is the universal individual unit. **Legend** is a subtype of Player with a manually curated Skill Profile.
 - All Legends are Players. The shared code representation is `PlayerWithSkills` (with `is_legend: true` for Legends).
 - A **PlayerPool** is a collection of Players (including Legends) passed as data to a PlayerPoolBrowser.
-- A **PlayerView** renders one Player at a configurable density (row, card, report). A PlayerPoolBrowser renders a collection of PlayerViews at the active density.
+- A **PlayerView** renders one Player at a configurable size: **Row**, **Card**, **Panel**, or **Profile**. A PlayerPoolBrowser renders a collection of PlayerViews at the active size.
 - Different surfaces render different PlayerPools with different column/filter configurations: the Legends picker uses a PlayerPool of only Legends; the builder picker uses active Players minus rostered ones.
 
 ### RuleSet governs the Build

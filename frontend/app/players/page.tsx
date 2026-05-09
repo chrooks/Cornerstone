@@ -65,7 +65,7 @@ import type { PlayerWithSkills, SkillTier } from "@/lib/types";
 // ---------------------------------------------------------------------------
 
 const VIEW_MODE_KEY = "playersViewMode";
-const PLAYERS_TABLE_PAGE_SIZE = 8;
+const PLAYERS_TABLE_PAGE_SIZE = 16;
 
 // ---------------------------------------------------------------------------
 // Unique ID generator for filter entries

@@ -66,6 +66,7 @@ interface PlayerPoolBrowserProps {
   onFilterEntriesChange?: (entries: FilterEntry[]) => void;
   onSortKeysChange?: (keys: SortKey[]) => void;
   onCountsChange?: (counts: PlayerPoolBrowserCounts) => void;
+  onVisiblePlayersChange?: (players: PlayerWithSkills[]) => void;
   onViewModeReadyChange?: (ready: boolean) => void;
   renderViewToggle?: (args: {
     viewMode: PlayerPoolViewMode;
@@ -154,6 +155,7 @@ export function PlayerPoolBrowser({
   onFilterEntriesChange,
   onSortKeysChange,
   onCountsChange,
+  onVisiblePlayersChange,
   onViewModeReadyChange,
   renderViewToggle,
   renderCard,
@@ -304,6 +306,11 @@ export function PlayerPoolBrowser({
       pageCount: paginatedPlayers.length,
     });
   }, [filteredPlayers.length, onCountsChange, paginatedPlayers.length, players.length, sortedPlayers.length]);
+
+  useEffect(() => {
+    // Expose filtered and sorted PlayerPool to page-level actions like random Cornerstone selection.
+    onVisiblePlayersChange?.(sortedPlayers);
+  }, [onVisiblePlayersChange, sortedPlayers]);
 
   const handleAddFilter = useCallback((filter: PlayerFilterType, value: string) => {
     if (filterEntries.length >= MAX_ACTIVE_FILTERS) return;
