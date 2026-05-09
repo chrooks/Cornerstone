@@ -50,7 +50,9 @@ The landing page exists to hook visitors in 5 seconds: show them the system is s
 
 ## References
 
-- Baseball Savant (baseballsavant.mlb.com): sharp rectangles, clean data presentation, statistical confidence. Less density, more air.
+- **Pokemon Showdown** (play.pokemonshowdown.com): Premier inspiration for the product structure. Metagames/tiers = RuleSets. Each format defines a different game with different constraints. Team builder under format rules → battle → compare. Cornerstone is this, but for NBA rosters. The RuleSet selection screen should feel like picking a Showdown tier.
+- **Baseball Savant** (baseballsavant.mlb.com): Visual design inspiration. Sharp rectangles, clean data presentation, statistical confidence. Less density, more air.
+- **NBA 2K MyBuilder/MyLab**: UX nomenclature inspiration. "Build" as a configuration in progress. "Lab" as the space where you experiment. Large audience overlap expected.
 
 ## Accessibility & Inclusion
 

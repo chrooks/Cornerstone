@@ -33,6 +33,8 @@ supabase db push   # Apply pending migrations to linked project
 
 Cornerstone is the engine for the barbershop argument: "$15 to build a starting five," "five eras of LeBron, which years?", "best roster around prime Hakeem?" The product turns hypothetical roster debates into something you can build, test, and compare against others using the same rules. Think of those Instagram/social media posts where you pick players at different price tiers, but with a real evaluation engine behind it.
 
+Product inspirations: **Pokemon Showdown** (RuleSets = metagames/tiers, format-first team building), **NBA 2K** (Lab/Build nomenclature, builder UX). The Lab lifecycle: `/lab/<ruleset>/legends` → `/lab/<ruleset>/build` → `/lab/<ruleset>/eval`.
+
 ---
 
 ## Architecture Overview

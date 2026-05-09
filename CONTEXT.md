@@ -54,13 +54,17 @@ _Avoid_: Permutation
 The rotation-level variety of viable lineup archetypes.
 _Avoid_: Archetype diversity in user-facing UI
 
+**Lab**:
+The full lifecycle of building and evaluating a Team. Encompasses the complete sequence: selecting a RuleSet, picking a Cornerstone, assembling the Build, and evaluating the result. Borrows from NBA 2K's MyLab/MyPlayer Builder nomenclature. A Lab session produces one Build under one RuleSet. Route structure: `/lab/<ruleset>/<step>` (e.g., `/lab/standard/legends`, `/lab/standard/build`, `/lab/standard/eval`).
+_Avoid_: Session, game, match
+
 **Build**:
-The in-progress, pre-persistence state of an assembled roster in the builder. A configuration of cornerstone + supporting players being tested and iterated on before saving. Borrows from NBA 2K nomenclature where a "build" is a configuration of attributes before it becomes a usable entity.
+The in-progress, pre-persistence state of an assembled Team in the Lab. A configuration of Cornerstone + supporting players being tested and iterated on before saving. Borrows from NBA 2K nomenclature where a "build" is a configuration of attributes before it becomes a usable entity.
 _Avoid_: Draft, assembly
 
 **RuleSet**:
-A published configuration that defines the constraints of a builder session. Includes: Team size, SalaryCap (if any), Cornerstone rules, PlayerPool source, RookieDeal limit, and any additional restrictions. Users build Teams under a specific RuleSet; Teams built under different RuleSets are not directly comparable.
-_Avoid_: Mode, settings, config
+A published configuration that defines the constraints of a Lab session. Analogous to Pokemon Showdown's metagames/tiers (OU, UU, Ubers, etc.): each RuleSet defines a different game with different constraints, and Teams built under different RuleSets are not directly comparable. Includes: Team size, SalaryCap (if any), Cornerstone rules, PlayerPool source, RookieDeal limit, and any additional restrictions. RuleSets appear as selectable cards at `/lab/` (the Lab entry point). Expect 2-10 RuleSets at any given time.
+_Avoid_: Mode, settings, config, tier (use RuleSet to avoid confusion with skill Tiers)
 
 **Standard RuleSet** (initial):
 - 9 players (Rotation)
@@ -90,6 +94,12 @@ _Avoid_: Stats, raw stats
 - The engine always evaluates at the **Lineup** level. A 5-player Team = 1 Lineup. A 9-player Team = C(9,5) = 126 Lineup Combinations. A 12-player Team = C(12,5) = 792 Lineup Combinations.
 - **Lineup Combinations** are ranked by cohesion score descending.
 - A **Rotation Diagnostic** summarizes rotation-level factors before showing one selected **Lineup Combination**.
+
+### Lab lifecycle
+- A **Lab** session follows a fixed sequence: RuleSet selection → Cornerstone selection → Build assembly → Evaluation.
+- Route structure: `/lab/` (RuleSet picker) → `/lab/<ruleset>/legends` → `/lab/<ruleset>/build` → `/lab/<ruleset>/eval`
+- A **Lab** session produces one **Build** under one **RuleSet**.
+- Auth can occur at any point in the Lab lifecycle. The current Build persists through authentication.
 
 ### RuleSet governs the Build
 - A **RuleSet** defines: Team size, **SalaryCap**, **Cornerstone** rules, **PlayerPool**, **RookieDeal** limit.

@@ -104,7 +104,7 @@ The system is precise without being clinical. Space Grotesk headlines give it ge
 
 This is not a SaaS marketing page. Not a sports media site. Not a shadcn template with a different accent color. It is a scouting report for people who build rosters the way chess players build positions.
 
-**Design note — the 2K parallel:** Cornerstone shares a thought exercise with NBA 2K's MyPlayer builder: assemble a hypothetical configuration, test it, iterate. The terminology ("Build" for an in-progress roster) and the core loop (configure → evaluate → refine) are deliberately borrowed. Large audience overlap expected. The UI should feel familiar to someone who spends hours tweaking a 2K build, but with real NBA data instead of sliders.
+**Design note — the Showdown + 2K parallel:** Cornerstone's product structure borrows from two games. **Pokemon Showdown** provides the format/metagame model: RuleSets are metagames, each defining a different game with different constraints. The RuleSet picker should feel like choosing a Showdown tier. **NBA 2K** provides the builder nomenclature: "Lab" as the experimentation space, "Build" as a configuration in progress. The full Lab lifecycle (RuleSet → Legends → Build → Eval) maps to Showdown's format → teambuilder → battle. The UI should feel familiar to someone who plays either game.
 
 **Key Characteristics:**
 - Sharp geometry: tight radii, precise grid alignment, rectangular containers
