@@ -26,12 +26,20 @@ _Avoid_: Lineup, Rotation
 The first five selected slots in a Rotation or Roster, used as the primary displayed Lineup.
 _Avoid_: Best lineup
 
+**Player**:
+The universal individual unit. Every person in the system is a Player, whether active or legendary. A Player has an id, name, position, team, physical attributes, and a Skill Profile (which may be stat-derived or manually curated). In code, the shared representation is `PlayerWithSkills`. All Legends are Players; not all Players are Legends.
+_Avoid_: Using Legend when the concept is type-agnostic
+
+**Legend**:
+A Player whose Skill Profile is manually curated rather than derived from the stat pipeline. Tagged `is_legend: true` in the data layer. Legends represent all-time greats evaluated on the same 21-skill taxonomy as active Players. In the Standard RuleSet, the Cornerstone must be a Legend.
+_Avoid_: All-time great (as a data category; use Legend), historical player
+
 **Cornerstone**:
-The (ideally best) player in the first slot of a Team. The player you build the rest of the Team around. In the Standard RuleSet, the Cornerstone must be a Legend and is paid $54M.
+The (ideally best) Player in the first slot of a Team. The Player you build the rest of the Team around. In the Standard RuleSet, the Cornerstone must be a Legend and is paid $54M.
 _Avoid_: Star, anchor
 
 **PlayerPool**:
-The set of players available for selection in a given RuleSet. In the Standard RuleSet, the PlayerPool is all active NBA players from the current season's Snapshot plus the Legend pool.
+An ordered collection of Players (which may include Legends) available for browsing and selection in a given context. A PlayerPool is the data input to the shared PlayerPool browser component: it is the `players` prop alongside configuration for which columns to display and which filters to expose in the search controls. In the Standard RuleSet, the PlayerPool is all active Players from the current season's Snapshot plus all Legends. Different surfaces render different PlayerPools with different configurations: the Legends picker renders a PlayerPool of only Legends with peak year and position columns; the builder picker renders active Players with salary and contract columns; the Players explorer renders the full pool with all columns and admin controls.
 _Avoid_: Player list, available players
 
 **SalaryCap**:
@@ -74,8 +82,12 @@ _Avoid_: Mode, settings, config, tier (use RuleSet to avoid confusion with skill
 - Max 2 RookieDeal players
 _Avoid_: Default rules
 
+**PlayerView**:
+The visual representation of a single Player at a given density. Three densities: row (compact, single line: name, position, team, tier summary), card (medium, standalone: adds physical attributes, top skills, CTA), and report (full scouting report: adds complete categorized Skill Profile). All three densities render the same Player data (`PlayerWithSkills`); they differ only in how much they reveal. A PlayerPoolBrowser renders a collection of PlayerViews at the active density.
+_Avoid_: PlayerCard, PlayerRow, LegendCard as independent unrelated components
+
 **Skill Profile**:
-A player's complete dictionary of Skills at their evaluated Tier. Generated from the player's stat snapshot via the skill pipeline (stat thresholds + AI assessment + compositing).
+A Player's complete dictionary of Skills at their evaluated Tier. Generated from the Player's stat Snapshot via the skill pipeline (for active Players) or manually curated (for Legends).
 _Avoid_: Skill set (ambiguous with the general concept of "skills")
 
 **Snapshot**:
@@ -101,11 +113,18 @@ _Avoid_: Stats, raw stats
 - A **Lab** session produces one **Build** under one **RuleSet**.
 - Auth can occur at any point in the Lab lifecycle. The current Build persists through authentication.
 
+### Player hierarchy
+- **Player** is the universal individual unit. **Legend** is a subtype of Player with a manually curated Skill Profile.
+- All Legends are Players. The shared code representation is `PlayerWithSkills` (with `is_legend: true` for Legends).
+- A **PlayerPool** is a collection of Players (including Legends) passed as data to a PlayerPoolBrowser.
+- A **PlayerView** renders one Player at a configurable density (row, card, report). A PlayerPoolBrowser renders a collection of PlayerViews at the active density.
+- Different surfaces render different PlayerPools with different column/filter configurations: the Legends picker uses a PlayerPool of only Legends; the builder picker uses active Players minus rostered ones.
+
 ### RuleSet governs the Build
 - A **RuleSet** defines: Team size, **SalaryCap**, **Cornerstone** rules, **PlayerPool**, **RookieDeal** limit.
 - Every saved Team is associated with the **RuleSet** it was built under.
 - The **PlayerPool** available in the builder is determined by the active **RuleSet**.
-- A **Skill Profile** is generated from a **Snapshot** via the skill pipeline.
+- A **Skill Profile** is generated from a **Snapshot** via the stat pipeline (for active Players) or manually curated (for Legends).
 
 ## Example dialogue
 
