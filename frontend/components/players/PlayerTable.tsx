@@ -20,7 +20,7 @@ import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { formatSalary, formatHeight, SKILL_LABELS } from "./playerFilters";
 import { SKILL_TIERS, tierToNum, TIER_CONTEXT_COLORS, TIER_CONTEXT_ACTIVE } from "@/lib/tiers";
-import { SKILL_ABBREV, ALL_SKILL_NAMES } from "@/lib/skills";
+import { SKILL_ABBREV, ALL_SKILL_NAMES, PROFILE_SKILL_ORDER } from "@/lib/skills";
 import type { SortKey } from "./SortControls";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SkillTier } from "@/lib/types";
@@ -30,7 +30,7 @@ import type { SkillTier } from "@/lib/types";
 // ---------------------------------------------------------------------------
 
 /** Default number of rows shown per page. */
-export const DEFAULT_PAGE_SIZE = 25;
+export const DEFAULT_PAGE_SIZE = 8;
 
 // ---------------------------------------------------------------------------
 // Column definitions
@@ -46,25 +46,32 @@ interface ColDef {
   sticky?: boolean;
 }
 
-// Non-skill columns (left side of table)
+// Non-skill columns ordered by tier:
+//   T1 (always visible): Name, Pos, Salary
+//   T2 (high value):     Cap+, Pro+, Elite+, ATG+, Era, Team
+//   T3 (nice-to-have):   Age, GP, Ht, Wt
 const META_COLUMNS: ColDef[] = [
-  { key: "headshot",          label: "",           defaultWidth: 36,  minWidth: 36,  sticky: true },
-  { key: "name",              label: "Name",       defaultWidth: 160, minWidth: 120, sticky: true },
-  { key: "team",              label: "Team",       defaultWidth: 100, minWidth: 70 },
-  { key: "position",         label: "Pos",        defaultWidth: 70,  minWidth: 50 },
-  { key: "age",               label: "Age",        defaultWidth: 60,  minWidth: 50 },
-  { key: "height",            label: "Ht",         defaultWidth: 70,  minWidth: 55 },
-  { key: "weight",            label: "Wt",         defaultWidth: 70,  minWidth: 55 },
-  { key: "salary",            label: "Salary",     defaultWidth: 90,  minWidth: 70 },
-  { key: "games_played",      label: "GP",         defaultWidth: 60,  minWidth: 50 },
-  { key: "peak_year",              label: "Era",    defaultWidth: 65,  minWidth: 50 },
-  { key: "capable_plus_count",    label: "Cap+",   defaultWidth: 65,  minWidth: 50 },
-  { key: "proficient_plus_count", label: "Pro+",   defaultWidth: 65,  minWidth: 50 },
-  { key: "elite_plus_count",      label: "Elite+", defaultWidth: 65,  minWidth: 50 },
-  { key: "alltime_plus_count",    label: "ATG+",   defaultWidth: 65,  minWidth: 50 },
+  // Tier 1 — always visible
+  { key: "headshot",              label: "",        defaultWidth: 36,  minWidth: 36,  sticky: true },
+  { key: "name",                  label: "Name",    defaultWidth: 160, minWidth: 120, sticky: true },
+  { key: "position",              label: "Pos",     defaultWidth: 70,  minWidth: 50 },
+  { key: "salary",                label: "Salary",  defaultWidth: 90,  minWidth: 70 },
+  // Tier 2 — high value
+  { key: "capable_plus_count",    label: "Cap+",    defaultWidth: 65,  minWidth: 50 },
+  { key: "proficient_plus_count", label: "Pro+",    defaultWidth: 65,  minWidth: 50 },
+  { key: "elite_plus_count",      label: "Elite+",  defaultWidth: 65,  minWidth: 50 },
+  { key: "alltime_plus_count",    label: "ATG+",    defaultWidth: 65,  minWidth: 50 },
+  { key: "peak_year",             label: "Era",     defaultWidth: 65,  minWidth: 50 },
+  { key: "team",                  label: "Team",    defaultWidth: 100, minWidth: 70 },
+  // Tier 3 — nice-to-have
+  { key: "age",                   label: "Age",     defaultWidth: 60,  minWidth: 50 },
+  { key: "games_played",          label: "GP",      defaultWidth: 60,  minWidth: 50 },
+  { key: "height",                label: "Ht",      defaultWidth: 70,  minWidth: 55 },
+  { key: "weight",                label: "Wt",      defaultWidth: 70,  minWidth: 55 },
 ];
 
-const SKILL_COLUMNS: ColDef[] = ALL_SKILL_NAMES.map((key) => ({
+// Skill columns follow profile display order (PUBLIC_SKILL_CATEGORIES grouping)
+const SKILL_COLUMNS: ColDef[] = PROFILE_SKILL_ORDER.map((key) => ({
   key,
   label: SKILL_ABBREV[key],
   defaultWidth: 90,
@@ -162,6 +169,12 @@ interface PlayerTableProps {
   highlightedPlayerId?: string | null;
   /** When true, row clicks navigate to /admin/players/[id] instead of /players/[id]. */
   isAdmin?: boolean;
+  /** Column keys to hide by default (uncontrolled mode). */
+  initialHiddenColumns?: string[];
+  /** Controlled hidden columns — when provided, PlayerTable defers to parent state. */
+  hiddenColumns?: Set<string>;
+  /** Callback when user toggles column visibility (controlled mode). */
+  onHiddenColumnsChange?: (hidden: Set<string>) => void;
 }
 
 export function PlayerTable({
@@ -183,6 +196,9 @@ export function PlayerTable({
   onRowHoverEnd,
   highlightedPlayerId,
   isAdmin,
+  initialHiddenColumns,
+  hiddenColumns: controlledHidden,
+  onHiddenColumnsChange,
 }: PlayerTableProps) {
   const router = useRouter();
 
@@ -191,8 +207,12 @@ export function PlayerTable({
     Object.fromEntries(ALL_COLUMNS.map((c) => [c.key, c.defaultWidth])),
   );
 
-  // Hidden columns — all visible by default
-  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
+  // Hidden columns — controlled or uncontrolled
+  const [internalHidden, setInternalHidden] = useState<Set<string>>(
+    () => new Set(initialHiddenColumns ?? []),
+  );
+  const hiddenColumns = controlledHidden ?? internalHidden;
+  const setHiddenColumns = onHiddenColumnsChange ?? setInternalHidden;
   const [columnsOpen, setColumnsOpen] = useState(false);
 
   // Context menu for right-click skill tier editing
@@ -320,12 +340,10 @@ export function PlayerTable({
   // ── Column toggle ────────────────────────────────────────────────────────
 
   const toggleColumn = (key: string) => {
-    setHiddenColumns((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    const next = new Set(hiddenColumns);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setHiddenColumns(next);
   };
 
   // ── Visible columns ──────────────────────────────────────────────────────
@@ -459,43 +477,7 @@ export function PlayerTable({
   const endRow = Math.min(page * pageSize, totalCount);
 
   return (
-    <div id="player-table-root" className="space-y-2">
-      {/* Columns toggle button */}
-      <div className="flex justify-end">
-        <div className="relative">
-          <button
-            id="player-table-columns-btn"
-            type="button"
-            onClick={() => setColumnsOpen((v) => !v)}
-            className="flex items-center gap-1.5 text-xs rounded border border-input px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Columns {hiddenColumns.size > 0 && <span className="text-amber-600">({hiddenColumns.size} hidden)</span>}
-          </button>
-
-          {columnsOpen && (
-            <div id="player-table-columns-panel" className="absolute right-0 top-full mt-1 z-50 w-52 max-h-80 overflow-y-auto rounded-md border border-border bg-background shadow-md p-2 space-y-1">
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 px-1">
-                Toggle Columns
-              </div>
-              {ALL_COLUMNS.filter((col) => col.key !== "headshot").map((col) => (
-                <label
-                  key={col.key}
-                  className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-muted cursor-pointer text-xs"
-                >
-                  <input
-                    type="checkbox"
-                    checked={!hiddenColumns.has(col.key)}
-                    onChange={() => toggleColumn(col.key)}
-                    className="rounded"
-                  />
-                  <span>{col.key === "name" ? "Name (locked)" : (SKILL_LABELS[col.key] ?? col.label)}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
+    <div id="player-table-root">
       {/* Table wrapper with horizontal scroll */}
       <div id="player-table-wrapper" className="overflow-x-auto rounded-lg border border-border">
         <table id="player-table" className="border-collapse text-xs" style={{ tableLayout: "fixed", minWidth: "max-content" }}>
@@ -627,6 +609,42 @@ export function PlayerTable({
         </span>
 
         <div className="flex items-center gap-3">
+          {/* Columns toggle — inline with pagination controls */}
+          <div className="relative">
+            <button
+              id="player-table-columns-btn"
+              type="button"
+              onClick={() => setColumnsOpen((v) => !v)}
+              className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+              title="Toggle column visibility"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              Columns{hiddenColumns.size > 0 && <span className="text-amber-600"> ({hiddenColumns.size})</span>}
+            </button>
+
+            {columnsOpen && (
+              <div id="player-table-columns-panel" className="absolute right-0 bottom-full mb-1 z-50 w-52 max-h-80 overflow-y-auto rounded-sm border border-border bg-background shadow-md p-2 space-y-1">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 px-1">
+                  Toggle Columns
+                </div>
+                {ALL_COLUMNS.filter((col) => col.key !== "headshot").map((col) => (
+                  <label
+                    key={col.key}
+                    className="flex items-center gap-2 px-1 py-0.5 rounded-sm hover:bg-muted cursor-pointer text-xs"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!hiddenColumns.has(col.key)}
+                      onChange={() => toggleColumn(col.key)}
+                      className="rounded-sm"
+                    />
+                    <span>{col.key === "name" ? "Name (locked)" : (SKILL_LABELS[col.key] ?? col.label)}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Page size selector */}
           <label className="flex items-center gap-1">
             <span>Rows:</span>
@@ -639,7 +657,7 @@ export function PlayerTable({
                 onPageChange(1);
               }}
             >
-              {[10, 25, 50, 100].map((n) => (
+              {[8, 16, 32, 64].map((n) => (
                 <option key={n} value={n}>
                   {n}
                 </option>

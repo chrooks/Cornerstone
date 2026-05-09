@@ -161,6 +161,9 @@ export const PUBLIC_SKILL_CATEGORIES: Record<string, string[]> = {
   "Defense":               ["rim_protector", "perimeter_disruptor", "versatile_defender"],
 };
 
+/** Profile-ordered flat list of all skill names — matches PUBLIC_SKILL_CATEGORIES order. */
+export const PROFILE_SKILL_ORDER: string[] = Object.values(PUBLIC_SKILL_CATEGORIES).flat();
+
 // ---------------------------------------------------------------------------
 // Legends page grouping (by skill_category type, not confidence)
 // ---------------------------------------------------------------------------

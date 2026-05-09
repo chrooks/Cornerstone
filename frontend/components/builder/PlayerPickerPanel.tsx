@@ -1,20 +1,21 @@
 "use client";
 
 /**
- * PlayerPickerPanel.tsx — Right panel of the Team Builder.
+ * PlayerPickerPanel.tsx — Right panel of the Build page.
  *
- * Full-featured player explorer: FilterBar + SortControls + PlayerTable/Cards.
- * Identical functionality to /players page but:
+ * Full-featured PlayerPool browser: FilterBar + SortControls + PlayerTable/Cards.
+ * Same filtering/sorting infrastructure as /players page but:
  *   - State is local (no URL sync — URL is owned by the builder for roster state)
- *   - No admin features (no skill override, no manual include/remove)
+ *   - No admin features
  *   - Legends excluded (activeRows only)
  *   - Row click fills the selected builder slot instead of navigating
  *   - Rows are draggable to builder slots
  */
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { PlayerTable, DEFAULT_PAGE_SIZE } from "@/components/players/PlayerTable";
+import { PlayerTable } from "@/components/players/PlayerTable";
+import { ALL_SKILL_NAMES } from "@/lib/skills";
 import { PlayerCard } from "@/components/players/PlayerCard";
 import { FilterBar } from "@/components/players/FilterBar";
 import { SortControls } from "@/components/players/SortControls";
@@ -91,6 +92,16 @@ function stableMultiSort(players: PlayerWithSkills[], keys: SortKey[]): PlayerWi
 
 type ViewMode = "table" | "cards";
 
+/** Default page sizes for each view in the builder picker. */
+const TABLE_DEFAULT_PAGE_SIZE = 8;
+const CARDS_DEFAULT_PAGE_SIZE = 16; // 4 rows × 4 columns
+
+/** Columns hidden by default in the builder picker — Tier 3 starts collapsed. */
+const PICKER_HIDDEN_COLUMNS = [
+  // Tier 3 — nice-to-have (age, GP, Ht, Wt)
+  "age", "games_played", "height", "weight",
+];
+
 interface PlayerPickerPanelProps {
   players: PlayerWithSkills[];
   loading: boolean;
@@ -147,21 +158,42 @@ export function PlayerPickerPanel({
   highlightedPlayerId,
   isAdmin,
 }: PlayerPickerPanelProps) {
-  // ── View mode ─────────────────────────────────────────────────────────────
+  // ── Hint banner dismissal (persisted) ────────────────────────────────────
+  const HINT_STORAGE_KEY = "cornerstone:picker-hint-dismissed";
+  const [hintDismissed, setHintDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(HINT_STORAGE_KEY) === "1";
+  });
+  const dismissHint = useCallback(() => {
+    setHintDismissed(true);
+    localStorage.setItem(HINT_STORAGE_KEY, "1");
+  }, []);
+
+  // ── View mode — reset page size to view-appropriate default on switch ────
   const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const switchViewMode = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    setPage(1);
+    setPageSize(mode === "table" ? TABLE_DEFAULT_PAGE_SIZE : CARDS_DEFAULT_PAGE_SIZE);
+  }, []);
 
   // ── Filter state ──────────────────────────────────────────────────────────
   const [filterEntries, setFilterEntries] = useState<FilterEntry[]>([]);
   const [nextConnector, setNextConnector] = useState<FilterConnector>("AND");
+
+  // ── Column visibility (shared between PlayerTable + SortControls) ────────
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
+    () => new Set(PICKER_HIDDEN_COLUMNS),
+  );
 
   // ── Sort state ────────────────────────────────────────────────────────────
   const [sortKeys, setSortKeys] = useState<SortKey[]>([{ field: "name", direction: "asc" }]);
 
   // ── Pagination ────────────────────────────────────────────────────────────
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState(TABLE_DEFAULT_PAGE_SIZE);
 
-  // Reset page on filter/sort change
+  /* Reset page on filter/sort change */
   useEffect(() => { setPage(1); }, [filterEntries, sortKeys]);
 
   // ── Derived data ──────────────────────────────────────────────────────────
@@ -171,8 +203,6 @@ export function PlayerPickerPanel({
   }, [players, filterEntries]);
 
   // ── Salary filter injection ───────────────────────────────────────────────
-  // When parent triggers a salary filter (via salary gauge click), inject it as
-  // a real filter entry into the existing filter system so it shows in FilterBar.
   useEffect(() => {
     if (salaryFilterTrigger == null) return;
     const salaryFilter = AVAILABLE_FILTERS.find((f) => f.label === "Salary");
@@ -181,28 +211,22 @@ export function PlayerPickerPanel({
     const entry: ActiveFilter = {
       id: crypto.randomUUID(),
       filter: salaryFilter,
-      // NumericFilter value format: "op|value_in_millions" — operator must be unicode ≤
       value: `≤|${(salaryFilterTrigger / 1_000_000).toFixed(1)}`,
       connector: nextConnector,
       negated: false,
     };
     setFilterEntries((prev) => [...prev, entry]);
     onSalaryFilterInjected?.();
-  // Only run when trigger changes — not on every filterEntries/nextConnector change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [salaryFilterTrigger]);
 
   // ── Skill filter injection — GM Notes suggestion link ───────────────────
-  // When parent triggers a {skill, tier} filter from a clicked suggestion note,
-  // inject it into the existing filter system. Replaces any prior skill filter
-  // for the SAME skill so repeated clicks don't pile up duplicates.
   useEffect(() => {
     if (!skillFilterTrigger) return;
     const skillFilter = AVAILABLE_FILTERS.find((f) => f.label === "Skill");
     if (!skillFilter) return;
     const encodedValue = `${skillFilterTrigger.skill}|${skillFilterTrigger.tier}`;
     setFilterEntries((prev) => {
-      // Drop any existing Skill entry pinned to this same skill (any tier) so we don't duplicate
       const pruned = prev.filter((e) => {
         if ("paren" in e) return true;
         if (e.filter.label !== "Skill") return true;
@@ -220,7 +244,6 @@ export function PlayerPickerPanel({
       return [...pruned, entry];
     });
     onSkillFilterInjected?.();
-  // Only run when trigger identity changes — not on every filterEntries/nextConnector change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skillFilterTrigger]);
 
@@ -294,7 +317,7 @@ export function PlayerPickerPanel({
     return false;
   }, [rosterPlayerIds, remainingSalary]);
 
-  // Disabled player IDs — rostered or over remaining salary budget
+  /* Disabled player IDs — rostered or over remaining salary budget */
   const disabledPlayerIds = useMemo(
     () => new Set(paginated.filter(isUnavailable).map((p) => p.id)),
     [paginated, isUnavailable],
@@ -307,13 +330,13 @@ export function PlayerPickerPanel({
     e.dataTransfer.effectAllowed = "copy";
   }, [isUnavailable]);
 
-  // ── Left-click — fill first free slot (skip if unavailable) ──────────────
+  /* Left-click — fill first free slot (skip if unavailable) */
   const handleRowClick = useCallback((player: PlayerWithSkills) => {
     if (isUnavailable(player)) return;
     onPlayerClick(player);
   }, [isUnavailable, onPlayerClick]);
 
-  // ── Right-click — open player profile in new tab with from=builder marker ──
+  /* Right-click — open player profile in new tab */
   const handleRowContextMenu = useCallback((e: React.MouseEvent, player: PlayerWithSkills) => {
     e.preventDefault();
     const prefix = isAdmin ? "/admin/players" : "/players";
@@ -322,14 +345,14 @@ export function PlayerPickerPanel({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div id="player-picker-panel" className="flex flex-col h-full gap-2 min-h-0">
+    <div id="player-picker-panel" className="flex flex-col h-full gap-1.5 min-h-0">
 
-      {/* Header */}
+      {/* Header — title + player count + view toggle */}
       <div id="player-picker-header" className="flex items-center justify-between flex-wrap gap-2 flex-shrink-0">
         <div>
-          <h2 id="player-picker-title" className="text-sm font-semibold text-foreground">Players</h2>
+          <h2 id="player-picker-title" className="text-[1.125rem] font-semibold text-[#0e0907]">Players</h2>
           {!loading && (
-            <p id="player-picker-count" className="text-xs text-muted-foreground">
+            <p id="player-picker-count" className="text-[0.8125rem] text-[#0e0907]/45">
               {filtered.length === players.length
                 ? `${players.length} players`
                 : `${filtered.length} of ${players.length} players`}
@@ -337,17 +360,17 @@ export function PlayerPickerPanel({
           )}
         </div>
 
-        {/* View toggle */}
-        <div id="player-picker-view-toggle" className="flex rounded-md border border-border overflow-hidden text-xs font-medium">
+        {/* View toggle — design system button styling */}
+        <div id="player-picker-view-toggle" className="flex rounded-sm border border-[#d9d0c9] overflow-hidden text-[0.8125rem] font-medium">
           <button
             id="player-picker-cards-btn"
             type="button"
-            onClick={() => setViewMode("cards")}
+            onClick={() => switchViewMode("cards")}
             className={cn(
               "px-3 py-1.5 transition-colors",
               viewMode === "cards"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                ? "bg-[#0e0907] text-[#f7f7f7]"
+                : "text-[#0e0907]/45 hover:text-[#0e0907]/70 hover:bg-[#0e0907]/[0.04]",
             )}
           >
             Cards
@@ -355,12 +378,12 @@ export function PlayerPickerPanel({
           <button
             id="player-picker-table-btn"
             type="button"
-            onClick={() => setViewMode("table")}
+            onClick={() => switchViewMode("table")}
             className={cn(
-              "px-3 py-1.5 border-l border-border transition-colors",
+              "px-3 py-1.5 border-l border-[#d9d0c9] transition-colors",
               viewMode === "table"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                ? "bg-[#0e0907] text-[#f7f7f7]"
+                : "text-[#0e0907]/45 hover:text-[#0e0907]/70 hover:bg-[#0e0907]/[0.04]",
             )}
           >
             Table
@@ -368,16 +391,29 @@ export function PlayerPickerPanel({
         </div>
       </div>
 
-      {/* Hint: left-click fills slot, right-click opens profile */}
-      <div
-        id="player-picker-selection-hint"
-        className="flex-shrink-0 text-xs text-muted-foreground bg-muted/40 border border-border rounded-md px-3 py-1.5"
-      >
-        Hint: Left-click to add · Right-click to open profile · Click remaining salary to filter players you cannot afford
-        {selectedSlot != null && selectedSlot !== 1 && (
-          <span className="ml-2 text-blue-600 font-medium">→ Slot {selectedSlot} selected</span>
-        )}
-      </div>
+      {/* Hint banner — warm background, dismissable */}
+      {!hintDismissed && (
+        <div
+          id="player-picker-selection-hint"
+          className="flex-shrink-0 flex items-center justify-between text-[0.8125rem] text-[#0e0907]/45 bg-[#f0f0f0] border border-[#d9d0c9]/60 rounded-sm px-3 py-1.5"
+        >
+          <span>
+            Left-click to add · Right-click to open profile · Click remaining salary to filter
+            {selectedSlot != null && selectedSlot !== 1 && (
+              <span className="ml-2 text-[#ffa05c] font-medium">→ Slot {selectedSlot} selected</span>
+            )}
+          </span>
+          <button
+            id="player-picker-hint-dismiss"
+            type="button"
+            onClick={dismissHint}
+            className="ml-2 text-[#0e0907]/30 hover:text-[#0e0907]/60 transition-colors flex-shrink-0"
+            title="Dismiss hint"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Filter bar */}
       {!loading && !error && (
@@ -401,26 +437,27 @@ export function PlayerPickerPanel({
       {/* Sort controls */}
       {!loading && !error && (
         <div className="flex-shrink-0">
-          <SortControls sortKeys={sortKeys} onSortKeysChange={setSortKeys} />
+          <SortControls sortKeys={sortKeys} onSortKeysChange={setSortKeys} hiddenColumns={hiddenColumns} />
         </div>
       )}
 
-      {/* Loading / error */}
+      {/* Loading skeleton */}
       {loading && (
         <div id="player-picker-loading" className="flex-1 space-y-2 animate-pulse">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-9 bg-muted rounded" />
+            <div key={i} className="h-9 bg-[#0e0907]/[0.04] rounded-sm" />
           ))}
         </div>
       )}
 
+      {/* Error state */}
       {!loading && error && (
-        <div id="player-picker-error" className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+        <div id="player-picker-error" className="rounded-md bg-[#e53e3e]/10 border border-[#e53e3e]/20 p-3 text-[0.9375rem] text-[#e53e3e]">
           {error}
         </div>
       )}
 
-      {/* Table / Cards — scrollable */}
+      {/* Table / Cards — scrollable content */}
       {!loading && !error && (
         <div id="player-picker-list" className="flex-1 overflow-auto min-h-0">
           {viewMode === "table" ? (
@@ -432,6 +469,8 @@ export function PlayerPickerPanel({
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
+              hiddenColumns={hiddenColumns}
+              onHiddenColumnsChange={setHiddenColumns}
               onPageSizeChange={setPageSize}
               onRowClick={handleRowClick}
               onRowDragStart={handleRowDragStart}
@@ -444,7 +483,7 @@ export function PlayerPickerPanel({
             />
           ) : (
             <>
-              <div id="player-picker-cards" className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
+              <div id="player-picker-cards" className="grid grid-cols-4 gap-3">
                 {paginated.map((player) => {
                   const isHighlighted = highlightedPlayerId != null && highlightedPlayerId === player.id;
                   return (
@@ -458,10 +497,9 @@ export function PlayerPickerPanel({
                     onMouseEnter={onPlayerHover ? () => onPlayerHover(player.salary ?? null) : undefined}
                     onMouseLeave={onPlayerHoverEnd}
                     className={cn(
-                      "cursor-pointer rounded-lg transition-shadow",
+                      "cursor-pointer rounded-lg transition-colors",
                       isUnavailable(player) && !isHighlighted ? "opacity-40 pointer-events-none" : "",
-                      // CourtLineup face hover → cross-highlight even on disabled cards
-                      isHighlighted && "!opacity-100 ring-2 ring-amber-400/80 shadow-[0_0_12px_rgba(251,191,36,0.3)]",
+                      isHighlighted && "!opacity-100 ring-2 ring-[#ffa05c]/60",
                     )}
                   >
                     <PlayerCard player={player} />
@@ -469,39 +507,39 @@ export function PlayerPickerPanel({
                   );
                 })}
                 {paginated.length === 0 && (
-                  <p className="col-span-full text-center text-sm text-muted-foreground py-6">
+                  <p className="col-span-full text-center text-[0.9375rem] text-[#0e0907]/40 py-6">
                     No players match the current filters.
                   </p>
                 )}
               </div>
 
               {/* Cards pagination */}
-              <div id="player-picker-cards-pagination" className="flex items-center justify-between text-xs text-muted-foreground mt-3">
-                <span>
+              <div id="player-picker-cards-pagination" className="flex items-center justify-between text-[0.8125rem] text-[#0e0907]/45 mt-3">
+                <span className="font-mono tabular-nums">
                   {sorted.length === 0
                     ? "No results"
                     : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, sorted.length)} of ${sorted.length}`}
                 </span>
                 <div className="flex items-center gap-2">
                   <select
-                    className="rounded border border-input bg-background px-1 py-0.5 focus:outline-none"
+                    className="rounded-md border border-[#d9d0c9] bg-transparent px-1 py-0.5 text-[0.8125rem] focus:outline-none focus:border-[#ffa05c]"
                     value={pageSize}
                     onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
                   >
-                    {[12, 24, 48].map((n) => <option key={n} value={n}>{n}</option>)}
+                    {[8, 16, 32].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
                   <button
                     type="button"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="px-2 py-0.5 rounded border border-input disabled:opacity-40"
+                    className="px-2 py-0.5 rounded-md border border-[#d9d0c9] disabled:opacity-40 hover:bg-[#f0f0f0] transition-colors"
                   >‹</button>
-                  <span>{page} / {Math.max(1, Math.ceil(sorted.length / pageSize))}</span>
+                  <span className="font-mono tabular-nums">{page} / {Math.max(1, Math.ceil(sorted.length / pageSize))}</span>
                   <button
                     type="button"
                     onClick={() => setPage((p) => Math.min(Math.ceil(sorted.length / pageSize), p + 1))}
                     disabled={page >= Math.ceil(sorted.length / pageSize)}
-                    className="px-2 py-0.5 rounded border border-input disabled:opacity-40"
+                    className="px-2 py-0.5 rounded-md border border-[#d9d0c9] disabled:opacity-40 hover:bg-[#f0f0f0] transition-colors"
                   >›</button>
                 </div>
               </div>

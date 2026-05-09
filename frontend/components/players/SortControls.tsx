@@ -78,9 +78,11 @@ const SORT_FIELD_OPTIONS: string[] = [
 interface SortControlsProps {
   sortKeys: SortKey[];
   onSortKeysChange: (keys: SortKey[]) => void;
+  /** When provided, sort options are limited to visible (non-hidden) columns. */
+  hiddenColumns?: Set<string>;
 }
 
-export function SortControls({ sortKeys, onSortKeysChange }: SortControlsProps) {
+export function SortControls({ sortKeys, onSortKeysChange, hiddenColumns }: SortControlsProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -97,6 +99,11 @@ export function SortControls({ sortKeys, onSortKeysChange }: SortControlsProps) 
 
   const activeFieldSet = new Set(sortKeys.map((k) => k.field));
   const atMax = sortKeys.length >= MAX_SORT_KEYS;
+
+  // Only offer sort options for visible columns
+  const availableFields = hiddenColumns
+    ? SORT_FIELD_OPTIONS.filter((f) => !hiddenColumns.has(f))
+    : SORT_FIELD_OPTIONS;
 
   // Add a new sort key
   const addSortKey = (field: string) => {
@@ -127,7 +134,7 @@ export function SortControls({ sortKeys, onSortKeysChange }: SortControlsProps) 
       {sortKeys.map((key, index) => (
         <div
           key={key.field}
-          className="flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-1 text-xs font-medium"
+          className="flex items-center gap-1 rounded-sm border border-border bg-muted px-2 py-1 text-xs font-medium"
         >
           {/* Order indicator */}
           {sortKeys.length > 1 && (
@@ -172,7 +179,7 @@ export function SortControls({ sortKeys, onSortKeysChange }: SortControlsProps) 
 
           {dropdownOpen && (
             <div id="sort-dropdown" className="absolute top-full left-0 mt-1 z-50 w-52 max-h-60 overflow-y-auto rounded-md border border-border bg-background shadow-md">
-              {SORT_FIELD_OPTIONS.filter((f) => !activeFieldSet.has(f)).map((field) => (
+              {availableFields.filter((f) => !activeFieldSet.has(f)).map((field) => (
                 <button
                   key={field}
                   type="button"
