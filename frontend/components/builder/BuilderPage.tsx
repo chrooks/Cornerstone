@@ -6,7 +6,7 @@
  * Layout (top to bottom):
  *   1. Header row: breadcrumb, title, SalaryCap gauge, Evaluate CTA
  *   2. Court strip: full-width compact row of 9 slots, starter/bench divider
- *   3. Workspace: PlayerPool (primary, ~65%) | GM Notes (secondary, ~35%, collapsible)
+ *   3. Workspace: PlayerPool (primary, ~65%) | Feedback (secondary, ~35%, collapsible)
  *
  * Requires ?cornerstone=<id>. Redirects to /lab/[ruleset]/legends if missing.
  */
@@ -21,11 +21,11 @@ import { useBuilderSalary } from "@/lib/hooks/useBuilderSalary";
 import { BuilderHeader } from "./BuilderHeader";
 import { CourtStrip } from "./CourtStrip";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
-import { AssistantGmNotes } from "./AssistantGmNotes";
+import { BuilderFeedbackPanel } from "./BuilderFeedbackPanel";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
-/** Default workspace split: PlayerPool gets 65%, GM Notes gets 35% */
+/** Default workspace split: PlayerPool gets 65%, Feedback gets 35% */
 const DEFAULT_NOTES_FRAC = 0.35;
 const MIN_NOTES_FRAC = 0.20;
 const MAX_NOTES_FRAC = 0.50;
@@ -74,7 +74,7 @@ export function BuilderPage() {
     }
   }, [dataLoading, cornerstoneId, ruleset, router]);
 
-  // ── Full legend profile for skill grid and GM Notes ───────────────────────
+  // ── Full Legend profile for Skill Profile and Feedback ────────────────────
   const [legendDetail, setLegendDetail] = useState<LegendDetail | null>(null);
 
   useEffect(() => {
@@ -98,12 +98,13 @@ export function BuilderPage() {
 
   const salary = useBuilderSalary(roster.allSlots, cornerstoneId, hoveredSlotIndex);
 
-  // ── GM Notes collapse state ───────────────────────────────────────────────
+  // ── Feedback collapse state ───────────────────────────────────────────────
   const [notesCollapsed, setNotesCollapsed] = useState(false);
   const [hasNewNotes, setHasNewNotes] = useState(false);
+  const [latestEval, setLatestEval] = useState<RosterEvaluation | null>(null);
   /* When notes arrive while collapsed, pulse the indicator */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleEvaluation = useCallback((_eval: RosterEvaluation) => {
+  const handleEvaluation = useCallback((evaluation: RosterEvaluation) => {
+    setLatestEval(evaluation);
     if (notesCollapsed) setHasNewNotes(true);
   }, [notesCollapsed]);
 
@@ -113,8 +114,9 @@ export function BuilderPage() {
     setHasNewNotes(false);
   }, []);
 
-  // ── Player-scoped note filtering (slot click → filter GM Notes) ──────────
+  // ── Player-scoped note filtering (slot click → filter Feedback) ──────────
   const [focusedPlayerName, setFocusedPlayerName] = useState<string | null>(null);
+  const [hoveredPoolPlayer, setHoveredPoolPlayer] = useState<PlayerWithSkills | null>(null);
 
   const handleSlotClick = useCallback((slotIndex: number) => {
     const occupant = roster.allSlots[slotIndex - 1];
@@ -162,7 +164,14 @@ export function BuilderPage() {
     setHoveredCourtPlayerId(null);
   }, []);
 
-  // ── Workspace horizontal resize (PlayerPool | GM Notes) ───────────────────
+  const inspectedPlayer = useMemo(() => {
+    if (focusedPlayerName) {
+      return roster.allSlots.find((player) => player?.name === focusedPlayerName) ?? null;
+    }
+    return hoveredPoolPlayer;
+  }, [focusedPlayerName, hoveredPoolPlayer, roster.allSlots]);
+
+  // ── Workspace horizontal resize (PlayerPool | Feedback) ───────────────────
   const [notesFrac, setNotesFrac] = useState(DEFAULT_NOTES_FRAC);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
@@ -232,7 +241,6 @@ export function BuilderPage() {
         cornerstone={cornerstone}
         ruleset={ruleset}
         allSlotsFilled={roster.allSlots.every((p) => p !== null)}
-        onBackToLegends={() => router.push(`/lab/${ruleset}/legends`)}
       />
 
       {/* Row 2: Court strip — salary gauge + centered slot row */}
@@ -252,7 +260,7 @@ export function BuilderPage() {
         onSlotHoverEnd={handleSlotHoverEnd}
       />
 
-      {/* Row 3: Workspace — PlayerPool (primary) | GM Notes (secondary, collapsible) */}
+      {/* Row 3: Workspace — PlayerPool (primary) | Feedback (secondary, collapsible) */}
       <div
         id="builder-workspace"
         ref={workspaceRef}
@@ -281,12 +289,13 @@ export function BuilderPage() {
             onPlayerClick={roster.handlePlayerClick}
             onPlayerHover={(s) => salary.setPickerHoveredSalary(s)}
             onPlayerHoverEnd={() => salary.setPickerHoveredSalary(null)}
+            onPlayerInspectHover={setHoveredPoolPlayer}
             highlightedPlayerId={hoveredCourtPlayerId}
             isAdmin={isAdmin}
           />
         </div>
 
-        {/* Resize handle — between PlayerPool and GM Notes */}
+        {/* Resize handle — between PlayerPool and Feedback */}
         {!notesCollapsed && (
           <div
             id="builder-workspace-resize-handle"
@@ -300,14 +309,14 @@ export function BuilderPage() {
           </div>
         )}
 
-        {/* GM Notes — secondary feedback panel, collapsible */}
+        {/* Feedback — secondary panel, collapsible */}
         {notesCollapsed ? (
           /* Collapsed indicator — pulsing dot */
           <button
             id="builder-notes-collapsed"
             type="button"
             onClick={handleExpandNotes}
-            title="Expand Assistant GM Feedback"
+            title="Expand Feedback"
             className="flex-shrink-0 w-10 border border-[#d9d0c9] rounded-lg flex flex-col items-center justify-center gap-2 hover:bg-[#0e0907]/[0.02] transition-colors"
           >
             <div className={cn(
@@ -323,51 +332,22 @@ export function BuilderPage() {
         ) : (
           <div
             id="builder-notes-panel"
-            className="flex-shrink-0 min-w-0 border border-[#d9d0c9] rounded-lg overflow-hidden flex flex-col"
+            className="flex-shrink-0 min-w-0 overflow-hidden flex flex-col"
             style={{ flex: `${notesFrac} 1 0%` }}
           >
-            {/* Notes panel header — collapse button + player filter indicator */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-[#d9d0c9] flex-shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <h2 className="text-[0.9375rem] font-semibold text-[#0e0907]">Assistant GM Feedback</h2>
-                {focusedPlayerName && (
-                  <span className="text-[0.8125rem] text-[#0e0907]/45 truncate">
-                    · Showing notes for{" "}
-                    <span className="font-medium text-[#0e0907]">{focusedPlayerName}</span>
-                    {" · "}
-                    <button
-                      id="builder-notes-clear-filter"
-                      type="button"
-                      onClick={handleClearPlayerFocus}
-                      className="text-[#ffa05c] hover:text-[#fe6d34] transition-colors"
-                    >
-                      Show all
-                    </button>
-                  </span>
-                )}
-              </div>
-              <button
-                id="builder-notes-collapse-btn"
-                type="button"
-                onClick={() => setNotesCollapsed(true)}
-                title="Collapse feedback"
-                className="text-[#0e0907]/35 hover:text-[#0e0907]/60 transition-colors text-[0.8125rem] px-1"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Notes content — scrollable */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-3">
-              <AssistantGmNotes
-                allSlots={roster.allSlots}
-                legendDetail={legendDetail}
-                isAdmin={isAdmin}
-                onEvaluation={handleEvaluation}
-                onSuggestionFilter={handleSuggestionFilter}
-                focusedPlayerName={focusedPlayerName}
-              />
-            </div>
+            <BuilderFeedbackPanel
+              allSlots={roster.allSlots}
+              cornerstoneId={cornerstoneId}
+              legendDetail={legendDetail}
+              isAdmin={isAdmin}
+              latestEval={latestEval}
+              inspectedPlayer={inspectedPlayer}
+              focusedPlayerName={focusedPlayerName}
+              onClearPlayerFocus={handleClearPlayerFocus}
+              onCollapse={() => setNotesCollapsed(true)}
+              onEvaluation={handleEvaluation}
+              onSuggestionFilter={handleSuggestionFilter}
+            />
           </div>
         )}
       </div>

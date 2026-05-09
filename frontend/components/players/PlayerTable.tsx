@@ -166,6 +166,10 @@ interface PlayerTableProps {
   hiddenColumns?: Set<string>;
   /** Callback when user toggles column visibility (controlled mode). */
   onHiddenColumnsChange?: (hidden: Set<string>) => void;
+  /** Optional root sizing class for embedded table surfaces. */
+  rootClassName?: string;
+  /** Optional scroll-frame class for embedded table surfaces. */
+  wrapperClassName?: string;
 }
 
 export function PlayerTable({
@@ -190,6 +194,8 @@ export function PlayerTable({
   initialHiddenColumns,
   hiddenColumns: controlledHidden,
   onHiddenColumnsChange,
+  rootClassName,
+  wrapperClassName,
 }: PlayerTableProps) {
   const router = useRouter();
 
@@ -468,9 +474,9 @@ export function PlayerTable({
   const endRow = Math.min(page * pageSize, totalCount);
 
   return (
-    <div id="player-table-root">
+    <div id="player-table-root" className={rootClassName}>
       {/* Table wrapper with horizontal scroll */}
-      <div id="player-table-wrapper" className="overflow-x-auto rounded-lg border border-border">
+      <div id="player-table-wrapper" className={cn("overflow-x-auto rounded-lg border border-border", wrapperClassName)}>
         <table id="player-table" className="border-collapse text-xs" style={{ tableLayout: "fixed", minWidth: "max-content" }}>
           <thead>
             <tr className="bg-muted/60 border-b border-border">

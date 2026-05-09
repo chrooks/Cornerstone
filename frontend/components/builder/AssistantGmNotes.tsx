@@ -1,18 +1,18 @@
 "use client";
 
 /**
- * AssistantGmNotes.tsx — Live GM feedback panel for the roster builder.
+ * AssistantGmNotes.tsx — Live Feedback panel for Build.
  *
- * Fires POST /api/builder/evaluate whenever the set of players in the roster
+ * Fires POST /api/builder/evaluate whenever the set of Players in the Rotation
  * changes (add/remove). Reordering slots does NOT trigger a re-eval.
  * Debounced 500ms to avoid hammering the backend on rapid changes.
  *
- * States: idle → analyzing (skeleton) → ready (session history stack) | error
+ * States: idle → analyzing (skeleton) → ready (evaluation history stack) | error
  *
- * Session history model (email-style):
+ * Evaluation history model:
  *   Each successful eval is appended to sessionHistory. The most recent entry is
  *   expanded by default with the full S/W/S layout. Older entries render as
- *   compact rows with a subject line + timestamp + note count — click a row
+ *   compact rows with a change line + timestamp + note count. Click a row
  *   to expand it and collapse whichever entry was previously expanded.
  *
  * Player payload: cornerstone → slot=0, is_cornerstone=true
@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { evaluateRoster } from "@/lib/api";
+import { FeedbackTooltip } from "./FeedbackTooltip";
 import { NotesList } from "./NotesList";
 import { filterNotesByPlayer, type SuggestionFilter } from "@/lib/noteFilters";
 import type { LegendDetail, Note, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
@@ -39,6 +40,8 @@ interface HistoryEntry {
   timestamp: number;
   /** Subject-line summary of what changed since the previous eval (e.g. "Added Cooper Flagg to slot 4"). */
   changeDescription: string;
+  /** Full engine response for the same snapshot. Used for the current explanation header. */
+  evaluation: RosterEvaluation | null;
   notes: Note[];
   issues: Note[];
   suggestions: Note[];
@@ -106,7 +109,7 @@ function buildPlayerPayload(
 }
 
 /**
- * Derive a short subject line describing how the roster changed between two
+ * Derive a short line describing how the Rotation changed between two
  * snapshots. Pure function of the id+slot layout so it's robust to reorderings.
  */
 function describeRosterChange(
@@ -156,16 +159,7 @@ function describeRosterChange(
   return "Roster updated";
 }
 
-/** Format a Unix timestamp (ms) as a short time string like "3:47 PM". */
-function formatTime(ts: number): string {
-  try {
-    return new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  } catch {
-    return "";
-  }
-}
-
-/** Format a timestamp like an internal memo dateline. */
+/** Format a timestamp for compact evaluation history. */
 function formatMemoDate(ts: number): string {
   try {
     return new Date(ts).toLocaleString(undefined, {
@@ -182,27 +176,186 @@ function formatMemoDate(ts: number): string {
 // Maximum history entries to retain — older evals are dropped FIFO
 const HISTORY_LIMIT = 20;
 
+const BREAKDOWN_LABELS: Record<string, string> = {
+  starting_5: "Starting Lineup",
+  depth: "Depth",
+  archetype_diversity: "Versatility",
+  floor: "Floor",
+};
+
+function formatPct(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "0%";
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatScore(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "0.00";
+  return value.toFixed(2);
+}
+
+function topBreakdownItems(evaluation: RosterEvaluation | null) {
+  if (!evaluation) return [];
+  return Object.entries(evaluation.star_rating_breakdown)
+    .map(([key, value]) => ({
+      key,
+      label: BREAKDOWN_LABELS[key] ?? key.replaceAll("_", " "),
+      value,
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 3);
+}
+
+function weakestBreakdownItem(evaluation: RosterEvaluation | null) {
+  if (!evaluation) return null;
+  const [key, value] = Object.entries(evaluation.star_rating_breakdown)
+    .sort((a, b) => a[1] - b[1])[0] ?? [null, null];
+  if (!key || value == null) return null;
+  return {
+    key,
+    label: BREAKDOWN_LABELS[key] ?? key.replaceAll("_", " "),
+    value,
+  };
+}
+
+function CurrentEngineRead({ entry }: { entry: HistoryEntry }) {
+  const evaluation = entry.evaluation;
+  const drivers = topBreakdownItems(evaluation);
+  const weakest = weakestBreakdownItem(evaluation);
+  const identity = evaluation?.lineup_summary.archetype_labels?.length
+    ? evaluation.lineup_summary.archetype_labels.join(" / ")
+    : "Still forming";
+  const viable = evaluation?.lineup_summary.viable_lineups ?? 0;
+  const total = evaluation?.lineup_summary.total_lineups ?? 0;
+
+  return (
+    <section id={`history-entry-current-read-${entry.id}`} className="min-w-0 flex-1 space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[0.625rem] font-semibold uppercase tracking-[0.18em] text-[#0e0907]/40">
+            Current Engine Read
+          </p>
+          <h3 className="mt-1 text-[1rem] font-semibold leading-tight text-[#0e0907]">
+            {entry.changeDescription}
+          </h3>
+          <p className="mt-1 text-[0.8125rem] leading-snug text-[#0e0907]/55">
+            Rotation identity: <span className="font-medium text-[#0e0907]/75">{identity}</span>
+          </p>
+        </div>
+        <FeedbackTooltip
+          id={`history-entry-score-tooltip-${entry.id}`}
+          as="div"
+          align="right"
+          className="shrink-0"
+          content={(
+            <div className="space-y-2">
+              <p className="font-semibold text-[#0e0907]">Score</p>
+              <p>
+                Current live evaluation: <span className="font-mono text-[#0e0907]">{formatScore(evaluation?.star_rating)}</span> / 5.
+              </p>
+              <p>Built from lineup fit, depth, versatility, and floor checks after this pick.</p>
+            </div>
+          )}
+        >
+          <div className="border border-[#d9d0c9] bg-[#f0f0f0]/60 px-3 py-2 text-right transition-colors hover:border-[#ffa05c]/45">
+            <p className="text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-[#0e0907]/40">Score</p>
+            <p className="font-mono text-[1rem] font-semibold tabular-nums text-[#0e0907]">
+              {formatScore(evaluation?.star_rating)}
+            </p>
+          </div>
+        </FeedbackTooltip>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        {drivers.map((item) => (
+          <FeedbackTooltip
+            key={item.key}
+            id={`history-entry-driver-tooltip-${entry.id}-${item.key}`}
+            as="div"
+            content={(
+              <div className="space-y-2">
+                <p className="font-semibold text-[#0e0907]">{item.label}</p>
+                <p>
+                  This factor is contributing <span className="font-mono text-[#0e0907]">{formatPct(item.value)}</span> toward the current score. It rises when the evaluated lineups repeatedly satisfy this part of the engine.
+                </p>
+              </div>
+            )}
+            className="w-full"
+          >
+            <div id={`history-entry-driver-${entry.id}-${item.key}`} className="w-full border border-[#d9d0c9]/70 bg-[#f8f3f1]/60 px-3 py-2 transition-colors hover:border-[#ffa05c]/45">
+              <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-[#0e0907]/35">{item.label}</p>
+              <p className="mt-1 font-mono text-[0.8125rem] tabular-nums text-[#0e0907]">{formatPct(item.value)}</p>
+            </div>
+          </FeedbackTooltip>
+        ))}
+      </div>
+
+      <div className="grid gap-2 text-[0.8125rem] leading-snug text-[#0e0907]/60 sm:grid-cols-2">
+        <FeedbackTooltip
+          id={`history-entry-lineup-coverage-tooltip-${entry.id}`}
+          as="div"
+          content={(
+            <div className="space-y-2">
+              <p className="font-semibold text-[#0e0907]">Viable Lineup Combinations</p>
+              <p>How many evaluated lineup combinations cleared the engine&apos;s viability floor. More viable combinations means the build has more substitution paths.</p>
+            </div>
+          )}
+          className="w-full"
+        >
+          <p id={`history-entry-lineup-coverage-${entry.id}`} className="w-full border border-[#d9d0c9]/60 bg-[#f7f7f7] px-3 py-2 transition-colors hover:border-[#ffa05c]/45">
+            Viable Lineup Combinations: <span className="font-mono text-[#0e0907]">{viable}</span>
+            <span className="text-[#0e0907]/35"> / </span>
+            <span className="font-mono text-[#0e0907]">{total}</span>
+          </p>
+        </FeedbackTooltip>
+        {weakest && (
+          <FeedbackTooltip
+            id={`history-entry-primary-gap-tooltip-${entry.id}`}
+            as="div"
+            align="right"
+            content={(
+              <div className="space-y-2">
+                <p className="font-semibold text-[#0e0907]">Main pressure point</p>
+                <p>
+                  Lowest current score factor: <span className="font-medium text-[#0e0907]">{weakest.label}</span>{" "}
+                  at <span className="font-mono text-[#0e0907]">{formatPct(weakest.value)}</span>. This is the clearest path to improving the score.
+                </p>
+              </div>
+            )}
+            className="w-full"
+          >
+            <p id={`history-entry-primary-gap-${entry.id}`} className="w-full border border-[#d9d0c9]/60 bg-[#f7f7f7] px-3 py-2 transition-colors hover:border-[#ffa05c]/45">
+              Main pressure point: <span className="font-medium text-[#0e0907]">{weakest.label}</span>
+              <span className="ml-1 font-mono text-[#0e0907]/70">{formatPct(weakest.value)}</span>
+            </p>
+          </FeedbackTooltip>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // What-changed panel — shows specific notes that appeared/disappeared
 // ---------------------------------------------------------------------------
 
 function WhatChangedPanel({ added, removed }: { added: Note[]; removed: Note[] }) {
   const [isOpen, setIsOpen] = useState(true);
+  const [isVisible, setIsVisible] = useState(true);
   const totalCount = added.length + removed.length;
 
-  // Auto-collapse after 5 seconds so stale changes don't clutter the view
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    setIsVisible(true);
     setIsOpen(true);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setIsOpen(false), 5000);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    const timer = setTimeout(() => setIsVisible(false), 5000);
+    return () => clearTimeout(timer);
   }, [added, removed]);
+
+  if (!isVisible) return null;
 
   return (
     <div
       id="gm-notes-what-changed"
-      className="overflow-hidden rounded-lg border border-[#d9d0c9]/70 bg-[#f7f7f7]"
+      className="overflow-hidden border border-[#d9d0c9]/70 bg-[#f0f0f0]/55"
     >
       <button
         id="gm-notes-what-changed-toggle"
@@ -212,8 +365,8 @@ function WhatChangedPanel({ added, removed }: { added: Note[]; removed: Note[] }
         aria-expanded={isOpen}
       >
         <div>
-          <p className="text-[10px] uppercase tracking-[0.22em] text-[#0e0907]/35">Redlines</p>
-          <span className="text-[12px] font-semibold text-foreground">
+          <p className="text-[0.625rem] font-semibold uppercase tracking-[0.18em] text-[#0e0907]/40">Since Last Pick</p>
+          <span className="text-[0.8125rem] font-semibold text-[#0e0907]">
             What changed
             <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">({totalCount})</span>
           </span>
@@ -223,15 +376,15 @@ function WhatChangedPanel({ added, removed }: { added: Note[]; removed: Note[] }
         </span>
       </button>
       {isOpen && (
-        <div id="gm-notes-what-changed-content" className="space-y-2 px-4 pb-4">
+        <div id="gm-notes-what-changed-content" className="grid gap-2 px-4 pb-4 sm:grid-cols-2">
           {/* New notes — green accent */}
           {added.map((note) => (
             <div
               key={`added-${note.trace_key}`}
               id={`changed-added-${note.trace_key}`}
-              className="flex items-start gap-2 rounded-md border border-green-500/20 bg-green-500/5 px-3 py-2 text-[0.6875rem]"
+              className="flex items-start gap-2 border border-[#059669]/25 bg-[#059669]/5 px-3 py-2 text-[0.75rem]"
             >
-              <span className="text-green-500 font-mono flex-shrink-0">+</span>
+              <span className="text-[#059669] font-mono flex-shrink-0">+</span>
               <p className="text-muted-foreground leading-snug">{note.text}</p>
             </div>
           ))}
@@ -240,9 +393,9 @@ function WhatChangedPanel({ added, removed }: { added: Note[]; removed: Note[] }
             <div
               key={`removed-${note.trace_key}`}
               id={`changed-removed-${note.trace_key}`}
-              className="flex items-start gap-2 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-[0.6875rem] opacity-70"
+              className="flex items-start gap-2 border border-[#e53e3e]/25 bg-[#e53e3e]/5 px-3 py-2 text-[0.75rem] opacity-80"
             >
-              <span className="text-red-500 font-mono flex-shrink-0">−</span>
+              <span className="text-[#e53e3e] font-mono flex-shrink-0">−</span>
               <p className="text-muted-foreground leading-snug line-through">{note.text}</p>
             </div>
           ))}
@@ -282,41 +435,22 @@ function ExpandedHistoryEntry({
     <div
       id={`history-entry-expanded-${entry.id}`}
       className={cn(
-        "w-full min-w-0 space-y-4 rounded-lg border p-4",
+        "w-full min-w-0 space-y-4",
         isCurrent
-          ? "border-[#ffa05c]/30 bg-[#f7f7f7]"
-          : "border-[#d9d0c9]/80 bg-[#f7f7f7]",
+          ? ""
+          : "border border-[#d9d0c9]/70 bg-[#f7f7f7] p-3",
       )}
     >
-      {/* Header row — memo metadata + subject line */}
       <div className="flex items-start justify-between gap-3">
-        <div id={`history-entry-metadata-${entry.id}`} className="min-w-0 flex-1 space-y-3">
-
-          <div className="flex items-start justify-between gap-4">
-            <p id={`history-entry-subject-${entry.id}`} className="min-w-0 flex-1">
-              <span className="font-semibold text-foreground/85">Subject:</span> {entry.changeDescription}
-            </p>
-            <p className="flex-shrink-0 text-[11px] text-muted-foreground">
-              {formatTime(entry.timestamp)}
-              {isCurrent && <span className="ml-1.5 text-amber-600 dark:text-amber-400">• latest</span>}
-            </p>
-          </div>
-
-          <div className="grid gap-1 text-[11px] text-muted-foreground">
-            <p id={`history-entry-from-${entry.id}`}><span className="font-semibold text-foreground/85">From:</span> Assistant GM, Pro Scouting</p>
-            <p id={`history-entry-to-${entry.id}`}><span className="font-semibold text-foreground/85">To:</span> General Manager</p>
-          </div>
-
-
-        </div>
+        <CurrentEngineRead entry={entry} />
         {!isCurrent && onCollapse && (
           <button
             id={`history-entry-dismiss-${entry.id}`}
             type="button"
             onClick={onCollapse}
-            className="flex-shrink-0 rounded-md border border-[#d9d0c9]/70 px-3 py-1.5 text-[0.625rem] uppercase tracking-[0.18em] text-[#0e0907]/45 transition-colors hover:border-[#ffa05c]/40 hover:text-[#0e0907]"
+            className="flex-shrink-0 border border-[#d9d0c9]/70 px-3 py-1.5 text-[0.625rem] uppercase tracking-[0.18em] text-[#0e0907]/45 transition-colors hover:border-[#ffa05c]/40 hover:text-[#0e0907]"
           >
-            Latest memo
+            Latest
           </button>
         )}
       </div>
@@ -326,15 +460,16 @@ function ExpandedHistoryEntry({
         <WhatChangedPanel added={changedNotes.added} removed={changedNotes.removed} />
       )}
 
-      {/* Three-column strengths/weaknesses/suggestions */}
+      {/* Strengths / weaknesses / suggestions */}
       {entry.notes.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No issues found — roster looks solid.</p>
+        <p className="border border-dashed border-[#d9d0c9] bg-[#f0f0f0]/55 px-3 py-3 text-[0.8125rem] text-[#0e0907]/55">
+          No pressure points yet. Add Players to make the Rotation readable.
+        </p>
       ) : (
         <NotesList
           issues={entry.issues}
           suggestions={entry.suggestions}
           strengths={entry.strengths}
-          variant="email"
           onSuggestionFilter={onSuggestionFilter}
           showDebug={showDebug}
         />
@@ -344,7 +479,7 @@ function ExpandedHistoryEntry({
 }
 
 /**
- * Collapsed row — single-line email-style summary. Clicking expands this entry
+ * Collapsed row — single-line evaluation summary. Clicking expands this entry
  * (and collapses whichever one was previously expanded).
  */
 function CollapsedHistoryRow({
@@ -364,17 +499,17 @@ function CollapsedHistoryRow({
       id={`history-entry-collapsed-${entry.id}`}
       onClick={onExpand}
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg border border-[#d9d0c9]/70 bg-[#f7f7f7] px-4 py-3 text-left transition-colors",
+        "flex w-full items-center gap-3 border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-2.5 text-left transition-colors",
         "hover:border-[#ffa05c]/30 hover:bg-[#0e0907]/[0.02] focus:outline-none focus:ring-1 focus:ring-[#ffa05c]/50",
       )}
     >
       <div className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-[#ffa05c]/70" aria-hidden />
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] uppercase tracking-[0.18em] text-[#0e0907]/35">Scout note</p>
+        <p className="text-[10px] uppercase tracking-[0.18em] text-[#0e0907]/35">Previous eval</p>
         <p className="truncate font-medium text-foreground">{entry.changeDescription}</p>
         <p className="mt-0.5 text-[10px] text-muted-foreground">{formatMemoDate(entry.timestamp)}</p>
       </div>
-      {/* Pill: tiny counts of +/-/★ keep the row scannable like a mail subject line */}
+      {/* Compact counts keep older evaluations scannable. */}
       <div className="flex flex-shrink-0 items-center gap-2 rounded-md border border-[#d9d0c9]/70 bg-[#0e0907]/[0.03] px-2.5 py-1 text-[0.625rem] font-mono">
         <span className="text-green-600 dark:text-green-400">+{strengthCount}</span>
         <span className="text-red-600 dark:text-red-400">−{issueCount}</span>
@@ -410,7 +545,7 @@ export function AssistantGmNotes({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks previous notes to compute what-changed diffs (added/removed notes)
   const prevNotesRef = useRef<Note[] | null>(null);
-  // Tracks previous slot layout to derive the change subject line on the next eval
+  // Tracks previous slot layout to derive the change line on the next eval
   const prevSlotsRef = useRef<(PlayerWithSkills | null)[] | null>(null);
 
   // Stable key: changes on player add/remove OR starter↔bench boundary crossing.
@@ -468,7 +603,7 @@ export function AssistantGmNotes({
           setChangedNotes(null);
         }
 
-        // Derive the email-style subject line from the roster delta
+        // Derive the change line from the Rotation delta
         const changeDescription = describeRosterChange(prevSlotsRef.current, allSlots);
 
         // Build the new history entry — pre-bucketed into S/W/S for cheap re-renders
@@ -476,6 +611,7 @@ export function AssistantGmNotes({
           id: crypto.randomUUID(),
           timestamp: Date.now(),
           changeDescription,
+          evaluation: res.data,
           notes: newNotes,
           issues: newNotes.filter((n) => n.severity === "critical" || n.severity === "warning"),
           suggestions: newNotes.filter((n) => n.severity === "suggestion"),
@@ -523,7 +659,7 @@ export function AssistantGmNotes({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-    // rosterKey encodes legend + all slots; runEval is stable-ish via useCallback
+    // rosterKey encodes Legend + all slots; runEval is stable-ish via useCallback
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rosterKey]);
 
@@ -561,18 +697,18 @@ export function AssistantGmNotes({
   return (
     <div
       id="builder-gm-notes"
-      className="flex min-w-0 flex-col gap-4 rounded-lg border border-[#d9d0c9] bg-[#f7f7f7] p-4"
+      className="flex min-w-0 flex-col gap-4"
     >
       {state === "idle" && (
-        <p id="builder-gm-notes-idle" className="rounded-md border border-dashed border-[#d9d0c9] bg-[#f0f0f0]/60 px-4 py-6 text-[0.9375rem] text-[#0e0907]/45">
-          Add players to your roster to get GM feedback.
+        <p id="builder-gm-notes-idle" className="border border-dashed border-[#d9d0c9] bg-[#f0f0f0]/60 px-4 py-6 text-[0.9375rem] text-[#0e0907]/45">
+          Add Players to the Rotation to get live Feedback.
         </p>
       )}
 
       {state === "analyzing" && sessionHistory.length === 0 && (
         <ul
           id="builder-gm-notes-skeleton"
-          className="space-y-3 rounded-lg border border-[#d9d0c9]/70 bg-[#f0f0f0]/70 p-4 animate-pulse"
+          className="space-y-3 border border-[#d9d0c9]/70 bg-[#f0f0f0]/70 p-4 animate-pulse"
           aria-label="Loading notes"
         >
           {Array.from({ length: 4 }).map((_, i) => (
@@ -618,15 +754,15 @@ export function AssistantGmNotes({
 
           {/* "Viewing an older evaluation" hint when user has scrolled back */}
           {!isLatestExpanded && (
-            <p className="rounded-md border border-[#d9d0c9]/70 bg-[#f0f0f0]/70 px-3 py-2 text-[0.625rem] italic text-[#0e0907]/40">
-              Viewing an older evaluation. Click a newer row above or the return link to come back.
+            <p className="border border-[#d9d0c9]/70 bg-[#f0f0f0]/70 px-3 py-2 text-[0.625rem] italic text-[#0e0907]/40">
+              Viewing older eval. Click a newer row above or Latest to return.
             </p>
           )}
         </div>
       )}
 
       {state === "error" && (
-        <p id="builder-gm-notes-error" className="rounded-md border border-[#e53e3e]/30 bg-[#e53e3e]/5 px-4 py-3 text-[0.9375rem] text-[#e53e3e]">
+        <p id="builder-gm-notes-error" className="border border-[#e53e3e]/30 bg-[#e53e3e]/5 px-4 py-3 text-[0.9375rem] text-[#e53e3e]">
           {errorMsg ?? "Something went wrong."}
         </p>
       )}

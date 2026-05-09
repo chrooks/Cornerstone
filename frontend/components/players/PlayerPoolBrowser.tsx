@@ -71,6 +71,8 @@ interface PlayerPoolBrowserProps {
   cardGridClassName?: string;
   panelListClassName?: string;
   contentClassName?: string;
+  tableRootClassName?: string;
+  tableWrapperClassName?: string;
   emptyMessage: string;
   clearFiltersLabel?: string;
   persistViewModeKey?: string;
@@ -153,6 +155,8 @@ export function PlayerPoolBrowser({
   cardGridClassName = "grid grid-cols-[repeat(auto-fill,_minmax(280px,_1fr))] gap-4",
   panelListClassName = "flex flex-col gap-6",
   contentClassName,
+  tableRootClassName,
+  tableWrapperClassName,
   emptyMessage,
   clearFiltersLabel = "Clear filters",
   persistViewModeKey,
@@ -530,6 +534,8 @@ export function PlayerPoolBrowser({
           isAdmin={isAdmin}
           hiddenColumns={hiddenColumns}
           onHiddenColumnsChange={setHiddenColumns}
+          rootClassName={tableRootClassName}
+          wrapperClassName={tableWrapperClassName}
         />
       );
     }

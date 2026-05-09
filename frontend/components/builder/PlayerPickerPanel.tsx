@@ -9,7 +9,7 @@
  *   - No admin features
  *   - Legends excluded (activeRows only)
  *   - Row click fills the selected builder slot instead of navigating
- *   - Rows are draggable to builder slots
+ *   - Rows are draggable to Build slots
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -53,8 +53,8 @@ interface PlayerPickerPanelProps {
   /** Called after the salary filter has been injected — parent should reset trigger to null. */
   onSalaryFilterInjected?: () => void;
   /**
-   * When set, the panel programmatically adds a "Skill = X at tier Y" filter entry — used by
-   * the GM Notes suggestion-link flow. Parent resets this to null after the effect fires.
+   * When set, the panel programmatically adds a "Skill = X at tier Y" filter entry.
+   * Used by the Feedback suggestion-link flow. Parent resets this to null after the effect fires.
    */
   skillFilterTrigger?: SuggestionFilter | null;
   /** Called after the skill filter has been injected — parent should reset trigger to null. */
@@ -63,6 +63,10 @@ interface PlayerPickerPanelProps {
   onPlayerHover?: (salary: number | null) => void;
   /** Called on player row/card mouseleave — clears gauge preview. */
   onPlayerHoverEnd?: () => void;
+  /** Called on player row/card mouseenter with the full player for inspection surfaces. */
+  onPlayerInspectHover?: (player: PlayerWithSkills) => void;
+  /** Called on player row/card mouseleave to clear inspection preview. */
+  onPlayerInspectHoverEnd?: () => void;
   /**
    * Player ID to visually highlight in the list — used by BuilderPage to mirror
    * the CourtLineup face hover into the picker list.
@@ -86,6 +90,8 @@ export function PlayerPickerPanel({
   onSkillFilterInjected,
   onPlayerHover,
   onPlayerHoverEnd,
+  onPlayerInspectHover,
+  onPlayerInspectHoverEnd,
   highlightedPlayerId,
   isAdmin,
 }: PlayerPickerPanelProps) {
@@ -114,7 +120,7 @@ export function PlayerPickerPanel({
     });
   }, [salaryFilterTrigger]);
 
-  // ── Skill filter injection — GM Notes suggestion link ───────────────────
+  // ── Skill filter injection — Feedback suggestion link ───────────────────
   useEffect(() => {
     if (!skillFilterTrigger) return;
     setFilterRequest({
@@ -150,6 +156,16 @@ export function PlayerPickerPanel({
     if (filterRequest?.filterLabel === "Skill") onSkillFilterInjected?.();
     setFilterRequest(null);
   }, [filterRequest, onSalaryFilterInjected, onSkillFilterInjected]);
+
+  const handlePlayerHover = useCallback((player: PlayerWithSkills) => {
+    onPlayerHover?.(player.salary ?? null);
+    onPlayerInspectHover?.(player);
+  }, [onPlayerHover, onPlayerInspectHover]);
+
+  const handlePlayerHoverEnd = useCallback(() => {
+    onPlayerHoverEnd?.();
+    onPlayerInspectHoverEnd?.();
+  }, [onPlayerHoverEnd, onPlayerInspectHoverEnd]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -232,7 +248,9 @@ export function PlayerPickerPanel({
           defaultHiddenColumns={PICKER_HIDDEN_COLUMNS}
           cardGridClassName="grid grid-cols-4 gap-3"
           panelListClassName="flex flex-col gap-3"
-          contentClassName="flex-1 overflow-auto min-h-0"
+          contentClassName="flex-1 overflow-hidden min-h-0"
+          tableRootClassName="flex h-full min-h-0 flex-col"
+          tableWrapperClassName="min-h-0 flex-1 overflow-auto"
           emptyMessage="No players match the current filters."
           filterRequest={filterRequest}
           onFilterRequestHandled={handleFilterRequestHandled}
@@ -241,8 +259,8 @@ export function PlayerPickerPanel({
           }
           onRowClick={handleRowClick}
           onRowDragStart={handleRowDragStart}
-          onRowHover={onPlayerHover ? (player) => onPlayerHover(player.salary ?? null) : undefined}
-          onRowHoverEnd={onPlayerHoverEnd}
+          onRowHover={onPlayerHover || onPlayerInspectHover ? handlePlayerHover : undefined}
+          onRowHoverEnd={onPlayerHoverEnd || onPlayerInspectHoverEnd ? handlePlayerHoverEnd : undefined}
           highlightedPlayerId={highlightedPlayerId}
           isAdmin={isAdmin}
           getPrimaryActionLabel={(player) => isUnavailable(player) ? undefined : "Add to Rotation"}

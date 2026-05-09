@@ -10,6 +10,7 @@
  * Empty slots show "—". "None" tiers show "—" for cleaner display.
  */
 
+import { Fragment } from "react";
 import { cn } from "@/lib/utils";
 import { PUBLIC_SKILL_CATEGORIES, SKILL_LABELS } from "@/lib/skills";
 import type { PlayerWithSkills, LegendProfile } from "@/lib/types";
@@ -158,7 +159,7 @@ export function SkillGrid({
 
         <tbody>
           {Object.entries(PUBLIC_SKILL_CATEGORIES).map(([category, skills]) => (
-            <>
+            <Fragment key={category}>
               {/* Category divider row */}
               <tr key={`cat-${category}`} id={`builder-skill-category-${category.replace(/\s+/g, "-").toLowerCase()}`}>
                 <td className="sticky left-0 z-10 px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wider text-[#0e0907]/35 bg-[#f0f0f0] border-y border-[#d9d0c9]/60 whitespace-nowrap">
@@ -231,7 +232,7 @@ export function SkillGrid({
                   })()}
                 </tr>
               ))}
-            </>
+            </Fragment>
           ))}
         </tbody>
       </table>

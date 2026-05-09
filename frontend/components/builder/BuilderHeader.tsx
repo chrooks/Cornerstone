@@ -4,7 +4,7 @@
  * BuilderHeader — Top bar for the Build page in the Lab flow.
  *
  * Single header area with two rows:
- *   Row 1: Breadcrumb (left), ← Change Cornerstone (right)
+ *   Row 1: Breadcrumb
  *   Row 2: ★ Title (left), SalaryCap gauge (center-right), Evaluate CTA (right)
  */
 
@@ -18,7 +18,6 @@ interface BuilderHeaderProps {
   /** RuleSet slug from the route */
   ruleset: string;
   allSlotsFilled: boolean;
-  onBackToLegends: () => void;
 }
 
 /* ── Breadcrumb ── */
@@ -34,7 +33,11 @@ function Breadcrumb({ ruleset }: { ruleset: string }) {
       <span className="text-[#0e0907]/25" aria-hidden="true">/</span>
       <Link href="/lab" className="text-[#0e0907]/45 hover:text-[#0e0907]/70 transition-colors">{rulesetName}</Link>
       <span className="text-[#0e0907]/25" aria-hidden="true">/</span>
-      <span className="text-[#0e0907] font-medium">Build Your Rotation</span>
+      <Link href={`/lab/${ruleset}/legends`} className="text-[#0e0907]/45 hover:text-[#0e0907]/70 transition-colors">
+        Pick Your Cornerstone
+      </Link>
+      <span className="text-[#0e0907]/25" aria-hidden="true">/</span>
+      <span className="text-[#0e0907] font-medium" aria-current="page">Build Your Rotation</span>
     </nav>
   );
 }
@@ -43,24 +46,13 @@ export function BuilderHeader({
   cornerstone,
   ruleset,
   allSlotsFilled,
-  onBackToLegends,
 }: BuilderHeaderProps) {
   const searchParams = useSearchParams();
 
   return (
     <div id="builder-header" className="flex flex-col gap-1.5 mb-3 flex-shrink-0">
-      {/* Row 1: Breadcrumb + back link */}
-      <div className="flex items-center justify-between gap-4">
-        <Breadcrumb ruleset={ruleset} />
-        <button
-          id="builder-back-btn"
-          type="button"
-          onClick={onBackToLegends}
-          className="text-[0.8125rem] text-[#0e0907]/45 hover:text-[#0e0907]/70 transition-colors shrink-0"
-        >
-          ← Change Cornerstone
-        </button>
-      </div>
+      {/* Row 1: Breadcrumb */}
+      <Breadcrumb ruleset={ruleset} />
 
       {/* Row 2: Title + salary gauge + Evaluate CTA */}
       <div className="flex items-center justify-between gap-4">
