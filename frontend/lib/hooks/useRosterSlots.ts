@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import { readSlotsFromParams, buildSlotsParams } from "@/lib/roster-utils";
 import type { PlayerWithSkills } from "@/lib/types";
@@ -42,6 +42,7 @@ export function useRosterSlots(
   activeRows: PlayerWithSkills[],
 ): UseRosterSlotsReturn {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   // ── Flat 8-slot lineup state ────────────────────────────────────────────
@@ -69,9 +70,9 @@ export function useRosterSlots(
     (newCornerstoneId: string | null, newSlots: (PlayerWithSkills | null)[]) => {
       const params = buildSlotsParams(newCornerstoneId, newSlots);
       const qs = params.toString();
-      router.replace(`/builder${qs ? `?${qs}` : ""}`, { scroll: false });
+      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
     },
-    [router],
+    [pathname, router],
   );
 
   // ── Legend selection ─────────────────────────────────────────────────────

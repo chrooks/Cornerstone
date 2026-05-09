@@ -93,11 +93,14 @@ interface BuilderFeedbackPanelProps {
   cornerstoneId: string | null;
   legendDetail: LegendDetail | null;
   isAdmin: boolean;
+  collapsed: boolean;
+  hasUnreadFeedback: boolean;
   latestEval: RosterEvaluation | null;
   inspectedPlayer: PlayerWithSkills | null;
   focusedPlayerName: string | null;
   onClearPlayerFocus: () => void;
   onCollapse: () => void;
+  onExpand: () => void;
   onEvaluation: (evaluation: RosterEvaluation) => void;
   onSuggestionFilter: (filter: SuggestionFilter, note: Note) => void;
 }
@@ -772,11 +775,14 @@ export function BuilderFeedbackPanel({
   cornerstoneId,
   legendDetail,
   isAdmin,
+  collapsed,
+  hasUnreadFeedback,
   latestEval,
   inspectedPlayer,
   focusedPlayerName,
   onClearPlayerFocus,
   onCollapse,
+  onExpand,
   onEvaluation,
   onSuggestionFilter,
 }: BuilderFeedbackPanelProps) {
@@ -790,7 +796,40 @@ export function BuilderFeedbackPanel({
   const visibleTabs = tabs.filter((tab) => !tab.adminOnly || isAdmin);
 
   return (
-    <div id="builder-feedback-panel" className="flex h-full min-w-0 flex-col overflow-hidden border border-[#d9d0c9] bg-[#f7f7f7]">
+    <div id="builder-feedback-panel" className="flex h-full min-w-0 flex-col">
+      {collapsed && (
+        <button
+          id="builder-notes-collapsed"
+          type="button"
+          onClick={onExpand}
+          title="Expand Feedback"
+          aria-label={hasUnreadFeedback ? "Expand Feedback, new feedback available" : "Expand Feedback"}
+          className={cn(
+            "flex h-full w-10 flex-shrink-0 flex-col items-center justify-center gap-2 border transition-colors hover:bg-[#0e0907]/[0.02]",
+            hasUnreadFeedback
+              ? "border-[#ffa05c] bg-[#ffa05c]/10 ring-1 ring-[#ffa05c]/45"
+              : "border-[#d9d0c9] bg-[#f7f7f7]",
+          )}
+        >
+          <div
+            id="builder-feedback-collapsed-dot"
+            className={cn(
+              "h-3 w-3 rounded-full transition-colors",
+              hasUnreadFeedback ? "animate-pulse bg-[#ffa05c]" : "bg-[#d9d0c9]",
+            )}
+          />
+          <span className="text-[0.5625rem] font-medium uppercase tracking-wider text-[#0e0907]/35 [writing-mode:vertical-lr]">
+            Feedback
+          </span>
+        </button>
+      )}
+      <div
+        id="builder-feedback-expanded-panel"
+        className={cn(
+          "flex h-full min-w-0 flex-col overflow-hidden border border-[#d9d0c9] bg-[#f7f7f7]",
+          collapsed && "hidden",
+        )}
+      >
       <div id="builder-feedback-header" className="flex shrink-0 items-center justify-between gap-3 border-b border-[#d9d0c9] bg-[#f0f0f0]/55 px-3 py-2">
         <div className="min-w-0">
           <div id="builder-feedback-tabs" className="flex items-center gap-1">
@@ -837,7 +876,7 @@ export function BuilderFeedbackPanel({
       </div>
 
       <div id="builder-feedback-content" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3">
-        {activeTab === "feedback" && (
+        <div id="builder-feedback-tab-panel-feedback" className={cn(activeTab !== "feedback" && "hidden")}>
           <AssistantGmNotes
             allSlots={allSlots}
             legendDetail={legendDetail}
@@ -846,9 +885,9 @@ export function BuilderFeedbackPanel({
             onSuggestionFilter={onSuggestionFilter}
             focusedPlayerName={focusedPlayerName}
           />
-        )}
+        </div>
 
-        {activeTab === "skills" && (
+        <div id="builder-feedback-tab-panel-skills" className={cn(activeTab !== "skills" && "hidden")}>
           <SkillProfileDiagnostic
             allSlots={allSlots}
             cornerstoneId={cornerstoneId}
@@ -856,29 +895,32 @@ export function BuilderFeedbackPanel({
             latestEval={latestEval}
             inspectedPlayer={inspectedPlayer}
           />
-        )}
+        </div>
 
-        {activeTab === "debug" && isAdmin && (
+        {isAdmin && (
           <div id="builder-feedback-debug-panel" className="space-y-4">
-            {latestEval ? (
-              <>
-                <CohesionDebugPanel evaluation={latestEval} />
-                <details id="builder-feedback-debug-notes-json">
-                  <summary className="cursor-pointer text-[0.625rem] font-semibold uppercase tracking-wider text-[#0e0907]/35 hover:text-[#0e0907]/60">
-                    Raw Notes JSON
-                  </summary>
-                  <pre id="builder-feedback-debug-notes-json-content" className="mt-2 max-h-[400px] overflow-auto border border-[#d9d0c9]/60 bg-[#f0f0f0]/50 p-2 text-[0.5625rem] font-mono text-[#0e0907]/45 whitespace-pre-wrap">
-                    {JSON.stringify(latestEval.notes, null, 2)}
-                  </pre>
-                </details>
-              </>
-            ) : (
-              <p id="builder-feedback-debug-empty" className="border border-dashed border-[#d9d0c9] bg-[#f0f0f0]/55 px-3 py-3 text-[0.8125rem] text-[#0e0907]/55">
-                Debug data appears after live eval.
-              </p>
-            )}
+            <div id="builder-feedback-tab-panel-debug" className={cn(activeTab !== "debug" && "hidden")}>
+              {latestEval ? (
+                <>
+                  <CohesionDebugPanel evaluation={latestEval} />
+                  <details id="builder-feedback-debug-notes-json">
+                    <summary className="cursor-pointer text-[0.625rem] font-semibold uppercase tracking-wider text-[#0e0907]/35 hover:text-[#0e0907]/60">
+                      Raw Notes JSON
+                    </summary>
+                    <pre id="builder-feedback-debug-notes-json-content" className="mt-2 max-h-[400px] overflow-auto border border-[#d9d0c9]/60 bg-[#f0f0f0]/50 p-2 text-[0.5625rem] font-mono text-[#0e0907]/45 whitespace-pre-wrap">
+                      {JSON.stringify(latestEval.notes, null, 2)}
+                    </pre>
+                  </details>
+                </>
+              ) : (
+                <p id="builder-feedback-debug-empty" className="border border-dashed border-[#d9d0c9] bg-[#f0f0f0]/55 px-3 py-3 text-[0.8125rem] text-[#0e0907]/55">
+                  Debug data appears after live eval.
+                </p>
+              )}
+            </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

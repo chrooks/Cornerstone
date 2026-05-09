@@ -26,9 +26,9 @@ import type { SuggestionFilter } from "@/lib/noteFilters";
 import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
 
 /** Default workspace split: PlayerPool gets 65%, Feedback gets 35% */
-const DEFAULT_NOTES_FRAC = 0.35;
-const MIN_NOTES_FRAC = 0.20;
-const MAX_NOTES_FRAC = 0.50;
+const DEFAULT_FEEDBACK_FRAC = 0.35;
+const MIN_FEEDBACK_FRAC = 0.20;
+const MAX_FEEDBACK_FRAC = 0.50;
 
 export function BuilderPage() {
   const searchParams = useSearchParams();
@@ -99,19 +99,19 @@ export function BuilderPage() {
   const salary = useBuilderSalary(roster.allSlots, cornerstoneId, hoveredSlotIndex);
 
   // ── Feedback collapse state ───────────────────────────────────────────────
-  const [notesCollapsed, setNotesCollapsed] = useState(false);
-  const [hasNewNotes, setHasNewNotes] = useState(false);
+  const [feedbackCollapsed, setFeedbackCollapsed] = useState(false);
+  const [hasUnreadFeedback, setHasUnreadFeedback] = useState(false);
   const [latestEval, setLatestEval] = useState<RosterEvaluation | null>(null);
-  /* When notes arrive while collapsed, pulse the indicator */
+  /* When Feedback arrives while collapsed, pulse the indicator */
   const handleEvaluation = useCallback((evaluation: RosterEvaluation) => {
     setLatestEval(evaluation);
-    if (notesCollapsed) setHasNewNotes(true);
-  }, [notesCollapsed]);
+    if (feedbackCollapsed) setHasUnreadFeedback(true);
+  }, [feedbackCollapsed]);
 
-  /* Expanding notes clears the new-notes indicator */
-  const handleExpandNotes = useCallback(() => {
-    setNotesCollapsed(false);
-    setHasNewNotes(false);
+  /* Expanding Feedback clears the unread indicator */
+  const handleExpandFeedback = useCallback(() => {
+    setFeedbackCollapsed(false);
+    setHasUnreadFeedback(false);
   }, []);
 
   // ── Player-scoped note filtering (slot click → filter Feedback) ──────────
@@ -172,7 +172,7 @@ export function BuilderPage() {
   }, [focusedPlayerName, hoveredPoolPlayer, roster.allSlots]);
 
   // ── Workspace horizontal resize (PlayerPool | Feedback) ───────────────────
-  const [notesFrac, setNotesFrac] = useState(DEFAULT_NOTES_FRAC);
+  const [feedbackFrac, setFeedbackFrac] = useState(DEFAULT_FEEDBACK_FRAC);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
 
@@ -180,16 +180,16 @@ export function BuilderPage() {
     e.preventDefault();
     isDraggingRef.current = true;
     const startX = e.clientX;
-    const startFrac = notesFrac;
+    const startFrac = feedbackFrac;
 
     const onMove = (moveEvent: MouseEvent) => {
       if (!workspaceRef.current || !isDraggingRef.current) return;
       const containerWidth = workspaceRef.current.getBoundingClientRect().width;
       const dx = moveEvent.clientX - startX;
       const deltaFrac = dx / containerWidth;
-      /* Notes panel grows when handle moves left (subtract delta) */
-      const newFrac = Math.max(MIN_NOTES_FRAC, Math.min(MAX_NOTES_FRAC, startFrac - deltaFrac));
-      setNotesFrac(newFrac);
+      /* Feedback panel grows when handle moves left (subtract delta) */
+      const newFrac = Math.max(MIN_FEEDBACK_FRAC, Math.min(MAX_FEEDBACK_FRAC, startFrac - deltaFrac));
+      setFeedbackFrac(newFrac);
     };
 
     const onUp = () => {
@@ -204,7 +204,7 @@ export function BuilderPage() {
     document.addEventListener("mouseup", onUp);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
-  }, [notesFrac]);
+  }, [feedbackFrac]);
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (dataLoading) {
@@ -273,7 +273,7 @@ export function BuilderPage() {
             "flex-1 min-w-0 border border-[#d9d0c9] rounded-lg p-3 overflow-hidden flex flex-col",
             pickerFlashing && "border-[#ffa05c] ring-1 ring-[#ffa05c]/40",
           )}
-          style={!notesCollapsed ? { flex: `${1 - notesFrac} 1 0%` } : undefined}
+          style={!feedbackCollapsed ? { flex: `${1 - feedbackFrac} 1 0%` } : undefined}
         >
           <PlayerPickerPanel
             players={activeRows}
@@ -290,13 +290,14 @@ export function BuilderPage() {
             onPlayerHover={(s) => salary.setPickerHoveredSalary(s)}
             onPlayerHoverEnd={() => salary.setPickerHoveredSalary(null)}
             onPlayerInspectHover={setHoveredPoolPlayer}
+            onPlayerInspectHoverEnd={() => setHoveredPoolPlayer(null)}
             highlightedPlayerId={hoveredCourtPlayerId}
             isAdmin={isAdmin}
           />
         </div>
 
         {/* Resize handle — between PlayerPool and Feedback */}
-        {!notesCollapsed && (
+        {!feedbackCollapsed && (
           <div
             id="builder-workspace-resize-handle"
             role="separator"
@@ -310,46 +311,28 @@ export function BuilderPage() {
         )}
 
         {/* Feedback — secondary panel, collapsible */}
-        {notesCollapsed ? (
-          /* Collapsed indicator — pulsing dot */
-          <button
-            id="builder-notes-collapsed"
-            type="button"
-            onClick={handleExpandNotes}
-            title="Expand Feedback"
-            className="flex-shrink-0 w-10 border border-[#d9d0c9] rounded-lg flex flex-col items-center justify-center gap-2 hover:bg-[#0e0907]/[0.02] transition-colors"
-          >
-            <div className={cn(
-              "w-3 h-3 rounded-full transition-colors",
-              hasNewNotes
-                ? "bg-[#ffa05c] animate-pulse"
-                : "bg-[#d9d0c9]",
-            )} />
-            <span className="text-[0.5625rem] font-medium text-[#0e0907]/35 [writing-mode:vertical-lr] tracking-wider uppercase">
-              Feedback
-            </span>
-          </button>
-        ) : (
-          <div
-            id="builder-notes-panel"
-            className="flex-shrink-0 min-w-0 overflow-hidden flex flex-col"
-            style={{ flex: `${notesFrac} 1 0%` }}
-          >
-            <BuilderFeedbackPanel
-              allSlots={roster.allSlots}
-              cornerstoneId={cornerstoneId}
-              legendDetail={legendDetail}
-              isAdmin={isAdmin}
-              latestEval={latestEval}
-              inspectedPlayer={inspectedPlayer}
-              focusedPlayerName={focusedPlayerName}
-              onClearPlayerFocus={handleClearPlayerFocus}
-              onCollapse={() => setNotesCollapsed(true)}
-              onEvaluation={handleEvaluation}
-              onSuggestionFilter={handleSuggestionFilter}
-            />
-          </div>
-        )}
+        <div
+          id="builder-notes-panel"
+          className="flex-shrink-0 min-w-0 overflow-hidden flex flex-col"
+          style={feedbackCollapsed ? { flex: "0 0 2.5rem" } : { flex: `${feedbackFrac} 1 0%` }}
+        >
+          <BuilderFeedbackPanel
+            allSlots={roster.allSlots}
+            cornerstoneId={cornerstoneId}
+            legendDetail={legendDetail}
+            isAdmin={isAdmin}
+            collapsed={feedbackCollapsed}
+            hasUnreadFeedback={hasUnreadFeedback}
+            latestEval={latestEval}
+            inspectedPlayer={inspectedPlayer}
+            focusedPlayerName={focusedPlayerName}
+            onClearPlayerFocus={handleClearPlayerFocus}
+            onCollapse={() => setFeedbackCollapsed(true)}
+            onExpand={handleExpandFeedback}
+            onEvaluation={handleEvaluation}
+            onSuggestionFilter={handleSuggestionFilter}
+          />
+        </div>
       </div>
     </main>
   );

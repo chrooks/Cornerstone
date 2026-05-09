@@ -115,7 +115,7 @@ function buildPlayerPayload(
 function describeRosterChange(
   prev: (PlayerWithSkills | null)[] | null,
   curr: (PlayerWithSkills | null)[],
-): string {
+): string | null {
   if (!prev) return "Initial evaluation";
 
   // Build id→slot maps for both snapshots
@@ -130,10 +130,23 @@ function describeRosterChange(
   const removed: PlayerWithSkills[] = [];
   prev.forEach((p) => { if (p && !currMap.has(p.id)) removed.push(p); });
 
-  // Detect a pure slot reorder (identical id set, different positions)
-  const reordered =
-    added.length === 0 && removed.length === 0 &&
-    curr.some((p, i) => p && prevMap.get(p.id) !== i);
+  // Detect movement across the Starting Lineup / bench Boundary. Pure slot
+  // reorders inside either group are intentionally not visible updates.
+  const boundaryMoves = curr
+    .map((p, i) => {
+      if (!p) return null;
+      const prevIndex = prevMap.get(p.id);
+      if (prevIndex == null) return null;
+      const wasStarter = prevIndex < STARTER_BOUNDARY;
+      const isStarter = i < STARTER_BOUNDARY;
+      if (wasStarter === isStarter) return null;
+      return {
+        player: p,
+        from: wasStarter ? "Starting Lineup" : "bench",
+        to: isStarter ? "Starting Lineup" : "bench",
+      };
+    })
+    .filter((move): move is { player: PlayerWithSkills; from: string; to: string } => move !== null);
 
   if (added.length === 1 && removed.length === 0) {
     return `Added ${added[0].player.name} to slot ${added[0].slot}`;
@@ -153,10 +166,14 @@ function describeRosterChange(
   if (removed.length > 0) {
     return `Removed ${removed.length} players`;
   }
-  if (reordered) {
-    return "Reordered lineup";
+  if (boundaryMoves.length === 1) {
+    const move = boundaryMoves[0];
+    return `${move.player.name} moved from the ${move.from} to the ${move.to}`;
   }
-  return "Roster updated";
+  if (boundaryMoves.length > 1) {
+    return `Moved ${boundaryMoves.length} players across the Starting Lineup / bench split`;
+  }
+  return null;
 }
 
 /** Format a timestamp for compact evaluation history. */
@@ -175,6 +192,7 @@ function formatMemoDate(ts: number): string {
 
 // Maximum history entries to retain — older evals are dropped FIFO
 const HISTORY_LIMIT = 20;
+const STARTER_BOUNDARY = 5;
 
 const BREAKDOWN_LABELS: Record<string, string> = {
   starting_5: "Starting Lineup",
@@ -182,6 +200,17 @@ const BREAKDOWN_LABELS: Record<string, string> = {
   archetype_diversity: "Versatility",
   floor: "Floor",
 };
+
+const BREAKDOWN_EXPLAINERS: Record<string, string> = {
+  starting_5: "How much the first five slots hold together as the primary Lineup. This rises when the starters cover creation, spacing, defense, and finishing without forcing one Player to solve every possession.",
+  depth: "How many useful five-player combinations survive beyond the starters. This rises when bench Players keep the Rotation playable instead of creating fragile substitution paths.",
+  archetype_diversity: "How many different lineup styles the Rotation can credibly play. This rises when the same nine Players can form multiple identities, like defensive, offensive, transition, or balanced groups.",
+  floor: "How safe the Rotation is across its middle lineup outcomes. This rises when the median Lineup Combination stays solid, not just when the best Lineup is strong.",
+};
+
+function breakdownExplainer(key: string): string {
+  return BREAKDOWN_EXPLAINERS[key] ?? "How this score factor affects the current eval.";
+}
 
 function formatPct(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "0%";
@@ -275,7 +304,12 @@ function CurrentEngineRead({ entry }: { entry: HistoryEntry }) {
               <div className="space-y-2">
                 <p className="font-semibold text-[#0e0907]">{item.label}</p>
                 <p>
-                  This factor is contributing <span className="font-mono text-[#0e0907]">{formatPct(item.value)}</span> toward the current score. It rises when the evaluated lineups repeatedly satisfy this part of the engine.
+                  <span className="font-mono text-[#0e0907]">{formatPct(item.value)}</span>{" "}
+                  means this factor is currently this satisfied in the engine.
+                </p>
+                <p>{breakdownExplainer(item.key)}</p>
+                <p className="text-[#0e0907]/55">
+                  Higher is better. Low values are pressure points for the next Build change.
                 </p>
               </div>
             )}
@@ -317,8 +351,10 @@ function CurrentEngineRead({ entry }: { entry: HistoryEntry }) {
                 <p className="font-semibold text-[#0e0907]">Main pressure point</p>
                 <p>
                   Lowest current score factor: <span className="font-medium text-[#0e0907]">{weakest.label}</span>{" "}
-                  at <span className="font-mono text-[#0e0907]">{formatPct(weakest.value)}</span>. This is the clearest path to improving the score.
+                  at <span className="font-mono text-[#0e0907]">{formatPct(weakest.value)}</span>.
                 </p>
+                <p>{breakdownExplainer(weakest.key)}</p>
+                <p className="text-[#0e0907]/55">This is the clearest path to improving the score.</p>
               </div>
             )}
             className="w-full"
@@ -417,6 +453,7 @@ function ExpandedHistoryEntry({
   entry,
   isCurrent,
   changedNotes,
+  focusedPlayerName,
   onCollapse,
   onSuggestionFilter,
   showDebug = false,
@@ -425,6 +462,8 @@ function ExpandedHistoryEntry({
   isCurrent: boolean;
   /** What-changed diff against the previous eval — only shown for the current entry. */
   changedNotes: { added: Note[]; removed: Note[] } | null;
+  /** When present, the visible notes are filtered to this Player. */
+  focusedPlayerName?: string | null;
   /** Only shown on non-current entries; clicking dismisses this one back to the latest. */
   onCollapse?: () => void;
   onSuggestionFilter?: (filter: SuggestionFilter, note: Note) => void;
@@ -462,8 +501,13 @@ function ExpandedHistoryEntry({
 
       {/* Strengths / weaknesses / suggestions */}
       {entry.notes.length === 0 ? (
-        <p className="border border-dashed border-[#d9d0c9] bg-[#f0f0f0]/55 px-3 py-3 text-[0.8125rem] text-[#0e0907]/55">
-          No pressure points yet. Add Players to make the Rotation readable.
+        <p
+          id={focusedPlayerName ? "builder-gm-notes-focused-empty" : "builder-gm-notes-empty"}
+          className="border border-dashed border-[#d9d0c9] bg-[#f0f0f0]/55 px-3 py-3 text-[0.8125rem] text-[#0e0907]/55"
+        >
+          {focusedPlayerName
+            ? `No ${focusedPlayerName}-specific pressure points in this eval. Use Show all to see the full Rotation read.`
+            : "No pressure points yet. Add Players to make the Rotation readable."}
         </p>
       ) : (
         <NotesList
@@ -547,6 +591,12 @@ export function AssistantGmNotes({
   const prevNotesRef = useRef<Note[] | null>(null);
   // Tracks previous slot layout to derive the change line on the next eval
   const prevSlotsRef = useRef<(PlayerWithSkills | null)[] | null>(null);
+  // Keeps async evaluation completion wired to the latest parent callback.
+  const onEvaluationRef = useRef(onEvaluation);
+
+  useEffect(() => {
+    onEvaluationRef.current = onEvaluation;
+  }, [onEvaluation]);
 
   // Stable key: changes on player add/remove OR starter↔bench boundary crossing.
   // Swaps *within* starters (slots 1-5) or *within* bench (slots 6-9) do NOT
@@ -555,9 +605,8 @@ export function AssistantGmNotes({
   // Legend ID is prefixed so switching cornerstones triggers re-eval even with 0 supporting players.
   const rosterKey = useMemo(() => {
     const legendPart = legendDetail ? `legend:${legendDetail.id}` : "legend:none";
-    // allSlots indices 0-4 = starting lineup (cornerstone + co-star + starters)
+    // allSlots indices 0-4 = Starting Lineup (cornerstone + co-star + starters)
     // allSlots indices 5-8 = bench
-    const STARTER_BOUNDARY = 5;
     const starterIds = allSlots
       .slice(0, STARTER_BOUNDARY)
       .filter(Boolean)
@@ -591,6 +640,18 @@ export function AssistantGmNotes({
         // diff logic work identically for both engine responses
         const newNotes: Note[] = normalizeCohesionNotes(res.data.notes);
 
+        // Derive the change line from the Rotation delta. If an irrelevant
+        // reorder somehow reaches this point, keep the latest eval fresh but
+        // do not add a visible update entry.
+        const changeDescription = describeRosterChange(prevSlotsRef.current, allSlots);
+        if (!changeDescription) {
+          prevNotesRef.current = newNotes;
+          prevSlotsRef.current = allSlots.slice();
+          onEvaluationRef.current?.(res.data);
+          setState("ready");
+          return;
+        }
+
         // Compute what-changed diff: which specific notes appeared or disappeared
         const prevN = prevNotesRef.current;
         if (prevN) {
@@ -602,9 +663,6 @@ export function AssistantGmNotes({
         } else {
           setChangedNotes(null);
         }
-
-        // Derive the change line from the Rotation delta
-        const changeDescription = describeRosterChange(prevSlotsRef.current, allSlots);
 
         // Build the new history entry — pre-bucketed into S/W/S for cheap re-renders
         const entry: HistoryEntry = {
@@ -627,7 +685,7 @@ export function AssistantGmNotes({
         prevSlotsRef.current = allSlots.slice(); // immutable snapshot
 
         // Lift full evaluation to parent so the Debug tab can display scoring breakdown
-        onEvaluation?.(res.data);
+        onEvaluationRef.current?.(res.data);
         setState("ready");
       } else {
         setErrorMsg(res.error ?? "Evaluation failed");
@@ -737,6 +795,7 @@ export function AssistantGmNotes({
                   entry={filteredCurrentEntry}
                   isCurrent={isLatest}
                   changedNotes={isLatest && !focusedPlayerName ? changedNotes : null}
+                  focusedPlayerName={focusedPlayerName}
                   onCollapse={!isLatest ? () => setExpandedEntryId(null) : undefined}
                   onSuggestionFilter={onSuggestionFilter}
                   showDebug={isAdmin}
