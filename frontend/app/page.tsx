@@ -28,7 +28,7 @@ const STEPS = [
     number: "01",
     label: "Pick Your Rules",
     description:
-      "Salary cap or free-for-all. Current players, all-time greats, or both. Choose a ruleset that defines the game.",
+      "Salary cap or free-for-all. Current players, all-time greats, or both. Choose a Rule Set that defines the game.",
   },
   {
     number: "02",
@@ -103,11 +103,11 @@ export default function LandingPage() {
             {/* CTAs */}
             <div id="landing-cta" className="flex items-center gap-3 mt-8">
               <Link
-                id="landing-cta-builder"
-                href="/builder"
+                id="landing-cta-lab"
+                href="/lab"
                 className="inline-flex items-center px-5 py-2.5 rounded-md bg-[#0e0907] text-[#ffa05c] text-sm font-medium tracking-[0.01em] transition-all duration-150 hover:bg-[#0e0907]/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e0907]"
               >
-                Build a Roster
+                Enter the Lab
               </Link>
               <Link
                 id="landing-cta-players"
@@ -279,10 +279,10 @@ export default function LandingPage() {
           <div className="mt-16 pt-8 border-t border-border">
             <Link
               id="landing-final-cta"
-              href="/builder"
+              href="/lab"
               className="inline-flex items-center px-5 py-2.5 rounded-md bg-primary text-primary-foreground text-sm font-medium tracking-[0.01em] transition-all duration-150 hover:opacity-85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
-              Start Building →
+              Enter the Lab →
             </Link>
           </div>
         </div>
