@@ -134,14 +134,14 @@ export function SortControls({
   };
 
   return (
-    <div id="sort-controls" className="flex flex-wrap items-center gap-2">
+    <div id="sort-controls" className="flex flex-wrap items-center gap-1.5">
       <span className="text-xs font-medium text-muted-foreground">Sort:</span>
 
       {/* Active sort key chips */}
       {sortKeys.map((key, index) => (
         <div
           key={key.field}
-          className="flex items-center gap-1 rounded-sm border border-border bg-muted px-2 py-1 text-xs font-medium"
+          className="flex items-center gap-1 rounded-sm border border-border bg-muted px-2 py-0.5 text-xs font-medium"
         >
           {/* Order indicator */}
           {sortKeys.length > 1 && (
@@ -179,7 +179,7 @@ export function SortControls({
             id="sort-add-btn"
             type="button"
             onClick={() => setDropdownOpen((v) => !v)}
-            className="flex items-center gap-1 text-xs rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground px-2 py-1 transition-colors"
+            className="flex items-center gap-1 text-xs rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground px-2 py-0.5 transition-colors"
           >
             + Add sort
           </button>

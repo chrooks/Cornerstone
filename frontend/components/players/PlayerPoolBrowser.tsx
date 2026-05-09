@@ -3,10 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { cn } from "@/lib/utils";
+import { getLegend, getPlayerProfile, getPlayerStats } from "@/lib/api";
 import { FilterBar } from "@/components/players/FilterBar";
-import { PlayerCard } from "@/components/players/PlayerCard";
 import { PlayerTable } from "@/components/players/PlayerTable";
 import { SortControls } from "@/components/players/SortControls";
+import {
+  PlayerProfileModal,
+  PlayerView,
+  PlayerViewSizeToggle,
+  legendDetailToPlayerProfile,
+  playerWithSkillsToProfile,
+  type PlayerViewSize,
+} from "@/components/players/PlayerView";
 import {
   AVAILABLE_FILTERS,
   MAX_ACTIVE_FILTERS,
@@ -22,9 +30,12 @@ import {
   stableMultiSort,
 } from "@/components/players/playerPoolPipeline";
 import type { SortKey } from "@/components/players/SortControls";
-import type { PlayerWithSkills, SkillTier } from "@/lib/types";
+import type { LegendDetail, PlayerProfile, PlayerWithSkills, SkillTier } from "@/lib/types";
 
-export type PlayerPoolViewMode = "table" | "cards" | "report";
+const CURRENT_SEASON = "2025-26";
+
+export type { PlayerViewSize };
+export type PlayerPoolViewMode = PlayerViewSize;
 
 export interface PlayerPoolFilterRequest {
   id: string;
@@ -46,16 +57,19 @@ interface PlayerPoolBrowserProps {
   players: PlayerWithSkills[];
   defaultSortKeys: SortKey[];
   defaultPageSize: number;
-  pageSizeByView?: Partial<Record<PlayerPoolViewMode, number>>;
+  defaultPageSizeByViewSize?: Partial<Record<PlayerViewSize, number>>;
   pageSizeOptions: number[];
-  viewModes: PlayerPoolViewMode[];
-  defaultViewMode: PlayerPoolViewMode;
+  viewSizes: PlayerViewSize[];
+  defaultViewSize: PlayerViewSize;
+  viewSize?: PlayerViewSize;
+  onViewSizeChange?: (size: PlayerViewSize) => void;
   defaultHiddenColumns?: string[];
   initialFilterEntries?: FilterEntry[];
   initialSortKeys?: SortKey[];
   availableFilters?: PlayerFilterType[];
   sortFieldOptions?: string[];
   cardGridClassName?: string;
+  panelListClassName?: string;
   contentClassName?: string;
   emptyMessage: string;
   clearFiltersLabel?: string;
@@ -69,13 +83,15 @@ interface PlayerPoolBrowserProps {
   onVisiblePlayersChange?: (players: PlayerWithSkills[]) => void;
   onViewModeReadyChange?: (ready: boolean) => void;
   renderViewToggle?: (args: {
-    viewMode: PlayerPoolViewMode;
-    setViewMode: (mode: PlayerPoolViewMode) => void;
+    viewSize: PlayerViewSize;
+    setViewSize: (size: PlayerViewSize) => void;
     ready: boolean;
   }) => React.ReactNode;
-  renderCard?: (player: PlayerWithSkills) => React.ReactNode;
-  renderReport?: (player: PlayerWithSkills) => React.ReactNode;
   getDisabledPlayerIds?: (players: PlayerWithSkills[]) => Set<string>;
+  getPanelSkills?: (player: PlayerWithSkills) => Record<string, string | null | undefined> | null | undefined;
+  getProfileLegendDetail?: (player: PlayerWithSkills) => LegendDetail | null | undefined;
+  getPrimaryActionLabel?: (player: PlayerWithSkills, viewSize: PlayerViewSize) => string | undefined;
+  onPrimaryAction?: (player: PlayerWithSkills, viewSize: PlayerViewSize) => void;
   onSkillOverride?: (playerId: string, skillKey: string, tier: SkillTier) => Promise<void>;
   onRemoveManualPlayer?: (playerId: string) => void;
   onRowClick?: (player: PlayerWithSkills) => void;
@@ -92,40 +108,28 @@ function nextFilterId(): string {
 }
 
 function defaultViewToggle({
-  viewMode,
-  setViewMode,
+  viewSize,
+  setViewSize,
   ready,
-  viewModes,
+  viewSizes,
   id,
 }: {
-  viewMode: PlayerPoolViewMode;
-  setViewMode: (mode: PlayerPoolViewMode) => void;
+  viewSize: PlayerViewSize;
+  setViewSize: (size: PlayerViewSize) => void;
   ready: boolean;
-  viewModes: PlayerPoolViewMode[];
+  viewSizes: PlayerViewSize[];
   id: string;
 }) {
-  if (!ready || viewModes.length <= 1) return null;
+  if (!ready || viewSizes.length <= 1) return null;
 
   return (
-    <div id={`${id}-view-toggle`} className="flex rounded-md border border-border overflow-hidden text-xs font-medium">
-      {viewModes.map((mode, index) => (
-        <button
-          key={mode}
-          id={`${id}-view-${mode}-btn`}
-          type="button"
-          onClick={() => setViewMode(mode)}
-          className={cn(
-            "px-3 py-1.5 capitalize transition-colors",
-            index > 0 && "border-l border-border",
-            viewMode === mode
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted",
-          )}
-        >
-          {mode === "report" ? "Cards" : mode}
-        </button>
-      ))}
-    </div>
+    <PlayerViewSizeToggle
+      id={`${id}-view-toggle`}
+      viewSize={viewSize}
+      viewSizes={viewSizes}
+      onViewSizeChange={setViewSize}
+      ready={ready}
+    />
   );
 }
 
@@ -135,16 +139,19 @@ export function PlayerPoolBrowser({
   players,
   defaultSortKeys,
   defaultPageSize,
-  pageSizeByView,
+  defaultPageSizeByViewSize,
   pageSizeOptions,
-  viewModes,
-  defaultViewMode,
+  viewSizes,
+  defaultViewSize,
+  viewSize: controlledViewSize,
+  onViewSizeChange,
   defaultHiddenColumns = [],
   initialFilterEntries = [],
   initialSortKeys,
   availableFilters = AVAILABLE_FILTERS,
   sortFieldOptions,
   cardGridClassName = "grid grid-cols-[repeat(auto-fill,_minmax(280px,_1fr))] gap-4",
+  panelListClassName = "flex flex-col gap-6",
   contentClassName,
   emptyMessage,
   clearFiltersLabel = "Clear filters",
@@ -158,9 +165,11 @@ export function PlayerPoolBrowser({
   onVisiblePlayersChange,
   onViewModeReadyChange,
   renderViewToggle,
-  renderCard,
-  renderReport,
   getDisabledPlayerIds,
+  getPanelSkills,
+  getProfileLegendDetail,
+  getPrimaryActionLabel,
+  onPrimaryAction,
   onSkillOverride,
   onRemoveManualPlayer,
   onRowClick,
@@ -171,16 +180,25 @@ export function PlayerPoolBrowser({
   highlightedPlayerId,
   isAdmin,
 }: PlayerPoolBrowserProps) {
+  const initialPageSize = defaultPageSizeByViewSize?.[defaultViewSize] ?? defaultPageSize;
   const [filterEntries, setFilterEntries] = useState<FilterEntry[]>(initialFilterEntries);
   const [nextConnector, setNextConnector] = useState<FilterConnector>("AND");
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
     () => new Set(defaultHiddenColumns),
   );
   const [sortKeys, setSortKeys] = useState<SortKey[]>(initialSortKeys ?? defaultSortKeys);
-  const [viewMode, setViewModeState] = useState<PlayerPoolViewMode>(defaultViewMode);
+  const [internalViewSize, setInternalViewSize] = useState<PlayerViewSize>(defaultViewSize);
+  const viewSize = controlledViewSize ?? internalViewSize;
   const [viewModeReady, setViewModeReady] = useState(!persistViewModeKey && !hideViewToggleUntilReady);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(defaultPageSize);
+  const [pageSize, setPageSize] = useState(initialPageSize);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [profileBoxStats, setProfileBoxStats] = useState<Record<string, number | null> | null>(null);
+  const profileCache = useRef(new Map<string, PlayerProfile>());
+  const profileBoxStatsCache = useRef(new Map<string, Record<string, number | null> | null>());
   const handledFilterRequestIds = useRef(new Set<string>());
   const didNotifyInitialFilters = useRef(false);
   const didNotifyInitialSorts = useRef(false);
@@ -192,22 +210,86 @@ export function PlayerPoolBrowser({
       return;
     }
     const stored = localStorage.getItem(persistViewModeKey);
-    if (stored && viewModes.includes(stored as PlayerPoolViewMode)) {
-      setViewModeState(stored as PlayerPoolViewMode);
+    if (stored && viewSizes.includes(stored as PlayerViewSize)) {
+      if (onViewSizeChange) {
+        onViewSizeChange(stored as PlayerViewSize);
+      } else {
+        setInternalViewSize(stored as PlayerViewSize);
+      }
     }
     setViewModeReady(true);
     onViewModeReadyChange?.(true);
-  }, [onViewModeReadyChange, persistViewModeKey, viewModes]);
+  }, [onViewModeReadyChange, onViewSizeChange, persistViewModeKey, viewSizes]);
 
-  const setViewMode = useCallback((mode: PlayerPoolViewMode) => {
-    setViewModeState(mode);
+  const setViewSize = useCallback((size: PlayerViewSize) => {
+    if (onViewSizeChange) {
+      onViewSizeChange(size);
+    } else {
+      setInternalViewSize(size);
+    }
     setPage(1);
-    setPageSize(pageSizeByView?.[mode] ?? defaultPageSize);
-    if (persistViewModeKey) localStorage.setItem(persistViewModeKey, mode);
-  }, [defaultPageSize, pageSizeByView, persistViewModeKey]);
+    if (persistViewModeKey) localStorage.setItem(persistViewModeKey, size);
+  }, [onViewSizeChange, persistViewModeKey]);
 
   const updateSortKeys = useCallback((keys: SortKey[]) => {
     setSortKeys(keys);
+  }, []);
+
+  const openProfile = useCallback(async (player: PlayerWithSkills) => {
+    const cachedProfile = profileCache.current.get(player.id);
+    const cachedBoxStats = profileBoxStatsCache.current.get(player.id);
+    const optimisticProfile = cachedProfile ?? playerWithSkillsToProfile(player);
+
+    setProfileModalOpen(true);
+    setProfile(optimisticProfile);
+    setProfileBoxStats(cachedBoxStats ?? null);
+    setProfileLoading(false);
+    setProfileError(null);
+
+    if (cachedProfile && profileBoxStatsCache.current.has(player.id)) return;
+
+    setProfileLoading(true);
+
+    try {
+      if (player.is_legend) {
+        const providedDetail = getProfileLegendDetail?.(player);
+        const detail = providedDetail ?? (await getLegend(player.id)).data;
+        const legendProfile = legendDetailToPlayerProfile(player, detail ?? null);
+        profileCache.current.set(player.id, legendProfile);
+        profileBoxStatsCache.current.set(player.id, null);
+        setProfile(legendProfile);
+        setProfileBoxStats(null);
+        return;
+      }
+
+      const [profileRes, statsRes] = await Promise.all([
+        getPlayerProfile(player.id, CURRENT_SEASON),
+        getPlayerStats(player.id, CURRENT_SEASON),
+      ]);
+      if (!profileRes.success || !profileRes.data) {
+        setProfileError(profileRes.error ?? "Failed to load full player profile");
+        return;
+      }
+      profileCache.current.set(player.id, profileRes.data);
+      profileBoxStatsCache.current.set(
+        player.id,
+        statsRes.success ? statsRes.data?.box_score ?? null : null,
+      );
+      setProfile(profileRes.data);
+      setProfileBoxStats(statsRes.success ? statsRes.data?.box_score ?? null : null);
+    } catch {
+      setProfileError("Failed to load full player profile");
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [getProfileLegendDetail]);
+
+  const closeProfile = useCallback(() => {
+    setProfileModalOpen(false);
+    setProfileLoading(false);
+    setProfileError(null);
+    setProfile(null);
+    setProfileBoxStats(null);
   }, []);
 
   useEffect(() => {
@@ -308,7 +390,6 @@ export function PlayerPoolBrowser({
   }, [filteredPlayers.length, onCountsChange, paginatedPlayers.length, players.length, sortedPlayers.length]);
 
   useEffect(() => {
-    // Expose filtered and sorted PlayerPool to page-level actions like random Cornerstone selection.
     onVisiblePlayersChange?.(sortedPlayers);
   }, [onVisiblePlayersChange, sortedPlayers]);
 
@@ -419,8 +500,87 @@ export function PlayerPoolBrowser({
   );
 
   const viewToggle = renderViewToggle
-    ? renderViewToggle({ viewMode, setViewMode, ready: viewModeReady })
-    : defaultViewToggle({ viewMode, setViewMode, ready: viewModeReady, viewModes, id });
+    ? renderViewToggle({ viewSize, setViewSize, ready: viewModeReady })
+    : defaultViewToggle({ viewSize, setViewSize, ready: viewModeReady, viewSizes, id });
+
+  const renderCollectionView = () => {
+    if (viewSize === "row") {
+      return (
+        <PlayerTable
+          players={paginatedPlayers}
+          sortKeys={sortKeys}
+          onSortKeysChange={updateSortKeys}
+          totalCount={sortedPlayers.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onSkillOverride={onSkillOverride}
+          onRemoveManualPlayer={onRemoveManualPlayer}
+          onRowClick={onRowClick ?? openProfile}
+          onRowDragStart={onRowDragStart}
+          onRowContextMenu={onRowContextMenu ?? ((event, player) => {
+            event.preventDefault();
+            openProfile(player);
+          })}
+          disabledPlayerIds={disabledPlayerIds}
+          onRowHover={onRowHover}
+          onRowHoverEnd={onRowHoverEnd}
+          highlightedPlayerId={highlightedPlayerId}
+          isAdmin={isAdmin}
+          hiddenColumns={hiddenColumns}
+          onHiddenColumnsChange={setHiddenColumns}
+        />
+      );
+    }
+
+    const collectionId = viewSize === "card" ? `${id}-cards` : `${id}-panels`;
+    const collectionClassName = viewSize === "card" ? cardGridClassName : panelListClassName;
+
+    return (
+      <>
+        <div id={collectionId} className={collectionClassName}>
+          {paginatedPlayers.map((player) => {
+            const disabled = disabledPlayerIds?.has(player.id) ?? false;
+            const highlighted = highlightedPlayerId != null && highlightedPlayerId === player.id;
+            return (
+              <PlayerView
+                key={player.id}
+                size={viewSize}
+                player={player}
+                skills={viewSize === "panel" ? getPanelSkills?.(player) : undefined}
+                disabled={disabled}
+                highlighted={highlighted}
+                primaryActionLabel={getPrimaryActionLabel?.(player, viewSize)}
+                onPrimaryAction={onPrimaryAction ? (item) => onPrimaryAction(item, viewSize) : undefined}
+                onOpenProfile={openProfile}
+                onDragStart={onRowDragStart}
+                onContextMenu={onRowContextMenu}
+                onHover={onRowHover}
+                onHoverEnd={onRowHoverEnd}
+              />
+            );
+          })}
+          {paginatedPlayers.length === 0 && (
+            <p id={`${id}-${viewSize}-empty`} className={cn(viewSize === "card" && "col-span-full", "text-center text-sm text-muted-foreground py-12")}>
+              {emptyMessage}
+            </p>
+          )}
+        </div>
+        {paginatedPlayers.length === 0 && (
+          <button
+            id={`${id}-${viewSize}-clear-filters`}
+            type="button"
+            onClick={handleClearFilters}
+            className="mx-auto block text-[0.8125rem] font-medium text-[#fe6d34] hover:text-[#fe6d34]/70 transition-colors"
+          >
+            {clearFiltersLabel}
+          </button>
+        )}
+        {renderPagination(`${id}-${viewSize}-pagination`, "Showing ")}
+      </>
+    );
+  };
 
   return (
     <div id={id} className={className}>
@@ -449,65 +609,18 @@ export function PlayerPoolBrowser({
       />
 
       <div id={`${id}-content`} className={contentClassName}>
-        {viewMode === "table" ? (
-          <PlayerTable
-            players={paginatedPlayers}
-            sortKeys={sortKeys}
-            onSortKeysChange={updateSortKeys}
-            totalCount={sortedPlayers.length}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            onSkillOverride={onSkillOverride}
-            onRemoveManualPlayer={onRemoveManualPlayer}
-            onRowClick={onRowClick}
-            onRowDragStart={onRowDragStart}
-            onRowContextMenu={onRowContextMenu}
-            disabledPlayerIds={disabledPlayerIds}
-            onRowHover={onRowHover}
-            onRowHoverEnd={onRowHoverEnd}
-            highlightedPlayerId={highlightedPlayerId}
-            isAdmin={isAdmin}
-            hiddenColumns={hiddenColumns}
-            onHiddenColumnsChange={setHiddenColumns}
-          />
-        ) : viewMode === "cards" ? (
-          <>
-            <div id={`${id}-cards`} className={cardGridClassName}>
-              {paginatedPlayers.map((player) => (
-                renderCard ? renderCard(player) : <PlayerCard key={player.id} player={player} isAdmin={isAdmin} />
-              ))}
-              {paginatedPlayers.length === 0 && (
-                <p id={`${id}-empty`} className="col-span-full text-center text-sm text-muted-foreground py-12">
-                  {emptyMessage}
-                </p>
-              )}
-            </div>
-            {renderPagination(`${id}-cards-pagination`, "Showing ")}
-          </>
-        ) : (
-          <>
-            {sortedPlayers.length === 0 ? (
-              <div id={`${id}-report-empty`} className="text-center py-16">
-                <p className="text-[0.9375rem] text-[#0e0907]/40">{emptyMessage}</p>
-                <button
-                  id={`${id}-report-clear-filters`}
-                  type="button"
-                  onClick={handleClearFilters}
-                  className="mt-3 text-[0.8125rem] font-medium text-[#fe6d34] hover:text-[#fe6d34]/70 transition-colors"
-                >
-                  {clearFiltersLabel}
-                </button>
-              </div>
-            ) : (
-              <div id={`${id}-reports`} className="flex flex-col gap-6">
-                {sortedPlayers.map((player) => renderReport?.(player))}
-              </div>
-            )}
-          </>
-        )}
+        {renderCollectionView()}
       </div>
+
+      {profileModalOpen && (
+        <PlayerProfileModal
+          profile={profile}
+          boxStats={profileBoxStats}
+          loading={profileLoading}
+          error={profileError}
+          onDismiss={closeProfile}
+        />
+      )}
     </div>
   );
 }

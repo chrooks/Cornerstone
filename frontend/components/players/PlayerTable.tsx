@@ -19,8 +19,9 @@ import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { formatSalary, formatHeight, SKILL_LABELS } from "./playerFilters";
-import { SKILL_TIERS, tierToNum, TIER_CONTEXT_COLORS, TIER_CONTEXT_ACTIVE } from "@/lib/tiers";
-import { SKILL_ABBREV, ALL_SKILL_NAMES, PROFILE_SKILL_ORDER } from "@/lib/skills";
+import { PlayerRowView, skillCountAtOrAbove } from "@/components/players/PlayerView";
+import { SKILL_TIERS, TIER_CONTEXT_COLORS, TIER_CONTEXT_ACTIVE } from "@/lib/tiers";
+import { SKILL_ABBREV, PROFILE_SKILL_ORDER } from "@/lib/skills";
 import type { SortKey } from "./SortControls";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SkillTier } from "@/lib/types";
@@ -36,7 +37,7 @@ export const DEFAULT_PAGE_SIZE = 8;
 // Column definitions
 // ---------------------------------------------------------------------------
 
-// SKILL_ABBREV and ALL_SKILL_NAMES imported from @/lib/skills
+// SKILL_ABBREV imported from @/lib/skills
 
 interface ColDef {
   key: string;
@@ -103,16 +104,6 @@ const CLOSED_MENU: ContextMenuState = {
   playerId: "", playerName: "", skillKey: "", skillLabel: "",
   currentTier: undefined, saving: false,
 };
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// Tier thresholds: None=0, Capable=1, Proficient=2, Elite=3, All-Time Great=4
-function skillCountAtOrAbove(player: PlayerWithSkills, minTier: number): number {
-  if (!player.skills) return 0;
-  return Object.values(player.skills).filter((t) => tierToNum(t) >= minTier).length;
-}
 
 // ---------------------------------------------------------------------------
 // PlayerTable
@@ -546,53 +537,24 @@ export function PlayerTable({
                     };
                 const isHighlighted = highlightedPlayerId != null && highlightedPlayerId === player.id;
                 return (
-                <tr
-                  key={player.id}
-                  id={`player-row-${player.id}`}
-                  draggable={!!onRowDragStart && !isDisabled}
-                  onDragStart={onRowDragStart && !isDisabled ? (e) => onRowDragStart(e, player) : undefined}
-                  onClick={handleRowClick}
-                  onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(e, player) : undefined}
-                  onMouseEnter={onRowHover ? () => onRowHover(player) : undefined}
-                  onMouseLeave={onRowHoverEnd}
-                  className={cn(
-                    "border-b border-border transition-colors group",
-                    isDisabled
-                      ? "opacity-40 cursor-not-allowed"
-                      : onRowClick
-                      ? "cursor-pointer hover:bg-blue-50/60 dark:hover:bg-blue-950/20"
-                      : isLegend
-                      ? "bg-amber-50/30 dark:bg-amber-950/10 cursor-default"
-                      : "hover:bg-muted/40 cursor-pointer",
-                    // Cross-component highlight driven by CourtLineup face hover.
-                    // `!opacity-100` overrides the disabled dimming so the match is visible.
-                    isHighlighted && "!opacity-100 bg-amber-100/70 dark:bg-amber-900/30 outline outline-2 outline-amber-400/80 outline-offset-[-2px]",
-                  )}
-                >
-                  {visibleColumns.map((col) => {
-                    const isSkillCol = ALL_SKILL_NAMES.includes(col.key);
-                    return (
-                      <td
-                        key={col.key}
-                        style={{ width: columnWidths[col.key] ?? col.defaultWidth }}
-                        className={cn(
-                          "px-2 py-1.5 whitespace-nowrap overflow-hidden text-ellipsis",
-                          col.sticky && "sticky left-0 z-10 bg-background group-hover:bg-muted border-r border-border transition-colors",
-                          // Sticky cell needs the highlight bg to override bg-background
-                          col.sticky && isHighlighted && "!bg-amber-100/70 dark:!bg-amber-900/30",
-                          isSkillCol && onSkillOverride && "cursor-context-menu",
-                        )}
-                        onContextMenu={
-                          isSkillCol
-                            ? (e) => handleSkillContextMenu(e, player, col.key)
-                            : undefined
-                        }
-                      >
-                        {renderCell(player, col)}
-                      </td>
-                    );
-                  })}
-                </tr>
+                  <PlayerRowView
+                    key={player.id}
+                    player={player}
+                    columns={visibleColumns}
+                    columnWidths={columnWidths}
+                    disabled={isDisabled}
+                    highlighted={isHighlighted}
+                    clickable={!!onRowClick}
+                    legend={isLegend}
+                    onDragStart={onRowDragStart && !isDisabled ? (event) => onRowDragStart(event, player) : undefined}
+                    onClick={handleRowClick}
+                    onContextMenu={onRowContextMenu ? (event) => onRowContextMenu(event, player) : undefined}
+                    onHover={onRowHover ? () => onRowHover(player) : undefined}
+                    onHoverEnd={onRowHoverEnd}
+                    onSkillContextMenu={handleSkillContextMenu}
+                    onSkillOverrideEnabled={!!onSkillOverride}
+                    renderCell={renderCell}
+                  />
               );
               })
             )}

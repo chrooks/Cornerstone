@@ -31,6 +31,7 @@ import {
   type ActiveFilter,
   MAX_ACTIVE_FILTERS,
 } from "@/components/players/playerFilters";
+import { PlayerViewSizeToggle } from "@/components/players/PlayerView";
 
 // ---------------------------------------------------------------------------
 // Legends toggle helpers
@@ -65,7 +66,9 @@ import type { PlayerWithSkills, SkillTier } from "@/lib/types";
 // ---------------------------------------------------------------------------
 
 const VIEW_MODE_KEY = "playersViewMode";
-const PLAYERS_TABLE_PAGE_SIZE = 16;
+const PLAYERS_ROW_PAGE_SIZE = 32;
+const PLAYERS_CARD_PAGE_SIZE = 16;
+const PLAYERS_PANEL_PAGE_SIZE = 16;
 
 // ---------------------------------------------------------------------------
 // Unique ID generator for filter entries
@@ -481,10 +484,11 @@ function PlayersPageContent() {
           initialFilterEntries={filterEntries}
           initialSortKeys={sortKeys}
           defaultSortKeys={[{ field: "name", direction: "asc" }]}
-          defaultPageSize={PLAYERS_TABLE_PAGE_SIZE}
-          pageSizeOptions={[8, 12, 24, 48, 96]}
-          viewModes={["table", "cards"]}
-          defaultViewMode="table"
+          defaultPageSize={PLAYERS_ROW_PAGE_SIZE}
+          defaultPageSizeByViewSize={{ row: PLAYERS_ROW_PAGE_SIZE, card: PLAYERS_CARD_PAGE_SIZE, panel: PLAYERS_PANEL_PAGE_SIZE }}
+          pageSizeOptions={[8, 16, 32, 48, 96]}
+          viewSizes={["row", "card", "panel"]}
+          defaultViewSize="row"
           emptyMessage="No players match the current filters."
           persistViewModeKey={VIEW_MODE_KEY}
           hideViewToggleUntilReady
@@ -497,26 +501,14 @@ function PlayersPageContent() {
           onSkillOverride={isAdmin ? handleSkillOverride : undefined}
           onRemoveManualPlayer={isAdmin ? handleRemoveManualPlayer : undefined}
           isAdmin={isAdmin}
-          renderViewToggle={({ viewMode, setViewMode }) => viewModeReady && (
-            <div id="players-view-toggle" className="flex w-fit rounded-md border border-border overflow-hidden text-xs font-medium">
-              {(["table", "cards"] as PlayerPoolViewMode[]).map((mode, index) => (
-                <button
-                  key={mode}
-                  id={`players-view-${mode}-btn`}
-                  type="button"
-                  onClick={() => setViewMode(mode)}
-                  className={cn(
-                    "px-3 py-1.5 capitalize transition-colors",
-                    index > 0 && "border-l border-border",
-                    viewMode === mode
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
-                  )}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
+          renderViewToggle={({ viewSize, setViewSize }) => (
+            <PlayerViewSizeToggle
+              id="players-view-toggle"
+              viewSize={viewSize}
+              viewSizes={["row", "card", "panel"] as PlayerPoolViewMode[]}
+              onViewSizeChange={setViewSize}
+              ready={viewModeReady}
+            />
           )}
         />
       )}

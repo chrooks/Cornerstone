@@ -13,25 +13,24 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
-import { PlayerCard } from "@/components/players/PlayerCard";
 import {
   PlayerPoolBrowser,
-  type PlayerPoolBrowserCounts,
   type PlayerPoolFilterRequest,
   type PlayerPoolViewMode,
 } from "@/components/players/PlayerPoolBrowser";
+import { PlayerViewSizeToggle, type PlayerViewSize } from "@/components/players/PlayerView";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 
 /** Default page sizes for each view in the builder picker. */
-const TABLE_DEFAULT_PAGE_SIZE = 8;
+const ROW_DEFAULT_PAGE_SIZE = 32;
 const CARDS_DEFAULT_PAGE_SIZE = 16; // 4 rows × 4 columns
+const PANELS_DEFAULT_PAGE_SIZE = 8;
 
 /** Columns hidden by default in the builder picker — Tier 3 starts collapsed. */
 const PICKER_HIDDEN_COLUMNS = [
-  // Tier 3 — nice-to-have (age, GP, Ht, Wt)
-  "age", "games_played", "height", "weight",
+  // Tier 3 — nice-to-have. Height stays visible after Team before skill columns.
+  "age", "games_played", "weight",
 ];
 
 interface PlayerPickerPanelProps {
@@ -90,13 +89,8 @@ export function PlayerPickerPanel({
   highlightedPlayerId,
   isAdmin,
 }: PlayerPickerPanelProps) {
-  const [browserCounts, setBrowserCounts] = useState<PlayerPoolBrowserCounts>({
-    totalCount: players.length,
-    filteredCount: players.length,
-    sortedCount: players.length,
-    pageCount: 0,
-  });
   const [filterRequest, setFilterRequest] = useState<PlayerPoolFilterRequest | null>(null);
+  const [viewSize, setViewSize] = useState<PlayerViewSize>("row");
 
   // ── Hint banner dismissal (persisted) ────────────────────────────────────
   const HINT_STORAGE_KEY = "cornerstone:picker-hint-dismissed";
@@ -151,13 +145,6 @@ export function PlayerPickerPanel({
     onPlayerClick(player);
   }, [isUnavailable, onPlayerClick]);
 
-  /* Right-click — open player profile in new tab */
-  const handleRowContextMenu = useCallback((e: React.MouseEvent, player: PlayerWithSkills) => {
-    e.preventDefault();
-    const prefix = isAdmin ? "/admin/players" : "/players";
-    window.open(`${prefix}/${player.id}?from=builder`, "_blank");
-  }, [isAdmin]);
-
   const handleFilterRequestHandled = useCallback(() => {
     if (filterRequest?.filterLabel === "Salary") onSalaryFilterInjected?.();
     if (filterRequest?.filterLabel === "Skill") onSkillFilterInjected?.();
@@ -172,14 +159,19 @@ export function PlayerPickerPanel({
       <div id="player-picker-header" className="flex items-center justify-between flex-wrap gap-2 flex-shrink-0">
         <div>
           <h2 id="player-picker-title" className="text-[1.125rem] font-semibold text-[#0e0907]">Players</h2>
-          {!loading && (
-            <p id="player-picker-count" className="text-[0.8125rem] text-[#0e0907]/45">
-              {browserCounts.filteredCount === browserCounts.totalCount
-                ? `${browserCounts.totalCount} players`
-                : `${browserCounts.filteredCount} of ${browserCounts.totalCount} players`}
-            </p>
-          )}
         </div>
+        {!loading && !error && (
+          <PlayerViewSizeToggle
+            id="player-picker-view-toggle"
+            viewSize={viewSize}
+            viewSizes={["row", "card", "panel"] as PlayerPoolViewMode[]}
+            onViewSizeChange={setViewSize}
+            className="self-end rounded-sm text-[0.8125rem]"
+            activeClassName="bg-[#0e0907] text-[#f7f7f7]"
+            inactiveClassName="text-[#0e0907]/45 hover:text-[#0e0907]/70 hover:bg-[#0e0907]/[0.04]"
+            borderClassName="border-[#d9d0c9]"
+          />
+        )}
 
       </div>
 
@@ -230,71 +222,32 @@ export function PlayerPickerPanel({
           className="flex flex-col gap-1.5 flex-1 min-h-0"
           players={players}
           defaultSortKeys={[{ field: "name", direction: "asc" }]}
-          defaultPageSize={TABLE_DEFAULT_PAGE_SIZE}
-          pageSizeByView={{ table: TABLE_DEFAULT_PAGE_SIZE, cards: CARDS_DEFAULT_PAGE_SIZE }}
+          defaultPageSize={ROW_DEFAULT_PAGE_SIZE}
+          defaultPageSizeByViewSize={{ row: ROW_DEFAULT_PAGE_SIZE, card: CARDS_DEFAULT_PAGE_SIZE, panel: PANELS_DEFAULT_PAGE_SIZE }}
           pageSizeOptions={[8, 16, 32]}
-          viewModes={["table", "cards"]}
-          defaultViewMode="table"
+          viewSizes={["row", "card", "panel"]}
+          defaultViewSize="row"
+          viewSize={viewSize}
+          onViewSizeChange={setViewSize}
           defaultHiddenColumns={PICKER_HIDDEN_COLUMNS}
           cardGridClassName="grid grid-cols-4 gap-3"
+          panelListClassName="flex flex-col gap-3"
           contentClassName="flex-1 overflow-auto min-h-0"
           emptyMessage="No players match the current filters."
           filterRequest={filterRequest}
           onFilterRequestHandled={handleFilterRequestHandled}
-          onCountsChange={setBrowserCounts}
           getDisabledPlayerIds={(visiblePlayers) =>
             new Set(visiblePlayers.filter(isUnavailable).map((player) => player.id))
           }
           onRowClick={handleRowClick}
           onRowDragStart={handleRowDragStart}
-          onRowContextMenu={handleRowContextMenu}
           onRowHover={onPlayerHover ? (player) => onPlayerHover(player.salary ?? null) : undefined}
           onRowHoverEnd={onPlayerHoverEnd}
           highlightedPlayerId={highlightedPlayerId}
           isAdmin={isAdmin}
-          renderViewToggle={({ viewMode, setViewMode }) => (
-            <div id="player-picker-view-toggle" className="flex self-end rounded-sm border border-[#d9d0c9] overflow-hidden text-[0.8125rem] font-medium">
-              {(["cards", "table"] as PlayerPoolViewMode[]).map((mode, index) => (
-                <button
-                  key={mode}
-                  id={`player-picker-${mode}-btn`}
-                  type="button"
-                  onClick={() => setViewMode(mode)}
-                  className={cn(
-                    "px-3 py-1.5 capitalize transition-colors",
-                    index > 0 && "border-l border-[#d9d0c9]",
-                    viewMode === mode
-                      ? "bg-[#0e0907] text-[#f7f7f7]"
-                      : "text-[#0e0907]/45 hover:text-[#0e0907]/70 hover:bg-[#0e0907]/[0.04]",
-                  )}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-          )}
-          renderCard={(player) => {
-            const isHighlighted = highlightedPlayerId != null && highlightedPlayerId === player.id;
-            return (
-                  <div
-                    key={player.id}
-                    id={`player-card-${player.id}`}
-                    draggable
-                    onDragStart={(e) => handleRowDragStart(e, player)}
-                    onClick={() => handleRowClick(player)}
-                    onContextMenu={(e) => handleRowContextMenu(e, player)}
-                    onMouseEnter={onPlayerHover ? () => onPlayerHover(player.salary ?? null) : undefined}
-                    onMouseLeave={onPlayerHoverEnd}
-                    className={cn(
-                      "cursor-pointer rounded-lg transition-colors",
-                      isUnavailable(player) && !isHighlighted ? "opacity-40 pointer-events-none" : "",
-                      isHighlighted && "!opacity-100 ring-2 ring-[#ffa05c]/60",
-                    )}
-                  >
-                    <PlayerCard player={player} />
-                  </div>
-            );
-          }}
+          getPrimaryActionLabel={(player) => isUnavailable(player) ? undefined : "Add to Rotation"}
+          onPrimaryAction={(player) => handleRowClick(player)}
+          renderViewToggle={() => null}
         />
       )}
     </div>

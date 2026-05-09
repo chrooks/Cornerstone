@@ -321,13 +321,13 @@ export function FilterBar({
       : [];
 
   return (
-    <div id="filter-bar" className="w-full rounded-sm border border-border bg-muted/30 p-3 space-y-2">
+    <div id="filter-bar" className="w-full rounded-sm border border-border bg-muted/30 p-2 space-y-1.5">
       {/* ── Top row: filter controls ── */}
-      <div id="filter-controls-row" className="flex flex-wrap items-center gap-2">
+      <div id="filter-controls-row" className="flex flex-wrap items-center gap-1.5">
         {/* Filter type selector */}
         <select
           id="filter-type-select"
-          className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="text-xs rounded border border-input bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           value={currentFilter.label}
           onChange={(e) => {
             const selected = availableFilters.find((f) => f.label === e.target.value);
@@ -350,7 +350,7 @@ export function FilterBar({
             {/* Skill name dropdown */}
             <select
               id="filter-skill-name-select"
-              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="text-xs rounded border border-input bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               value={skillName}
               onChange={(e) => setSkillName(e.target.value)}
             >
@@ -363,7 +363,7 @@ export function FilterBar({
             {/* Tier minimum dropdown */}
             <select
               id="filter-tier-option-select"
-              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="text-xs rounded border border-input bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               value={tierOption}
               onChange={(e) => setTierOption(e.target.value)}
             >
@@ -379,7 +379,7 @@ export function FilterBar({
             {/* Comparison operator dropdown */}
             <select
               id="filter-numeric-op-select"
-              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="text-xs rounded border border-input bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               value={numericOp}
               onChange={(e) => setNumericOp(e.target.value)}
             >
@@ -391,7 +391,7 @@ export function FilterBar({
             <input
               id="filter-numeric-value-input"
               type="text"
-              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground w-24 focus:outline-none focus:ring-1 focus:ring-ring"
+              className="text-xs rounded border border-input bg-background px-2 py-1 text-foreground w-24 focus:outline-none focus:ring-1 focus:ring-ring"
               value={localValue}
               placeholder={currentFilter.unit ?? "Value…"}
               onChange={(e) => setLocalValue(e.target.value)}
@@ -403,7 +403,7 @@ export function FilterBar({
             {/* Tier to count from */}
             <select
               id="filter-skill-count-tier-select"
-              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="text-xs rounded border border-input bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               value={tierOption}
               onChange={(e) => setTierOption(e.target.value)}
             >
@@ -414,7 +414,7 @@ export function FilterBar({
             {/* Comparison operator */}
             <select
               id="filter-skill-count-op-select"
-              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="text-xs rounded border border-input bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               value={numericOp}
               onChange={(e) => setNumericOp(e.target.value)}
             >
@@ -426,7 +426,7 @@ export function FilterBar({
             <input
               id="filter-skill-count-value-input"
               type="text"
-              className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground w-20 focus:outline-none focus:ring-1 focus:ring-ring"
+              className="text-xs rounded border border-input bg-background px-2 py-1 text-foreground w-20 focus:outline-none focus:ring-1 focus:ring-ring"
               value={localValue}
               placeholder="Count…"
               onChange={(e) => setLocalValue(e.target.value)}
@@ -436,7 +436,7 @@ export function FilterBar({
         ) : currentFilter.inputMethod === "select" ? (
           <select
             id="filter-value-select"
-            className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="text-xs rounded border border-input bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             value={localValue}
             onChange={(e) => setLocalValue(e.target.value)}
           >
@@ -451,7 +451,7 @@ export function FilterBar({
           <input
             id="filter-value-input"
             type="text"
-            className="text-sm rounded border border-input bg-background px-2 py-1.5 text-foreground w-28 focus:outline-none focus:ring-1 focus:ring-ring"
+            className="text-xs rounded border border-input bg-background px-2 py-1 text-foreground w-28 focus:outline-none focus:ring-1 focus:ring-ring"
             value={localValue}
             placeholder="Value…"
             onChange={(e) => setLocalValue(e.target.value)}
@@ -467,7 +467,7 @@ export function FilterBar({
             onClick={() => onSetNextConnector(nextConnector === "AND" ? "OR" : "AND")}
             title="Toggle AND / OR for the next filter"
             className={cn(
-              "px-3 py-1.5 rounded text-xs font-bold border text-white transition-colors",
+              "px-2.5 py-1 rounded text-xs font-bold border text-white transition-colors",
               nextConnector === "AND"
                 ? "bg-blue-700 border-blue-500 hover:bg-blue-600"
                 : "bg-orange-600 border-orange-400 hover:bg-orange-500",
@@ -484,7 +484,7 @@ export function FilterBar({
           onClick={handleAdd}
           disabled={atMax}
           title={atMax ? `Maximum ${MAX_ACTIVE_FILTERS} filters reached` : "Add filter"}
-          className="px-3 py-1.5 rounded text-xs font-medium bg-primary text-primary-foreground hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+          className="px-2.5 py-1 rounded text-xs font-medium bg-primary text-primary-foreground hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
         >
           Add Filter
         </button>
@@ -496,7 +496,7 @@ export function FilterBar({
           onClick={onAddParens}
           disabled={atMax}
           title="Insert a ( ) pair — drag to reposition"
-          className="px-3 py-1.5 rounded text-xs font-bold border border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-2.5 py-1 rounded text-xs font-bold border border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           ( )
         </button>
@@ -507,7 +507,7 @@ export function FilterBar({
           type="button"
           onClick={onClearFilters}
           disabled={filters.length === 0}
-          className="px-3 py-1.5 rounded text-xs font-medium border border-input text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-2.5 py-1 rounded text-xs font-medium border border-input text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           Clear All
         </button>
@@ -524,7 +524,7 @@ export function FilterBar({
       {filters.length > 0 && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={filters.map((f) => f.id)} strategy={horizontalListSortingStrategy}>
-            <div id="filter-pills-row" className="flex flex-wrap gap-2 items-center min-h-[2rem]">
+            <div id="filter-pills-row" className="flex flex-wrap gap-1.5 items-center min-h-7">
               {filters.map((entry, index) =>
                 isParenMarker(entry) ? (
                   <SortableParenPill
