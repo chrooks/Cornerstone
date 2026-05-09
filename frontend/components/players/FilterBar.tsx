@@ -118,7 +118,7 @@ function SortableFilterPill({
       {/* Pill body */}
       <div
         className={cn(
-          "flex items-center gap-0.5 pl-1 pr-2 py-1 rounded-full border select-none text-xs font-medium",
+          "flex items-center gap-0.5 pl-1 pr-2 py-1 rounded-sm border select-none text-xs font-medium",
           entry.negated
             ? "bg-red-50 border-red-200 text-red-800"
             : "bg-muted border-border text-foreground",
@@ -126,7 +126,7 @@ function SortableFilterPill({
       >
         {/* Remove button — stopPropagation prevents drag-kit from intercepting click */}
         <span
-          className="mr-0.5 px-1.5 py-0.5 rounded-full border border-border bg-background cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
+          className="mr-0.5 px-1.5 py-0.5 rounded-sm border border-border bg-background cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={onRemove}
           title="Remove filter"
@@ -201,9 +201,9 @@ function SortableParenPill({
           {entry.connector}
         </button>
       )}
-      <div className="flex items-center gap-0.5 pl-1 pr-2 py-1 rounded-full bg-violet-100 border border-violet-300 text-violet-800 text-xs font-bold select-none">
+      <div className="flex items-center gap-0.5 pl-1 pr-2 py-1 rounded-sm bg-violet-100 border border-violet-300 text-violet-800 text-xs font-bold select-none">
         <span
-          className="mr-0.5 px-1.5 py-0.5 rounded-full border border-violet-300 bg-background cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
+          className="mr-0.5 px-1.5 py-0.5 rounded-sm border border-violet-300 bg-background cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={onRemove}
           title="Remove parenthesis"
@@ -312,7 +312,7 @@ export function FilterBar({
       : [];
 
   return (
-    <div id="filter-bar" className="w-full rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+    <div id="filter-bar" className="w-full rounded-sm border border-border bg-muted/30 p-3 space-y-2">
       {/* ── Top row: filter controls ── */}
       <div id="filter-controls-row" className="flex flex-wrap items-center gap-2">
         {/* Filter type selector */}

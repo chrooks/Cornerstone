@@ -29,11 +29,11 @@ interface UseResizablePanelOptions {
   minRightFrac?: number;
   /** Max right panel fraction. Default: 0.55 */
   maxRightFrac?: number;
-  /** Initial top panel height fraction. Default: 0.42 */
+  /** Initial top panel height fraction. Default: 0.55 */
   initialTopFrac?: number;
-  /** Min top panel fraction. Default: 0.28 */
+  /** Min top panel fraction. Default: 0.25 */
   minTopFrac?: number;
-  /** Max top panel fraction. Default: 0.42 */
+  /** Max top panel fraction. Default: 0.72 */
   maxTopFrac?: number;
 }
 
@@ -42,9 +42,9 @@ export function useResizablePanel(options: UseResizablePanelOptions = {}): UseRe
     initialRightFrac = 0.27,
     minRightFrac = 0.20,
     maxRightFrac = 0.55,
-    initialTopFrac = 0.42,
-    minTopFrac = 0.28,
-    maxTopFrac = 0.42,
+    initialTopFrac = 0.55,
+    minTopFrac = 0.25,
+    maxTopFrac = 0.72,
   } = options;
 
   const [rightPanelFrac, setRightPanelFrac] = useState(initialRightFrac);

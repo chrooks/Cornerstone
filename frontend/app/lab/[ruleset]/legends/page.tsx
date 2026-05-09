@@ -85,6 +85,14 @@ function compareByKey(a: PlayerWithSkills, b: PlayerWithSkills, key: SortKey): n
       case "games_played":      return p.games_played;
       case "minutes_per_game":  return p.minutes_per_game;
       case "peak_year":         return p.peak_year ?? null;
+      case "capable_plus_count":
+        return p.skills ? Object.values(p.skills).filter((t) => libTierToNum(t) >= 1).length : 0;
+      case "proficient_plus_count":
+        return p.skills ? Object.values(p.skills).filter((t) => libTierToNum(t) >= 2).length : 0;
+      case "elite_plus_count":
+        return p.skills ? Object.values(p.skills).filter((t) => libTierToNum(t) >= 3).length : 0;
+      case "alltime_plus_count":
+        return p.skills ? Object.values(p.skills).filter((t) => libTierToNum(t) >= 4).length : 0;
       default:
         /* Skill column — sort by tier numeric value */
         return p.skills ? libTierToNum(p.skills[key.field]) : 0;

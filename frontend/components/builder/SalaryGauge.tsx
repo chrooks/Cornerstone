@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * SalaryGauge.tsx — Horizontal salary cap bar for the Team Builder.
+ * SalaryGauge.tsx — Horizontal SalaryCap bar for the Build page.
  *
- * Shows used salary vs. cap total, percentage fill, and per-slot salary labels
- * above the headshot row (slot names render in RotationSlots, this handles the bar).
+ * Shows used salary vs. cap total with Geist Mono data typography,
+ * percentage fill bar, and per-slot hover highlighting. Dollar figures
+ * follow the Mono Data Rule from DESIGN.md.
  */
 
 import { cn } from "@/lib/utils";
@@ -30,7 +31,7 @@ interface SalaryGaugeProps {
   previewSalary?: number | null;
 }
 
-/** Format a dollar amount as "$XM" or "$X.XM". */
+/** Format a dollar amount as "$XM" or "$X.XM" — always rendered in Geist Mono. */
 export function formatSalaryM(amount: number): string {
   const m = amount / 1_000_000;
   return m % 1 === 0 ? `$${m}M` : `$${m.toFixed(1)}M`;
@@ -41,37 +42,42 @@ export function SalaryGauge({ usedSalary, cap = SALARY_CAP, onRemainingClick, hi
   const overCap = usedSalary > cap;
   const remaining = cap - usedSalary;
 
-  // Preview values — how the numbers change if hovered picker player were added
+  /* Preview values — how the numbers change if hovered picker player were added */
   const wouldExceedCap = previewSalary != null && usedSalary + previewSalary > cap;
   const wouldBeRemaining = previewSalary != null ? remaining - previewSalary : null;
 
   return (
     /* Single-line: [used label] [bar] [cap label] */
     <div id="builder-salary-gauge" className="flex items-center gap-3">
+      {/* Used salary — Geist Mono for all dollar figures */}
       <div id="builder-salary-used" className="shrink-0 flex flex-col items-start leading-tight">
-        <span className={cn("text-xs font-medium whitespace-nowrap", overCap ? "text-red-600" : "text-foreground")}>
-          {formatSalaryM(usedSalary)} used
-        </span>
-        {/* "+$XM" preview — invisible when no picker player is hovered, holds layout space */}
         <span className={cn(
-          "text-xs font-medium whitespace-nowrap transition-opacity",
+          "font-mono text-[0.8125rem] tabular-nums font-medium whitespace-nowrap",
+          overCap ? "text-[#e53e3e]" : "text-[#0e0907]",
+        )}>
+          {formatSalaryM(usedSalary)} <span className="text-[#0e0907]/45 font-sans text-[0.6875rem]">used</span>
+        </span>
+        {/* "+$XM" preview — invisible placeholder when no hover, preserves layout */}
+        <span className={cn(
+          "font-mono text-[0.6875rem] tabular-nums font-medium whitespace-nowrap transition-opacity",
           previewSalary != null ? "opacity-100" : "invisible",
-          wouldExceedCap ? "text-red-500" : "text-emerald-600",
+          wouldExceedCap ? "text-[#e53e3e]" : "text-emerald-600",
         )}>
           {previewSalary != null ? `+${formatSalaryM(previewSalary)}` : "+$0M"}
         </span>
       </div>
 
+      {/* Bar track — warm muted background */}
       <div
         id="builder-salary-bar-track"
-        className="relative flex-1 h-2 rounded-full bg-muted overflow-hidden"
+        className="relative flex-1 h-2 rounded-full bg-[#d9d0c9]/40 overflow-hidden"
       >
         {/* Filled portion — total committed salary */}
         <div
           id="builder-salary-bar-fill"
           className={cn(
             "h-full rounded-full transition-all duration-300",
-            overCap ? "bg-red-500" : pct >= 90 ? "bg-amber-500" : "bg-emerald-500",
+            overCap ? "bg-[#e53e3e]" : pct >= 90 ? "bg-amber-500" : "bg-emerald-500",
           )}
           style={{ width: `${pct}%` }}
         />
@@ -81,7 +87,7 @@ export function SalaryGauge({ usedSalary, cap = SALARY_CAP, onRemainingClick, hi
             id="builder-salary-bar-preview"
             className={cn(
               "absolute top-0 h-full transition-all duration-150",
-              wouldExceedCap ? "bg-red-400/50" : "bg-emerald-400/40",
+              wouldExceedCap ? "bg-[#e53e3e]/40" : "bg-emerald-400/40",
             )}
             style={{
               left: `${pct}%`,
@@ -102,6 +108,7 @@ export function SalaryGauge({ usedSalary, cap = SALARY_CAP, onRemainingClick, hi
         )}
       </div>
 
+      {/* Remaining — clickable to filter PlayerPool by salary */}
       <div className="shrink-0 flex flex-col items-end leading-tight">
         <button
           id="builder-salary-remaining"
@@ -110,19 +117,23 @@ export function SalaryGauge({ usedSalary, cap = SALARY_CAP, onRemainingClick, hi
           disabled={overCap || !onRemainingClick}
           title={!overCap ? `Filter players by salary ≤ ${formatSalaryM(remaining)}` : undefined}
           className={cn(
-            "text-xs whitespace-nowrap transition-colors",
-            overCap ? "text-red-500" : onRemainingClick ? "text-muted-foreground hover:text-foreground hover:underline cursor-pointer" : "text-muted-foreground",
+            "font-mono text-[0.8125rem] tabular-nums whitespace-nowrap transition-colors",
+            overCap
+              ? "text-[#e53e3e]"
+              : onRemainingClick
+                ? "text-[#0e0907]/45 hover:text-[#0e0907] hover:underline cursor-pointer"
+                : "text-[#0e0907]/45",
           )}
         >
           {overCap
             ? `${formatSalaryM(Math.abs(remaining))} over`
             : `${formatSalaryM(remaining)} left`}
         </button>
-        {/* Would-be remaining after adding hovered picker player — invisible when no hover */}
+        {/* Would-be remaining after adding hovered picker player */}
         <span className={cn(
-          "text-xs whitespace-nowrap transition-opacity",
+          "font-mono text-[0.6875rem] tabular-nums whitespace-nowrap transition-opacity",
           wouldBeRemaining != null ? "opacity-100" : "invisible",
-          wouldExceedCap ? "text-red-500" : "text-muted-foreground",
+          wouldExceedCap ? "text-[#e53e3e]" : "text-[#0e0907]/45",
         )}>
           {wouldBeRemaining != null
             ? wouldExceedCap
@@ -132,7 +143,8 @@ export function SalaryGauge({ usedSalary, cap = SALARY_CAP, onRemainingClick, hi
         </span>
       </div>
 
-      <span id="builder-salary-cap" className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+      {/* SalaryCap label */}
+      <span id="builder-salary-cap" className="font-mono text-[0.8125rem] tabular-nums text-[#0e0907]/35 whitespace-nowrap shrink-0">
         {formatSalaryM(cap)} cap
       </span>
     </div>

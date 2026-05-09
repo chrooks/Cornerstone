@@ -50,7 +50,7 @@ function TierSquare({ tier }: { tier: string | null | undefined }) {
   const resolved = tier && tier !== "None" ? tier : null;
   if (!resolved) {
     // Empty / None — render a faint placeholder square
-    return <span className="inline-block size-4 rounded-sm bg-muted/40" />;
+    return <span className="inline-block size-4 rounded-sm bg-[#d9d0c9]/30" />;
   }
   return (
     <span
@@ -70,7 +70,7 @@ const TIER_ORDER = ["None", "Capable", "Proficient", "Elite", "All-Time Great"] 
  */
 function AvgTierSquare({ avg }: { avg: number }) {
   if (avg < 0.25) {
-    return <span className="inline-block size-4 rounded-sm bg-muted/40" />;
+    return <span className="inline-block size-4 rounded-sm bg-[#d9d0c9]/30" />;
   }
 
   // Round to nearest 0.5 for half-tier granularity
@@ -97,8 +97,8 @@ function AvgTierSquare({ avg }: { avg: number }) {
       className="inline-flex size-4 rounded-sm overflow-hidden cursor-default"
       title={`${lowerTier} / ${upperTier}`}
     >
-      <span className={cn("w-1/2 h-full", TIER_BG_CLASSES[lowerTier] || "bg-muted/40")} />
-      <span className={cn("w-1/2 h-full", TIER_BG_CLASSES[upperTier] || "bg-muted/40")} />
+      <span className={cn("w-1/2 h-full", TIER_BG_CLASSES[lowerTier] || "bg-[#d9d0c9]/30")} />
+      <span className={cn("w-1/2 h-full", TIER_BG_CLASSES[upperTier] || "bg-[#d9d0c9]/30")} />
     </span>
   );
 }
@@ -123,7 +123,7 @@ export function SkillGrid({
             {/* Skill label header — sticky top+left (corner cell) */}
             <th
               id="builder-skill-grid-skill-header"
-              className="sticky top-0 left-0 z-40 bg-background text-left px-2 py-1.5 font-medium text-muted-foreground border-b border-border min-w-[120px]"
+              className="sticky top-0 left-0 z-40 bg-[#f7f7f7] text-left px-2 py-1.5 font-medium text-[#0e0907]/45 border-b border-[#d9d0c9] min-w-[120px]"
             >
               Skill
             </th>
@@ -137,7 +137,7 @@ export function SkillGrid({
                   key={slotIndex}
                   id={`builder-skill-grid-col-${slotIndex}`}
                   // sticky top-0 so column names stay visible on vertical scroll
-                  className="sticky top-0 z-30 bg-background px-1 py-1.5 text-center font-medium border-b border-border min-w-[44px] text-foreground"
+                  className="sticky top-0 z-30 bg-[#f7f7f7] px-1 py-1.5 text-center font-medium border-b border-[#d9d0c9] min-w-[44px] text-[#0e0907]"
                 >
                   <span className="truncate block max-w-[76px] mx-auto" title={name}>
                     {name.split(" ").pop()}
@@ -149,7 +149,7 @@ export function SkillGrid({
             {/* Average column header — sticky top + right */}
             <th
               id="builder-skill-grid-col-avg"
-              className="sticky top-0 right-0 z-40 bg-background px-2 py-1.5 text-center font-medium border-b border-border border-l border-border/60 min-w-[50px] text-muted-foreground"
+              className="sticky top-0 right-0 z-40 bg-[#f7f7f7] px-2 py-1.5 text-center font-medium border-b border-[#d9d0c9] border-l border-[#d9d0c9]/60 min-w-[50px] text-[#0e0907]/45"
             >
               Avg
             </th>
@@ -161,11 +161,11 @@ export function SkillGrid({
             <>
               {/* Category divider row */}
               <tr key={`cat-${category}`} id={`builder-skill-category-${category.replace(/\s+/g, "-").toLowerCase()}`}>
-                <td className="sticky left-0 z-10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 bg-muted border-y border-border/60 whitespace-nowrap">
+                <td className="sticky left-0 z-10 px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wider text-[#0e0907]/35 bg-[#f0f0f0] border-y border-[#d9d0c9]/60 whitespace-nowrap">
                   {category}
                 </td>
                 {/* +1 for avg column */}
-                <td colSpan={visibleIndices.length + 1} className="bg-muted border-y border-border/60" />
+                <td colSpan={visibleIndices.length + 1} className="bg-[#f0f0f0] border-y border-[#d9d0c9]/60" />
               </tr>
 
               {/* Skill rows within this category */}
@@ -174,12 +174,12 @@ export function SkillGrid({
                   key={skill}
                   id={`builder-skill-row-${skill}`}
                   className={cn(
-                    "border-b border-border/40",
-                    rowIdx % 2 === 0 ? "bg-background" : "bg-muted/20",
+                    "border-b border-[#d9d0c9]/40",
+                    rowIdx % 2 === 0 ? "bg-[#f7f7f7]" : "bg-[#0e0907]/[0.02]",
                   )}
                 >
                   {/* Skill label — sticky left */}
-                  <td className="sticky left-0 z-10 px-2 py-1 font-medium text-muted-foreground whitespace-nowrap bg-background">
+                  <td className="sticky left-0 z-10 px-2 py-1 font-medium text-[#0e0907]/60 whitespace-nowrap bg-[#f7f7f7]">
                     {SKILL_LABELS[skill] ?? skill}
                   </td>
 
@@ -198,7 +198,7 @@ export function SkillGrid({
                         className="px-1 py-1 text-center"
                       >
                         {!p ? (
-                          <span className="inline-block size-4 rounded-sm bg-muted/20" />
+                          <span className="inline-block size-4 rounded-sm bg-[#d9d0c9]/15" />
                         ) : (
                           <TierSquare tier={tier} />
                         )}
@@ -223,7 +223,7 @@ export function SkillGrid({
                     return (
                       <td
                         id={`builder-skill-grid-avg-${skill}`}
-                        className={cn("sticky right-0 z-10 px-2 py-1 text-center border-l border-border/60 bg-background", rowIdx % 2 !== 0 && "bg-muted/20")}
+                        className={cn("sticky right-0 z-10 px-2 py-1 text-center border-l border-[#d9d0c9]/60 bg-[#f7f7f7]", rowIdx % 2 !== 0 && "bg-[#0e0907]/[0.02]")}
                       >
                         <AvgTierSquare avg={avg} />
                       </td>

@@ -68,3 +68,27 @@ export function mapNoteToFilter(note: Note): SuggestionFilter | null {
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Player-scoped note filtering — used by the Build page to show notes
+// relevant to a specific player when their slot is clicked in the court strip.
+// ---------------------------------------------------------------------------
+
+/**
+ * Filter notes to those that mention a specific player by name.
+ *
+ * Behavioral contracts:
+ *   - filterNotesByPlayer(notes, "Kareem Abdul-Jabbar")
+ *       → notes whose text contains "Kareem Abdul-Jabbar" (case-insensitive)
+ *   - filterNotesByPlayer(notes, null)
+ *       → returns all notes unfiltered
+ *   - filterNotesByPlayer([], "Anyone")
+ *       → returns []
+ *   - Synergy notes mentioning two players match either player
+ *   - Match is substring-based: "Abdul-Jabbar" matches "Kareem Abdul-Jabbar's defense"
+ */
+export function filterNotesByPlayer(notes: Note[], playerName: string | null): Note[] {
+  if (!playerName) return notes;
+  const needle = playerName.toLowerCase();
+  return notes.filter((note) => note.text.toLowerCase().includes(needle));
+}
