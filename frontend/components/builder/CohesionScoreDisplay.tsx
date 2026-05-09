@@ -18,7 +18,8 @@
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { SUBSCORE_GROUPS } from "@/lib/cohesion-constants";
-import { subscoreColor, subscoreBarFill } from "@/lib/cohesion-colors";
+import { subscoreColor } from "@/lib/cohesion-colors";
+import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
 import type { RosterEvaluation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -32,9 +33,7 @@ function starColorClass(rating: number): string {
   return "text-red-400";
 }
 
-// Alias shared functions with names used locally in this component
 const subscoreColorClass = subscoreColor;
-const subscoreBarColor = subscoreBarFill;
 
 /** Color class for 0-1 breakdown bars. */
 function breakdownColorClass(value: number): string {
@@ -133,24 +132,17 @@ function StarRating({ rating, colorClass }: { rating: number; colorClass: string
 // Sub-components
 // ---------------------------------------------------------------------------
 
-const BREAKDOWN_DESCRIPTIONS: Record<string, string> = {
-  starting_5: "How strong the selected starting five is on the 0-5 cohesion scale.",
-  depth: "Bench rotation depth: viable non-starting lineup ratio blended with median non-starting lineup quality.",
-  archetype_diversity: "How many different lineup identities the roster can support.",
-  floor: "How stable the roster is across all evaluated five-man lineup combinations.",
-};
-
 const SUBSCORE_DESCRIPTIONS: Record<string, string> = {
-  spacing_creation_ratio: "How well lineup spacing and shot creation balance each other.",
-  creation_offball_ratio: "Whether on-ball creation has enough off-ball impact around it.",
-  spacing_paint_touch_ratio: "Whether rim pressure has enough spacing support.",
+  spacing_creation_ratio: "Whether or not you have enough spacing for your on-ball creators to operate.",
+  creation_offball_ratio: "Whether or not you have a good balance of on & off-ball offensive players.",
+  spacing_paint_touch_ratio: "Whether or not you have enough spacing to support your paint touches.",
   rebound_transition_ratio: "Whether rebounding and transition play support each other.",
   rebounding_spacing_deficit: "Whether spacing is adequate or rebounding can offset a spacing deficit.",
   paint_touch_total: "Lineup-wide ability to pressure the rim.",
   post_game_total: "Top post option, secondary post option, and post depth blended together.",
   pnr_pairing: "How well pick-and-roll handlers and screeners match in both quality and balance.",
-  anchor_total: "Primary defensive anchor quality with secondary support and depth.",
-  perimeter_defense_total: "Primary perimeter defender quality with secondary support and depth.",
+  anchor_total: "How much the Lineup has a stabilizing big-man presence through interior defense, rebounding, vertical size, and screening.",
+  perimeter_defense_total: "Primary perimeter defender quality with secondary support and depth.", //TODO change this t
   interior_defense_total: "Primary interior defender quality with secondary support and depth.",
   collective_passing: "Primary creator passing plus lineup-wide passing depth.",
   rebounding: "Top rebounders plus team rebounding depth.",
@@ -189,8 +181,72 @@ function BreakdownBar({ id, label, value, description }: { id: string; label: st
   );
 }
 
-/** A labeled horizontal bar for 0-10 subscore values. */
-function SubscoreBar({
+function SummaryMetric({
+  id,
+  label,
+  value,
+  description,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  description: string;
+}) {
+  return (
+    <div
+      id={id}
+      className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-2"
+      title={description}
+    >
+      <p id={`${id}-label`} className="text-[0.6875rem] font-semibold text-[#0e0907]/50">
+        {label}
+      </p>
+      <p id={`${id}-value`} className="mt-1 font-mono text-[0.875rem] font-semibold tabular-nums text-[#0e0907]">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function gradeForScore(score: number): string {
+  if (score >= 9.7) return "A+";
+  if (score >= 9.3) return "A";
+  if (score >= 9.0) return "A-";
+  if (score >= 8.7) return "B+";
+  if (score >= 8.3) return "B";
+  if (score >= 8.0) return "B-";
+  if (score >= 7.7) return "C+";
+  if (score >= 7.3) return "C";
+  if (score >= 7.0) return "C-";
+  if (score >= 6.7) return "D+";
+  if (score >= 6.3) return "D";
+  if (score >= 6.0) return "D-";
+  return "F";
+}
+
+function gradeToneClass(score: number): string {
+  if (score >= 8) return "border-green-500/35 bg-green-500/10 text-green-700 dark:text-green-300";
+  if (score >= 6) return "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  return "border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300";
+}
+
+function deltaLabel(score: number, rotationScore?: number): string {
+  if (rotationScore == null) return "No Median";
+  const delta = Math.round((rotationScore - score) * 10) / 10;
+  if (Math.abs(delta) < 0.05) return "Even";
+  return `${delta > 0 ? "+" : ""}${delta.toFixed(1)}`;
+}
+
+function deltaToneClass(score: number, rotationScore?: number): string {
+  if (rotationScore == null) return "text-[#0e0907]/35";
+  const delta = rotationScore - score;
+  if (delta >= 0.25) return "text-green-600";
+  if (delta <= -0.75) return "text-red-600";
+  return "text-[#0e0907]/45";
+}
+
+/** A scouting-grade tile for 0-10 subscore values. */
+function SubscoreGrade({
   id,
   label,
   score,
@@ -204,57 +260,52 @@ function SubscoreBar({
   description: string;
 }) {
   const rounded = Math.round(score * 10) / 10;
-  const widthPct = Math.max(0, Math.min(100, (score / 10) * 100));
   const hasRotation = rotationScore != null;
   const rotRounded = hasRotation ? Math.round(rotationScore * 10) / 10 : 0;
-  const rotWidthPct = hasRotation ? Math.max(0, Math.min(100, (rotationScore / 10) * 100)) : 0;
+  const grade = gradeForScore(score);
   return (
-    <div id={id} className="flex flex-col gap-1">
-      <div className="flex items-center justify-between">
-        <span id={`${id}-label`} className="text-xs font-medium text-muted-foreground cursor-help" title={description}>
+    <div
+      id={id}
+      className="grid min-h-[88px] grid-cols-[3.25rem_minmax(0,1fr)] border border-[#d9d0c9]/70 bg-[#f7f7f7] transition-colors hover:border-[#ffa05c]/55"
+      title={description}
+    >
+      <div
+        id={`${id}-grade`}
+        className={cn(
+          "flex items-center justify-center border-r px-2 font-mono text-lg font-bold tabular-nums",
+          gradeToneClass(score),
+        )}
+      >
+        {grade}
+      </div>
+      <div className="min-w-0 px-3 py-2">
+        <p id={`${id}-label`} className="truncate text-xs font-semibold text-[#0e0907]">
           {label}
-        </span>
-        <div className="flex items-center gap-1.5">
-          <span className={cn("text-xs font-mono font-bold tabular-nums", subscoreColorClass(score))}>
-            {rounded.toFixed(1)}
-          </span>
-          {hasRotation && (
+        </p>
+        <div className="mt-2 grid gap-1">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[0.6875rem] text-[#0e0907]/48">Starting Lineup</span>
+            <span className={cn("font-mono text-xs font-bold tabular-nums", subscoreColorClass(score))}>
+              {rounded.toFixed(1)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[0.6875rem] text-[#0e0907]/48">Rotation Median</span>
             <span
               id={`${id}-rotation`}
-              className={cn("text-[10px] font-mono tabular-nums", subscoreColorClass(rotationScore))}
-              title="Rotation median (viable lineups)"
+              className={cn("font-mono text-xs tabular-nums", hasRotation ? subscoreColorClass(rotationScore) : "text-[#0e0907]/35")}
             >
-              / {rotRounded.toFixed(1)}
+              {hasRotation ? rotRounded.toFixed(1) : "--"}
             </span>
-          )}
+          </div>
+          <div className="flex items-center justify-between gap-3 border-t border-[#d9d0c9]/60 pt-1">
+            <span className="text-[0.625rem] text-[#0e0907]/38">Durability</span>
+            <span id={`${id}-delta`} className={cn("font-mono text-[0.6875rem] tabular-nums", deltaToneClass(score, rotationScore))}>
+              {deltaLabel(score, rotationScore)}
+            </span>
+          </div>
         </div>
       </div>
-      {/* Starting 5 bar */}
-      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-        <div
-          className={cn("h-full rounded-full transition-all duration-500", subscoreBarColor(score))}
-          style={{ width: `${widthPct}%` }}
-          role="progressbar"
-          aria-valuenow={rounded}
-          aria-valuemin={0}
-          aria-valuemax={10}
-          aria-label={label}
-        />
-      </div>
-      {/* Rotation median bar — thinner, below the starting 5 bar */}
-      {hasRotation && (
-        <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
-          <div
-            className={cn("h-full rounded-full transition-all duration-500 opacity-50", subscoreBarColor(rotationScore))}
-            style={{ width: `${rotWidthPct}%` }}
-            role="progressbar"
-            aria-valuenow={rotRounded}
-            aria-valuemin={0}
-            aria-valuemax={10}
-            aria-label={`${label} rotation median`}
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -273,37 +324,87 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
   const { star_rating, star_rating_breakdown, starting_lineup, lineup_summary } = evaluation;
   const rotationMedian = lineup_summary.rotation_median_subscores;
   const colorClass = starColorClass(star_rating);
+  const factorEntries = Object.entries(star_rating_breakdown).map(([key, value]) => ({
+    key,
+    label: scoreFactorLabel(key),
+    value,
+    description: scoreFactorExplainer(key),
+  }));
 
   return (
-    <div id="cohesion-score-display" className="space-y-4 rounded-xl border border-border bg-card p-4">
+    <div id="cohesion-score-display" className="space-y-5 border border-[#d9d0c9] bg-[#f7f7f7] p-4 sm:p-5">
 
       {/* Star Rating Hero */}
       <div
         id="cohesion-score-hero"
         role="group"
-        aria-label={`Roster cohesion: ${star_rating.toFixed(2)} out of 5 stars`}
-        className="flex flex-col items-center gap-2 py-2"
+        aria-label={`Team cohesion: ${star_rating.toFixed(2)} out of 5 stars`}
+        className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
       >
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Roster Cohesion
-        </p>
-        <StarRating rating={star_rating} colorClass={colorClass} />
-        <span id="cohesion-score-exact" className={cn("text-lg font-mono font-bold tabular-nums", colorClass)}>
-          {star_rating.toFixed(2)}
-        </span>
+        <div id="cohesion-score-heading" className="min-w-0">
+          <p className="text-xs font-semibold text-[#0e0907]/50">
+            Final Team Read
+          </p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-[#0e0907]">
+            Rotation Cohesion
+          </h2>
+          <p className="mt-1 max-w-[62ch] text-sm leading-6 text-[#0e0907]/62">
+            The engine evaluates the Starting Lineup, then tests the full Rotation across its Lineup Combinations.
+          </p>
+        </div>
+        <div id="cohesion-score-rating" className="flex flex-col items-start gap-1 sm:items-end">
+          <StarRating rating={star_rating} colorClass={colorClass} />
+          <span id="cohesion-score-exact" className="font-mono text-2xl font-bold tabular-nums text-[#0e0907]">
+            <span className={colorClass}>{star_rating.toFixed(2)}</span>
+            <span className="text-base font-semibold text-[#0e0907]/45"> / 5</span>
+          </span>
+        </div>
+      </div>
+
+      <div className="w-full h-px bg-border" />
+
+      <div id="cohesion-rotation-summary" className="grid gap-2 sm:grid-cols-3">
+        <SummaryMetric
+          id="cohesion-summary-starting-lineup"
+          label="Starting Lineup"
+          value={starting_lineup.cohesion_score.toFixed(2)}
+          description="Cohesion score for slots 1 through 5."
+        />
+        <SummaryMetric
+          id="cohesion-summary-viable-combos"
+          label="Viable Combos"
+          value={`${lineup_summary.viable_lineups}/${lineup_summary.total_lineups}`}
+          description="Lineup Combinations above the engine viability floor."
+        />
+        <SummaryMetric
+          id="cohesion-summary-median-combo"
+          label="Median Combo"
+          value={lineup_summary.median_score.toFixed(2)}
+          description="Middle Lineup Combination score across the Rotation."
+        />
       </div>
 
       <div className="w-full h-px bg-border" />
 
       {/* 4-Factor Breakdown (0-1 bars shown as percentages) */}
       <div id="cohesion-breakdown" className="space-y-3">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Rating Breakdown
-        </p>
-        <BreakdownBar id="cohesion-breakdown-starting5" label="Starting 5" value={star_rating_breakdown.starting_5} description={BREAKDOWN_DESCRIPTIONS.starting_5} />
-        <BreakdownBar id="cohesion-breakdown-depth" label="Depth" value={star_rating_breakdown.depth} description={BREAKDOWN_DESCRIPTIONS.depth} />
-        <BreakdownBar id="cohesion-breakdown-versatility" label="Versatility" value={star_rating_breakdown.archetype_diversity} description={BREAKDOWN_DESCRIPTIONS.archetype_diversity} />
-        <BreakdownBar id="cohesion-breakdown-floor" label="Floor" value={star_rating_breakdown.floor} description={BREAKDOWN_DESCRIPTIONS.floor} />
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground">
+            Score Factors
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Hover a factor for the engine read. A low factor can pull down an otherwise strong Team.
+          </p>
+        </div>
+        {factorEntries.map((item) => (
+          <BreakdownBar
+            key={item.key}
+            id={`cohesion-breakdown-${item.key}`}
+            label={item.label}
+            value={item.value}
+            description={item.description}
+          />
+        ))}
       </div>
 
       <div className="w-full h-px bg-border" />
@@ -311,23 +412,23 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
       {/* 13 Subscore Grid (0-10 scale, grouped) */}
       <div id="cohesion-subscores" className="space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <p className="text-xs font-semibold text-muted-foreground">
             Subscores
           </p>
           {rotationMedian && Object.keys(rotationMedian).length > 0 && (
             <p id="cohesion-subscores-legend" className="text-[9px] text-muted-foreground/60">
-              Starting 5 / <span className="opacity-50">Rotation Median</span>
+              Starting Lineup / <span className="opacity-50">Rotation Median</span>
             </p>
           )}
         </div>
         {SUBSCORE_GROUPS.map((group) => (
           <div key={group.heading} className="space-y-2">
-            <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider">
+            <p className="text-[11px] font-medium text-muted-foreground/70">
               {group.heading}
             </p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-2">
               {group.entries.map((entry) => (
-                <SubscoreBar
+                <SubscoreGrade
                   key={entry.key}
                   id={`cohesion-subscore-${entry.key}`}
                   label={entry.label}
@@ -345,18 +446,18 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
 
       {/* Accentuation — strength amplification + weakness coverage */}
       <div id="cohesion-accentuation" className="space-y-3">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <p className="text-xs font-semibold text-muted-foreground">
           Accentuation
         </p>
         <div className="grid grid-cols-2 gap-x-4">
-          <SubscoreBar
+          <SubscoreGrade
             id="cohesion-accentuation-strength"
             label="Strength Amp"
             score={starting_lineup.accentuation.strength_amplification}
             rotationScore={rotationMedian?.accentuation_strength}
             description={SUBSCORE_DESCRIPTIONS.accentuation_strength}
           />
-          <SubscoreBar
+          <SubscoreGrade
             id="cohesion-accentuation-weakness"
             label="Weakness Cover"
             score={starting_lineup.accentuation.weakness_coverage}

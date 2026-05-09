@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { COMPOSITE_COLUMNS } from "@/lib/cohesion-constants";
+import { scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
 import { formatSkillName } from "@/lib/skills";
 import { AssistantGmNotes } from "./AssistantGmNotes";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
@@ -22,13 +23,6 @@ import type {
 } from "@/lib/types";
 
 type FeedbackTab = "feedback" | "skills" | "debug";
-
-const BREAKDOWN_LABELS: Record<string, string> = {
-  starting_5: "Starting Lineup",
-  depth: "Depth",
-  archetype_diversity: "Versatility",
-  floor: "Floor",
-};
 
 type CompositeKey = keyof CohesionCompositeScores;
 
@@ -651,7 +645,7 @@ function LineupImpactSummary({ evaluation }: { evaluation: RosterEvaluation | nu
   const breakdown = evaluation
     ? Object.entries(evaluation.star_rating_breakdown).map(([key, value]) => ({
       key,
-      label: BREAKDOWN_LABELS[key] ?? key.replaceAll("_", " "),
+      label: scoreFactorLabel(key),
       value,
     }))
     : [];

@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { evaluateRoster } from "@/lib/api";
+import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
 import { FeedbackTooltip } from "./FeedbackTooltip";
 import { NotesList } from "./NotesList";
 import { filterNotesByPlayer, type SuggestionFilter } from "@/lib/noteFilters";
@@ -194,24 +195,6 @@ function formatMemoDate(ts: number): string {
 const HISTORY_LIMIT = 20;
 const STARTER_BOUNDARY = 5;
 
-const BREAKDOWN_LABELS: Record<string, string> = {
-  starting_5: "Starting Lineup",
-  depth: "Depth",
-  archetype_diversity: "Versatility",
-  floor: "Floor",
-};
-
-const BREAKDOWN_EXPLAINERS: Record<string, string> = {
-  starting_5: "How much the first five slots hold together as the primary Lineup. This rises when the starters cover creation, spacing, defense, and finishing without forcing one Player to solve every possession.",
-  depth: "How many useful five-player combinations survive beyond the starters. This rises when bench Players keep the Rotation playable instead of creating fragile substitution paths.",
-  archetype_diversity: "How many different lineup styles the Rotation can credibly play. This rises when the same nine Players can form multiple identities, like defensive, offensive, transition, or balanced groups.",
-  floor: "How safe the Rotation is across its middle lineup outcomes. This rises when the median Lineup Combination stays solid, not just when the best Lineup is strong.",
-};
-
-function breakdownExplainer(key: string): string {
-  return BREAKDOWN_EXPLAINERS[key] ?? "How this score factor affects the current eval.";
-}
-
 function formatPct(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "0%";
   return `${Math.round(value * 100)}%`;
@@ -227,7 +210,7 @@ function topBreakdownItems(evaluation: RosterEvaluation | null) {
   return Object.entries(evaluation.star_rating_breakdown)
     .map(([key, value]) => ({
       key,
-      label: BREAKDOWN_LABELS[key] ?? key.replaceAll("_", " "),
+      label: scoreFactorLabel(key),
       value,
     }))
     .sort((a, b) => b.value - a.value)
@@ -241,7 +224,7 @@ function weakestBreakdownItem(evaluation: RosterEvaluation | null) {
   if (!key || value == null) return null;
   return {
     key,
-    label: BREAKDOWN_LABELS[key] ?? key.replaceAll("_", " "),
+    label: scoreFactorLabel(key),
     value,
   };
 }
@@ -307,7 +290,7 @@ function CurrentEngineRead({ entry }: { entry: HistoryEntry }) {
                   <span className="font-mono text-[#0e0907]">{formatPct(item.value)}</span>{" "}
                   means this factor is currently this satisfied in the engine.
                 </p>
-                <p>{breakdownExplainer(item.key)}</p>
+                <p>{scoreFactorExplainer(item.key)}</p>
                 <p className="text-[#0e0907]/55">
                   Higher is better. Low values are pressure points for the next Build change.
                 </p>
@@ -353,7 +336,7 @@ function CurrentEngineRead({ entry }: { entry: HistoryEntry }) {
                   Lowest current score factor: <span className="font-medium text-[#0e0907]">{weakest.label}</span>{" "}
                   at <span className="font-mono text-[#0e0907]">{formatPct(weakest.value)}</span>.
                 </p>
-                <p>{breakdownExplainer(weakest.key)}</p>
+                <p>{scoreFactorExplainer(weakest.key)}</p>
                 <p className="text-[#0e0907]/55">This is the clearest path to improving the score.</p>
               </div>
             )}

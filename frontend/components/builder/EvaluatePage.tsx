@@ -50,17 +50,22 @@ function TeamDescriptionCard({ description, isLoading }: TeamDescriptionCardProp
   if (!isLoading && !description) return null;
 
   return (
-    <div id="eval-team-description" className="border border-border rounded-lg overflow-hidden">
+    <section id="eval-team-description" className="border border-[#d9d0c9] bg-[#f7f7f7]">
       {/* Header — always visible, toggles collapse */}
       <button
         id="eval-team-description-toggle"
         type="button"
         onClick={() => setIsOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-muted/30 transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#f0f0f0]/70 transition-colors cursor-pointer"
         aria-expanded={isOpen}
       >
-        <span className="text-sm font-semibold text-purple-400">
-          Team Identity
+        <span>
+          <span className="block text-xs font-semibold text-[#0e0907]/50">
+            Team Identity
+          </span>
+          <span className="mt-0.5 block text-sm font-semibold text-[#0e0907]">
+            Final Scouting Note
+          </span>
         </span>
         <span className="text-muted-foreground text-xs font-mono" aria-hidden>
           {isOpen ? "▾" : "▸"}
@@ -69,7 +74,7 @@ function TeamDescriptionCard({ description, isLoading }: TeamDescriptionCardProp
 
       {/* Content — only rendered when open */}
       {isOpen && (
-        <div id="eval-team-description-content" className="px-4 pb-4 pt-1">
+        <div id="eval-team-description-content" className="border-t border-[#d9d0c9]/70 px-4 pb-4 pt-3">
           {isLoading ? (
             // Spinner placeholder while the API call is in flight
             <div id="eval-team-description-loading" className="flex items-center gap-2 text-xs text-muted-foreground py-2">
@@ -83,13 +88,13 @@ function TeamDescriptionCard({ description, isLoading }: TeamDescriptionCardProp
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
               </svg>
-              Generating team identity…
+              Generating Team identity...
             </div>
           ) : (
             // Render each paragraph from the narrative as its own <p> element
             <div id="eval-team-description-text" className="space-y-3">
               {description!.split("\n\n").map((para, i) => (
-                <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                <p key={i} className="w-full text-sm text-[#0e0907]/68 leading-6">
                   {para.trim()}
                 </p>
               ))}
@@ -97,7 +102,7 @@ function TeamDescriptionCard({ description, isLoading }: TeamDescriptionCardProp
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -107,34 +112,59 @@ function TeamDescriptionCard({ description, isLoading }: TeamDescriptionCardProp
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function RosterSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSkills | null)[]; cornerstoneId: string | null }) {
-  return (
-    <div id="eval-roster-summary" className="flex gap-3 overflow-x-auto pb-1 justify-center">
-      {allSlots.filter(Boolean).map((p, i) => {
-        const isCornerstone = p!.id === cornerstoneId;
-        return (
-          <div key={p!.id} id={`eval-slot-${i + 1}`} className="flex-shrink-0 flex flex-col items-center gap-1">
-            <div className="relative w-14 h-14 rounded-lg overflow-hidden border-2 border-border">
-              <PlayerHeadshot nba_api_id={p!.nba_api_id} size={56} name={p!.name} />
-              {isCornerstone && (
-                <span
-                  id={`eval-slot-${i + 1}-legend-badge`}
-                  className="absolute top-0 left-0 bg-amber-400/90 text-white text-[8px] font-bold px-1 py-0.5 rounded-br"
-                >
-                  ★
-                </span>
-              )}
-            </div>
-            <p
-              id={`eval-slot-${i + 1}-name`}
-              className="text-[9px] text-muted-foreground text-center leading-tight truncate w-14"
-              title={p!.name}
+function RotationSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSkills | null)[]; cornerstoneId: string | null }) {
+  const players = allSlots.filter(Boolean) as PlayerWithSkills[];
+  const starterPlayers = players.slice(0, 5);
+  const benchPlayers = players.slice(5);
+
+  function renderPlayer(p: PlayerWithSkills, index: number) {
+    const isCornerstone = p.id === cornerstoneId;
+    return (
+      <div key={p.id} id={`eval-slot-${index + 1}`} className="flex-shrink-0 flex flex-col items-center gap-1">
+        <div className="relative h-16 w-16 overflow-hidden border-2 border-border">
+          <PlayerHeadshot nba_api_id={p.nba_api_id} size={64} name={p.name} />
+          {isCornerstone && (
+            <span
+              id={`eval-slot-${index + 1}-legend-badge`}
+              className="absolute top-0 left-0 bg-amber-400/90 text-white text-[8px] font-bold px-1 py-0.5"
             >
-              {p!.name.split(" ").pop()}
-            </p>
-          </div>
-        );
-      })}
+              ★
+            </span>
+          )}
+        </div>
+        <p
+          id={`eval-slot-${index + 1}-name`}
+          className="w-[4.5rem] truncate text-center text-[10px] leading-tight text-muted-foreground"
+          title={p.name}
+        >
+          {p.name.split(" ").pop()}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div id="eval-rotation-summary" className="overflow-x-auto border border-[#d9d0c9] bg-[#f7f7f7] px-6 py-3">
+      <div id="eval-rotation-summary-list" className="mx-auto flex w-max items-start justify-center">
+        <div id="eval-rotation-starters" className="flex items-start gap-3">
+          {starterPlayers.map((player, index) => renderPlayer(player, index))}
+        </div>
+
+        {benchPlayers.length > 0 && (
+          <>
+            <div id="eval-rotation-boundary" className="mx-4 flex self-stretch flex-col items-center">
+              <div className="w-px flex-1 bg-[#d9d0c9]" />
+              <span className="py-1 text-[0.5rem] font-semibold uppercase tracking-[1px] text-[#9a938a]">
+                Bench
+              </span>
+              <div className="w-px flex-1 bg-[#d9d0c9]" />
+            </div>
+            <div id="eval-rotation-bench" className="flex items-start gap-3">
+              {benchPlayers.map((player, index) => renderPlayer(player, index + 5))}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -290,7 +320,7 @@ export function EvaluatePage() {
   const isLoading = evalState === "loading" || evalState === "evaluating";
 
   return (
-    <main id="eval-page" className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+    <main id="eval-page" className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 
       {/* Header */}
       <div id="eval-header" className="relative flex items-center">
@@ -300,10 +330,10 @@ export function EvaluatePage() {
           onClick={() => router.push(backHref)}
           className="text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
         >
-          ← Back to builder
+          ← Back to Build
         </button>
         <h1 id="eval-title" className="absolute left-1/2 -translate-x-1/2 text-lg font-bold text-foreground pointer-events-none whitespace-nowrap">
-          Final Evaluation
+          Final Eval
         </h1>
         {isLoggedIn && (
           <button
@@ -313,14 +343,14 @@ export function EvaluatePage() {
             title="Coming soon"
             className="ml-auto text-sm font-medium rounded-md border border-border px-3 py-1.5 opacity-40 cursor-not-allowed shrink-0"
           >
-            Save Roster
+            Save Team
           </button>
         )}
       </div>
 
-      {/* Roster summary */}
+      {/* Rotation summary */}
       {dataReady && (
-        <RosterSummary allSlots={dataReady.slots} cornerstoneId={cornerstoneId} />
+        <RotationSummary allSlots={dataReady.slots} cornerstoneId={cornerstoneId} />
       )}
 
       {/* Loading skeleton — shown while player data loads (phase 1) or evaluation runs (phase 2) */}
@@ -360,8 +390,27 @@ export function EvaluatePage() {
             isLoading={false}
           />
 
-          {/* Notes — issues, suggestions, strengths in collapsible sections */}
-          <NotesList issues={issues} suggestions={suggestions} strengths={strengths} />
+          {/* Notes */}
+          <section id="eval-notes-section" className="space-y-3">
+            <div id="eval-notes-header">
+              <p className="text-xs font-semibold text-[#0e0907]/50">
+                Pressure Points
+              </p>
+              <h2 className="mt-1 text-base font-semibold text-[#0e0907]">
+                What The Engine Would Argue About
+              </h2>
+            </div>
+            <NotesList
+              issues={issues}
+              suggestions={suggestions}
+              strengths={strengths}
+              emptyTextOverrides={{
+                strengths: "No standout strengths identified in this final read.",
+                issues: "No major weaknesses identified.",
+                suggestions: "No immediate adjustment suggested.",
+              }}
+            />
+          </section>
 
           {/* Admin debug panel */}
           {isAdmin && (
@@ -370,7 +419,7 @@ export function EvaluatePage() {
           {/* Raw notes JSON dump */}
           {isAdmin && (
             <details id="eval-debug-notes-json" className="mt-4">
-              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground">
+              <summary className="cursor-pointer text-[10px] font-semibold text-muted-foreground hover:text-foreground">
                 Raw Notes JSON
               </summary>
               <pre id="eval-debug-notes-json-content" className="mt-2 max-h-[400px] overflow-auto rounded border border-border/60 bg-muted/30 p-2 text-[9px] font-mono text-muted-foreground whitespace-pre-wrap">

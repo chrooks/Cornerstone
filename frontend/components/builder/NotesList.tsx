@@ -65,11 +65,13 @@ const COLUMNS: Record<"strengths" | "issues" | "suggestions", ColumnConfig> = {
 function SwsColumn({
   config,
   notes,
+  emptyText,
   onSuggestionFilter,
   showDebug = false,
 }: {
   config: ColumnConfig;
   notes: Note[];
+  emptyText?: string;
   /** If provided, suggestion note text becomes a clickable link that injects a player-search filter. */
   onSuggestionFilter?: (filter: SuggestionFilter, note: Note) => void;
   /** Show engine debug info per note (admin only). */
@@ -106,7 +108,7 @@ function SwsColumn({
       {/* Note items */}
       {notes.length === 0 ? (
         <p className="text-[11px] text-muted-foreground/60 italic">
-          {config.emptyText}
+          {emptyText ?? config.emptyText}
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -166,6 +168,7 @@ interface NotesListProps {
   issues: Note[];
   suggestions: Note[];
   strengths: Note[];
+  emptyTextOverrides?: Partial<Record<"strengths" | "issues" | "suggestions", string>>;
   /** Called when a suggestion note is clicked — parent injects the filter into the player picker. */
   onSuggestionFilter?: (filter: SuggestionFilter, note: Note) => void;
   /** Show engine debug info per note (admin only). */
@@ -176,6 +179,7 @@ export function NotesList({
   issues,
   suggestions,
   strengths,
+  emptyTextOverrides,
   onSuggestionFilter,
   showDebug = false,
 }: NotesListProps) {
@@ -183,14 +187,25 @@ export function NotesList({
     <div id="notes-list">
       {/* Three-column S/W/S layout — stacks on narrow viewports */}
       <div className="grid gap-3 xl:grid-cols-3">
-        <SwsColumn config={COLUMNS.strengths} notes={strengths} showDebug={showDebug} />
+        <SwsColumn
+          config={COLUMNS.strengths}
+          notes={strengths}
+          emptyText={emptyTextOverrides?.strengths}
+          showDebug={showDebug}
+        />
 
-        <SwsColumn config={COLUMNS.issues} notes={issues} showDebug={showDebug} />
+        <SwsColumn
+          config={COLUMNS.issues}
+          notes={issues}
+          emptyText={emptyTextOverrides?.issues}
+          showDebug={showDebug}
+        />
 
         {/* Only the suggestions column exposes clickable filter links. */}
         <SwsColumn
           config={COLUMNS.suggestions}
           notes={suggestions}
+          emptyText={emptyTextOverrides?.suggestions}
           onSuggestionFilter={onSuggestionFilter}
           showDebug={showDebug}
         />

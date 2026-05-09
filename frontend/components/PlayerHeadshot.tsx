@@ -41,6 +41,7 @@ interface PlayerHeadshotProps {
  */
 export function PlayerHeadshot({ nba_api_id, size = 48, name, className }: PlayerHeadshotProps) {
   const [failed, setFailed] = useState(false);
+  const sourceSize = Math.max(size, 128);
 
   if (!nba_api_id || failed) {
     return (
@@ -60,8 +61,8 @@ export function PlayerHeadshot({ nba_api_id, size = 48, name, className }: Playe
       <Image
         src={url}
         alt={name ? `${name} headshot` : "Player headshot"}
-        width={size}
-        height={size}
+        width={sourceSize}
+        height={sourceSize}
         className="w-full h-full object-cover"
         onError={() => setFailed(true)}
       />
