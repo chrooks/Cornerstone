@@ -18,8 +18,10 @@ import {
   UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { listPlayersWithSkills } from "@/lib/api";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
+import type { PlayerWithSkills } from "@/lib/types";
 
 type ProfileLoadState = "loading" | "ready" | "signed-out" | "error";
 type SavedTeamType = "Lineup" | "Rotation" | "Roster";
@@ -67,6 +69,11 @@ interface MockSavedTeam {
   }>;
   summary: string;
   tags: string[];
+}
+
+interface SavedTeamBuilderTarget {
+  href: string | null;
+  missingPlayers: string[];
 }
 
 const MOCK_SAVED_TEAMS: MockSavedTeam[] = [
@@ -275,6 +282,60 @@ function compareSavedTeamsBySort(a: MockSavedTeam, b: MockSavedTeam, sort: Saved
   return 0;
 }
 
+function normalizePlayerName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function getRulesetSlug(ruleset: string): string {
+  return ruleset.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "standard";
+}
+
+function resolveSavedTeamPlayer(
+  player: MockSavedTeam["players"][number],
+  playerRows: PlayerWithSkills[],
+  isCornerstone: boolean,
+): PlayerWithSkills | null {
+  const normalizedName = normalizePlayerName(player.name);
+  const candidates = playerRows.filter((row) => (
+    row.nba_api_id === player.nbaApiId ||
+    normalizePlayerName(row.name) === normalizedName
+  ));
+
+  if (isCornerstone) {
+    return candidates.find((row) => row.is_legend) ?? candidates[0] ?? null;
+  }
+
+  return candidates.find((row) => !row.is_legend) ?? candidates[0] ?? null;
+}
+
+function buildSavedTeamBuilderTarget(
+  team: MockSavedTeam,
+  playerRows: PlayerWithSkills[],
+): SavedTeamBuilderTarget {
+  const resolvedPlayers = team.players.map((player, index) =>
+    resolveSavedTeamPlayer(player, playerRows, index === 0)
+  );
+  const missingPlayers = team.players
+    .filter((_, index) => resolvedPlayers[index] == null)
+    .map((player) => player.name);
+  const cornerstone = resolvedPlayers[0];
+
+  if (!cornerstone || missingPlayers.length > 0) {
+    return { href: null, missingPlayers };
+  }
+
+  const params = new URLSearchParams();
+  params.set("cornerstone", cornerstone.id);
+  resolvedPlayers.forEach((player, index) => {
+    if (player) params.set(`s${index + 1}`, player.id);
+  });
+
+  return {
+    href: `/lab/${getRulesetSlug(team.ruleset)}/build?${params.toString()}`,
+    missingPlayers: [],
+  };
+}
+
 function SavedTeamSkeleton() {
   return (
     <div id="profile-saved-team-skeleton" className="space-y-3">
@@ -333,7 +394,25 @@ function SavedTeamHeadshot({
   );
 }
 
-function SavedTeamRecord({ team, featured = false }: { team: MockSavedTeam; featured?: boolean }) {
+function SavedTeamRecord({
+  team,
+  builderTarget,
+  builderTargetsLoading,
+  featured = false,
+}: {
+  team: MockSavedTeam;
+  builderTarget: SavedTeamBuilderTarget;
+  builderTargetsLoading: boolean;
+  featured?: boolean;
+}) {
+  const openButtonClassName = "inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded border border-[oklch(0.18_0.02_45)] bg-[oklch(0.18_0.02_45)] px-3 py-2 text-sm font-semibold text-[oklch(0.92_0.08_64)] transition-colors duration-150 hover:bg-[oklch(0.25_0.03_45)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]";
+  const secondaryButtonClassName = "inline-flex min-h-10 flex-1 items-center justify-center rounded border border-[oklch(0.83_0.02_62)] bg-[oklch(0.96_0.006_62)] px-3 py-2 text-sm font-semibold text-[oklch(0.22_0.02_45)] transition-colors duration-150 hover:border-[oklch(0.73_0.08_53)] hover:bg-[oklch(0.92_0.035_64)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]";
+  const openUnavailableReason = builderTargetsLoading
+    ? "Resolving this Saved Team against the current PlayerPool."
+    : builderTarget.missingPlayers.length > 0
+      ? `Could not find ${builderTarget.missingPlayers.join(", ")} in the current PlayerPool.`
+      : "This Saved Team cannot be opened yet.";
+
   return (
     <article
       id={`profile-saved-team-${team.id}`}
@@ -450,21 +529,35 @@ function SavedTeamRecord({ team, featured = false }: { team: MockSavedTeam; feat
 
         <div id={`profile-saved-team-${team.id}-actions`} className="flex flex-wrap gap-2">
           <button
-            id={`profile-saved-team-${team.id}-open-btn`}
+            id={`profile-saved-team-${team.id}-see-eval-btn`}
             type="button"
-            className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded border border-[oklch(0.18_0.02_45)] bg-[oklch(0.18_0.02_45)] px-3 py-2 text-sm font-semibold text-[oklch(0.92_0.08_64)] transition-colors duration-150 hover:bg-[oklch(0.25_0.03_45)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]"
+            disabled
+            title="Saved evaluation view will be available when Saved Team storage is wired."
+            className={cn(secondaryButtonClassName, "cursor-not-allowed opacity-55 hover:border-[oklch(0.83_0.02_62)] hover:bg-[oklch(0.96_0.006_62)]")}
           >
-            Open
-            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            See Eval
           </button>
-          <button
-            id={`profile-saved-team-${team.id}-rerun-btn`}
-            type="button"
-            className="inline-flex min-h-10 items-center justify-center rounded border border-[oklch(0.83_0.02_62)] bg-[oklch(0.96_0.006_62)] px-3 py-2 text-sm font-semibold text-[oklch(0.22_0.02_45)] transition-colors duration-150 hover:border-[oklch(0.73_0.08_53)] hover:bg-[oklch(0.92_0.035_64)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]"
-            aria-label={`Re-evaluate ${team.name}`}
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          </button>
+          {builderTarget.href ? (
+            <Link
+              id={`profile-saved-team-${team.id}-rebuild-link`}
+              href={builderTarget.href}
+              className={openButtonClassName}
+            >
+              Rebuild
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          ) : (
+            <button
+              id={`profile-saved-team-${team.id}-rebuild-btn`}
+              type="button"
+              disabled
+              title={openUnavailableReason}
+              className={cn(openButtonClassName, "cursor-not-allowed opacity-45 hover:bg-[oklch(0.18_0.02_45)]")}
+            >
+              Rebuild
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </aside>
     </article>
@@ -478,6 +571,9 @@ export default function ProfilePage() {
   const [filterValue, setFilterValue] = useState("");
   const [savedTeamFilters, setSavedTeamFilters] = useState<SavedTeamAppliedFilter[]>([]);
   const [savedTeamSorts, setSavedTeamSorts] = useState<SavedTeamSort[]>(DEFAULT_SAVED_TEAM_SORTS);
+  const [builderPlayerRows, setBuilderPlayerRows] = useState<PlayerWithSkills[]>([]);
+  const [builderTargetsLoading, setBuilderTargetsLoading] = useState(true);
+  const [builderTargetsError, setBuilderTargetsError] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -510,6 +606,32 @@ export default function ProfilePage() {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    setBuilderTargetsLoading(true);
+    setBuilderTargetsError(false);
+
+    listPlayersWithSkills()
+      .then((res) => {
+        if (!alive) return;
+        if (res.success && res.data) {
+          setBuilderPlayerRows(res.data);
+          return;
+        }
+        setBuilderTargetsError(true);
+      })
+      .catch(() => {
+        if (alive) setBuilderTargetsError(true);
+      })
+      .finally(() => {
+        if (alive) setBuilderTargetsLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const rulesetOptions = useMemo(
     () => getUniqueValues(MOCK_SAVED_TEAMS.map((team) => team.ruleset)),
     []
@@ -534,6 +656,17 @@ export default function ProfilePage() {
       return 0;
     });
   }, [savedTeamFilters, savedTeamSorts]);
+
+  const builderTargetsByTeamId = useMemo(() => {
+    return new Map(
+      MOCK_SAVED_TEAMS.map((team) => [
+        team.id,
+        builderTargetsError
+          ? { href: null, missingPlayers: [] }
+          : buildSavedTeamBuilderTarget(team, builderPlayerRows),
+      ])
+    );
+  }, [builderPlayerRows, builderTargetsError]);
 
   const hasActiveAdvancedFilters = savedTeamFilters.length > 0 || JSON.stringify(savedTeamSorts) !== JSON.stringify(DEFAULT_SAVED_TEAM_SORTS);
   const canAddFilter = filterValue.trim().length > 0;
@@ -905,7 +1038,13 @@ export default function ProfilePage() {
           {visibleTeams.length > 0 ? (
             <div id="profile-saved-team-list" className="space-y-3">
               {visibleTeams.map((team, index) => (
-                <SavedTeamRecord key={team.id} team={team} featured={index === 0} />
+                <SavedTeamRecord
+                  key={team.id}
+                  team={team}
+                  builderTarget={builderTargetsByTeamId.get(team.id) ?? { href: null, missingPlayers: [] }}
+                  builderTargetsLoading={builderTargetsLoading}
+                  featured={index === 0}
+                />
               ))}
             </div>
           ) : (
