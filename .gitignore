@@ -35,3 +35,4 @@ backend/.next/trace*
 knowledge/
 scripts/composite_results/
 scripts/compute_composites.py
+tmp/
