@@ -5,7 +5,7 @@
  *
  * This delegates the lineup result surface to the shared cohesion detail
  * component so Builder and calibration show the same bell curves, expandable
- * subscores, synergy chips, and composites table.
+ * subscores, synergy chips, and Impact Traits table.
  */
 
 import { CohesionResultDetails } from "@/components/cohesion/CohesionResultDetails";

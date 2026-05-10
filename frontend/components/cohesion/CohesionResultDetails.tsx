@@ -102,7 +102,7 @@ export function CohesionCompositesTable({
   return (
     <div id={idPrefix} className="overflow-x-auto">
       <p id={`${idPrefix}-title`} className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Player Composites (0-10)
+        Player Impact Traits (0-10)
       </p>
       <table id={`${idPrefix}-table`} className="w-full text-[10px] border-separate" style={{ borderSpacing: "2px 3px" }}>
         <thead>

@@ -106,9 +106,33 @@ _Avoid_: Modal-only profile, profile card
 A Player's complete dictionary of Skills at their evaluated Tier. Generated from the Player's stat Snapshot via the skill pipeline (for active Players) or manually curated (for Legends).
 _Avoid_: Skill set (ambiguous with the general concept of "skills")
 
+**Impact Trait**:
+A normalized player-level basketball effect produced from a Player's Skill Profile. Skills describe what a Player possesses; Impact Traits describe what those Skills can add to a Lineup before full Lineup context is applied. Examples: Spacing, Rim Pressure, Shot Creation, Anchor, Perimeter Defense.
+_Avoid_: composite, channel, dimension, attribute
+
 **Snapshot**:
-A point-in-time capture of a player's stats used as input to the skill pipeline. Currently sourced from the 2024-25 NBA season, approximately monthly.
-_Avoid_: Stats, raw stats
+A point-in-time capture of a Player's stats used as input to the skill pipeline. A Snapshot is an internal pipeline input; it may be used to produce a Snapshot Release, but not every Snapshot is necessarily published for users to build against.
+_Avoid_: Stats, raw stats, Snapshot Release when referring only to pipeline input
+
+**Snapshot Release**:
+A published, user-visible version of the PlayerPool, Player metadata, salaries, Snapshots, and Skill Profiles used for building and evaluating Teams. Snapshot Releases are immutable once published so a Saved Team can always be understood in the evaluation context that existed when it was saved.
+_Avoid_: update, data refresh, release, version when referring to the user-facing evaluation context
+
+**Canonical Player**:
+The stable identity of a Player across Snapshot Releases. Used to connect the same real person across trades, waives, salary changes, team changes, role changes, and Skill Profile updates.
+_Avoid_: player row, current player record
+
+**Snapshot Player**:
+A Player as they existed in one Snapshot Release, including team, position, salary, Snapshot-derived metadata, and Skill Profile at that point in time.
+_Avoid_: current player, player version
+
+**Saved Team**:
+A persisted Team owned by a user, tied to the RuleSet and Snapshot Release it was built under. Saved Teams are private by default unless a later publishing workflow explicitly changes visibility.
+_Avoid_: saved roster, saved build
+
+**Evaluation Version**:
+The version of the scoring engine, weights, and evaluation rules used to evaluate a Team. Evaluation Version is separate from Snapshot Release: the Snapshot Release says which Player data was used, while the Evaluation Version says how the engine interpreted that data.
+_Avoid_: algorithm version, model version unless specifically referring to an AI model
 
 ## Relationships
 
@@ -138,9 +162,21 @@ _Avoid_: Stats, raw stats
 
 ### RuleSet governs the Build
 - A **RuleSet** defines: Team size, **SalaryCap**, **Cornerstone** rules, **PlayerPool**, **RookieDeal** limit.
-- Every saved Team is associated with the **RuleSet** it was built under.
+- Every **Saved Team** is associated with the **RuleSet** it was built under.
 - The **PlayerPool** available in the builder is determined by the active **RuleSet**.
 - A **Skill Profile** is generated from a **Snapshot** via the stat pipeline (for active Players) or manually curated (for Legends).
+- An **Impact Trait** is derived from a **Skill Profile** and describes the basketball effect those Skills can create before Lineup context, synergy, and rollup scoring are applied.
+
+### Saved Team persistence
+- A **Saved Team** persists a valid **Team** under one **RuleSet** and one **Snapshot Release**.
+- A **Saved Team** preserves slot order so the **Starting Lineup** remains recoverable.
+- A **Saved Team** should preserve enough original evaluation context to explain what the Team meant when it was saved, even if future Snapshot Releases change Player metadata, salaries, or Skill Profiles.
+
+### Snapshot Releases
+- A **Snapshot** is pipeline input; a **Snapshot Release** is the published evaluation context users build against.
+- A **Snapshot Release** defines which PlayerPool, Player metadata, salaries, Snapshots, and Skill Profiles are active for user-facing Team building.
+- A **Snapshot Player** belongs to one **Snapshot Release** and represents a **Canonical Player** at that point in time.
+- Saved Teams do not silently mutate when a newer **Snapshot Release** is published. They may be re-evaluated under a newer Snapshot Release through an explicit user action.
 
 ## Example dialogue
 
