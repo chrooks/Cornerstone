@@ -1,6 +1,6 @@
 # Project Index
 
-Last updated: 2026-05-08 by /fork (handoff: 2026-05-08-legends-picker-playerpool-domain)
+Last updated: 2026-05-10 by /handoff
 
 ## Source-of-truth documents
 
@@ -14,6 +14,9 @@ Last updated: 2026-05-08 by /fork (handoff: 2026-05-08-legends-picker-playerpool
 
 ## Handoffs
 
+- [profile-real-saved-teams-schema](handoffs/2026-05-10-profile-real-saved-teams-schema.md) — Profile mock complete; next scope is real Saved Team data, RuleSet, and evaluation schema
+- [save-team-workflow](handoffs/2026-05-09-save-team-workflow.md) — Final Eval refresh complete; next scope is Save Team workflow from final Eval
+- [builder-feedback-final-eval](handoffs/2026-05-09-builder-feedback-final-eval.md) — Builder Feedback complete; move next to final Eval page hierarchy and refresh direction
 - [legends-picker-playerpool-domain](handoffs/2026-05-08-legends-picker-playerpool-domain.md) — Lab flow progress: Legends picker done, Build reskin next, PlayerPool extraction plan
 - [lab-flow-craft-ruleset-picker](handoffs/2026-05-08-lab-flow-craft-ruleset-picker.md) — Craft the Lab flow, starting with Rule Set picker page
 - [note-skill-creation](handoffs/2026-05-08-note-skill-creation.md) — Create a `/note` skill for quick scratchpad notes
