@@ -178,12 +178,12 @@ export function NavBar() {
                     className="absolute right-0 top-full mt-2 w-48 rounded-lg border border-border bg-popover shadow-lg z-20 py-1 overflow-hidden"
                   >
                     <Link
-                      id="navbar-saved-teams-link"
-                      href="/saved-teams"
+                      id="navbar-profile-link"
+                      href="/profile"
                       onClick={() => setProfileOpen(false)}
                       className="block px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                     >
-                      Saved Teams
+                      Profile
                     </Link>
                     <button
                       id="navbar-logout-btn"

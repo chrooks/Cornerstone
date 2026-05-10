@@ -13,16 +13,17 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams, useParams } from "next/navigation";
-import { listPlayersWithSkills, getLegend, evaluateRoster } from "@/lib/api";
+import { useRouter, useSearchParams, useParams, usePathname } from "next/navigation";
+import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam } from "@/lib/api";
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { readSlotsFromParams, buildPlayerPayload } from "@/lib/roster-utils";
+import { LEGEND_SALARY, MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { NotesList } from "./NotesList";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
-import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
+import type { LegendDetail, PlayerWithSkills, RosterEvaluation, SaveTeamPayload, SavedTeamSummary } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // TeamDescriptionCard — LLM-generated GM-memo narrative (final mode only)
@@ -174,6 +175,7 @@ function RotationSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSki
 // ---------------------------------------------------------------------------
 
 type EvalState = "loading" | "evaluating" | "ready" | "error";
+type SaveState = "idle" | "saving" | "saved" | "error";
 
 interface DataReady {
   slots: (PlayerWithSkills | null)[];
@@ -234,6 +236,7 @@ export function EvaluatePage() {
   const searchParams = useSearchParams();
   const router       = useRouter();
   const params       = useParams();
+  const pathname     = usePathname();
   const { isAdmin, loading: adminLoading, email } = useAdminStatus();
   const isLoggedIn = email !== null;
 
@@ -248,6 +251,9 @@ export function EvaluatePage() {
   const [errorMsg, setErrorMsg]   = useState<string | null>(null);
   const [dataReady, setDataReady] = useState<DataReady | null>(null);
   const [evaluation, setEvaluation] = useState<RosterEvaluation | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedTeam, setSavedTeam] = useState<SavedTeamSummary | null>(null);
 
   // Capture searchParams at mount — stable ref avoids closure staleness
   const paramsRef = useRef(searchParams.toString());
@@ -319,6 +325,96 @@ export function EvaluatePage() {
 
   const isLoading = evalState === "loading" || evalState === "evaluating";
 
+  function buildSavePayload(): SaveTeamPayload | null {
+    if (!dataReady || !evaluation) return null;
+
+    const filledSlots = dataReady.slots.slice(0, MAX_ROSTER_SLOTS);
+    if (filledSlots.some((player) => player === null)) return null;
+
+    return {
+      ruleset_slug: ruleset ?? "standard",
+      cornerstone_legend_id: dataReady.legend.id,
+      players: filledSlots.map((player, index) => {
+        const slot = index + 1;
+        const isCornerstone = player!.id === dataReady.legend.id || player!.is_legend === true;
+        if (isCornerstone) {
+          return {
+            slot,
+            is_cornerstone: true,
+            player_id: null,
+            legend_id: dataReady.legend.id,
+            salary_snapshot: LEGEND_SALARY,
+            player_name_snapshot: dataReady.legend.name,
+            team_snapshot: dataReady.legend.team,
+            position_snapshot: dataReady.legend.position,
+            skill_profile_snapshot: Object.fromEntries(
+              Object.entries(dataReady.legend.profile).map(([skill, tier]) => [skill, tier ?? "None"]),
+            ),
+          };
+        }
+
+        return {
+          slot,
+          is_cornerstone: false,
+          player_id: player!.id,
+          legend_id: null,
+          salary_snapshot: player!.salary ?? 0,
+          player_name_snapshot: player!.name,
+          team_snapshot: player!.team,
+          position_snapshot: player!.position,
+          skill_profile_snapshot: (player!.skills ?? {}) as Record<string, string>,
+        };
+      }),
+      evaluation: {
+        star_rating: evaluation.star_rating,
+        starting_lineup_score: evaluation.starting_lineup.cohesion_score,
+        team_description: evaluation.team_description,
+      },
+    };
+  }
+
+  function redirectToLoginForSave() {
+    const current = `${pathname}?${searchParams.toString()}`;
+    router.push(`/login?redirectTo=${encodeURIComponent(current)}`);
+  }
+
+  async function handleSaveTeam() {
+    setSaveError(null);
+
+    if (adminLoading) return;
+    if (!isLoggedIn) {
+      redirectToLoginForSave();
+      return;
+    }
+
+    const payload = buildSavePayload();
+    if (!payload) {
+      setSaveState("error");
+      setSaveError("Complete this Rotation before saving.");
+      return;
+    }
+
+    setSaveState("saving");
+    const res = await saveTeam(payload);
+    if (res.success && res.data) {
+      setSavedTeam(res.data);
+      setSaveState("saved");
+      return;
+    }
+
+    setSaveState("error");
+    setSaveError(res.error ?? "Team could not be saved.");
+  }
+
+  const saveButtonLabel = saveState === "saving"
+    ? "Saving..."
+    : isLoggedIn
+      ? savedTeam
+        ? "Saved"
+        : "Save Team"
+      : "Sign In To Save";
+  const saveDisabled = adminLoading || evalState !== "ready" || saveState === "saving" || saveState === "saved";
+
   return (
     <main id="eval-page" className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 
@@ -335,18 +431,49 @@ export function EvaluatePage() {
         <h1 id="eval-title" className="absolute left-1/2 -translate-x-1/2 text-lg font-bold text-foreground pointer-events-none whitespace-nowrap">
           Final Eval
         </h1>
-        {isLoggedIn && (
-          <button
-            id="eval-save-btn"
-            type="button"
-            disabled
-            title="Coming soon"
-            className="ml-auto text-sm font-medium rounded-md border border-border px-3 py-1.5 opacity-40 cursor-not-allowed shrink-0"
-          >
-            Save Team
-          </button>
-        )}
+        <button
+          id="eval-save-btn"
+          type="button"
+          disabled={saveDisabled}
+          onClick={handleSaveTeam}
+          className="ml-auto shrink-0 rounded-[4px] border border-[#0e0907] bg-[#ffa05c] px-3 py-1.5 text-sm font-medium text-[#0e0907] transition-colors hover:bg-[#fe6d34] disabled:cursor-not-allowed disabled:border-[#d9d0c9] disabled:bg-[#f0f0f0] disabled:text-[#0e0907]/40"
+        >
+          {saveButtonLabel}
+        </button>
       </div>
+
+      {(saveState === "saving" || saveState === "saved" || saveState === "error") && (
+        <div
+          id="eval-save-feedback"
+          role="status"
+          aria-live="polite"
+          className="border border-[#d9d0c9] bg-[#f7f7f7] px-4 py-3 text-sm text-[#0e0907]/70"
+        >
+          {saveState === "saving" && (
+            <p id="eval-save-saving">Saving this Team to your Lab...</p>
+          )}
+          {saveState === "saved" && savedTeam && (
+            <div id="eval-save-success" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p>
+                Saved <span className="font-semibold text-[#0e0907]">{savedTeam.name}</span>.
+              </p>
+              <button
+                id="eval-save-keep-tuning-btn"
+                type="button"
+                onClick={() => router.push(backHref)}
+                className="w-fit rounded-[4px] border border-[#d9d0c9] px-2.5 py-1 text-xs font-medium text-[#0e0907] transition-colors hover:bg-[#f0f0f0]"
+              >
+                Keep Tuning
+              </button>
+            </div>
+          )}
+          {saveState === "error" && (
+            <p id="eval-save-error" className="text-[#e53e3e]">
+              {saveError ?? "Team could not be saved."}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Rotation summary */}
       {dataReady && (

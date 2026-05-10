@@ -103,6 +103,7 @@ from api.legends import legends_bp
 from api.rosters import rosters_bp
 from api.builder import builder_bp
 from api.cohesion_calibration import cohesion_calibration_bp
+from api.saved_teams import saved_teams_bp
 
 
 def _warm_cohesion_distributions() -> None:
@@ -154,6 +155,7 @@ def create_app() -> Flask:
     app.register_blueprint(rosters_bp)      # Prompt 9: roster builder persistence
     app.register_blueprint(builder_bp)      # Phase 4: roster evaluation engine
     app.register_blueprint(cohesion_calibration_bp)  # Cohesion engine calibration
+    app.register_blueprint(saved_teams_bp)  # Saved Team persistence
 
     _warm_cohesion_distributions()
 

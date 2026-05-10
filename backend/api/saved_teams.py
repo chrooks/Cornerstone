@@ -1,0 +1,238 @@
+"""
+api/saved_teams.py — Saved Team persistence endpoints.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid as _uuid_mod
+from typing import Any
+
+from flask import Blueprint, g, jsonify, request
+
+from api.auth import require_user
+from services.supabase_client import get_supabase
+
+logger = logging.getLogger(__name__)
+
+saved_teams_bp = Blueprint("saved_teams", __name__, url_prefix="/api")
+
+STANDARD_RULESET = "standard"
+STANDARD_ROTATION_SIZE = 9
+STANDARD_SALARY_CAP = 195_000_000
+EVALUATION_VERSION = "cohesion-v1"
+
+
+def _ok(data: Any, status: int = 200) -> tuple:
+    return jsonify({"success": True, "data": data, "error": None}), status
+
+
+def _err(msg: str, status: int = 400) -> tuple:
+    return jsonify({"success": False, "data": None, "error": msg}), status
+
+
+def _validate_uuid(value: Any) -> bool:
+    try:
+        _uuid_mod.UUID(str(value))
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+def _published_snapshot_release_id(supabase, requested_id: str | None) -> str | None:
+    query = (
+        supabase.table("snapshot_releases")
+        .select("id, status")
+        .eq("status", "published")
+    )
+    if requested_id:
+        query = query.eq("id", requested_id)
+    else:
+        query = query.order("published_at", desc=True).limit(1)
+
+    res = query.execute()
+    rows = res.data or []
+    return rows[0]["id"] if rows else None
+
+
+def _is_missing_snapshot_release_table(exc: Exception) -> bool:
+    text = str(exc)
+    return (
+        "snapshot_releases" in text
+        and (
+            "schema cache" in text
+            or "Could not find the table" in text
+            or "relation" in text
+        )
+    )
+
+
+def _validate_standard_saved_team(body: dict[str, Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
+    ruleset_slug = body.get("ruleset_slug")
+    if ruleset_slug != STANDARD_RULESET:
+        return None, "ruleset_slug must be 'standard'"
+
+    cornerstone_legend_id = body.get("cornerstone_legend_id")
+    if not _validate_uuid(cornerstone_legend_id):
+        return None, "cornerstone_legend_id must be a valid UUID"
+
+    players = body.get("players")
+    if not isinstance(players, list):
+        return None, "players must be an array"
+    if len(players) != STANDARD_ROTATION_SIZE:
+        return None, f"Standard RuleSet Saved Team must include exactly {STANDARD_ROTATION_SIZE} players"
+
+    slots: list[int] = []
+    cornerstone_rows: list[dict[str, Any]] = []
+    total_salary = 0
+
+    for player in players:
+        if not isinstance(player, dict):
+            return None, "each saved Team player must be an object"
+
+        slot = player.get("slot")
+        if not isinstance(slot, int) or isinstance(slot, bool):
+            return None, "each saved Team player slot must be an integer"
+        slots.append(slot)
+
+        is_cornerstone = player.get("is_cornerstone")
+        if not isinstance(is_cornerstone, bool):
+            return None, "each saved Team player must include is_cornerstone"
+        if is_cornerstone:
+            cornerstone_rows.append(player)
+
+        salary = player.get("salary_snapshot", 0)
+        if not isinstance(salary, int) or salary < 0:
+            return None, "salary_snapshot must be a non-negative integer"
+        total_salary += salary
+
+        name = player.get("player_name_snapshot")
+        if not isinstance(name, str) or not name.strip():
+            return None, "player_name_snapshot is required"
+
+        skills = player.get("skill_profile_snapshot")
+        if not isinstance(skills, dict):
+            return None, "skill_profile_snapshot must be an object"
+
+        player_id = player.get("player_id")
+        legend_id = player.get("legend_id")
+        if player_id is not None and not _validate_uuid(player_id):
+            return None, "player_id must be a valid UUID when present"
+        if legend_id is not None and not _validate_uuid(legend_id):
+            return None, "legend_id must be a valid UUID when present"
+        if player_id is None and legend_id is None:
+            return None, "each saved Team player needs player_id or legend_id"
+
+    if sorted(slots) != list(range(1, STANDARD_ROTATION_SIZE + 1)):
+        return None, "Standard RuleSet slots must be exactly 1 through 9"
+    if len(cornerstone_rows) != 1:
+        return None, "Standard RuleSet Saved Team must include exactly one Cornerstone"
+
+    cornerstone = cornerstone_rows[0]
+    if cornerstone["slot"] != 1:
+        return None, "Standard RuleSet Cornerstone must be in slot 1"
+    if cornerstone.get("legend_id") != cornerstone_legend_id:
+        return None, "Cornerstone legend_id must match cornerstone_legend_id"
+    if cornerstone.get("player_id") is not None:
+        return None, "Cornerstone must use legend_id, not player_id"
+    if total_salary > STANDARD_SALARY_CAP:
+        return None, f"Saved Team exceeds Standard RuleSet SalaryCap of ${STANDARD_SALARY_CAP:,}"
+
+    return players, None
+
+
+def _auto_name(body: dict[str, Any], players: list[dict[str, Any]]) -> str:
+    raw_name = body.get("name")
+    if isinstance(raw_name, str) and raw_name.strip():
+        return raw_name.strip()
+    cornerstone = next(player for player in players if player["is_cornerstone"])
+    return f"{cornerstone['player_name_snapshot'].strip()} Standard Rotation"
+
+
+def _player_insert_rows(saved_team_id: str, players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for player in sorted(players, key=lambda item: item["slot"]):
+        rows.append({
+            "saved_team_id": saved_team_id,
+            "player_id": player.get("player_id"),
+            "legend_id": player.get("legend_id"),
+            "slot": player["slot"],
+            "is_cornerstone": player["is_cornerstone"],
+            "salary_snapshot": player.get("salary_snapshot", 0),
+            "player_name_snapshot": player["player_name_snapshot"].strip(),
+            "team_snapshot": player.get("team_snapshot"),
+            "position_snapshot": player.get("position_snapshot"),
+            "skill_profile_snapshot": player.get("skill_profile_snapshot", {}),
+        })
+    return rows
+
+
+@saved_teams_bp.route("/saved-teams", methods=["POST"])
+@require_user
+def create_saved_team():
+    body = request.get_json(silent=True) or {}
+
+    players, validation_error = _validate_standard_saved_team(body)
+    if validation_error:
+        return _err(validation_error)
+    assert players is not None
+
+    try:
+        supabase = get_supabase()
+
+        snapshot_release_id = body.get("snapshot_release_id")
+        if snapshot_release_id is not None and not _validate_uuid(snapshot_release_id):
+            return _err("snapshot_release_id must be a valid UUID")
+
+        try:
+            published_snapshot_id = _published_snapshot_release_id(supabase, snapshot_release_id)
+        except Exception as exc:
+            if _is_missing_snapshot_release_table(exc):
+                return _err(
+                    "Snapshot Release migration has not been applied. Run the saved_teams Supabase migration before saving Teams.",
+                    status=503,
+                )
+            raise
+        if published_snapshot_id is None:
+            return _err("A published Snapshot Release is required", status=400)
+
+        total_salary = sum(player.get("salary_snapshot", 0) for player in players)
+        evaluation = body.get("evaluation") if isinstance(body.get("evaluation"), dict) else {}
+
+        saved_team_insert = {
+            "user_id": g.user_id,
+            "ruleset_slug": STANDARD_RULESET,
+            "snapshot_release_id": published_snapshot_id,
+            "name": _auto_name(body, players),
+            "visibility": "private",
+            "cornerstone_legend_id": body["cornerstone_legend_id"],
+            "total_salary": total_salary,
+            "star_rating": evaluation.get("star_rating"),
+            "starting_lineup_score": evaluation.get("starting_lineup_score"),
+            "team_description": evaluation.get("team_description"),
+            "evaluation_version": EVALUATION_VERSION,
+        }
+
+        team_res = supabase.table("saved_teams").insert(saved_team_insert).execute()
+        saved_team = team_res.data[0]
+        saved_team_id = saved_team["id"]
+
+        try:
+            supabase.table("saved_team_players").insert(
+                _player_insert_rows(saved_team_id, players)
+            ).execute()
+        except Exception:
+            supabase.table("saved_teams").delete().eq("id", saved_team_id).execute()
+            raise
+
+        return _ok({
+            "id": saved_team_id,
+            "name": saved_team["name"],
+            "ruleset_slug": saved_team["ruleset_slug"],
+            "snapshot_release_id": saved_team["snapshot_release_id"],
+            "visibility": saved_team["visibility"],
+        }, status=201)
+
+    except Exception:
+        logger.exception("Error in POST /api/saved-teams")
+        return _err("Internal server error", status=500)

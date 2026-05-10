@@ -596,6 +596,46 @@ export interface RosterEvaluation {
   team_description: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Saved Teams
+// ---------------------------------------------------------------------------
+
+/** One ordered Player snapshot persisted inside a Saved Team. */
+export interface SaveTeamPlayerPayload {
+  slot: number;
+  is_cornerstone: boolean;
+  player_id: string | null;
+  legend_id: string | null;
+  salary_snapshot: number;
+  player_name_snapshot: string;
+  team_snapshot: string | null;
+  position_snapshot: string | null;
+  skill_profile_snapshot: Record<string, string>;
+}
+
+/** Request payload for POST /api/saved-teams. */
+export interface SaveTeamPayload {
+  ruleset_slug: string;
+  snapshot_release_id?: string;
+  name?: string;
+  cornerstone_legend_id: string;
+  players: SaveTeamPlayerPayload[];
+  evaluation: {
+    star_rating: number;
+    starting_lineup_score: number;
+    team_description: string | null;
+  };
+}
+
+/** Summary returned after a Team is saved. */
+export interface SavedTeamSummary {
+  id: string;
+  name: string;
+  ruleset_slug: string;
+  snapshot_release_id: string;
+  visibility: "private" | "unlisted" | "public";
+}
+
 /** One ranked five-player combination returned by calibration rotation diagnostics. */
 export interface CohesionLineupCombination extends CohesionLineupData {
   rank: number;

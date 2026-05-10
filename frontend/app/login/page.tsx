@@ -5,17 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 
-/**
- * Guard against open-redirect attacks: the redirectTo param must be a
- * relative path starting with /admin. Any external URL or unexpected path
- * falls back to the safe default /admin.
- */
-function sanitizeAdminRedirect(raw: string | null): string {
-  // Must start with /admin and must not start with // (protocol-relative URL)
-  if (raw && raw.startsWith("/admin") && !raw.startsWith("//")) {
+/** Guard against open-redirect attacks by allowing only same-site paths. */
+function sanitizeRedirect(raw: string | null): string {
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) {
     return raw;
   }
-  return "/admin";
+  return "/";
 }
 
 /**
@@ -26,7 +21,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // Validate the redirectTo param before trusting it — prevents open-redirect attacks
-  const redirectTo = sanitizeAdminRedirect(searchParams.get("redirectTo"));
+  const redirectTo = sanitizeRedirect(searchParams.get("redirectTo"));
 
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
@@ -37,9 +32,9 @@ function LoginForm() {
   useEffect(() => {
     const supabase = getBrowserSupabase();
     supabase.auth.getSession().then(({ data: { session } }: { data: { session: unknown } }) => {
-      if (session) router.replace("/admin");
+      if (session) router.replace(redirectTo);
     });
-  }, [router]);
+  }, [redirectTo, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,7 +113,7 @@ function LoginForm() {
 
       <p id="login-signup-link" className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
-        <Link href="/signup" className="underline hover:text-foreground transition-colors">
+        <Link href={`/signup?redirectTo=${encodeURIComponent(redirectTo)}`} className="underline hover:text-foreground transition-colors">
           Sign up
         </Link>
       </p>
@@ -128,7 +123,7 @@ function LoginForm() {
 
 /**
  * /login — Email/password sign-in page.
- * On success, redirects to /admin (or the original destination captured by middleware).
+ * On success, redirects to the safe same-site destination captured by redirectTo.
  */
 export default function LoginPage() {
   return (
@@ -142,7 +137,7 @@ export default function LoginPage() {
             Cornerstone
           </h1>
           <p id="login-subtitle" className="text-sm text-muted-foreground">
-            Sign in to access admin tools
+            Sign in to continue
           </p>
         </div>
 

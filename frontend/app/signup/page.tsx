@@ -5,6 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 
+/** Guard against open-redirect attacks by allowing only same-site paths. */
+function sanitizeRedirect(raw: string | null): string {
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) {
+    return raw;
+  }
+  return "/";
+}
+
 /**
  * Inner form — extracted so useSearchParams() can be wrapped in Suspense,
  * required by Next.js 14 App Router for client-side search param reads.
@@ -12,15 +20,15 @@ import { getBrowserSupabase } from "@/lib/supabase/client";
 function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") ?? "/";
+  const redirectTo = sanitizeRedirect(searchParams.get("redirectTo"));
 
   // Redirect already-authenticated users away from the signup page
   useEffect(() => {
     const supabase = getBrowserSupabase();
     supabase.auth.getSession().then(({ data: { session } }: { data: { session: unknown } }) => {
-      if (session) router.replace("/admin");
+      if (session) router.replace(redirectTo);
     });
-  }, [router]);
+  }, [redirectTo, router]);
 
   const [email, setEmail]           = useState("");
   const [password, setPassword]     = useState("");
@@ -153,7 +161,7 @@ function SignUpForm() {
 
       <p id="signup-login-link" className="text-center text-sm text-muted-foreground">
         Already have an account?{" "}
-        <Link href="/login" className="underline hover:text-foreground transition-colors">
+        <Link href={`/login?redirectTo=${encodeURIComponent(redirectTo)}`} className="underline hover:text-foreground transition-colors">
           Sign in
         </Link>
       </p>

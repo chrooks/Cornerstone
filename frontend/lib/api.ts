@@ -29,6 +29,8 @@ import type {
   EvaluatePayload,
   RosterEvaluation,
   CohesionRotationEvaluation,
+  SaveTeamPayload,
+  SavedTeamSummary,
 } from "./types";
 
 // Points to the Flask dev server by default; override via env var in production.
@@ -581,6 +583,16 @@ export async function evaluateRoster(
   payload: EvaluatePayload,
 ): Promise<ApiResponse<RosterEvaluation>> {
   return apiFetch<RosterEvaluation>("/api/builder/evaluate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Save a valid Team under the active RuleSet and Snapshot Release. */
+export async function saveTeam(
+  payload: SaveTeamPayload,
+): Promise<ApiResponse<SavedTeamSummary>> {
+  return apiFetch<SavedTeamSummary>("/api/saved-teams", {
     method: "POST",
     body: JSON.stringify(payload),
   });

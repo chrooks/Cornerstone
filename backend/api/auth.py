@@ -22,7 +22,7 @@ from typing import Callable, TypeVar
 
 import jwt
 import requests as http_requests
-from flask import jsonify, request
+from flask import g, jsonify, request
 from jwt.algorithms import ECAlgorithm, RSAAlgorithm
 
 from services.supabase_client import get_supabase
@@ -170,6 +170,47 @@ def require_admin(f: F) -> F:
         if not res.data:
             logger.debug("Access denied for user %s — no admin role", user_id)
             return jsonify({"success": False, "error": "Forbidden — admin role required"}), 403
+
+        return f(*args, **kwargs)
+
+    return decorated  # type: ignore[return-value]
+
+
+def require_user(f: F) -> F:
+    """
+    Decorator that enforces ordinary Supabase user authentication.
+
+    This verifies the same JWTs as require_admin, but it does not check
+    user_roles. Use it for endpoints where any logged-in user may act on
+    their own data. The authenticated user's id is exposed as g.user_id.
+    """
+
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return (
+                jsonify({
+                    "success": False,
+                    "data": None,
+                    "error": "Missing or malformed Authorization header",
+                }),
+                401,
+            )
+
+        token = auth_header.split(" ", 1)[1]
+
+        try:
+            payload = _verify_jwt(token)
+            g.user_id = payload["sub"]
+        except jwt.ExpiredSignatureError:
+            return jsonify({"success": False, "data": None, "error": "Token expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"success": False, "data": None, "error": "Invalid token"}), 401
+        except RuntimeError:
+            return jsonify({"success": False, "data": None, "error": "Server auth not configured"}), 500
+        except KeyError:
+            return jsonify({"success": False, "data": None, "error": "Invalid token"}), 401
 
         return f(*args, **kwargs)
 
