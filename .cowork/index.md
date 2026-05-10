@@ -14,6 +14,7 @@ Last updated: 2026-05-10 by /handoff
 
 ## Handoffs
 
+- [builder-feedback-read-next-steps](handoffs/2026-05-10-builder-feedback-read-next-steps.md) — Builder Feedback read implemented; next scope is PlayerPool Contribution Preview honesty and responsiveness tuning
 - [profile-real-saved-teams-schema](handoffs/2026-05-10-profile-real-saved-teams-schema.md) — Profile mock complete; next scope is real Saved Team data, RuleSet, and evaluation schema
 - [save-team-workflow](handoffs/2026-05-09-save-team-workflow.md) — Final Eval refresh complete; next scope is Save Team workflow from final Eval
 - [builder-feedback-final-eval](handoffs/2026-05-09-builder-feedback-final-eval.md) — Builder Feedback complete; move next to final Eval page hierarchy and refresh direction
