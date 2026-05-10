@@ -78,6 +78,31 @@ export const SKILL_LABELS: Record<string, string> = {
   high_flyer:               "High Flyer",
 };
 
+/** Human-readable skill definitions. Mirrors backend/services/skills.py. */
+export const SKILL_DESCRIPTIONS: Record<string, string> = {
+  spot_up_shooter:          "Hits catch-and-shoot three-pointers and mid-range shots from set positions.",
+  off_dribble_shooter:      "Creates and converts shots off the dribble, including pull-ups and step-backs.",
+  offensive_rebounder:      "Consistently crashes offensive boards and converts second-chance opportunities.",
+  rebounder:                "Consistently grabs defensive and offensive boards through positioning and effort.",
+  rim_protector:            "Deters and blocks shots at the rim, altering opponent finishing attempts.",
+  isolation_scorer:         "Beats defenders one-on-one in isolation situations through dribble moves and athleticism.",
+  movement_shooter:         "Hits shots while relocating off screens and handoffs, not just standing still.",
+  cutter:                   "Scores effectively by cutting to the basket off-ball.",
+  transition_threat:        "Scores effectively in the open court on fast breaks.",
+  pnr_ball_handler:         "Initiates and scores or creates effectively as the ball handler in pick-and-roll actions.",
+  pnr_finisher:             "Scores effectively as the screener in pick-and-roll actions, whether rolling, popping, or slipping.",
+  crafty_finisher:          "Scores at the rim using touch, body control, and foul-drawing ability rather than pure athleticism.",
+  driver:                   "Consistently attacks the paint from the perimeter off the dribble, generating driving lane pressure and paint touches.",
+  vertical_spacer:          "Threatens vertically as a lob target and above-the-rim finisher, creating driving lanes for teammates.",
+  screen_setter:            "Sets quality screens that free teammates for open shots.",
+  passer:                   "Creates quality shot opportunities for teammates through vision and passing skill.",
+  mid_post_player:          "Scores effectively from the mid-post and elbow area using face-up moves and mid-range shooting.",
+  low_post_player:          "Scores effectively with back-to-basket moves in the low post.",
+  versatile_defender:       "Can guard multiple positional groups effectively when switched.",
+  perimeter_disruptor:      "Disrupts ball handlers through active hands, pressure, and contests at the point of attack.",
+  high_flyer:               "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, and transition finishes.",
+};
+
 /** Converts a skill key to its display name, with snake_case title-case fallback. */
 export function formatSkillName(name: string): string {
   return (

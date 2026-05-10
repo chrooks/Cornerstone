@@ -3,11 +3,11 @@
  *
  * Shared across CohesionResultDetails, CohesionScoreDisplay, and the
  * cohesion calibration admin page. Eliminates previously duplicated
- * definitions of composite columns, subscore groupings, and synergy descriptions.
+ * definitions of Impact Trait columns, subscore groupings, and synergy descriptions.
  */
 
 // ---------------------------------------------------------------------------
-// Composite columns (the 12 player-level composite dimensions)
+// Impact Trait columns (the 12 player-level normalized basketball effects)
 // ---------------------------------------------------------------------------
 
 export interface CompositeColumn {
@@ -16,7 +16,7 @@ export interface CompositeColumn {
   abbr: string;
 }
 
-/** The 12 composite scoring dimensions in canonical order. */
+/** The 12 Impact Trait scoring columns in canonical order. */
 export const COMPOSITE_COLUMNS: CompositeColumn[] = [
   { key: "spacing", abbr: "Spc", label: "Spacing" },
   { key: "finishing", abbr: "Fin", label: "Finishing" },
@@ -31,6 +31,22 @@ export const COMPOSITE_COLUMNS: CompositeColumn[] = [
   { key: "perimeter_defense", abbr: "PD", label: "Perimeter Defense" },
   { key: "interior_defense", abbr: "ID", label: "Interior Defense" },
 ];
+
+/** Human-readable explanations of player-level Impact Traits. */
+export const IMPACT_TRAIT_DESCRIPTIONS: Record<string, string> = {
+  spacing: "Floor spacing from shooting gravity.",
+  finishing: "Ability to score at the rim.",
+  paint_touch: "Rim pressure and interior presence from finishing, vertical spacing, and post play.",
+  anchor: "Defensive anchoring through rim protection, size, rebounding, and screening.",
+  post_game: "Half-court post scoring threat.",
+  pnr_screener: "Pick-and-roll screening, rolling, popping, and slip value.",
+  off_ball_impact: "Cutting, movement, relocation, and secondary playmaking without dominating the ball.",
+  shot_creation: "Ability to generate shots for self and teammates.",
+  rebounding: "Board-crashing value on both ends.",
+  transition: "Open-court value as runner, finisher, or pace-pusher.",
+  perimeter_defense: "On-ball and help defense around the perimeter.",
+  interior_defense: "Rim protection, post defense, and interior rebounding.",
+};
 
 // ---------------------------------------------------------------------------
 // Subscore labels and groupings (the 16 lineup-level subscores)
@@ -55,6 +71,29 @@ export const SUBSCORE_LABELS: Record<string, string> = {
   transition: "Transition",
   defensive_coverage: "Def Coverage",
   defensive_gaps: "Def Gaps",
+};
+
+/** Human-readable explanations of Lineup Subscores. */
+export const SUBSCORE_DESCRIPTIONS: Record<string, string> = {
+  spacing_creation_ratio: "Whether the Lineup has enough spacing for on-ball creators to operate.",
+  creation_offball_ratio: "Whether the Lineup balances on-ball creation with off-ball value.",
+  spacing_paint_touch_ratio: "Whether the Lineup has enough spacing to support rim pressure.",
+  rebound_transition_ratio: "Whether rebounding and transition play support each other.",
+  rebounding_spacing_deficit: "Whether spacing is adequate or rebounding can offset a spacing deficit.",
+  paint_touch_total: "Lineup-wide ability to pressure the rim.",
+  post_game_total: "Top post option, secondary post option, and post depth blended together.",
+  pnr_pairing: "How well pick-and-roll handlers and screeners match in quality and balance.",
+  pnr_screener_total: "Lineup-wide screening, rolling, popping, and slip value.",
+  anchor_total: "Stabilizing big-man presence through interior defense, rebounding, vertical size, and screening.",
+  perimeter_defense_total: "Primary perimeter defender quality with secondary support and depth.",
+  interior_defense_total: "Primary interior defender quality with secondary support and depth.",
+  collective_passing: "Primary creator passing plus lineup-wide passing depth.",
+  rebounding: "Top rebounders plus team rebounding depth.",
+  transition: "Lineup-wide transition pressure and open-court value.",
+  defensive_coverage: "Stacked height-based defensive bell-curve coverage after lineup effects.",
+  defensive_gaps: "How many height bands avoid falling below the defensive gap threshold.",
+  accentuation_strength: "How much the Lineup amplifies its best traits.",
+  accentuation_weakness: "How well the Lineup covers its weakest traits.",
 };
 
 /** Subscores organized into display groups for UI rendering. */

@@ -591,6 +591,7 @@ export interface RosterEvaluation {
   starting_lineup: CohesionLineupData;
   player_composites: CohesionPlayerComposites[];
   lineup_summary: CohesionLineupSummary;
+  lineup_combinations?: CohesionLineupCombination[];
   notes: CohesionNote[];
   team_description: string | null;
 }
@@ -612,6 +613,8 @@ export interface CohesionRotationEvaluation extends RosterEvaluation {
 /** Request payload for POST /api/builder/evaluate */
 export interface EvaluatePayload {
   players: Array<{
+    id?: string;
+    player_id?: string;
     name: string;
     /** 0 = cornerstone, 1–9 = supporting slots */
     slot: number;

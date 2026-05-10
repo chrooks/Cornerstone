@@ -17,7 +17,7 @@
 
 import { cn } from "@/lib/utils";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
-import { SUBSCORE_GROUPS } from "@/lib/cohesion-constants";
+import { SUBSCORE_DESCRIPTIONS, SUBSCORE_GROUPS } from "@/lib/cohesion-constants";
 import { subscoreColor } from "@/lib/cohesion-colors";
 import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
 import type { RosterEvaluation } from "@/lib/types";
@@ -45,27 +45,6 @@ function breakdownBarColor(value: number): string {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-const SUBSCORE_DESCRIPTIONS: Record<string, string> = {
-  spacing_creation_ratio: "Whether or not you have enough spacing for your on-ball creators to operate.",
-  creation_offball_ratio: "Whether or not you have a good balance of on & off-ball offensive players.",
-  spacing_paint_touch_ratio: "Whether or not you have enough spacing to support your paint touches.",
-  rebound_transition_ratio: "Whether rebounding and transition play support each other.",
-  rebounding_spacing_deficit: "Whether spacing is adequate or rebounding can offset a spacing deficit.",
-  paint_touch_total: "Lineup-wide ability to pressure the rim.",
-  post_game_total: "Top post option, secondary post option, and post depth blended together.",
-  pnr_pairing: "How well pick-and-roll handlers and screeners match in both quality and balance.",
-  anchor_total: "How much the Lineup has a stabilizing big-man presence through interior defense, rebounding, vertical size, and screening.",
-  perimeter_defense_total: "Primary perimeter defender quality with secondary support and depth.", //TODO change this t
-  interior_defense_total: "Primary interior defender quality with secondary support and depth.",
-  collective_passing: "Primary creator passing plus lineup-wide passing depth.",
-  rebounding: "Top rebounders plus team rebounding depth.",
-  transition: "Lineup-wide transition pressure and open-court value.",
-  defensive_coverage: "Stacked height-based defensive bell-curve coverage after lineup effects.",
-  defensive_gaps: "How many height bands avoid falling below the defensive gap threshold.",
-  accentuation_strength: "How much the lineup amplifies its best traits.",
-  accentuation_weakness: "How well the lineup covers its weakest traits.",
-};
 
 /** A labeled horizontal bar for 0-1 breakdown factors. */
 function BreakdownBar({ id, label, value, description }: { id: string; label: string; value: number; description: string }) {

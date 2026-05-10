@@ -74,6 +74,8 @@ function buildPlayerPayload(
   legendDetail: LegendDetail | null,
 ) {
   const result: Array<{
+    id?: string;
+    player_id?: string;
     name: string;
     slot: number;
     is_cornerstone: boolean;
@@ -84,6 +86,7 @@ function buildPlayerPayload(
   // Cornerstone legend — always slot=0
   if (legendDetail) {
     result.push({
+      id: legendDetail.id,
       name: legendDetail.name,
       slot: 0,
       is_cornerstone: true,
@@ -98,6 +101,8 @@ function buildPlayerPayload(
   allSlots.forEach((p, index) => {
     if (p === null || p.is_legend) return; // skip nulls and legend placeholder entries
     result.push({
+      id: p.id,
+      player_id: p.id,
       name: p.name,
       slot: index + 1,
       is_cornerstone: false,

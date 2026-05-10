@@ -4,9 +4,18 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { COMPOSITE_COLUMNS } from "@/lib/cohesion-constants";
-import { scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
-import { formatSkillName } from "@/lib/skills";
+import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
+import {
+  COMPOSITE_COLUMNS,
+  IMPACT_TRAIT_DESCRIPTIONS,
+  SUBSCORE_DESCRIPTIONS,
+  SUBSCORE_LABELS,
+} from "@/lib/cohesion-constants";
+import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
+import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
+import { mapNoteToFilter } from "@/lib/noteFilters";
+import { formatSkillName, SKILL_DESCRIPTIONS } from "@/lib/skills";
+import { TIER_BADGE_CLASSES } from "@/lib/tiers";
 import { AssistantGmNotes } from "./AssistantGmNotes";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import { FeedbackTooltip } from "./FeedbackTooltip";
@@ -14,15 +23,17 @@ import { SkillGrid } from "./SkillGrid";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 import type {
   CohesionCompositeScores,
+  CohesionLineupCombination,
   CohesionPlayerComposites,
   LegendDetail,
   Note,
   PlayerSkillMap,
   PlayerWithSkills,
   RosterEvaluation,
+  SkillTier,
 } from "@/lib/types";
 
-type FeedbackTab = "feedback" | "skills" | "debug";
+type FeedbackTab = "feedback" | "new" | "skills" | "debug";
 
 type CompositeKey = keyof CohesionCompositeScores;
 
@@ -68,6 +79,63 @@ const THEORETICAL_MAX: Record<CompositeKey, number> = {
   transition: 42,
   perimeter_defense: 17,
   interior_defense: 18,
+};
+
+const SKILL_TO_IMPACT_TRAITS: Record<string, CompositeKey[]> = {
+  movement_shooter: ["spacing", "off_ball_impact", "shot_creation"],
+  spot_up_shooter: ["spacing", "pnr_screener", "off_ball_impact", "shot_creation", "transition"],
+  off_dribble_shooter: ["spacing", "shot_creation"],
+  high_flyer: ["finishing", "paint_touch", "off_ball_impact", "transition"],
+  crafty_finisher: ["finishing", "paint_touch", "off_ball_impact"],
+  driver: ["paint_touch", "shot_creation", "transition"],
+  vertical_spacer: ["paint_touch", "anchor", "pnr_screener"],
+  low_post_player: ["paint_touch", "post_game"],
+  mid_post_player: ["paint_touch", "post_game"],
+  rebounder: ["rebounding", "interior_defense", "anchor"],
+  offensive_rebounder: ["rebounding"],
+  perimeter_disruptor: ["perimeter_defense"],
+  versatile_defender: ["perimeter_defense", "interior_defense"],
+  rim_protector: ["interior_defense"],
+  screen_setter: ["anchor", "pnr_screener"],
+  pnr_finisher: ["pnr_screener"],
+  transition_threat: ["transition"],
+  cutter: ["off_ball_impact"],
+  passer: ["off_ball_impact", "shot_creation", "transition"],
+  pnr_ball_handler: ["shot_creation"],
+  isolation_scorer: ["shot_creation"],
+};
+
+const IMPACT_TRAIT_TO_LINEUP_EFFECTS: Record<CompositeKey, string[]> = {
+  spacing: [
+    "spacing_creation_ratio",
+    "spacing_paint_touch_ratio",
+    "rebounding_spacing_deficit",
+  ],
+  finishing: ["paint_touch_total", "spacing_paint_touch_ratio"],
+  paint_touch: ["paint_touch_total", "spacing_paint_touch_ratio"],
+  anchor: ["anchor_total", "defensive_coverage", "defensive_gaps"],
+  post_game: ["post_game_total"],
+  pnr_screener: ["pnr_screener_total", "pnr_pairing"],
+  off_ball_impact: ["creation_offball_ratio"],
+  shot_creation: ["spacing_creation_ratio", "creation_offball_ratio"],
+  rebounding: ["rebounding", "rebound_transition_ratio", "rebounding_spacing_deficit"],
+  transition: ["transition", "rebound_transition_ratio"],
+  perimeter_defense: ["perimeter_defense_total", "defensive_coverage", "defensive_gaps"],
+  interior_defense: ["interior_defense_total", "defensive_coverage", "defensive_gaps"],
+};
+
+const SCORE_FACTOR_WEIGHTS: Record<string, string> = {
+  starting_5: "45%",
+  depth: "25%",
+  archetype_diversity: "20%",
+  floor: "10%",
+};
+
+const SCORE_FACTOR_DERIVATIONS: Record<string, string> = {
+  starting_5: "starting Lineup Cohesion Score divided by 5.0",
+  depth: "60% bench viable Lineup Combination rate plus 40% bench median quality",
+  archetype_diversity: "archetype count divided by the six supported lineup identities",
+  floor: "median score across all current Lineup Combinations divided by 5.0",
 };
 
 interface FormulaTerm {
@@ -139,7 +207,7 @@ function compositeFormulaTerm(
   return {
     label: `${compositeLabel(key)} raw`,
     value: raw * multiplier,
-    detail: multiplier === 1 ? "composite input" : `composite input x ${multiplier}`,
+    detail: multiplier === 1 ? "Impact Trait input" : `Impact Trait input x ${multiplier}`,
   };
 }
 
@@ -301,7 +369,7 @@ function computeRawCompositeBreakdowns(skills: PlayerSkillMap | null | undefined
       compositeFormulaTerm(raw, "paint_touch", c.shot_creation_paint_touch),
     ],
     raw: 0,
-    note: "This raw rating combines creation skills with spacing and rim-pressure composites.",
+    note: "This raw rating combines creation skills with Spacing and Rim Pressure Impact Traits.",
   };
   raw.shot_creation.raw = sumTerms(raw.shot_creation.terms);
 
@@ -326,7 +394,7 @@ function CompositeScoreTooltip({
         <p>Raw PlayerPool read. The normalized score appears after this Player is in the live evaluation.</p>
       ) : (
         <p>
-          Normalized player composite:{" "}
+          Normalized Impact Trait:{" "}
           <span className="font-mono text-[#0e0907]">{formatScore(normalized)}</span> / 10.
           The raw score is bell-curve normalized against the player pool.
         </p>
@@ -395,11 +463,194 @@ function rawToTenPointScale(key: CompositeKey, raw: number): number {
   return Math.min(10, Math.max(0, (raw / max) * 10));
 }
 
+function skillEntries(skills: PlayerSkillMap | null | undefined) {
+  return Object.entries(skills ?? {})
+    .map(([skill, tier]) => ({
+      skill,
+      label: formatSkillName(skill),
+      tier: tier ?? "None",
+      value: TIER_VALUES[tier ?? "None"] ?? 0,
+    }))
+    .filter((entry) => entry.value > 0)
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+}
+
+function isPlayerInCurrentSelection(allSlots: (PlayerWithSkills | null)[], player: PlayerWithSkills | null): boolean {
+  if (!player) return false;
+  return allSlots.some((slotPlayer) => slotPlayer?.id === player.id);
+}
+
+function combinationCount(total: number, pick: number): number {
+  if (total < pick || pick < 0) return 0;
+  if (pick === 0 || total === pick) return 1;
+  let numerator = 1;
+  let denominator = 1;
+  for (let index = 1; index <= pick; index += 1) {
+    numerator *= total - (pick - index);
+    denominator *= index;
+  }
+  return Math.round(numerator / denominator);
+}
+
+function lineupReach(allSlots: (PlayerWithSkills | null)[], player: PlayerWithSkills | null) {
+  const filledPlayers = allSlots.filter((slotPlayer): slotPlayer is PlayerWithSkills => slotPlayer !== null);
+  const totalLineups = combinationCount(filledPlayers.length, 5);
+  const isInSelection = isPlayerInCurrentSelection(allSlots, player);
+  const playerLineups = isInSelection ? combinationCount(filledPlayers.length - 1, 4) : 0;
+  return {
+    filledCount: filledPlayers.length,
+    isInSelection,
+    playerLineups,
+    totalLineups,
+  };
+}
+
+function playerIdentityKeys(player: PlayerWithSkills | null): Set<string> {
+  if (!player) return new Set();
+  return new Set([
+    player.id,
+    player.name,
+    player.name.toLowerCase(),
+  ].filter(Boolean));
+}
+
+function lineupHasPlayer(lineup: CohesionLineupCombination, player: PlayerWithSkills | null): boolean {
+  const keys = playerIdentityKeys(player);
+  if (keys.size === 0) return false;
+  return lineup.player_ids.some((id) => keys.has(id) || keys.has(id.toLowerCase()))
+    || lineup.player_names.some((name) => keys.has(name) || keys.has(name.toLowerCase()));
+}
+
+function playerLineupContext(
+  evaluation: RosterEvaluation | null,
+  player: PlayerWithSkills | null,
+) {
+  const combinations = evaluation?.lineup_combinations ?? [];
+  if (!player || combinations.length === 0) return null;
+
+  const withPlayer = combinations
+    .filter((lineup) => lineupHasPlayer(lineup, player))
+    .sort((a, b) => a.rank - b.rank || b.cohesion_score - a.cohesion_score);
+
+  if (withPlayer.length === 0) return null;
+
+  return {
+    total: combinations.length,
+    count: withPlayer.length,
+    best: withPlayer[0],
+    median: withPlayer[Math.floor((withPlayer.length - 1) / 2)],
+  };
+}
+
+function rotationLineupContext(evaluation: RosterEvaluation | null) {
+  const combinations = evaluation?.lineup_combinations ?? [];
+  if (combinations.length === 0) return null;
+
+  return {
+    total: evaluation?.lineup_summary.total_lineups ?? combinations.length,
+    viable: evaluation?.lineup_summary.viable_lineups ?? 0,
+    medianScore: evaluation?.lineup_summary.median_score ?? 0,
+    best: combinations[0],
+    typical: combinations[Math.floor((combinations.length - 1) / 2)],
+  };
+}
+
+function compactPlayerName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length <= 1) return name;
+
+  const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
+  const last = parts[parts.length - 1];
+  if (suffixes.has(last.toLowerCase()) && parts.length > 2) {
+    return parts[parts.length - 2];
+  }
+  return last;
+}
+
+function lineupNames(lineup: CohesionLineupCombination): string {
+  return lineup.player_names.map(compactPlayerName).join(" / ");
+}
+
+function topLineupSubscores(lineup: CohesionLineupCombination) {
+  return Object.entries(lineup.subscores)
+    .map(([key, value]) => ({ key, label: SUBSCORE_LABELS[key] ?? key.replaceAll("_", " "), value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 3);
+}
+
+function allImpactTraitEntries(
+  evaluation: RosterEvaluation | null,
+  player: PlayerWithSkills | null,
+) {
+  const playerName = player?.name.toLowerCase();
+  const evaluatedPlayer = playerName
+    ? evaluation?.player_composites.find((item) => item.name.toLowerCase() === playerName) ?? null
+    : null;
+  const rawBreakdowns = computeRawCompositeBreakdowns(player?.skills);
+
+  return COMPOSITE_COLUMNS.map((column) => {
+    const key = column.key as CompositeKey;
+    const normalizedValue = evaluatedPlayer ? compositeValue(evaluatedPlayer, column.key) : null;
+    const rawValue = rawBreakdowns[key]?.raw ?? 0;
+    return {
+      ...column,
+      rawValue,
+      normalizedValue,
+      value: normalizedValue ?? rawToTenPointScale(key, rawValue),
+    };
+  });
+}
+
 function SectionLabel({ id, children }: { id: string; children: ReactNode }) {
   return (
     <p id={id} className="text-[0.625rem] font-semibold uppercase tracking-[0.18em] text-[#0e0907]/40">
       {children}
     </p>
+  );
+}
+
+function scoreShapeText(factors: { key: string; label: string; value: number }[]): string {
+  if (factors.length === 0) return "Score Shape after eval.";
+
+  const sorted = [...factors].sort((a, b) => b.value - a.value);
+  const strongest = sorted[0];
+  const weakest = sorted[sorted.length - 1];
+  if (!strongest || !weakest) return "Score Shape after eval.";
+
+  if (strongest.value - weakest.value < 0.12) {
+    return "Balanced shape. No clear drag.";
+  }
+
+  return `${strongest.label} carrying. ${weakest.label} next ceiling.`;
+}
+
+function feedbackFragmentText(text: string): string {
+  return text
+    .replace(/^Lineup-level defensive coverage is a clear strength\.$/, "Defensive coverage strong.")
+    .replace(/^Lineup-level spacing support is a clear strength\.$/, "Spacing support strong.")
+    .replace(/^No warning note yet\.$/, "No drag yet.");
+}
+
+function ScoreFactorTooltip({
+  factor,
+}: {
+  factor: { key: string; label: string; value: number };
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="font-semibold text-[#0e0907]">{factor.label}</p>
+      <p>{scoreFactorExplainer(factor.key)}</p>
+      <p>
+        Rollup weight: <span className="font-mono text-[#0e0907]">{SCORE_FACTOR_WEIGHTS[factor.key] ?? "n/a"}</span>.
+      </p>
+      <p>
+        Derived from {SCORE_FACTOR_DERIVATIONS[factor.key] ?? "the cohesion engine"}.
+      </p>
+      <p>
+        Current normalized value:{" "}
+        <span className="font-mono text-[#0e0907]">{Math.round(factor.value * 100)}%</span>.
+      </p>
+    </div>
   );
 }
 
@@ -424,7 +675,7 @@ function RotationIdentityStrip({ evaluation }: { evaluation: RosterEvaluation | 
         <div>
           <SectionLabel id="builder-skill-rotation-identity-label">Build Trait Snapshot</SectionLabel>
           <h3 id="builder-skill-rotation-identity-title" className="mt-1 text-[1rem] font-semibold text-[#0e0907]">
-            Roster Composite Averages
+            Roster Impact Traits
           </h3>
           <p id="builder-skill-rotation-identity-archetypes" className="mt-0.5 text-[0.75rem] text-[#0e0907]/55">
             Identity tags: <span className="font-medium text-[#0e0907]/70">{archetypes.length > 0 ? archetypes.join(" / ") : "Still forming"}</span>
@@ -457,7 +708,7 @@ function RotationIdentityStrip({ evaluation }: { evaluation: RosterEvaluation | 
               as="div"
               content={(
                 <LineupMetricTooltip label={item.label}>
-                  Average normalized {item.label.toLowerCase()} score across the evaluated Players. This is a roster trait snapshot, not the weighted lineup subscore used by the engine.
+                  Average normalized {item.label.toLowerCase()} Impact Trait across the evaluated Players. This is a roster trait snapshot, not the weighted lineup subscore used by the engine.
                 </LineupMetricTooltip>
               )}
               className="w-full"
@@ -538,7 +789,7 @@ function PlayerContributionInspector({
 
       {player && !composite && (
         <p id="builder-skill-player-raw-mode" className="border border-[#d9d0c9]/60 bg-[#f0f0f0]/55 px-3 py-2 text-[0.75rem] text-[#0e0907]/55">
-          Showing raw PlayerPool formulas. Normalized impact appears after this Player enters the live eval.
+          Showing raw PlayerPool formulas. Normalized Impact Traits appear after this Player enters the live eval.
         </p>
       )}
 
@@ -601,7 +852,7 @@ function PlayerContributionInspector({
             </div>
           </div>
           <div id="builder-skill-player-formula-index" className="space-y-2 xl:col-span-2">
-            <p className="text-[0.75rem] font-semibold text-[#0e0907]">Formula index</p>
+            <p className="text-[0.75rem] font-semibold text-[#0e0907]">Impact Trait formulas</p>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {COMPOSITE_COLUMNS.map((column) => {
                 const key = column.key as CompositeKey;
@@ -737,6 +988,488 @@ function LineupImpactSummary({ evaluation }: { evaluation: RosterEvaluation | nu
   );
 }
 
+function NewFeedbackRead({
+  allSlots,
+  latestEval,
+  inspectedPlayer,
+  focusedPlayerName,
+  onSuggestionFilter,
+}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "inspectedPlayer" | "focusedPlayerName" | "onSuggestionFilter">) {
+  const [selectedSkillKey, setSelectedSkillKey] = useState<string | null>(null);
+  const targetPlayer = inspectedPlayer;
+  const isPlayerRead = targetPlayer !== null;
+  const skills = skillEntries(targetPlayer?.skills);
+  const selectedSkill = skills.find((skill) => skill.skill === selectedSkillKey) ?? skills[0] ?? null;
+  const affectedTraitKeys = new Set(selectedSkill ? SKILL_TO_IMPACT_TRAITS[selectedSkill.skill] ?? [] : []);
+  const affectedLineupEffectKeys = new Set(
+    Array.from(affectedTraitKeys).flatMap((traitKey) => IMPACT_TRAIT_TO_LINEUP_EFFECTS[traitKey as CompositeKey] ?? []),
+  );
+  const traits = allImpactTraitEntries(latestEval, targetPlayer);
+  const displayedTraits = (selectedSkill && affectedTraitKeys.size > 0
+    ? traits.filter((trait) => affectedTraitKeys.has(trait.key as CompositeKey))
+    : traits
+  ).sort((a, b) => b.value - a.value).slice(0, 5);
+  const playerAdds = traits
+    .filter((trait) => trait.value > 0)
+    .sort((a, b) => {
+      const aAffected = affectedTraitKeys.has(a.key as CompositeKey);
+      const bAffected = affectedTraitKeys.has(b.key as CompositeKey);
+      if (aAffected !== bAffected) return aAffected ? -1 : 1;
+      return b.value - a.value;
+    })
+    .slice(0, 3);
+  const reach = lineupReach(allSlots, targetPlayer);
+  const lineupContext = playerLineupContext(latestEval, targetPlayer);
+  const rotationContext = rotationLineupContext(latestEval);
+  const normalizedNotes = useMemo(
+    () => normalizeCohesionNotes(latestEval?.notes ?? []),
+    [latestEval?.notes],
+  );
+  const suggestions = normalizedNotes.filter((note) => note.severity === "suggestion").slice(0, 3);
+  const strengths = normalizedNotes.filter((note) => note.severity === "strength").slice(0, 2);
+  const warnings = normalizedNotes.filter((note) => note.severity === "warning").slice(0, 2);
+  const lineupSubscores = latestEval
+    ? Object.entries(latestEval.starting_lineup.subscores)
+      .map(([key, value]) => ({
+        key,
+        label: SUBSCORE_LABELS[key] ?? key.replaceAll("_", " "),
+        value,
+        isAffected: affectedLineupEffectKeys.has(key),
+      }))
+      .sort((a, b) => {
+        if (a.isAffected !== b.isAffected) return a.isAffected ? -1 : 1;
+        return b.value - a.value;
+      })
+    : [];
+  const scoreFactors = latestEval
+    ? Object.entries(latestEval.star_rating_breakdown)
+      .map(([key, value]) => ({ key, label: scoreFactorLabel(key), value }))
+      .sort((a, b) => b.value - a.value)
+    : [];
+  const scoreShape = scoreShapeText(scoreFactors);
+
+  return (
+    <div id="builder-new-feedback-read" className="space-y-4">
+      <section id="builder-new-feedback-current-read" className="border border-[#d9d0c9] bg-[#f0f0f0]/55 px-3 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <SectionLabel id="builder-new-feedback-current-read-label">Feedback Read</SectionLabel>
+            <h3 id="builder-new-feedback-current-read-title" className="mt-1 text-[1rem] font-semibold text-[#0e0907]">
+              {isPlayerRead ? `${targetPlayer.name} Contribution` : "Build Cohesion"}
+            </h3>
+            <p id="builder-new-feedback-current-read-copy" className="mt-1 text-[0.8125rem] leading-snug text-[#0e0907]/55">
+              {isPlayerRead
+                ? `Skill trace active. ${selectedSkill ? `${selectedSkill.label} path highlighted.` : "Selected Skill shows path."}`
+                : "Current Build snapshot."}
+            </p>
+          </div>
+          {latestEval ? (
+            <CohesionScoreBadge
+              id="builder-new-feedback-score"
+              value={latestEval.star_rating}
+              precision={2}
+              featured
+              ariaLabel={`Team Cohesion score: ${latestEval.star_rating.toFixed(2)} out of 5`}
+              className="shrink-0"
+            />
+          ) : (
+            <div id="builder-new-feedback-score" className="shrink-0 border border-[#d9d0c9]/80 bg-[#f7f7f7] px-3 py-2 text-right">
+              <p className="text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-[#0e0907]/40">Score</p>
+              <p className="font-mono text-[1rem] font-semibold tabular-nums text-[#0e0907]">--</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section id="builder-new-feedback-score-factors" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
+        <SectionLabel id="builder-new-feedback-score-factors-label">Score Factors</SectionLabel>
+        {scoreFactors.length > 0 ? (
+          <>
+            <p id="builder-new-feedback-score-shape" className="mt-2 border border-[#d9d0c9]/55 bg-[#f0f0f0]/45 px-2.5 py-2 text-[0.75rem] leading-snug text-[#0e0907]/60">
+              {scoreShape}
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {scoreFactors.map((factor) => (
+                <FeedbackTooltip
+                  key={factor.key}
+                  id={`builder-new-feedback-score-factor-${factor.key}-tooltip`}
+                  as="div"
+                  content={<ScoreFactorTooltip factor={factor} />}
+                  className="w-full"
+                >
+                  <div id={`builder-new-feedback-score-factor-${factor.key}`} className="flex w-full items-center justify-between gap-3 border border-[#d9d0c9]/55 bg-[#f0f0f0]/45 px-2.5 py-1.5 transition-colors hover:border-[#ffa05c]/45">
+                    <span className="truncate text-[0.75rem] text-[#0e0907]/65">{factor.label}</span>
+                    <span className="font-mono text-[0.6875rem] tabular-nums text-[#0e0907]">{Math.round(factor.value * 100)}%</span>
+                  </div>
+                </FeedbackTooltip>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p id="builder-new-feedback-score-factors-empty" className="mt-2 text-[0.8125rem] text-[#0e0907]/50">
+            Score factors appear after live eval.
+          </p>
+        )}
+      </section>
+
+      {isPlayerRead && (
+      <section id="builder-new-feedback-player-ladder" className="grid gap-3 xl:grid-cols-2">
+        <div id="builder-new-feedback-skills" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <SectionLabel id="builder-new-feedback-skills-label">Skill Profile</SectionLabel>
+            {skills.length > 0 && (
+              <span id="builder-new-feedback-skills-count" className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/35">
+                {skills.length} rated
+              </span>
+            )}
+          </div>
+          <div
+            id="builder-new-feedback-skills-scroll"
+            className="mt-2 grid max-h-[238px] gap-2 overflow-y-auto pr-1 [scrollbar-color:rgba(14,9,7,0.18)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb]:bg-[#0e0907]/15 hover:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/25"
+          >
+            {skills.length > 0 ? skills.map((skill) => (
+              <FeedbackTooltip
+                key={skill.skill}
+                id={`builder-new-feedback-skill-${skill.skill}-tooltip`}
+                as="div"
+                content={(
+                  <LineupMetricTooltip label={skill.label}>
+                    {SKILL_DESCRIPTIONS[skill.skill] ?? "Skill definition not written yet."}
+                  </LineupMetricTooltip>
+                )}
+                className="w-full"
+              >
+                <button
+                  id={`builder-new-feedback-skill-${skill.skill}`}
+                  type="button"
+                  onClick={() => setSelectedSkillKey(skill.skill)}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 border px-2.5 py-1.5 text-left transition-colors",
+                    selectedSkill?.skill === skill.skill
+                      ? "border-[#ffa05c]/70 bg-[#ffa05c]/10"
+                      : "border-[#d9d0c9]/55 bg-[#f0f0f0]/45 hover:border-[#ffa05c]/45",
+                  )}
+                >
+                  <span className="truncate text-[0.75rem] font-medium text-[#0e0907]/70">{skill.label}</span>
+                  <span className={cn("shrink-0 rounded-sm px-1.5 py-0.5 text-[0.625rem] font-semibold", TIER_BADGE_CLASSES[(skill.tier as SkillTier) ?? "None"] ?? TIER_BADGE_CLASSES.None)}>
+                    {skill.tier}
+                  </span>
+                </button>
+              </FeedbackTooltip>
+            )) : (
+              <p id="builder-new-feedback-skills-empty" className="text-[0.8125rem] text-[#0e0907]/50">
+                Select or hover a Player to see the Skills that feed this read.
+              </p>
+            )}
+          </div>
+          {selectedSkill && (
+            <p id="builder-new-feedback-selected-skill-copy" className="mt-3 border border-[#d9d0c9]/60 bg-[#f0f0f0]/45 px-2.5 py-2 text-[0.75rem] leading-snug text-[#0e0907]/55">
+              {selectedSkill.label} feeds{" "}
+              <span className="font-medium text-[#0e0907]/75">
+                {Array.from(affectedTraitKeys).map((key) => compositeLabel(key)).join(", ") || "no mapped Impact Trait yet"}
+              </span>
+              .
+            </p>
+          )}
+        </div>
+
+        <div id="builder-new-feedback-impact-traits" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
+          <SectionLabel id="builder-new-feedback-impact-traits-label">Impact Traits</SectionLabel>
+          <div className="mt-2 grid gap-2">
+            {displayedTraits.length > 0 ? displayedTraits.map((trait) => {
+              const isAffected = selectedSkill ? affectedTraitKeys.has(trait.key as CompositeKey) : false;
+              return (
+              <FeedbackTooltip
+                key={trait.key}
+                id={`builder-new-feedback-impact-trait-${trait.key}-tooltip`}
+                as="div"
+                content={(
+                  <LineupMetricTooltip label={trait.label}>
+                    {IMPACT_TRAIT_DESCRIPTIONS[trait.key] ?? "Impact Trait description not written yet."}
+                  </LineupMetricTooltip>
+                )}
+                className="w-full"
+              >
+                <div
+                  id={`builder-new-feedback-impact-trait-${trait.key}`}
+                  className={cn(
+                    "w-full border px-2.5 py-1.5 transition-colors",
+                    isAffected
+                      ? "border-[#ffa05c]/70 bg-[#ffa05c]/10"
+                      : "border-[#d9d0c9]/55 bg-[#f0f0f0]/45",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate text-[0.75rem] font-medium text-[#0e0907]/70">{trait.label}</span>
+                    <span className="font-mono text-[0.6875rem] tabular-nums text-[#0e0907]">
+                      {trait.normalizedValue == null ? `raw ${formatScore(trait.rawValue)}` : formatScore(trait.normalizedValue)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1 bg-[#d9d0c9]/50">
+                    <div className="h-full bg-[#ffa05c]" style={{ width: `${Math.min(100, Math.max(0, trait.value * 10))}%` }} />
+                  </div>
+                </div>
+              </FeedbackTooltip>
+              );
+            }) : (
+              <p id="builder-new-feedback-impact-traits-empty" className="text-[0.8125rem] text-[#0e0907]/50">
+                Impact Traits appear once a Player has Skill Profile data.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+      )}
+
+      <section id="builder-new-feedback-lineup-reach" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <SectionLabel id="builder-new-feedback-lineup-reach-label">{isPlayerRead ? "Lineup Reach" : "Rotation Reach"}</SectionLabel>
+            <p id="builder-new-feedback-lineup-reach-copy" className="mt-2 text-[0.8125rem] leading-snug text-[#0e0907]/55">
+              {isPlayerRead ? "Player presence across current Lineup Combinations." : "Combo spread. Viability. Typical fit."}
+            </p>
+          </div>
+          <div id="builder-new-feedback-lineup-reach-value" className="shrink-0 border border-[#d9d0c9]/70 bg-[#f0f0f0]/45 px-3 py-2 text-right">
+            <p className="font-mono text-[1rem] font-semibold tabular-nums text-[#0e0907]">
+              {isPlayerRead
+                ? `${reach.playerLineups}/${reach.totalLineups}`
+                : `${rotationContext?.viable ?? 0}/${rotationContext?.total ?? 0}`}
+            </p>
+            <p className="text-[0.625rem] uppercase tracking-[0.14em] text-[#0e0907]/40">{isPlayerRead ? "combos" : "viable"}</p>
+          </div>
+        </div>
+        <p id="builder-new-feedback-lineup-reach-status" className="mt-2 text-[0.75rem] text-[#0e0907]/50">
+          {!isPlayerRead && rotationContext
+            ? `${rotationContext.total} combos. ${rotationContext.viable} viable. Median ${rotationContext.medianScore.toFixed(2)}.`
+            : !isPlayerRead
+              ? "Need 5 Players before Lineup Combinations exist."
+              : reach.filledCount < 5
+            ? `Need ${Math.max(0, 5 - reach.filledCount)} more Player${5 - reach.filledCount === 1 ? "" : "s"} before Lineup Combinations exist.`
+            : lineupContext
+              ? `${targetPlayer?.name ?? "This Player"} in ${lineupContext.count} of ${lineupContext.total} combos.`
+              : reach.isInSelection
+                ? `${targetPlayer?.name ?? "This Player"} in ${reach.playerLineups} of ${reach.totalLineups} combos.`
+              : `${targetPlayer?.name ?? "This Player"} not in Build yet.`}
+        </p>
+        {!isPlayerRead && rotationContext && (
+          <div id="builder-new-feedback-rotation-contexts" className="mt-3 grid items-stretch gap-2 xl:grid-cols-2">
+            {[
+              { id: "best", label: "Best Lineup", lineup: rotationContext.best, helper: "Highest-ranked Lineup Combination in the current Build." },
+              { id: "typical", label: "Typical Lineup", lineup: rotationContext.typical, helper: "Middle-ranked Lineup Combination in the current Build." },
+            ].map((context) => (
+              <FeedbackTooltip
+                key={context.id}
+                id={`builder-new-feedback-rotation-${context.id}-lineup-tooltip`}
+                as="div"
+                content={(
+                  <LineupMetricTooltip label={context.label}>
+                    {context.helper}
+                  </LineupMetricTooltip>
+                )}
+                className="w-full"
+              >
+                <div id={`builder-new-feedback-rotation-${context.id}-lineup`} className="flex h-full w-full flex-col border border-[#d9d0c9]/60 bg-[#f0f0f0]/45 px-2.5 py-2 transition-colors hover:border-[#ffa05c]/45">
+                  <div className="flex min-h-[48px] items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{context.label}</p>
+                      <p className="mt-1 text-[0.6875rem] leading-snug text-[#0e0907]/55">{lineupNames(context.lineup)}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-mono text-[0.8125rem] font-semibold tabular-nums text-[#0e0907]">{context.lineup.cohesion_score.toFixed(2)}</p>
+                      <p className="text-[0.5625rem] uppercase tracking-[0.12em] text-[#0e0907]/35">rank {context.lineup.rank}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 min-h-[78px]">
+                    <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{context.id === "best" ? "Lineup Works Through" : "Typical Fit"}</p>
+                    <div className="mt-1 grid gap-1">
+                      {topLineupSubscores(context.lineup).map((subscore) => (
+                        <div key={subscore.key} className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[0.625rem] text-[#0e0907]/50">{subscore.label}</span>
+                          <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/70">{subscore.value.toFixed(1)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </FeedbackTooltip>
+            ))}
+          </div>
+        )}
+        {isPlayerRead && lineupContext && (
+          <div id="builder-new-feedback-lineup-contexts" className="mt-3 grid items-stretch gap-2 xl:grid-cols-2">
+            {[
+              {
+                id: "best",
+                label: "Best With Player",
+                lineup: lineupContext.best,
+                worksLabel: "Lineup Works Through",
+                addsLabel: "Player Adds Here",
+              },
+              {
+                id: "median",
+                label: "Median With Player",
+                lineup: lineupContext.median,
+                worksLabel: "Typical Fit",
+                addsLabel: "Player Still Adds",
+              },
+            ].map((context) => (
+              <FeedbackTooltip
+                key={context.id}
+                id={`builder-new-feedback-${context.id}-lineup-tooltip`}
+                as="div"
+                content={(
+                  <LineupMetricTooltip label={context.label}>
+                    {context.id === "best"
+                      ? "Highest-ranked evaluated Lineup Combination that includes this Player."
+                      : "Middle evaluated Lineup Combination that includes this Player. This shows typical fit, not ceiling."}
+                  </LineupMetricTooltip>
+                )}
+                className="w-full"
+              >
+                <div id={`builder-new-feedback-${context.id}-lineup`} className="flex h-full w-full flex-col border border-[#d9d0c9]/60 bg-[#f0f0f0]/45 px-2.5 py-2 transition-colors hover:border-[#ffa05c]/45">
+                  <div className="flex min-h-[48px] items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{context.label}</p>
+                      <p className="mt-1 text-[0.6875rem] leading-snug text-[#0e0907]/55">{lineupNames(context.lineup)}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-mono text-[0.8125rem] font-semibold tabular-nums text-[#0e0907]">{context.lineup.cohesion_score.toFixed(2)}</p>
+                      <p className="text-[0.5625rem] uppercase tracking-[0.12em] text-[#0e0907]/35">rank {context.lineup.rank}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid flex-1 grid-rows-[minmax(78px,auto)_auto] gap-2">
+                    <div className="min-h-[78px]">
+                      <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{context.worksLabel}</p>
+                      <div className="mt-1 grid gap-1">
+                        {topLineupSubscores(context.lineup).map((subscore) => (
+                          <div key={subscore.key} className="flex items-center justify-between gap-2">
+                            <span className="truncate text-[0.625rem] text-[#0e0907]/50">{subscore.label}</span>
+                            <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/70">{subscore.value.toFixed(1)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {playerAdds.length > 0 && (
+                      <div>
+                        <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{context.addsLabel}</p>
+                        <div className="mt-1 grid gap-1">
+                          {playerAdds.map((trait) => (
+                            <div key={trait.key} className="flex items-center justify-between gap-2">
+                              <span className="truncate text-[0.625rem] text-[#0e0907]/50">{trait.label}</span>
+                              <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/70">{formatScore(trait.value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </FeedbackTooltip>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section id="builder-new-feedback-lineup-effects" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
+        <SectionLabel id="builder-new-feedback-lineup-effects-label">Lineup Effects</SectionLabel>
+        {latestEval ? (
+          <>
+            <p id="builder-new-feedback-lineup-effects-copy" className="mt-2 text-[0.75rem] text-[#0e0907]/50">
+              {isPlayerRead ? "Amber rows touched by selected Skill path." : "Strongest current Lineup Subscores."}
+            </p>
+            <div
+              id="builder-new-feedback-lineup-effects-scroll"
+              className="mt-2 grid max-h-[164px] gap-2 overflow-y-auto pr-1 [scrollbar-color:rgba(14,9,7,0.18)_transparent] [scrollbar-width:thin] sm:grid-cols-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb]:bg-[#0e0907]/15 hover:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/25"
+            >
+              {lineupSubscores.map((subscore) => (
+                <FeedbackTooltip
+                  key={subscore.key}
+                  id={`builder-new-feedback-lineup-effect-${subscore.key}-tooltip`}
+                  as="div"
+                  content={(
+                    <LineupMetricTooltip label={subscore.label}>
+                      {SUBSCORE_DESCRIPTIONS[subscore.key] ?? "Lineup Subscore description not written yet."}
+                    </LineupMetricTooltip>
+                  )}
+                  className="w-full"
+                >
+                  <div
+                    id={`builder-new-feedback-lineup-effect-${subscore.key}`}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 border px-2.5 py-1.5 transition-colors",
+                      subscore.isAffected
+                        ? "border-[#ffa05c]/70 bg-[#ffa05c]/10"
+                        : "border-[#d9d0c9]/55 bg-[#f0f0f0]/45",
+                    )}
+                  >
+                    <span className="min-w-0 truncate text-[0.75rem] capitalize text-[#0e0907]/65">{subscore.label}</span>
+                    <span className="shrink-0 font-mono text-[0.6875rem] tabular-nums text-[#0e0907]">{subscore.value.toFixed(1)}</span>
+                  </div>
+                </FeedbackTooltip>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p id="builder-new-feedback-lineup-effects-empty" className="mt-2 text-[0.8125rem] text-[#0e0907]/50">
+            Lineup effects after eval.
+          </p>
+        )}
+      </section>
+
+      <section id="builder-new-feedback-next-search" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
+        <SectionLabel id="builder-new-feedback-next-search-label">Next Search</SectionLabel>
+        <div className="mt-2 space-y-2">
+          {suggestions.length > 0 ? suggestions.map((note) => {
+            const filter = mapNoteToFilter(note);
+            return (
+              <button
+                key={note.trace_key}
+                id={`builder-new-feedback-suggestion-${note.trace_key}`}
+                type="button"
+                disabled={!filter}
+                onClick={() => filter && onSuggestionFilter(filter, note)}
+                className="flex w-full items-start justify-between gap-3 border border-[#d97706]/25 bg-[#d97706]/10 px-2.5 py-2 text-left text-[0.75rem] text-[#a34400] transition-colors enabled:hover:border-[#ffa05c]/60 enabled:hover:bg-[#ffa05c]/15 disabled:cursor-default disabled:opacity-70"
+              >
+                <span>{note.text}</span>
+                <span className="shrink-0 font-mono text-[0.625rem] uppercase tracking-[0.14em]">Filter</span>
+              </button>
+            );
+          }) : (
+            <p id="builder-new-feedback-next-search-empty" className="text-[0.8125rem] text-[#0e0907]/50">
+              Suggestions appear once the engine finds a pressure point.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {(strengths.length > 0 || warnings.length > 0 || focusedPlayerName) && (
+        <section id="builder-new-feedback-note-context" className="grid gap-3 xl:grid-cols-2">
+          <div id="builder-new-feedback-strengths" className="border border-[#059669]/20 bg-[#059669]/5 px-3 py-3">
+            <SectionLabel id="builder-new-feedback-strengths-label">What Holds</SectionLabel>
+            <div className="mt-2 space-y-1.5">
+              {strengths.length > 0 ? strengths.map((note) => (
+                <p key={note.trace_key} className="text-[0.75rem] leading-snug text-[#047857]">{feedbackFragmentText(note.text)}</p>
+              )) : (
+                <p className="text-[0.75rem] text-[#0e0907]/50">No clear hold yet.</p>
+              )}
+            </div>
+          </div>
+          <div id="builder-new-feedback-warnings" className="border border-[#e53e3e]/20 bg-[#e53e3e]/5 px-3 py-3">
+            <SectionLabel id="builder-new-feedback-warnings-label">What Drags</SectionLabel>
+            <div className="mt-2 space-y-1.5">
+              {warnings.length > 0 ? warnings.map((note) => (
+                <p key={note.trace_key} className="text-[0.75rem] leading-snug text-[#b91c1c]">{feedbackFragmentText(note.text)}</p>
+              )) : (
+                <p className="text-[0.75rem] text-[#0e0907]/50">No drag yet.</p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 function SkillProfileDiagnostic({
   allSlots,
   cornerstoneId,
@@ -783,6 +1516,7 @@ export function BuilderFeedbackPanel({
   const [activeTab, setActiveTab] = useState<FeedbackTab>("feedback");
   const tabs: { id: FeedbackTab; label: string; adminOnly?: boolean }[] = [
     { id: "feedback", label: "Feedback" },
+    { id: "new", label: "New Feedback" },
     { id: "skills", label: "Skill Profile" },
     { id: "debug", label: "Debug", adminOnly: true },
   ];
@@ -878,6 +1612,16 @@ export function BuilderFeedbackPanel({
             onEvaluation={onEvaluation}
             onSuggestionFilter={onSuggestionFilter}
             focusedPlayerName={focusedPlayerName}
+          />
+        </div>
+
+        <div id="builder-feedback-tab-panel-new" className={cn(activeTab !== "new" && "hidden")}>
+          <NewFeedbackRead
+            allSlots={allSlots}
+            latestEval={latestEval}
+            inspectedPlayer={inspectedPlayer}
+            focusedPlayerName={focusedPlayerName}
+            onSuggestionFilter={onSuggestionFilter}
           />
         </div>
 

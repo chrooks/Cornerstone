@@ -5,14 +5,17 @@ Integration tests for POST /api/builder/evaluate.
 from __future__ import annotations
 
 import json
+from math import comb
 
 import pytest
 
 from app import create_app
+from api import builder
 
 
 @pytest.fixture()
-def client():
+def client(monkeypatch):
+    monkeypatch.setattr(builder, "ensure_distributions", lambda _season: None)
     app = create_app()
     app.config["TESTING"] = True
     with app.test_client() as c:
@@ -89,3 +92,24 @@ def test_partial_roster_returns_mode_a_notes(client):
     assert payload["lineup_summary"]["total_lineups"] == 0
     assert payload["starting_lineup"]["cohesion_score"] == 0.0
     assert len(payload["notes"]) > 0
+
+
+def test_evaluate_returns_ranked_lineup_combinations_for_current_selection(client):
+    players = [
+        *cohesion_roster(),
+        make_player("Bench", 5, {"rebounder": "Elite", "spot_up_shooter": "Proficient"}, "6-9"),
+    ]
+
+    resp, data = post_evaluate(client, {"players": players, "mode": "live", "debug": False})
+
+    assert resp.status_code == 200
+    payload = data["data"]
+    combinations = payload["lineup_combinations"]
+    scores = [lineup["cohesion_score"] for lineup in combinations]
+
+    assert payload["lineup_summary"]["total_lineups"] == comb(6, 5)
+    assert len(combinations) == comb(6, 5)
+    assert scores == sorted(scores, reverse=True)
+    assert [lineup["rank"] for lineup in combinations] == list(range(1, len(combinations) + 1))
+    assert sum(1 for lineup in combinations if lineup["is_starting_lineup"]) == 1
+    assert {"rank", "player_names", "player_ids", "subscores"}.issubset(combinations[0])

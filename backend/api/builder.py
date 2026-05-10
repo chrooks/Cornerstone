@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from itertools import combinations
 from typing import Any
 
 from flask import Blueprint, jsonify, request
@@ -27,7 +28,9 @@ from flask import Blueprint, jsonify, request
 from services.cohesion_engine import evaluate_roster
 from services.cohesion_engine import weights as cohesion_weights
 from services.cohesion_engine.bell_curve import apply_rp_pd_boost, compute_bell_params, parse_height_inches
+from services.cohesion_engine.cohesion import evaluate_lineup
 from services.cohesion_engine.composites import ensure_distributions
+from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
 from services.cohesion_engine.types import RosterEvaluation
 from services.players_service import CURRENT_SEASON
 
@@ -41,6 +44,7 @@ _VALID_MODES = {"live", "final"}
 _MAX_PLAYERS = 20
 _MAX_NAME_LENGTH = 100
 _MAX_SKILLS = 30
+_MAX_LINEUP_SIZE = 5
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +72,11 @@ def _cohesion_players_in_slot_order(players: list[dict[str, Any]]) -> list[dict[
             key=lambda item: (item[1].get("slot", 999), item[0]),
         )
     ]
+
+
+def _player_key(player: dict[str, Any], index: int) -> str:
+    """Return a stable identity used for lineup matching."""
+    return str(player.get("id") or player.get("player_id") or player.get("name") or f"player-{index}")
 
 
 def _rp_pd_boost_details(
@@ -161,6 +170,74 @@ def _serialize_lineup(lineup, starting_players: list[dict[str, Any]] | None = No
     }
 
 
+def _lineup_archetype_details(lineup) -> list[dict[str, Any]]:
+    """Explain the 2-3 archetypes selected from strongest mapped subscores."""
+    details: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for subscore, value in sorted(lineup.subscores.items(), key=lambda item: item[1], reverse=True):
+        archetype = SUBSCORE_ARCHETYPES.get(subscore)
+        if not archetype or archetype in seen:
+            continue
+        details.append({
+            "archetype": archetype,
+            "subscore_key": subscore,
+            "subscore_value": value,
+        })
+        seen.add(archetype)
+        if len(details) >= 3:
+            break
+
+    return details or ([{
+        "archetype": "balanced",
+        "subscore_key": None,
+        "subscore_value": 0.0,
+    }] if lineup.subscores else [])
+
+
+def _serialize_lineup_combination(lineup, lineup_players: list[dict[str, Any]]) -> dict[str, Any]:
+    """Serialize one five-player Lineup Combination for builder Feedback."""
+    archetype_details = _lineup_archetype_details(lineup)
+    return {
+        **_serialize_lineup(lineup, lineup_players),
+        "archetype_labels": [detail["archetype"] for detail in archetype_details],
+        "archetype_details": archetype_details,
+    }
+
+
+def _ranked_lineup_combinations(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Evaluate, sort, and serialize every current five-player combination."""
+    if len(players) < _MAX_LINEUP_SIZE:
+        return []
+
+    starting_keys = tuple(
+        _player_key(player, index)
+        for index, player in enumerate(players[:_MAX_LINEUP_SIZE])
+    )
+    evaluated: list[dict[str, Any]] = []
+    for combo_index, lineup_players_tuple in enumerate(combinations(players, _MAX_LINEUP_SIZE)):
+        lineup_players = list(lineup_players_tuple)
+        lineup = evaluate_lineup(lineup_players)
+        lineup_keys = tuple(_player_key(player, index) for index, player in enumerate(lineup_players))
+        evaluated.append({
+            **_serialize_lineup_combination(lineup, lineup_players),
+            "combination_index": combo_index,
+            "player_ids": [
+                _player_key(player, index)
+                for index, player in enumerate(lineup_players)
+            ],
+            "player_names": [
+                str(player.get("name") or _player_key(player, index))
+                for index, player in enumerate(lineup_players)
+            ],
+            "is_starting_lineup": lineup_keys == starting_keys,
+        })
+
+    evaluated.sort(key=lambda item: (-item["cohesion_score"], item["combination_index"]))
+    for rank, item in enumerate(evaluated, start=1):
+        item["rank"] = rank
+    return evaluated
+
+
 def _serialize_player_composites(player) -> dict:
     """Serialize cohesion player composites with display scores grouped under base."""
     return {
@@ -193,7 +270,8 @@ def _serialize_player_composites(player) -> dict:
 
 def _serialize_evaluation(evaluation: RosterEvaluation, players: list[dict[str, Any]]) -> dict:
     """Serialize a RosterEvaluation to the API response shape."""
-    starting_players = _cohesion_players_in_slot_order(players)[:5]
+    ordered_players = _cohesion_players_in_slot_order(players)
+    starting_players = ordered_players[:5]
     return {
         "star_rating": evaluation.star_rating,
         "star_rating_breakdown": evaluation.star_breakdown,
@@ -203,6 +281,7 @@ def _serialize_evaluation(evaluation: RosterEvaluation, players: list[dict[str, 
             for player in evaluation.player_composites
         ],
         "lineup_summary": evaluation.lineup_summary,
+        "lineup_combinations": _ranked_lineup_combinations(ordered_players),
         "notes": [dataclasses.asdict(note) for note in evaluation.notes],
         "team_description": evaluation.team_description,
     }
