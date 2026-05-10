@@ -15,8 +15,8 @@
  *   Breakdown (0-1): green (≥0.7), amber (0.4–0.69), red (<0.4)
  */
 
-import { useId } from "react";
 import { cn } from "@/lib/utils";
+import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
 import { SUBSCORE_GROUPS } from "@/lib/cohesion-constants";
 import { subscoreColor } from "@/lib/cohesion-colors";
 import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
@@ -25,13 +25,6 @@ import type { RosterEvaluation } from "@/lib/types";
 // ---------------------------------------------------------------------------
 // Color utilities (component-specific scales not shared elsewhere)
 // ---------------------------------------------------------------------------
-
-/** Color class for star rating (1-5 scale). */
-function starColorClass(rating: number): string {
-  if (rating >= 3.5) return "text-green-400";
-  if (rating >= 2.0) return "text-amber-400";
-  return "text-red-400";
-}
 
 const subscoreColorClass = subscoreColor;
 
@@ -47,85 +40,6 @@ function breakdownBarColor(value: number): string {
   if (value >= 0.7) return "bg-green-500";
   if (value >= 0.4) return "bg-amber-500";
   return "bg-red-500";
-}
-
-// ---------------------------------------------------------------------------
-// Star icons
-// ---------------------------------------------------------------------------
-
-/** Filled star SVG icon. */
-function StarFilled({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" stroke="none" width="24" height="24">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-    </svg>
-  );
-}
-
-/** Half-filled star SVG icon — uses inline clipPath to avoid global id collision. */
-function StarHalf({ className }: { className?: string }) {
-  // Use useId()-style unique id to prevent SVG clipPath collision when multiple
-  // CohesionScoreDisplay instances render in the same document.
-  const clipId = useId();
-  return (
-    <svg className={className} viewBox="0 0 24 24" width="24" height="24">
-      {/* Filled left half */}
-      <defs>
-        <clipPath id={clipId}>
-          <rect x="0" y="0" width="12" height="24" />
-        </clipPath>
-      </defs>
-      <path
-        d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-        fill="currentColor"
-        clipPath={`url(#${clipId})`}
-      />
-      {/* Empty outline for right half */}
-      <path
-        d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        opacity="0.3"
-      />
-    </svg>
-  );
-}
-
-/** Empty star SVG icon. */
-function StarEmpty({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="24" height="24" opacity="0.3">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-    </svg>
-  );
-}
-
-/**
- * Render 5 star icons based on a rating rounded to nearest 0.5.
- * E.g. 4.23 → 4.0 → 4 filled, 0 half, 1 empty
- *      3.76 → 4.0 → 4 filled, 0 half, 1 empty
- *      3.25 → 3.5 → 3 filled, 1 half, 1 empty
- */
-function StarRating({ rating, colorClass }: { rating: number; colorClass: string }) {
-  // Clamp to [0, 5] then round to nearest half star for display
-  const clamped = Math.max(0, Math.min(5, rating));
-  const rounded = Math.round(clamped * 2) / 2;
-  const fullStars = Math.floor(rounded);
-  const hasHalf = rounded % 1 !== 0;
-  const emptyStars = 5 - fullStars - (hasHalf ? 1 : 0);
-
-  return (
-    <div className={cn("flex items-center gap-0.5", colorClass)} aria-hidden="true">
-      {Array.from({ length: fullStars }, (_, i) => (
-        <StarFilled key={`full-${i}`} className="w-8 h-8" />
-      ))}
-      {hasHalf && <StarHalf className="w-8 h-8" />}
-      {Array.from({ length: emptyStars }, (_, i) => (
-        <StarEmpty key={`empty-${i}`} className="w-8 h-8" />
-      ))}
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +237,6 @@ interface CohesionScoreDisplayProps {
 export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) {
   const { star_rating, star_rating_breakdown, starting_lineup, lineup_summary } = evaluation;
   const rotationMedian = lineup_summary.rotation_median_subscores;
-  const colorClass = starColorClass(star_rating);
   const factorEntries = Object.entries(star_rating_breakdown).map(([key, value]) => ({
     key,
     label: scoreFactorLabel(key),
@@ -352,13 +265,13 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
             The engine evaluates the Starting Lineup, then tests the full Rotation across its Lineup Combinations.
           </p>
         </div>
-        <div id="cohesion-score-rating" className="flex flex-col items-start gap-1 sm:items-end">
-          <StarRating rating={star_rating} colorClass={colorClass} />
-          <span id="cohesion-score-exact" className="font-mono text-2xl font-bold tabular-nums text-[#0e0907]">
-            <span className={colorClass}>{star_rating.toFixed(2)}</span>
-            <span className="text-base font-semibold text-[#0e0907]/45"> / 5</span>
-          </span>
-        </div>
+        <CohesionScoreBadge
+          id="cohesion-score-rating"
+          value={star_rating}
+          precision={2}
+          featured
+          ariaLabel={`Team Cohesion score: ${star_rating.toFixed(2)} out of 5`}
+        />
       </div>
 
       <div className="w-full h-px bg-border" />
