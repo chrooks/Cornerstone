@@ -600,10 +600,40 @@ export interface RosterEvaluation {
 // Saved Teams
 // ---------------------------------------------------------------------------
 
+/** Published RuleSet shown at the Lab entry point. */
+export interface RuleSetSummary {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  status: "active" | "coming_soon" | "archived";
+  display_order: number;
+  current_version: {
+    id: string;
+    version_label: string;
+    rules_hash: string;
+    rules_json: Record<string, unknown>;
+    published_at: string | null;
+  } | null;
+  rules: Record<string, unknown> | null;
+}
+
+/** Minimal user-owned profile data for the Profile page. */
+export interface UserProfile {
+  id: string | null;
+  user_id: string;
+  display_name: string | null;
+  favorite_player_name: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 /** One ordered Player snapshot persisted inside a Saved Team. */
 export interface SaveTeamPlayerPayload {
   slot: number;
   is_cornerstone: boolean;
+  snapshot_player_id?: string | null;
+  canonical_player_id?: string | null;
   player_id: string | null;
   legend_id: string | null;
   salary_snapshot: number;
@@ -620,10 +650,8 @@ export interface SaveTeamPayload {
   name?: string;
   cornerstone_legend_id: string;
   players: SaveTeamPlayerPayload[];
-  evaluation: {
-    star_rating: number;
-    starting_lineup_score: number;
-    team_description: string | null;
+  evaluation: RosterEvaluation & {
+    starting_lineup_score?: number;
   };
 }
 
@@ -632,8 +660,24 @@ export interface SavedTeamSummary {
   id: string;
   name: string;
   ruleset_slug: string;
+  ruleset_version_id: string | null;
+  ruleset_version_hash: string | null;
   snapshot_release_id: string;
   visibility: "private" | "unlisted" | "public";
+  cornerstone_legend_id?: string | null;
+  total_salary?: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+  evaluation?: {
+    id: string | null;
+    evaluation_version: string | null;
+    star_rating: number | null;
+    starting_lineup_score: number | null;
+    team_description: string | null;
+    evaluation_payload?: RosterEvaluation | Record<string, unknown> | null;
+    created_at: string | null;
+  } | null;
+  players?: SaveTeamPlayerPayload[];
 }
 
 /** One ranked five-player combination returned by calibration rotation diagnostics. */

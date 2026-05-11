@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams, useParams, usePathname } from "next/navigation";
 import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam } from "@/lib/api";
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
@@ -366,9 +367,8 @@ export function EvaluatePage() {
         };
       }),
       evaluation: {
-        star_rating: evaluation.star_rating,
+        ...evaluation,
         starting_lineup_score: evaluation.starting_lineup.cohesion_score,
-        team_description: evaluation.team_description,
       },
     };
   }
@@ -455,7 +455,15 @@ export function EvaluatePage() {
           {saveState === "saved" && savedTeam && (
             <div id="eval-save-success" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p>
-                Saved <span className="font-semibold text-[#0e0907]">{savedTeam.name}</span>.
+                Saved{" "}
+                <Link
+                  id="eval-save-success-saved-team-link"
+                  href={`/profile/saved-teams/${savedTeam.id}`}
+                  className="font-semibold text-[#0e0907] underline decoration-[#ffa05c] underline-offset-4 transition-colors hover:text-[#a34400] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffa05c]"
+                >
+                  {savedTeam.name}
+                </Link>
+                .
               </p>
               <button
                 id="eval-save-keep-tuning-btn"

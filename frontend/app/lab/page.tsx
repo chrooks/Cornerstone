@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useCallback, type KeyboardEvent } from "react";
+import { useState, useCallback, useEffect, type KeyboardEvent } from "react";
+import { listRuleSets } from "@/lib/api";
+import type { RuleSetSummary } from "@/lib/types";
 
 /* ── Tab type for the notebook-style RuleSet cards ── */
 type TabId = "rules" | "players" | "community";
@@ -34,87 +36,49 @@ interface RuleSetDef {
   };
 }
 
-const RULESETS: RuleSetDef[] = [
-  {
-    slug: "standard",
-    name: "Standard",
-    subtitle: "The classic format. Salary-capped rotation around a Legend.",
-    status: "active",
+function asNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function asString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function formatSalaryCap(value: unknown): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "None";
+  return `$${Math.round(value / 1_000_000)}M`;
+}
+
+function mapRuleSetSummary(ruleSet: RuleSetSummary): RuleSetDef {
+  const rules = ruleSet.rules ?? {};
+  const isStandard = ruleSet.slug === "standard";
+  return {
+    slug: ruleSet.slug,
+    name: ruleSet.name,
+    subtitle: ruleSet.description ?? "RuleSet details are being prepared.",
+    status: ruleSet.status === "active" ? "active" : "coming-soon",
     rules: {
-      teamSize: 9,
-      teamLabel: "Rotation",
-      salaryCap: "$195M",
-      cornerstoneRule: "1 Legend required ($54M)",
-      playerPool: "2024-25 Snapshot + Legends",
-      rookieDealLimit: 2,
+      teamSize: asNumber(rules.team_size, 9),
+      teamLabel: asString(rules.team_label, "Rotation"),
+      salaryCap: asString(rules.salary_cap_display, formatSalaryCap(rules.salary_cap)),
+      cornerstoneRule: asString(rules.cornerstone_rule, isStandard ? "1 Legend required ($54M)" : "Any Player, any slot"),
+      playerPool: asString(rules.player_pool, isStandard ? "Current Snapshot + Legends" : "PlayerPool details pending"),
+      rookieDealLimit: asNumber(rules.rookie_deal_limit, 0),
     },
     players: {
-      legendCount: 36,
-      activeCount: "450+",
-      sampleNames: [
-        "M. Jordan",
-        "L. James",
-        "K. Bryant",
-        "S. Curry",
-        "T. Duncan",
-        "H. Olajuwon",
-      ],
-    },
-    community: {
-      teamsBuilt: 127,
-      topCornerstone: "Michael Jordan",
-      avgScore: 72,
-    },
-  },
-  {
-    slug: "free-for-all",
-    name: "Free For All",
-    subtitle: "No salary cap. No Cornerstone requirement. Pure best-of.",
-    status: "coming-soon",
-    rules: {
-      teamSize: 9,
-      teamLabel: "Rotation",
-      salaryCap: "None",
-      cornerstoneRule: "Any player, any slot",
-      playerPool: "All-time + Active",
-      rookieDealLimit: 0,
-    },
-    players: {
-      legendCount: 36,
-      activeCount: "450+",
-      sampleNames: [],
+      legendCount: isStandard ? 36 : 0,
+      activeCount: isStandard ? "450+" : "-",
+      sampleNames: isStandard
+        ? ["M. Jordan", "L. James", "K. Bryant", "S. Curry", "T. Duncan", "H. Olajuwon"]
+        : [],
     },
     community: {
       teamsBuilt: 0,
       topCornerstone: "-",
       avgScore: 0,
     },
-  },
-  {
-    slug: "budget",
-    name: "Budget Build",
-    subtitle: "Tight cap, no legends. Prove you can scout.",
-    status: "coming-soon",
-    rules: {
-      teamSize: 9,
-      teamLabel: "Rotation",
-      salaryCap: "$120M",
-      cornerstoneRule: "No Legends allowed",
-      playerPool: "2024-25 Snapshot only",
-      rookieDealLimit: 3,
-    },
-    players: {
-      legendCount: 0,
-      activeCount: "450+",
-      sampleNames: [],
-    },
-    community: {
-      teamsBuilt: 0,
-      topCornerstone: "-",
-      avgScore: 0,
-    },
-  },
-];
+  };
+}
 
 /* ── Notebook tab labels ── */
 const TABS: { id: TabId; label: string }[] = [
@@ -294,7 +258,7 @@ function RuleSetCard({ rs }: { rs: RuleSetDef }) {
     <article
       id={`ruleset-card-${rs.slug}`}
       className={`flex flex-col ${isComingSoon ? "opacity-55 pointer-events-none" : ""}`}
-      aria-label={`${rs.name} Rule Set`}
+      aria-label={`${rs.name} RuleSet`}
     >
       {/* ── Bookmark tabs protruding above the card ── */}
       <div className="flex" role="tablist" aria-label={`${rs.name} card tabs`}>
@@ -434,6 +398,30 @@ function RuleSetCard({ rs }: { rs: RuleSetDef }) {
  * Inspired by Pokemon Showdown's tier picker.
  */
 export default function LabPage() {
+  const [rulesets, setRulesets] = useState<RuleSetDef[]>([]);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    let alive = true;
+    listRuleSets()
+      .then((res) => {
+        if (!alive) return;
+        if (res.success && res.data) {
+          setRulesets(res.data.map(mapRuleSetSummary));
+          setLoadState("ready");
+          return;
+        }
+        setLoadState("error");
+      })
+      .catch(() => {
+        if (alive) setLoadState("error");
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <main id="lab-page" className="min-h-[calc(100vh-48px)]">
       {/* ── Page header ── */}
@@ -453,7 +441,7 @@ export default function LabPage() {
 
         {/* Subtitle */}
         <p className="mt-2 text-[0.9375rem] leading-relaxed text-[#0e0907]/55 max-w-lg">
-          Each Rule Set defines a different game with different constraints. Teams built under different Rule Sets are not directly comparable. Pick your format.
+          Each RuleSet defines a different game with different constraints. Teams built under different RuleSets are not directly comparable. Pick your format.
         </p>
       </section>
 
@@ -462,11 +450,25 @@ export default function LabPage() {
         id="lab-rulesets"
         className="max-w-screen-xl mx-auto px-6 pb-16 md:pb-24"
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
-          {RULESETS.map((rs) => (
-            <RuleSetCard key={rs.slug} rs={rs} />
-          ))}
-        </div>
+        {loadState === "loading" && (
+          <div id="lab-rulesets-loading" className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="h-80 animate-pulse rounded-md border border-[#d9d0c9] bg-[#f7f7f7]" />
+            ))}
+          </div>
+        )}
+        {loadState === "error" && (
+          <div id="lab-rulesets-error" className="rounded-md border border-[#d9d0c9] bg-[#f7f7f7] p-5 text-sm text-[#0e0907]/65">
+            RuleSets could not be loaded. Check the backend and migration status.
+          </div>
+        )}
+        {loadState === "ready" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
+            {rulesets.map((rs) => (
+              <RuleSetCard key={rs.slug} rs={rs} />
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

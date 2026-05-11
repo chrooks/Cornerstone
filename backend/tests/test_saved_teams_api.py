@@ -15,6 +15,8 @@ from api import auth, saved_teams
 USER_ID = "11111111-1111-1111-1111-111111111111"
 SNAPSHOT_RELEASE_ID = "22222222-2222-2222-2222-222222222222"
 LEGEND_ID = "33333333-3333-3333-3333-333333333333"
+STANDARD_RULESET_ID = "55555555-5555-5555-5555-555555555555"
+STANDARD_RULESET_VERSION_ID = "66666666-6666-6666-6666-666666666666"
 
 
 class _FakeResult:
@@ -76,9 +78,29 @@ class _FakeSupabase:
                     "status": "published",
                 }
             ],
+            "rulesets": [
+                {
+                    "id": STANDARD_RULESET_ID,
+                    "slug": "standard",
+                    "name": "Standard",
+                    "status": "active",
+                }
+            ],
+            "ruleset_versions": [
+                {
+                    "id": STANDARD_RULESET_VERSION_ID,
+                    "ruleset_id": STANDARD_RULESET_ID,
+                    "version_label": "v1",
+                    "rules_hash": "standard-v1",
+                    "rules_json": {"team_size": 9, "salary_cap": 195_000_000},
+                    "status": "published",
+                    "published_at": "2026-05-11T00:00:00Z",
+                }
+            ],
             "legends": [{"id": LEGEND_ID, "name": "Hakeem Olajuwon"}],
             "saved_teams": [],
             "saved_team_players": [],
+            "saved_team_evaluations": [],
         }
 
     def table(self, name: str):
@@ -156,17 +178,69 @@ def valid_player(slot: int) -> dict:
 
 
 def valid_payload() -> dict:
+    evaluation_payload = {
+        "star_rating": 3.9,
+        "star_rating_breakdown": {
+            "starting_5": 0.82,
+            "depth": 0.72,
+            "archetype_diversity": 0.68,
+            "floor": 0.74,
+        },
+        "starting_lineup": {
+            "cohesion_score": 4.1,
+            "subscores": {"spacing": 8.2, "anchor": 8.7},
+            "synergies_applied": ["Hakeem interior coverage"],
+            "accentuation": {
+                "strength_amplification": 0.81,
+                "weakness_coverage": 0.76,
+            },
+        },
+        "player_composites": [
+            {"player_id": LEGEND_ID, "name": "Hakeem Olajuwon", "base": {"anchor": 10.0}},
+        ],
+        "lineup_summary": {
+            "total_lineups": 126,
+            "viable_lineups": 88,
+            "median_score": 7.9,
+            "archetype_labels": ["defense-first"],
+        },
+        "notes": [
+            {
+                "type": "strength",
+                "category": "defense",
+                "severity": 0.91,
+                "raw_value": 8.7,
+                "text": "Elite rim protection travels across the Rotation.",
+            }
+        ],
+        "team_description": "A sharp Hakeem build with real defensive bite.",
+    }
     return {
         "ruleset_slug": "standard",
         "snapshot_release_id": SNAPSHOT_RELEASE_ID,
         "cornerstone_legend_id": LEGEND_ID,
         "players": [valid_player(slot) for slot in range(1, 10)],
-        "evaluation": {
-            "star_rating": 3.9,
-            "starting_lineup_score": 4.1,
-            "team_description": "A sharp Hakeem build with real defensive bite.",
-        },
+        "evaluation": evaluation_payload,
     }
+
+
+def _player_insert_rows(saved_team_id: str) -> list[dict]:
+    rows = []
+    for player in valid_payload()["players"]:
+        rows.append({
+            "id": f"saved-team-player-{player['slot']}",
+            "saved_team_id": saved_team_id,
+            "player_id": player.get("player_id"),
+            "legend_id": player.get("legend_id"),
+            "slot": player["slot"],
+            "is_cornerstone": player["is_cornerstone"],
+            "salary_snapshot": player["salary_snapshot"],
+            "player_name_snapshot": player["player_name_snapshot"],
+            "team_snapshot": player.get("team_snapshot"),
+            "position_snapshot": player.get("position_snapshot"),
+            "skill_profile_snapshot": player.get("skill_profile_snapshot", {}),
+        })
+    return rows
 
 
 def post_saved_team(client, body: dict, token: str | None = "test-token"):
@@ -178,6 +252,22 @@ def post_saved_team(client, body: dict, token: str | None = "test-token"):
         data=json.dumps(body),
         headers=headers,
     )
+    return resp, resp.get_json()
+
+
+def get_saved_teams(client, token: str | None = "test-token"):
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    resp = client.get("/api/saved-teams", headers=headers)
+    return resp, resp.get_json()
+
+
+def get_saved_team_detail(client, saved_team_id: str, token: str | None = "test-token"):
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    resp = client.get(f"/api/saved-teams/{saved_team_id}", headers=headers)
     return resp, resp.get_json()
 
 
@@ -197,16 +287,64 @@ def test_save_team_persists_valid_standard_rotation(client, fake_supabase):
     assert data["success"] is True
     assert data["data"]["name"] == "Hakeem Olajuwon Standard Rotation"
     assert data["data"]["ruleset_slug"] == "standard"
+    assert data["data"]["ruleset_version_id"] == STANDARD_RULESET_VERSION_ID
     assert data["data"]["snapshot_release_id"] == SNAPSHOT_RELEASE_ID
     assert data["data"]["visibility"] == "private"
 
     saved_team = fake_supabase.rows["saved_teams"][0]
     assert saved_team["user_id"] == USER_ID
+    assert saved_team["ruleset_id"] == STANDARD_RULESET_ID
+    assert saved_team["ruleset_version_id"] == STANDARD_RULESET_VERSION_ID
+    assert saved_team["ruleset_version_hash"] == "standard-v1"
     assert saved_team["total_salary"] == 134_000_000
-    assert saved_team["star_rating"] == 3.9
-    assert saved_team["starting_lineup_score"] == 4.1
     assert len(fake_supabase.rows["saved_team_players"]) == 9
     assert [row["slot"] for row in fake_supabase.rows["saved_team_players"]] == list(range(1, 10))
+    saved_evaluation = fake_supabase.rows["saved_team_evaluations"][0]
+    assert saved_evaluation["saved_team_id"] == saved_team["id"]
+    assert saved_evaluation["evaluation_version"] == "cohesion-v1"
+    assert saved_evaluation["star_rating"] == 3.9
+    assert saved_evaluation["starting_lineup_score"] == 4.1
+    assert saved_evaluation["team_description"] == "A sharp Hakeem build with real defensive bite."
+    assert saved_evaluation["evaluation_payload"] == valid_payload()["evaluation"]
+
+
+def test_save_team_accepts_full_final_eval_payload_over_64kb(client, fake_supabase):
+    body = valid_payload()
+    body["evaluation"]["lineup_combinations"] = [
+        {
+            "rank": index + 1,
+            "combination_index": index,
+            "is_viable": True,
+            "player_ids": [player["legend_id"] or player["player_id"] for player in body["players"][:5]],
+            "player_names": [player["player_name_snapshot"] for player in body["players"][:5]],
+            "is_starting_lineup": index == 0,
+            "cohesion_score": 8.1,
+            "subscores": {
+                "spacing_creation_ratio": 8.3,
+                "paint_touch_total": 7.7,
+                "anchor_total": 8.8,
+                "collective_passing": 7.9,
+                "defensive_gaps": 8.0,
+            },
+            "synergies_applied": [
+                "Hakeem protects the rim while perimeter defenders apply pressure.",
+                "Secondary actions keep the spacing intact.",
+            ],
+            "archetype_labels": ["defense-first", "pace-control"],
+            "accentuation": {
+                "strength_amplification": 0.82,
+                "weakness_coverage": 0.74,
+            },
+        }
+        for index in range(126)
+    ]
+
+    resp, data = post_saved_team(client, body)
+
+    assert resp.status_code == 201
+    assert data["success"] is True
+    saved_evaluation = fake_supabase.rows["saved_team_evaluations"][0]
+    assert len(saved_evaluation["evaluation_payload"]["lineup_combinations"]) == 126
 
 
 def test_save_team_rejects_incomplete_standard_rotation(client):
@@ -246,3 +384,108 @@ def test_save_team_reports_missing_snapshot_release_migration(monkeypatch):
     assert resp.status_code == 503
     assert data["success"] is False
     assert "Snapshot Release migration has not been applied" in data["error"]
+
+
+def test_list_saved_teams_returns_current_user_summaries(client, fake_supabase):
+    fake_supabase.rows["saved_teams"].append({
+        "id": "saved-team-1",
+        "user_id": USER_ID,
+        "ruleset_slug": "standard",
+        "ruleset_id": STANDARD_RULESET_ID,
+        "ruleset_version_id": STANDARD_RULESET_VERSION_ID,
+        "ruleset_version_hash": "standard-v1",
+        "snapshot_release_id": SNAPSHOT_RELEASE_ID,
+        "name": "Hakeem Standard Rotation",
+        "visibility": "private",
+        "cornerstone_legend_id": LEGEND_ID,
+        "total_salary": 134_000_000,
+        "created_at": "2026-05-11T00:00:00Z",
+        "updated_at": "2026-05-11T00:00:00Z",
+    })
+    fake_supabase.rows["saved_team_players"].extend(_player_insert_rows("saved-team-1"))
+    fake_supabase.rows["saved_team_evaluations"].append({
+        "id": "saved-eval-1",
+        "saved_team_id": "saved-team-1",
+        "evaluation_version": "cohesion-v1",
+        "star_rating": 4.2,
+        "starting_lineup_score": 4.5,
+        "team_description": "A real saved evaluation.",
+        "created_at": "2026-05-11T00:00:00Z",
+    })
+
+    resp, data = get_saved_teams(client)
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    assert len(data["data"]) == 1
+    saved_team = data["data"][0]
+    assert saved_team["id"] == "saved-team-1"
+    assert saved_team["name"] == "Hakeem Standard Rotation"
+    assert saved_team["ruleset_slug"] == "standard"
+    assert saved_team["ruleset_version_id"] == STANDARD_RULESET_VERSION_ID
+    assert saved_team["evaluation"]["star_rating"] == 4.2
+    assert saved_team["players"][0]["legend_id"] == LEGEND_ID
+    assert saved_team["players"][0]["player_name_snapshot"] == "Hakeem Olajuwon"
+
+
+def test_get_saved_team_detail_is_scoped_to_current_user(client, fake_supabase):
+    fake_supabase.rows["saved_teams"].append({
+        "id": "saved-team-1",
+        "user_id": USER_ID,
+        "ruleset_slug": "standard",
+        "ruleset_id": STANDARD_RULESET_ID,
+        "ruleset_version_id": STANDARD_RULESET_VERSION_ID,
+        "ruleset_version_hash": "standard-v1",
+        "snapshot_release_id": SNAPSHOT_RELEASE_ID,
+        "name": "Hakeem Standard Rotation",
+        "visibility": "private",
+        "cornerstone_legend_id": LEGEND_ID,
+        "total_salary": 134_000_000,
+        "created_at": "2026-05-11T00:00:00Z",
+        "updated_at": "2026-05-11T00:00:00Z",
+    })
+    fake_supabase.rows["saved_team_players"].extend(_player_insert_rows("saved-team-1"))
+
+    resp, data = get_saved_team_detail(client, "saved-team-1")
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    assert data["data"]["id"] == "saved-team-1"
+    assert len(data["data"]["players"]) == 9
+
+
+def test_get_saved_team_detail_returns_full_historical_eval_payload(client, fake_supabase):
+    full_eval_payload = valid_payload()["evaluation"]
+    fake_supabase.rows["saved_teams"].append({
+        "id": "saved-team-1",
+        "user_id": USER_ID,
+        "ruleset_slug": "standard",
+        "ruleset_id": STANDARD_RULESET_ID,
+        "ruleset_version_id": STANDARD_RULESET_VERSION_ID,
+        "ruleset_version_hash": "standard-v1",
+        "snapshot_release_id": SNAPSHOT_RELEASE_ID,
+        "name": "Hakeem Standard Rotation",
+        "visibility": "private",
+        "cornerstone_legend_id": LEGEND_ID,
+        "total_salary": 134_000_000,
+        "created_at": "2026-05-11T00:00:00Z",
+        "updated_at": "2026-05-11T00:00:00Z",
+    })
+    fake_supabase.rows["saved_team_players"].extend(_player_insert_rows("saved-team-1"))
+    fake_supabase.rows["saved_team_evaluations"].append({
+        "id": "saved-eval-1",
+        "saved_team_id": "saved-team-1",
+        "evaluation_version": "cohesion-v1",
+        "star_rating": 3.9,
+        "starting_lineup_score": 4.1,
+        "team_description": "A sharp Hakeem build with real defensive bite.",
+        "evaluation_payload": full_eval_payload,
+        "created_at": "2026-05-11T00:00:00Z",
+    })
+
+    resp, data = get_saved_team_detail(client, "saved-team-1")
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    assert data["data"]["evaluation"]["evaluation_payload"] == full_eval_payload
+    assert data["data"]["evaluation"]["evaluation_payload"]["lineup_summary"]["total_lineups"] == 126

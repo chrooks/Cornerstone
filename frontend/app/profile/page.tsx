@@ -18,10 +18,10 @@ import {
   UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { listPlayersWithSkills } from "@/lib/api";
+import { getUserProfile, listPlayersWithSkills, listSavedTeams } from "@/lib/api";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
-import type { PlayerWithSkills } from "@/lib/types";
+import type { PlayerWithSkills, SavedTeamSummary, UserProfile } from "@/lib/types";
 
 type ProfileLoadState = "loading" | "ready" | "signed-out" | "error";
 type SavedTeamType = "Lineup" | "Rotation" | "Roster";
@@ -65,7 +65,9 @@ interface MockSavedTeam {
   players: Array<{
     name: string;
     shortName: string;
-    nbaApiId: number;
+    nbaApiId: number | null;
+    playerId: string | null;
+    legendId: string | null;
   }>;
   summary: string;
   tags: string[];
@@ -75,111 +77,6 @@ interface SavedTeamBuilderTarget {
   href: string | null;
   missingPlayers: string[];
 }
-
-const MOCK_SAVED_TEAMS: MockSavedTeam[] = [
-  {
-    id: "hakeem-space-hunt",
-    name: "Hakeem Space Hunt",
-    cornerstone: "Hakeem Olajuwon",
-    favorite: true,
-    ruleset: "Standard",
-    snapshotRelease: "2025-26 Current",
-    evaluationVersion: "cohesion-v1",
-    createdAt: "May 9",
-    savedAt: "2026-05-09",
-    teamType: "Rotation",
-    starRating: 4.6,
-    scoreBreakdown: {
-      startingLineup: 4.8,
-      depth: 4.4,
-      versatility: 4.5,
-      floor: 4.6,
-    },
-    salaryUsed: 191_400_000,
-    salaryCap: 195_000_000,
-    players: [
-      { name: "Hakeem Olajuwon", shortName: "Hakeem", nbaApiId: 165 },
-      { name: "Shai Gilgeous-Alexander", shortName: "SGA", nbaApiId: 1628983 },
-      { name: "Mikal Bridges", shortName: "Bridges", nbaApiId: 1628969 },
-      { name: "Austin Reaves", shortName: "Reaves", nbaApiId: 1630559 },
-      { name: "Evan Mobley", shortName: "Mobley", nbaApiId: 1630596 },
-      { name: "Derrick White", shortName: "White", nbaApiId: 1628401 },
-      { name: "Trey Murphy III", shortName: "Murphy", nbaApiId: 1630530 },
-      { name: "Alex Caruso", shortName: "Caruso", nbaApiId: 1627936 },
-      { name: "Dereck Lively II", shortName: "Lively", nbaApiId: 1641726 },
-    ],
-    summary: "Paint pressure, switch coverage, and enough spacing to keep the Cornerstone fed.",
-    tags: ["Two-way", "Rim pressure", "Switchable"],
-  },
-  {
-    id: "lebron-delay-game",
-    name: "LeBron Delay Game",
-    cornerstone: "LeBron James",
-    favorite: false,
-    ruleset: "Standard",
-    snapshotRelease: "2025-26 Current",
-    evaluationVersion: "cohesion-v1",
-    createdAt: "May 8",
-    savedAt: "2026-05-08",
-    teamType: "Rotation",
-    starRating: 4.2,
-    scoreBreakdown: {
-      startingLineup: 4.4,
-      depth: 4.0,
-      versatility: 4.3,
-      floor: 4.1,
-    },
-    salaryUsed: 188_900_000,
-    salaryCap: 195_000_000,
-    players: [
-      { name: "LeBron James", shortName: "LeBron", nbaApiId: 2544 },
-      { name: "Tyrese Haliburton", shortName: "Haliburton", nbaApiId: 1630169 },
-      { name: "OG Anunoby", shortName: "Anunoby", nbaApiId: 1628384 },
-      { name: "Chet Holmgren", shortName: "Chet", nbaApiId: 1631096 },
-      { name: "Kentavious Caldwell-Pope", shortName: "KCP", nbaApiId: 203484 },
-      { name: "Josh Hart", shortName: "Hart", nbaApiId: 1628404 },
-      { name: "Naz Reid", shortName: "Naz", nbaApiId: 1629675 },
-      { name: "Jalen Suggs", shortName: "Suggs", nbaApiId: 1630591 },
-      { name: "Brandin Podziemski", shortName: "Podziemski", nbaApiId: 1641764 },
-    ],
-    summary: "Passing gravity turns every cut into a problem, but the bench needs a cleaner late-clock release.",
-    tags: ["Connector", "Big wing", "Depth"],
-  },
-  {
-    id: "curry-pressure-map",
-    name: "Curry Pressure Map",
-    cornerstone: "Stephen Curry",
-    favorite: true,
-    ruleset: "Standard",
-    snapshotRelease: "2025-26 Current",
-    evaluationVersion: "cohesion-v1",
-    createdAt: "May 7",
-    savedAt: "2026-05-07",
-    teamType: "Rotation",
-    starRating: 4.4,
-    scoreBreakdown: {
-      startingLineup: 4.5,
-      depth: 4.2,
-      versatility: 4.7,
-      floor: 4.3,
-    },
-    salaryUsed: 193_100_000,
-    salaryCap: 195_000_000,
-    players: [
-      { name: "Stephen Curry", shortName: "Curry", nbaApiId: 201939 },
-      { name: "Bam Adebayo", shortName: "Bam", nbaApiId: 1628389 },
-      { name: "Jaden McDaniels", shortName: "McDaniels", nbaApiId: 1630183 },
-      { name: "Herbert Jones", shortName: "Herb", nbaApiId: 1630529 },
-      { name: "Lauri Markkanen", shortName: "Markkanen", nbaApiId: 1628374 },
-      { name: "Mike Conley", shortName: "Conley", nbaApiId: 201144 },
-      { name: "Jonathan Isaac", shortName: "Isaac", nbaApiId: 1628371 },
-      { name: "Immanuel Quickley", shortName: "Quickley", nbaApiId: 1630193 },
-      { name: "Daniel Gafford", shortName: "Gafford", nbaApiId: 1629655 },
-    ],
-    summary: "Motion shooting with defensive insulation. The best Lineup Combinations lean into Bam as the hinge.",
-    tags: ["Movement", "Spacing", "Defensive cover"],
-  },
-];
 
 const DEFAULT_SAVED_TEAM_SORTS: SavedTeamSort[] = [
   { id: "date-desc", field: "date", direction: "desc" },
@@ -213,6 +110,32 @@ function formatMoney(value: number): string {
   return `$${(value / 1_000_000).toFixed(1)}M`;
 }
 
+function formatSavedDate(value: string | null | undefined): string {
+  if (!value) return "Unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatRulesetName(slug: string): string {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || "Standard";
+}
+
+function getSavedTeamType(playerCount: number): SavedTeamType {
+  if (playerCount >= 12) return "Roster";
+  if (playerCount >= 9) return "Rotation";
+  return "Lineup";
+}
+
+function getShortName(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : name;
+}
+
 function getInitials(email: string | null): string {
   if (!email) return "CS";
   const [name] = email.split("@");
@@ -236,7 +159,7 @@ function getUniqueValues<T extends string>(items: T[]): T[] {
 function matchesDateFilter(savedAt: string, filter: DateFilter): boolean {
   if (filter === "all") return true;
   const savedTime = new Date(`${savedAt}T00:00:00`).getTime();
-  const now = new Date("2026-05-10T00:00:00").getTime();
+  const now = new Date().getTime();
   const days = filter === "last-7" ? 7 : 30;
   return now - savedTime <= days * 24 * 60 * 60 * 1000;
 }
@@ -282,8 +205,71 @@ function compareSavedTeamsBySort(a: MockSavedTeam, b: MockSavedTeam, sort: Saved
   return 0;
 }
 
+function isDefaultSavedTeamSort(sorts: SavedTeamSort[]): boolean {
+  return JSON.stringify(sorts) === JSON.stringify(DEFAULT_SAVED_TEAM_SORTS);
+}
+
+function getFeaturedSavedTeamLabel(filters: SavedTeamAppliedFilter[], sorts: SavedTeamSort[]): string {
+  if (filters.length === 0 && isDefaultSavedTeamSort(sorts)) return "Latest Saved Team";
+  if (filters.length > 0 && isDefaultSavedTeamSort(sorts)) return "Latest Match";
+  return "First Result";
+}
+
 function normalizePlayerName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function splitSummary(summary: string): { firstSentence: string; remainder: string } {
+  const trimmed = summary.trim();
+  if (!trimmed) return { firstSentence: "", remainder: "" };
+
+  const match = trimmed.match(/^(.+?[.!?])(\s+[\s\S]+)$/);
+  if (!match) return { firstSentence: trimmed, remainder: "" };
+
+  return {
+    firstSentence: match[1].trim(),
+    remainder: match[2].trim(),
+  };
+}
+
+function mapSavedTeamSummary(team: SavedTeamSummary, profile: UserProfile | null): MockSavedTeam {
+  const players = [...(team.players ?? [])].sort((a, b) => a.slot - b.slot);
+  const cornerstone = players.find((player) => player.is_cornerstone) ?? players[0];
+  const savedAt = team.created_at?.slice(0, 10) ?? "";
+  const starRating = team.evaluation?.star_rating ?? 0;
+  const startingLineup = team.evaluation?.starting_lineup_score ?? starRating;
+  const teamType = getSavedTeamType(players.length);
+
+  return {
+    id: team.id,
+    name: team.name,
+    cornerstone: cornerstone?.player_name_snapshot ?? "Unknown Cornerstone",
+    favorite: normalizePlayerName(profile?.favorite_player_name ?? "") === normalizePlayerName(cornerstone?.player_name_snapshot ?? ""),
+    ruleset: formatRulesetName(team.ruleset_slug),
+    snapshotRelease: team.snapshot_release_id,
+    evaluationVersion: team.evaluation?.evaluation_version ?? "cohesion-v1",
+    createdAt: formatSavedDate(team.created_at),
+    savedAt,
+    teamType,
+    starRating,
+    scoreBreakdown: {
+      startingLineup,
+      depth: starRating,
+      versatility: starRating,
+      floor: starRating,
+    },
+    salaryUsed: team.total_salary ?? players.reduce((sum, player) => sum + player.salary_snapshot, 0),
+    salaryCap: team.ruleset_slug === "standard" ? 195_000_000 : Math.max(1, team.total_salary ?? 0),
+    players: players.map((player) => ({
+      name: player.player_name_snapshot,
+      shortName: getShortName(player.player_name_snapshot),
+      nbaApiId: null,
+      playerId: player.player_id,
+      legendId: player.legend_id,
+    })),
+    summary: team.evaluation?.team_description ?? "Saved evaluation details are attached to this Team.",
+    tags: [team.evaluation?.evaluation_version ?? "cohesion-v1", team.ruleset_slug],
+  };
 }
 
 function getRulesetSlug(ruleset: string): string {
@@ -297,6 +283,8 @@ function resolveSavedTeamPlayer(
 ): PlayerWithSkills | null {
   const normalizedName = normalizePlayerName(player.name);
   const candidates = playerRows.filter((row) => (
+    row.id === player.playerId ||
+    row.id === player.legendId ||
     row.nba_api_id === player.nbaApiId ||
     normalizePlayerName(row.name) === normalizedName
   ));
@@ -306,6 +294,31 @@ function resolveSavedTeamPlayer(
   }
 
   return candidates.find((row) => !row.is_legend) ?? candidates[0] ?? null;
+}
+
+function resolvePortraitSource(
+  player: MockSavedTeam["players"][number],
+  playerRows: PlayerWithSkills[],
+  isCornerstone: boolean,
+): number | null {
+  if (player.nbaApiId) return player.nbaApiId;
+  const resolved = resolveSavedTeamPlayer(player, playerRows, isCornerstone);
+  return resolved?.nba_api_id ?? null;
+}
+
+function enrichSavedTeamPortraits(
+  teams: MockSavedTeam[],
+  playerRows: PlayerWithSkills[],
+): MockSavedTeam[] {
+  if (playerRows.length === 0) return teams;
+
+  return teams.map((team) => ({
+    ...team,
+    players: team.players.map((player, index) => ({
+      ...player,
+      nbaApiId: resolvePortraitSource(player, playerRows, index === 0),
+    })),
+  }));
 }
 
 function buildSavedTeamBuilderTarget(
@@ -376,16 +389,22 @@ function SavedTeamHeadshot({
 }) {
   return (
     <>
-      <Image
-        src={`https://ak-static.cms.nba.com/wp-content/uploads/headshots/nba/latest/260x190/${player.nbaApiId}.png`}
-        alt={`${player.name} headshot`}
-        width={260}
-        height={190}
-        sizes="(max-width: 640px) 18vw, (max-width: 1024px) 10vw, 128px"
-        quality={100}
-        unoptimized
-        className="h-full w-full object-cover"
-      />
+      {player.nbaApiId ? (
+        <Image
+          src={`https://ak-static.cms.nba.com/wp-content/uploads/headshots/nba/latest/260x190/${player.nbaApiId}.png`}
+          alt={`${player.name} headshot`}
+          width={260}
+          height={190}
+          sizes="(max-width: 640px) 18vw, (max-width: 1024px) 10vw, 128px"
+          quality={100}
+          unoptimized
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center bg-[oklch(0.9_0.035_64)] font-mono text-xs font-semibold text-[oklch(0.28_0.03_45)]">
+          {player.shortName.slice(0, 3).toUpperCase()}
+        </span>
+      )}
       <span className="absolute left-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-br-sm bg-[oklch(0.18_0.02_45)] px-1 font-mono text-[0.625rem] leading-none text-[oklch(0.92_0.08_64)]">
         {slot}
       </span>
@@ -399,14 +418,18 @@ function SavedTeamRecord({
   builderTarget,
   builderTargetsLoading,
   featured = false,
+  featuredLabel,
 }: {
   team: MockSavedTeam;
   builderTarget: SavedTeamBuilderTarget;
   builderTargetsLoading: boolean;
   featured?: boolean;
+  featuredLabel?: string;
 }) {
   const openButtonClassName = "inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded border border-[oklch(0.18_0.02_45)] bg-[oklch(0.18_0.02_45)] px-3 py-2 text-sm font-semibold text-[oklch(0.92_0.08_64)] transition-colors duration-150 hover:bg-[oklch(0.25_0.03_45)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]";
   const secondaryButtonClassName = "inline-flex min-h-10 flex-1 items-center justify-center rounded border border-[oklch(0.83_0.02_62)] bg-[oklch(0.96_0.006_62)] px-3 py-2 text-sm font-semibold text-[oklch(0.22_0.02_45)] transition-colors duration-150 hover:border-[oklch(0.73_0.08_53)] hover:bg-[oklch(0.92_0.035_64)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]";
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const summaryParts = splitSummary(team.summary);
   const openUnavailableReason = builderTargetsLoading
     ? "Resolving this Saved Team against the current PlayerPool."
     : builderTarget.missingPlayers.length > 0
@@ -428,7 +451,7 @@ function SavedTeamRecord({
           <div className="min-w-0">
             {featured && (
               <p className="mb-2 font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.47_0.07_55)]">
-                Latest Saved Team
+                {featuredLabel ?? "First Result"}
               </p>
             )}
             <div className="flex flex-wrap items-center gap-2">
@@ -468,9 +491,26 @@ function SavedTeamRecord({
           />
         </div>
 
-        <p id={`profile-saved-team-${team.id}-summary`} className={cn("max-w-3xl text-sm leading-6 text-[oklch(0.34_0.02_45)]", featured && "text-[0.9375rem]")}>
-          {team.summary}
-        </p>
+        <div id={`profile-saved-team-${team.id}-summary`} className={cn("max-w-3xl space-y-2 text-sm leading-6 text-[oklch(0.34_0.02_45)]", featured && "text-[0.9375rem]")}>
+          <p>{summaryParts.firstSentence}</p>
+          {summaryParts.remainder && summaryExpanded && (
+            <p id={`profile-saved-team-${team.id}-summary-extra`}>
+              {summaryParts.remainder}
+            </p>
+          )}
+          {summaryParts.remainder && (
+            <button
+              id={`profile-saved-team-${team.id}-summary-toggle-btn`}
+              type="button"
+              onClick={() => setSummaryExpanded((current) => !current)}
+              aria-expanded={summaryExpanded}
+              aria-controls={`profile-saved-team-${team.id}-summary-extra`}
+              className="text-xs font-semibold text-[oklch(0.47_0.07_55)] underline-offset-4 transition-colors hover:text-[oklch(0.3_0.05_45)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]"
+            >
+              {summaryExpanded ? "Hide details" : "Show details"}
+            </button>
+          )}
+        </div>
 
         <div
           id={`profile-saved-team-${team.id}-players`}
@@ -528,15 +568,13 @@ function SavedTeamRecord({
         </dl>
 
         <div id={`profile-saved-team-${team.id}-actions`} className="flex flex-wrap gap-2">
-          <button
-            id={`profile-saved-team-${team.id}-see-eval-btn`}
-            type="button"
-            disabled
-            title="Saved evaluation view will be available when Saved Team storage is wired."
-            className={cn(secondaryButtonClassName, "cursor-not-allowed opacity-55 hover:border-[oklch(0.83_0.02_62)] hover:bg-[oklch(0.96_0.006_62)]")}
+          <Link
+            id={`profile-saved-team-${team.id}-see-eval-link`}
+            href={`/profile/saved-teams/${team.id}`}
+            className={secondaryButtonClassName}
           >
             See Eval
-          </button>
+          </Link>
           {builderTarget.href ? (
             <Link
               id={`profile-saved-team-${team.id}-rebuild-link`}
@@ -567,6 +605,8 @@ function SavedTeamRecord({
 export default function ProfilePage() {
   const [loadState, setLoadState] = useState<ProfileLoadState>("loading");
   const [email, setEmail] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [savedTeams, setSavedTeams] = useState<MockSavedTeam[]>([]);
   const [filterField, setFilterField] = useState<SavedTeamFilterField>("name");
   const [filterValue, setFilterValue] = useState("");
   const [savedTeamFilters, setSavedTeamFilters] = useState<SavedTeamAppliedFilter[]>([]);
@@ -594,6 +634,19 @@ export default function ProfilePage() {
         }
 
         setEmail(session.user.email ?? null);
+        const [profileRes, savedTeamsRes] = await Promise.all([
+          getUserProfile(),
+          listSavedTeams(),
+        ]);
+
+        if (!alive) return;
+        const profileData = profileRes.success ? profileRes.data : null;
+        setUserProfile(profileData);
+        setSavedTeams(
+          savedTeamsRes.success && savedTeamsRes.data
+            ? savedTeamsRes.data.map((team) => mapSavedTeamSummary(team, profileData))
+            : []
+        );
         setLoadState("ready");
       } catch {
         if (alive) setLoadState("error");
@@ -633,20 +686,25 @@ export default function ProfilePage() {
   }, []);
 
   const rulesetOptions = useMemo(
-    () => getUniqueValues(MOCK_SAVED_TEAMS.map((team) => team.ruleset)),
-    []
+    () => getUniqueValues(savedTeams.map((team) => team.ruleset)),
+    [savedTeams]
   );
   const snapshotOptions = useMemo(
-    () => getUniqueValues(MOCK_SAVED_TEAMS.map((team) => team.snapshotRelease)),
-    []
+    () => getUniqueValues(savedTeams.map((team) => team.snapshotRelease)),
+    [savedTeams]
   );
   const teamTypeOptions = useMemo(
-    () => getUniqueValues(MOCK_SAVED_TEAMS.map((team) => team.teamType)),
-    []
+    () => getUniqueValues(savedTeams.map((team) => team.teamType)),
+    [savedTeams]
+  );
+
+  const displaySavedTeams = useMemo(
+    () => enrichSavedTeamPortraits(savedTeams, builderPlayerRows),
+    [savedTeams, builderPlayerRows]
   );
 
   const visibleTeams = useMemo(() => {
-    const filtered = MOCK_SAVED_TEAMS.filter((team) => savedTeamFilters.every((filter) => matchesSavedTeamFilter(team, filter)));
+    const filtered = displaySavedTeams.filter((team) => savedTeamFilters.every((filter) => matchesSavedTeamFilter(team, filter)));
 
     return [...filtered].sort((a, b) => {
       for (const sort of savedTeamSorts) {
@@ -655,20 +713,21 @@ export default function ProfilePage() {
       }
       return 0;
     });
-  }, [savedTeamFilters, savedTeamSorts]);
+  }, [displaySavedTeams, savedTeamFilters, savedTeamSorts]);
 
   const builderTargetsByTeamId = useMemo(() => {
     return new Map(
-      MOCK_SAVED_TEAMS.map((team) => [
+      displaySavedTeams.map((team) => [
         team.id,
         builderTargetsError
           ? { href: null, missingPlayers: [] }
           : buildSavedTeamBuilderTarget(team, builderPlayerRows),
       ])
     );
-  }, [builderPlayerRows, builderTargetsError]);
+  }, [displaySavedTeams, builderPlayerRows, builderTargetsError]);
 
-  const hasActiveAdvancedFilters = savedTeamFilters.length > 0 || JSON.stringify(savedTeamSorts) !== JSON.stringify(DEFAULT_SAVED_TEAM_SORTS);
+  const hasActiveAdvancedFilters = savedTeamFilters.length > 0 || !isDefaultSavedTeamSort(savedTeamSorts);
+  const featuredSavedTeamLabel = getFeaturedSavedTeamLabel(savedTeamFilters, savedTeamSorts);
   const canAddFilter = filterValue.trim().length > 0;
 
   function resetSavedTeamControls() {
@@ -726,10 +785,12 @@ export default function ProfilePage() {
 
   const username = getUsername(email);
   const initials = getInitials(email);
-  const savedTeamCount = MOCK_SAVED_TEAMS.length;
-  const averageScore = MOCK_SAVED_TEAMS.reduce((sum, team) => sum + team.starRating, 0) / MOCK_SAVED_TEAMS.length;
-  const topScore = Math.max(...MOCK_SAVED_TEAMS.map((team) => team.starRating));
-  const latestTeam = MOCK_SAVED_TEAMS[0];
+  const savedTeamCount = savedTeams.length;
+  const averageScore = savedTeamCount > 0
+    ? savedTeams.reduce((sum, team) => sum + team.starRating, 0) / savedTeamCount
+    : 0;
+  const topScore = savedTeamCount > 0 ? Math.max(...savedTeams.map((team) => team.starRating)) : 0;
+  const latestTeam = savedTeams[0] ?? null;
 
   if (loadState === "loading") {
     return (
@@ -793,7 +854,9 @@ export default function ProfilePage() {
                   <UserRound className="h-4 w-4" aria-hidden="true" />
                   Favorite Player
                 </dt>
-                <dd className="text-right text-sm font-semibold text-[oklch(0.18_0.02_45)]">Hakeem</dd>
+                <dd className="text-right text-sm font-semibold text-[oklch(0.18_0.02_45)]">
+                  {userProfile?.favorite_player_name ?? "None"}
+                </dd>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <dt className="flex items-center gap-2 text-sm text-[oklch(0.42_0.02_45)]">
@@ -815,7 +878,7 @@ export default function ProfilePage() {
           <section id="profile-scorecard" className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-5">
             <h2 className="text-sm font-semibold text-[oklch(0.18_0.02_45)]">Build file</h2>
             <p className="mt-2 text-xs leading-5 text-[oklch(0.42_0.02_45)]">
-              Latest: <span className="font-semibold text-[oklch(0.18_0.02_45)]">{latestTeam.name}</span>
+              Latest: <span className="font-semibold text-[oklch(0.18_0.02_45)]">{latestTeam?.name ?? "None yet"}</span>
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div>
@@ -846,7 +909,7 @@ export default function ProfilePage() {
                 <h2 className="mt-1 font-display text-3xl font-semibold leading-tight tracking-[-0.01em] text-[oklch(0.16_0.018_45)]">Your scouting shelf</h2>
                 <p id="profile-saved-team-result-count" className="mt-2 text-sm text-[oklch(0.42_0.02_45)]">
                   Showing <span className="font-mono tabular-nums text-[oklch(0.18_0.02_45)]">{visibleTeams.length}</span> of{" "}
-                  <span className="font-mono tabular-nums text-[oklch(0.18_0.02_45)]">{MOCK_SAVED_TEAMS.length}</span>
+                  <span className="font-mono tabular-nums text-[oklch(0.18_0.02_45)]">{savedTeamCount}</span>
                 </p>
               </div>
             </div>
@@ -1031,7 +1094,7 @@ export default function ProfilePage() {
 
           {loadState === "error" && (
             <div id="profile-error-state" className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-              Account details could not be loaded. The mocked Saved Teams are still visible for this screen pass.
+              Account details could not be loaded. Saved Teams could not be loaded from the backend.
             </div>
           )}
 
@@ -1044,6 +1107,7 @@ export default function ProfilePage() {
                   builderTarget={builderTargetsByTeamId.get(team.id) ?? { href: null, missingPlayers: [] }}
                   builderTargetsLoading={builderTargetsLoading}
                   featured={index === 0}
+                  featuredLabel={index === 0 ? featuredSavedTeamLabel : undefined}
                 />
               ))}
             </div>

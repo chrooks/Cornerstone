@@ -6,9 +6,10 @@ Initializes the app, registers blueprints, and configures CORS and env loading.
 import logging
 import os
 
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
+from werkzeug.exceptions import RequestEntityTooLarge
 
 # Load environment variables from .env before anything else
 load_dotenv()
@@ -104,6 +105,8 @@ from api.rosters import rosters_bp
 from api.builder import builder_bp
 from api.cohesion_calibration import cohesion_calibration_bp
 from api.saved_teams import saved_teams_bp
+from api.rulesets import rulesets_bp
+from api.profile import profile_bp
 
 
 def _warm_cohesion_distributions() -> None:
@@ -128,9 +131,18 @@ def create_app() -> Flask:
     """Application factory — creates and configures the Flask app."""
     app = Flask(__name__)
 
-    # Hard cap on incoming request bodies — prevents oversized payload attacks.
-    # 64 KB is well above any legitimate API payload in this project.
-    app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
+    # Hard cap on incoming request bodies. Full Final Eval payloads include
+    # every Lineup Combination, so legitimate Saved Team requests can exceed
+    # small form-style limits while still being bounded.
+    app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def _request_too_large(_error):
+        return jsonify({
+            "success": False,
+            "data": None,
+            "error": "Request body is too large for this API endpoint.",
+        }), 413
 
     # Restrict CORS to known frontend origins.
     # FRONTEND_ORIGIN can be a comma-separated list for multi-environment setups
@@ -156,6 +168,8 @@ def create_app() -> Flask:
     app.register_blueprint(builder_bp)      # Phase 4: roster evaluation engine
     app.register_blueprint(cohesion_calibration_bp)  # Cohesion engine calibration
     app.register_blueprint(saved_teams_bp)  # Saved Team persistence
+    app.register_blueprint(rulesets_bp)  # RuleSet read API
+    app.register_blueprint(profile_bp)  # User Profile API
 
     _warm_cohesion_distributions()
 

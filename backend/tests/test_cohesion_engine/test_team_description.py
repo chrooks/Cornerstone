@@ -138,6 +138,13 @@ def test_build_prompt_uses_composites_subscores_archetypes_and_notes():
     assert "4.1" not in prompt
 
 
+def test_build_prompt_requires_first_sentence_saved_team_card_summary():
+    prompt = team_description._build_prompt(make_evaluation())
+
+    assert "Start with exactly one standalone summary sentence suitable for a Saved Team card." in prompt
+    assert "After that first sentence, continue with the longer evaluation detail." in prompt
+
+
 def test_generate_team_description_calls_anthropic_with_expected_model(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setattr(team_description.anthropic, "Anthropic", FakeAnthropic)

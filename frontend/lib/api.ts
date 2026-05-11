@@ -31,6 +31,8 @@ import type {
   CohesionRotationEvaluation,
   SaveTeamPayload,
   SavedTeamSummary,
+  RuleSetSummary,
+  UserProfile,
 } from "./types";
 
 // Points to the Flask dev server by default; override via env var in production.
@@ -82,9 +84,19 @@ export async function apiFetch<T>(
     ...options,
   });
 
-  // Parse the body regardless of status — it contains the error message on failure
-  const body = (await res.json()) as ApiResponse<T>;
-  return body;
+  const rawBody = await res.text();
+  try {
+    return JSON.parse(rawBody) as ApiResponse<T>;
+  } catch {
+    const preview = rawBody.trim().slice(0, 240);
+    return {
+      success: false,
+      data: null,
+      error: preview
+        ? `Backend returned ${res.status} ${res.statusText}: ${preview}`
+        : `Backend returned ${res.status} ${res.statusText} without a JSON response.`,
+    };
+  }
 }
 
 /** Check backend health — used on the homepage to confirm connectivity. */
@@ -578,6 +590,26 @@ export async function getLegendClaudeSuggestion(
 // Roster Evaluator
 // ---------------------------------------------------------------------------
 
+/** List published RuleSets for Lab selection. */
+export async function listRuleSets(): Promise<ApiResponse<RuleSetSummary[]>> {
+  return apiFetch<RuleSetSummary[]>("/api/rulesets");
+}
+
+/** Get the current user's minimal User Profile. */
+export async function getUserProfile(): Promise<ApiResponse<UserProfile>> {
+  return apiFetch<UserProfile>("/api/me/profile");
+}
+
+/** Update the current user's minimal User Profile. */
+export async function updateUserProfile(
+  payload: Partial<Pick<UserProfile, "display_name" | "favorite_player_name">>,
+): Promise<ApiResponse<UserProfile>> {
+  return apiFetch<UserProfile>("/api/me/profile", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 /** Evaluate a roster and return GM notes (live or final mode). */
 export async function evaluateRoster(
   payload: EvaluatePayload,
@@ -596,6 +628,16 @@ export async function saveTeam(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+/** List the current user's Saved Teams. */
+export async function listSavedTeams(): Promise<ApiResponse<SavedTeamSummary[]>> {
+  return apiFetch<SavedTeamSummary[]>("/api/saved-teams");
+}
+
+/** Get one Saved Team owned by the current user. */
+export async function getSavedTeam(savedTeamId: string): Promise<ApiResponse<SavedTeamSummary>> {
+  return apiFetch<SavedTeamSummary>(`/api/saved-teams/${encodeURIComponent(savedTeamId)}`);
 }
 
 // ---------------------------------------------------------------------------

@@ -55,6 +55,35 @@ def _published_snapshot_release_id(supabase, requested_id: str | None) -> str | 
     return rows[0]["id"] if rows else None
 
 
+def _published_ruleset_version(supabase, ruleset_slug: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    ruleset_res = (
+        supabase.table("rulesets")
+        .select("id, slug, name, status")
+        .eq("slug", ruleset_slug)
+        .limit(1)
+        .execute()
+    )
+    ruleset_rows = ruleset_res.data or []
+    if not ruleset_rows:
+        return None
+
+    ruleset = ruleset_rows[0]
+    version_res = (
+        supabase.table("ruleset_versions")
+        .select("id, ruleset_id, version_label, rules_hash, rules_json, status, published_at")
+        .eq("ruleset_id", ruleset["id"])
+        .eq("status", "published")
+        .order("published_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    version_rows = version_res.data or []
+    if not version_rows:
+        return None
+
+    return ruleset, version_rows[0]
+
+
 def _is_missing_snapshot_release_table(exc: Exception) -> bool:
     text = str(exc)
     return (
@@ -155,6 +184,9 @@ def _player_insert_rows(saved_team_id: str, players: list[dict[str, Any]]) -> li
         rows.append({
             "saved_team_id": saved_team_id,
             "player_id": player.get("player_id"),
+            "source_player_id": player.get("player_id"),
+            "snapshot_player_id": player.get("snapshot_player_id"),
+            "canonical_player_id": player.get("canonical_player_id"),
             "legend_id": player.get("legend_id"),
             "slot": player["slot"],
             "is_cornerstone": player["is_cornerstone"],
@@ -165,6 +197,134 @@ def _player_insert_rows(saved_team_id: str, players: list[dict[str, Any]]) -> li
             "skill_profile_snapshot": player.get("skill_profile_snapshot", {}),
         })
     return rows
+
+
+def _players_for_saved_team(supabase, saved_team_id: str) -> list[dict[str, Any]]:
+    res = (
+        supabase.table("saved_team_players")
+        .select("*")
+        .eq("saved_team_id", saved_team_id)
+        .order("slot")
+        .execute()
+    )
+    return res.data or []
+
+
+def _latest_evaluation_for_saved_team(supabase, saved_team_id: str) -> dict[str, Any] | None:
+    res = (
+        supabase.table("saved_team_evaluations")
+        .select("*")
+        .eq("saved_team_id", saved_team_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = res.data or []
+    return rows[0] if rows else None
+
+
+def _extract_starting_lineup_score(evaluation: dict[str, Any]) -> Any:
+    if "starting_lineup_score" in evaluation:
+        return evaluation.get("starting_lineup_score")
+
+    starting_lineup = evaluation.get("starting_lineup")
+    if isinstance(starting_lineup, dict):
+        return starting_lineup.get("cohesion_score")
+
+    return None
+
+
+def _serialize_saved_team(
+    saved_team: dict[str, Any],
+    players: list[dict[str, Any]],
+    evaluation: dict[str, Any] | None,
+    *,
+    include_evaluation_payload: bool = False,
+) -> dict[str, Any]:
+    evaluation_data = None
+    if evaluation:
+        evaluation_data = {
+            "id": evaluation.get("id"),
+            "evaluation_version": evaluation.get("evaluation_version"),
+            "star_rating": evaluation.get("star_rating"),
+            "starting_lineup_score": evaluation.get("starting_lineup_score"),
+            "team_description": evaluation.get("team_description"),
+            "created_at": evaluation.get("created_at"),
+        }
+        if include_evaluation_payload:
+            evaluation_data["evaluation_payload"] = evaluation.get("evaluation_payload")
+
+    return {
+        "id": saved_team["id"],
+        "name": saved_team["name"],
+        "ruleset_slug": saved_team["ruleset_slug"],
+        "ruleset_version_id": saved_team.get("ruleset_version_id"),
+        "ruleset_version_hash": saved_team.get("ruleset_version_hash"),
+        "snapshot_release_id": saved_team["snapshot_release_id"],
+        "visibility": saved_team["visibility"],
+        "cornerstone_legend_id": saved_team.get("cornerstone_legend_id"),
+        "total_salary": saved_team.get("total_salary", 0),
+        "created_at": saved_team.get("created_at"),
+        "updated_at": saved_team.get("updated_at"),
+        "evaluation": evaluation_data,
+        "players": players,
+    }
+
+
+@saved_teams_bp.route("/saved-teams", methods=["GET"])
+@require_user
+def list_saved_teams():
+    try:
+        supabase = get_supabase()
+        res = (
+            supabase.table("saved_teams")
+            .select("*")
+            .eq("user_id", g.user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        saved_teams = res.data or []
+        data = [
+            _serialize_saved_team(
+                saved_team,
+                _players_for_saved_team(supabase, saved_team["id"]),
+                _latest_evaluation_for_saved_team(supabase, saved_team["id"]),
+            )
+            for saved_team in saved_teams
+        ]
+        return _ok(data)
+    except Exception:
+        logger.exception("Error in GET /api/saved-teams")
+        return _err("Internal server error", status=500)
+
+
+@saved_teams_bp.route("/saved-teams/<saved_team_id>", methods=["GET"])
+@require_user
+def get_saved_team(saved_team_id: str):
+    try:
+        supabase = get_supabase()
+        res = (
+            supabase.table("saved_teams")
+            .select("*")
+            .eq("id", saved_team_id)
+            .eq("user_id", g.user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if not rows:
+            return _err("Saved Team not found", status=404)
+
+        saved_team = rows[0]
+        return _ok(_serialize_saved_team(
+            saved_team,
+            _players_for_saved_team(supabase, saved_team["id"]),
+            _latest_evaluation_for_saved_team(supabase, saved_team["id"]),
+            include_evaluation_payload=True,
+        ))
+    except Exception:
+        logger.exception("Error in GET /api/saved-teams/%s", saved_team_id)
+        return _err("Internal server error", status=500)
 
 
 @saved_teams_bp.route("/saved-teams", methods=["POST"])
@@ -196,21 +356,25 @@ def create_saved_team():
         if published_snapshot_id is None:
             return _err("A published Snapshot Release is required", status=400)
 
+        ruleset_version = _published_ruleset_version(supabase, STANDARD_RULESET)
+        if ruleset_version is None:
+            return _err("A published RuleSet Version is required", status=400)
+        ruleset_row, ruleset_version_row = ruleset_version
+
         total_salary = sum(player.get("salary_snapshot", 0) for player in players)
         evaluation = body.get("evaluation") if isinstance(body.get("evaluation"), dict) else {}
 
         saved_team_insert = {
             "user_id": g.user_id,
             "ruleset_slug": STANDARD_RULESET,
+            "ruleset_id": ruleset_row["id"],
+            "ruleset_version_id": ruleset_version_row["id"],
+            "ruleset_version_hash": ruleset_version_row["rules_hash"],
             "snapshot_release_id": published_snapshot_id,
             "name": _auto_name(body, players),
             "visibility": "private",
             "cornerstone_legend_id": body["cornerstone_legend_id"],
             "total_salary": total_salary,
-            "star_rating": evaluation.get("star_rating"),
-            "starting_lineup_score": evaluation.get("starting_lineup_score"),
-            "team_description": evaluation.get("team_description"),
-            "evaluation_version": EVALUATION_VERSION,
         }
 
         team_res = supabase.table("saved_teams").insert(saved_team_insert).execute()
@@ -221,6 +385,14 @@ def create_saved_team():
             supabase.table("saved_team_players").insert(
                 _player_insert_rows(saved_team_id, players)
             ).execute()
+            supabase.table("saved_team_evaluations").insert({
+                "saved_team_id": saved_team_id,
+                "evaluation_version": EVALUATION_VERSION,
+                "star_rating": evaluation.get("star_rating"),
+                "starting_lineup_score": _extract_starting_lineup_score(evaluation),
+                "team_description": evaluation.get("team_description"),
+                "evaluation_payload": evaluation,
+            }).execute()
         except Exception:
             supabase.table("saved_teams").delete().eq("id", saved_team_id).execute()
             raise
@@ -229,6 +401,8 @@ def create_saved_team():
             "id": saved_team_id,
             "name": saved_team["name"],
             "ruleset_slug": saved_team["ruleset_slug"],
+            "ruleset_version_id": saved_team["ruleset_version_id"],
+            "ruleset_version_hash": saved_team["ruleset_version_hash"],
             "snapshot_release_id": saved_team["snapshot_release_id"],
             "visibility": saved_team["visibility"],
         }, status=201)
