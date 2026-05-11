@@ -41,7 +41,8 @@ export function PlayerCardView({
   const hasMore = allTopSkills.length > TOP_SKILL_COUNT;
   const isLegend = player.is_legend === true;
   const canAct = !!onPrimaryAction && !disabled;
-  const canOpenProfile = !!onOpenProfile;
+  const canOpenProfile = !!onOpenProfile && !disabled;
+  const canClickCard = canAct || canOpenProfile;
   const bioLine = [
     player.age != null ? `Age ${player.age}` : null,
     formatHeight(player.height) || null,
@@ -55,17 +56,32 @@ export function PlayerCardView({
       id={`player-card-view-${player.id}`}
       draggable={!!onDragStart && !disabled}
       onDragStart={onDragStart && !disabled ? (event) => onDragStart(event, player) : undefined}
-      onContextMenu={onContextMenu ? (event) => onContextMenu(event, player) : undefined}
+      onContextMenu={(event) => {
+        if (onContextMenu) {
+          onContextMenu(event, player);
+          return;
+        }
+        if (canOpenProfile) {
+          event.preventDefault();
+          onOpenProfile?.(player);
+        }
+      }}
       onMouseEnter={onHover ? () => onHover(player) : undefined}
       onMouseLeave={onHoverEnd}
       className={cn(
         "group rounded-md border border-[#d9d0c9] bg-[#f7f7f7] p-4 flex flex-col gap-3 transition-colors",
-        canOpenProfile && !disabled && "cursor-pointer hover:border-[#0e0907]/30",
+        canClickCard && "cursor-pointer hover:border-[#0e0907]/30",
         disabled && "opacity-40 cursor-not-allowed",
         highlighted && "!opacity-100 ring-2 ring-[#ffa05c]/60",
         isLegend && "border-[#ffa05c]/50 bg-[#f7f7f7]",
       )}
-      onClick={canOpenProfile && !disabled ? () => onOpenProfile(player) : undefined}
+      onClick={canClickCard ? () => {
+        if (canAct) {
+          onPrimaryAction?.(player);
+          return;
+        }
+        onOpenProfile?.(player);
+      } : undefined}
     >
       <div id={`player-card-view-header-${player.id}`} className="flex items-center gap-3">
         <PlayerHeadshot nba_api_id={player.nba_api_id} size={48} name={player.name} />

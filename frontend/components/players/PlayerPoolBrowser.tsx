@@ -561,7 +561,10 @@ export function PlayerPoolBrowser({
                 onPrimaryAction={onPrimaryAction ? (item) => onPrimaryAction(item, viewSize) : undefined}
                 onOpenProfile={openProfile}
                 onDragStart={onRowDragStart}
-                onContextMenu={onRowContextMenu}
+                onContextMenu={onRowContextMenu ?? ((event, item) => {
+                  event.preventDefault();
+                  openProfile(item);
+                })}
                 onHover={onRowHover}
                 onHoverEnd={onRowHoverEnd}
               />
@@ -614,7 +617,13 @@ export function PlayerPoolBrowser({
         sortFieldOptions={sortFieldOptions}
       />
 
-      <div id={`${id}-content`} className={contentClassName}>
+      <div
+        id={`${id}-content`}
+        className={cn(
+          contentClassName,
+          viewSize !== "row" && "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1",
+        )}
+      >
         {renderCollectionView()}
       </div>
 

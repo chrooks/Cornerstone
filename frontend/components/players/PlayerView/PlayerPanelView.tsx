@@ -46,6 +46,8 @@ export function PlayerPanelView({
   const profile = skills ?? player.skills;
   const isLegend = player.is_legend === true;
   const canAct = !!onPrimaryAction && !disabled;
+  const canOpenProfile = !!onOpenProfile && !disabled;
+  const canClickPanel = canAct || canOpenProfile;
   const tierCounts = useMemo(() => {
     if (!profile) return null;
     const counts: Record<string, number> = {};
@@ -68,11 +70,28 @@ export function PlayerPanelView({
       id={`player-panel-view-${player.id}`}
       draggable={!!onDragStart && !disabled}
       onDragStart={onDragStart && !disabled ? (event) => onDragStart(event, player) : undefined}
-      onContextMenu={onContextMenu ? (event) => onContextMenu(event, player) : undefined}
+      onContextMenu={(event) => {
+        if (onContextMenu) {
+          onContextMenu(event, player);
+          return;
+        }
+        if (canOpenProfile) {
+          event.preventDefault();
+          onOpenProfile?.(player);
+        }
+      }}
       onMouseEnter={onHover ? () => onHover(player) : undefined}
       onMouseLeave={onHoverEnd}
+      onClick={canClickPanel ? () => {
+        if (canAct) {
+          onPrimaryAction?.(player);
+          return;
+        }
+        onOpenProfile?.(player);
+      } : undefined}
       className={cn(
         "rounded-md border border-[#d9d0c9] bg-[#f7f7f7] transition-colors",
+        canClickPanel && "cursor-pointer hover:border-[#0e0907]/30",
         disabled && "opacity-40 cursor-not-allowed",
         highlighted && "!opacity-100 ring-2 ring-[#ffa05c]/60",
       )}
@@ -126,7 +145,10 @@ export function PlayerPanelView({
                 id={`player-panel-view-primary-${player.id}`}
                 type="button"
                 disabled={!canAct}
-                onClick={() => onPrimaryAction?.(player)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onPrimaryAction?.(player);
+                }}
                 className="inline-flex items-center px-5 py-2.5 rounded-sm bg-[#ffa05c] text-[#0e0907] text-[0.8125rem] font-medium tracking-[0.01em] transition-colors duration-150 hover:bg-[#fe6d34] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {primaryActionLabel}
@@ -136,7 +158,10 @@ export function PlayerPanelView({
               <button
                 id={`player-panel-view-profile-${player.id}`}
                 type="button"
-                onClick={() => onOpenProfile(player)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenProfile(player);
+                }}
                 className="inline-flex items-center px-4 py-2.5 rounded-sm border border-[#d9d0c9] text-[#0e0907]/65 text-[0.8125rem] font-medium tracking-[0.01em] transition-colors duration-150 hover:bg-[#f0f0f0] hover:text-[#0e0907]"
               >
                 Profile

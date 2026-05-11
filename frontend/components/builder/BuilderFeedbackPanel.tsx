@@ -16,7 +16,6 @@ import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { mapNoteToFilter } from "@/lib/noteFilters";
 import { formatSkillName, SKILL_DESCRIPTIONS } from "@/lib/skills";
 import { TIER_BADGE_CLASSES } from "@/lib/tiers";
-import { AssistantGmNotes } from "./AssistantGmNotes";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import { FeedbackTooltip } from "./FeedbackTooltip";
 import { SkillGrid } from "./SkillGrid";
@@ -33,7 +32,8 @@ import type {
   SkillTier,
 } from "@/lib/types";
 
-type FeedbackTab = "feedback" | "new" | "skills" | "debug";
+type FeedbackTab = "feedback" | "skills" | "debug";
+export type BuilderInspectionSource = "build" | "build-player" | "playerpool-preview";
 
 type CompositeKey = keyof CohesionCompositeScores;
 
@@ -159,11 +159,12 @@ interface BuilderFeedbackPanelProps {
   hasUnreadFeedback: boolean;
   latestEval: RosterEvaluation | null;
   inspectedPlayer: PlayerWithSkills | null;
+  inspectionSource: BuilderInspectionSource;
   focusedPlayerName: string | null;
   onClearPlayerFocus: () => void;
+  onClearInspection: () => void;
   onCollapse: () => void;
   onExpand: () => void;
-  onEvaluation: (evaluation: RosterEvaluation) => void;
   onSuggestionFilter: (filter: SuggestionFilter, note: Note) => void;
 }
 
@@ -430,7 +431,7 @@ function ScoreExplainerTooltip({ score }: { score: number | null | undefined }) 
         Current live evaluation: <span className="font-mono text-[#0e0907]">{formatScore(score)}</span> / 5.
       </p>
       <p>
-        Built from lineup cohesion, depth, versatility, and floor checks. Higher means the current roster is scoring better as a complete build, not just stacking individual talent.
+        Built from Lineup cohesion, depth, versatility, and floor checks. Higher means the current Build is scoring better as a complete Team, not just stacking individual talent.
       </p>
     </div>
   );
@@ -537,6 +538,7 @@ function playerLineupContext(
   return {
     total: combinations.length,
     count: withPlayer.length,
+    starting: withPlayer.find((lineup) => lineup.is_starting_lineup) ?? null,
     best: withPlayer[0],
     median: withPlayer[Math.floor((withPlayer.length - 1) / 2)],
   };
@@ -550,8 +552,9 @@ function rotationLineupContext(evaluation: RosterEvaluation | null) {
     total: evaluation?.lineup_summary.total_lineups ?? combinations.length,
     viable: evaluation?.lineup_summary.viable_lineups ?? 0,
     medianScore: evaluation?.lineup_summary.median_score ?? 0,
+    starting: combinations.find((lineup) => lineup.is_starting_lineup) ?? combinations[0],
     best: combinations[0],
-    typical: combinations[Math.floor((combinations.length - 1) / 2)],
+    median: combinations[Math.floor((combinations.length - 1) / 2)],
   };
 }
 
@@ -576,6 +579,102 @@ function topLineupSubscores(lineup: CohesionLineupCombination) {
     .map(([key, value]) => ({ key, label: SUBSCORE_LABELS[key] ?? key.replaceAll("_", " "), value }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 3);
+}
+
+interface LineupCardContext {
+  id: string;
+  label: string;
+  lineup: CohesionLineupCombination;
+  helper: string;
+  worksLabel: string;
+  addsLabel?: string;
+}
+
+function LineupContextSwitcher({
+  id,
+  contexts,
+  playerAdds = [],
+}: {
+  id: string;
+  contexts: LineupCardContext[];
+  playerAdds?: Array<{ key: string; label: string; value: number }>;
+}) {
+  const [selectedId, setSelectedId] = useState(contexts[0]?.id ?? "");
+  const selected = contexts.find((context) => context.id === selectedId) ?? contexts[0];
+
+  if (!selected) return null;
+
+  return (
+    <div id={id} className="mt-3 border border-[#d9d0c9]/60 bg-[#f0f0f0]/45">
+      <div id={`${id}-tabs`} className="flex border-b border-[#d9d0c9]/60">
+        {contexts.map((context) => (
+          <button
+            key={context.id}
+            id={`${id}-tab-${context.id}`}
+            type="button"
+            onClick={() => setSelectedId(context.id)}
+            className={cn(
+              "flex-1 px-2.5 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] transition-colors",
+              selected.id === context.id
+                ? "bg-[#0e0907] text-[#f8f3f1]"
+                : "text-[#0e0907]/40 hover:bg-[#0e0907]/[0.04] hover:text-[#0e0907]/65",
+            )}
+          >
+            {context.label}
+          </button>
+        ))}
+      </div>
+      <FeedbackTooltip
+        id={`${id}-${selected.id}-tooltip`}
+        as="div"
+        content={(
+          <LineupMetricTooltip label={selected.label}>
+            {selected.helper}
+          </LineupMetricTooltip>
+        )}
+        className="w-full"
+      >
+        <div id={`${id}-${selected.id}-card`} className="flex h-full w-full flex-col px-2.5 py-2 transition-colors hover:border-[#ffa05c]/45">
+          <div className="flex min-h-[48px] items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{selected.label}</p>
+              <p className="mt-1 text-[0.6875rem] leading-snug text-[#0e0907]/55">{lineupNames(selected.lineup)}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="font-mono text-[0.8125rem] font-semibold tabular-nums text-[#0e0907]">{selected.lineup.cohesion_score.toFixed(2)}</p>
+              <p className="text-[0.5625rem] uppercase tracking-[0.12em] text-[#0e0907]/35">rank {selected.lineup.rank}</p>
+            </div>
+          </div>
+          <div className="mt-3 grid flex-1 grid-rows-[minmax(78px,auto)_auto] gap-2">
+            <div className="min-h-[78px]">
+              <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{selected.worksLabel}</p>
+              <div className="mt-1 grid gap-1">
+                {topLineupSubscores(selected.lineup).map((subscore) => (
+                  <div key={subscore.key} className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[0.625rem] text-[#0e0907]/50">{subscore.label}</span>
+                    <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/70">{subscore.value.toFixed(1)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {selected.addsLabel && playerAdds.length > 0 && (
+              <div>
+                <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{selected.addsLabel}</p>
+                <div className="mt-1 grid gap-1">
+                  {playerAdds.map((trait) => (
+                    <div key={trait.key} className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[0.625rem] text-[#0e0907]/50">{trait.label}</span>
+                      <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/70">{formatScore(trait.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </FeedbackTooltip>
+    </div>
+  );
 }
 
 function allImpactTraitEntries(
@@ -675,7 +774,7 @@ function RotationIdentityStrip({ evaluation }: { evaluation: RosterEvaluation | 
         <div>
           <SectionLabel id="builder-skill-rotation-identity-label">Build Trait Snapshot</SectionLabel>
           <h3 id="builder-skill-rotation-identity-title" className="mt-1 text-[1rem] font-semibold text-[#0e0907]">
-            Roster Impact Traits
+            Build Impact Traits
           </h3>
           <p id="builder-skill-rotation-identity-archetypes" className="mt-0.5 text-[0.75rem] text-[#0e0907]/55">
             Identity tags: <span className="font-medium text-[#0e0907]/70">{archetypes.length > 0 ? archetypes.join(" / ") : "Still forming"}</span>
@@ -708,7 +807,7 @@ function RotationIdentityStrip({ evaluation }: { evaluation: RosterEvaluation | 
               as="div"
               content={(
                 <LineupMetricTooltip label={item.label}>
-                  Average normalized {item.label.toLowerCase()} Impact Trait across the evaluated Players. This is a roster trait snapshot, not the weighted lineup subscore used by the engine.
+                  Average normalized {item.label.toLowerCase()} Impact Trait across the evaluated Players. This is a Build trait snapshot, not the weighted Lineup Subscore used by the engine.
                 </LineupMetricTooltip>
               )}
               className="w-full"
@@ -992,12 +1091,14 @@ function NewFeedbackRead({
   allSlots,
   latestEval,
   inspectedPlayer,
-  focusedPlayerName,
+  inspectionSource,
   onSuggestionFilter,
-}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "inspectedPlayer" | "focusedPlayerName" | "onSuggestionFilter">) {
+}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "inspectedPlayer" | "inspectionSource" | "onSuggestionFilter">) {
   const [selectedSkillKey, setSelectedSkillKey] = useState<string | null>(null);
   const targetPlayer = inspectedPlayer;
   const isPlayerRead = targetPlayer !== null;
+  const isPreviewRead = inspectionSource === "playerpool-preview" && targetPlayer !== null;
+  const isBuildPlayerRead = inspectionSource === "build-player" && targetPlayer !== null;
   const skills = skillEntries(targetPlayer?.skills);
   const selectedSkill = skills.find((skill) => skill.skill === selectedSkillKey) ?? skills[0] ?? null;
   const affectedTraitKeys = new Set(selectedSkill ? SKILL_TO_IMPACT_TRAITS[selectedSkill.skill] ?? [] : []);
@@ -1047,19 +1148,102 @@ function NewFeedbackRead({
       .sort((a, b) => b.value - a.value)
     : [];
   const scoreShape = scoreShapeText(scoreFactors);
+  const reachLabel = isPreviewRead ? "Preview Status" : isPlayerRead ? "Lineup Reach" : "Rotation Reach";
+  const reachCopy = isPreviewRead
+    ? "Not in the current Build. Skill Profile and raw Impact Trait reads are available before selection."
+    : isPlayerRead
+      ? "Player presence across current Lineup Combinations."
+      : "Lineup Combination spread. Viability. Typical fit.";
+  const reachValue = isPreviewRead
+    ? "Preview"
+    : isPlayerRead
+      ? `${reach.playerLineups}/${reach.totalLineups}`
+      : `${rotationContext?.viable ?? 0}/${rotationContext?.total ?? 0}`;
+  const reachValueLabel = isPreviewRead ? "not in Build" : isPlayerRead ? "Lineups" : "viable";
+  const reachStatus = isPreviewRead
+    ? "Lineup Combination reads use the current Build only. Add this Player to see live contribution across Lineup Combinations."
+    : !isPlayerRead && rotationContext
+      ? `${rotationContext.total} Lineup Combinations. ${rotationContext.viable} viable. Median ${rotationContext.medianScore.toFixed(2)}.`
+      : !isPlayerRead
+        ? "Need 5 Players before Lineup Combinations exist."
+        : reach.filledCount < 5
+          ? `Need ${Math.max(0, 5 - reach.filledCount)} more Player${5 - reach.filledCount === 1 ? "" : "s"} before Lineup Combinations exist.`
+          : lineupContext
+            ? `${targetPlayer?.name ?? "This Player"} in ${lineupContext.count} of ${lineupContext.total} Lineup Combinations.`
+            : reach.isInSelection
+              ? `${targetPlayer?.name ?? "This Player"} in ${reach.playerLineups} of ${reach.totalLineups} Lineup Combinations.`
+              : `${targetPlayer?.name ?? "This Player"} not in Build yet.`;
+  const rotationLineupCards: LineupCardContext[] = rotationContext ? [
+    {
+      id: "starting",
+      label: "Starting",
+      lineup: rotationContext.starting,
+      helper: "The Starting Lineup uses the first five selected slots in the current Build.",
+      worksLabel: "Starting Fit",
+    },
+    {
+      id: "best",
+      label: "Best",
+      lineup: rotationContext.best,
+      helper: "Highest-ranked Lineup Combination in the current Build.",
+      worksLabel: "Lineup Works Through",
+    },
+    {
+      id: "median",
+      label: "Median",
+      lineup: rotationContext.median,
+      helper: "Middle-ranked Lineup Combination in the current Build.",
+      worksLabel: "Typical Fit",
+    },
+  ] : [];
+  const playerLineupCards: LineupCardContext[] = lineupContext ? [
+    lineupContext.starting ? {
+      id: "starting",
+      label: "Starting",
+      lineup: lineupContext.starting,
+      helper: "The Starting Lineup includes this Player.",
+      worksLabel: "Starting Fit",
+      addsLabel: "Player Adds Here",
+    } : null,
+    {
+      id: "best",
+      label: "Best",
+      lineup: lineupContext.best,
+      helper: "Highest-ranked evaluated Lineup Combination that includes this Player.",
+      worksLabel: "Lineup Works Through",
+      addsLabel: "Player Adds Here",
+    },
+    {
+      id: "median",
+      label: "Median",
+      lineup: lineupContext.median,
+      helper: "Middle evaluated Lineup Combination that includes this Player. This shows typical fit, not ceiling.",
+      worksLabel: "Typical Fit",
+      addsLabel: "Player Still Adds",
+    },
+  ].filter((context): context is LineupCardContext => context !== null) : [];
 
   return (
     <div id="builder-new-feedback-read" className="space-y-4">
-      <section id="builder-new-feedback-current-read" className="border border-[#d9d0c9] bg-[#f0f0f0]/55 px-3 py-3">
+      <section
+        id="builder-new-feedback-current-read"
+        className="border border-[#d9d0c9] bg-[#f0f0f0]/55 px-3 py-3"
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <SectionLabel id="builder-new-feedback-current-read-label">Feedback Read</SectionLabel>
             <h3 id="builder-new-feedback-current-read-title" className="mt-1 text-[1rem] font-semibold text-[#0e0907]">
-              {isPlayerRead ? `${targetPlayer.name} Contribution` : "Build Cohesion"}
+              {isPreviewRead
+                ? `${targetPlayer.name} Contribution Preview`
+                : isBuildPlayerRead
+                  ? `${targetPlayer.name} Contribution`
+                  : "Build Cohesion"}
             </h3>
             <p id="builder-new-feedback-current-read-copy" className="mt-1 text-[0.8125rem] leading-snug text-[#0e0907]/55">
-              {isPlayerRead
-                ? `Skill trace active. ${selectedSkill ? `${selectedSkill.label} path highlighted.` : "Selected Skill shows path."}`
+              {isPreviewRead
+                ? `Preview only. ${selectedSkill ? `${selectedSkill.label} path highlighted.` : "Selected Skill shows path."} Add this Player to the Build for live Lineup Combination reads.`
+                : isBuildPlayerRead
+                  ? `Skill trace active. ${selectedSkill ? `${selectedSkill.label} path highlighted.` : "Selected Skill shows path."}`
                 : "Current Build snapshot."}
             </p>
           </div>
@@ -1082,7 +1266,7 @@ function NewFeedbackRead({
       </section>
 
       <section id="builder-new-feedback-score-factors" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
-        <SectionLabel id="builder-new-feedback-score-factors-label">Score Factors</SectionLabel>
+        <SectionLabel id="builder-new-feedback-score-factors-label">{isPreviewRead ? "Build Score Factors" : "Score Factors"}</SectionLabel>
         {scoreFactors.length > 0 ? (
           <>
             <p id="builder-new-feedback-score-shape" className="mt-2 border border-[#d9d0c9]/55 bg-[#f0f0f0]/45 px-2.5 py-2 text-[0.75rem] leading-snug text-[#0e0907]/60">
@@ -1224,149 +1408,35 @@ function NewFeedbackRead({
       <section id="builder-new-feedback-lineup-reach" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <SectionLabel id="builder-new-feedback-lineup-reach-label">{isPlayerRead ? "Lineup Reach" : "Rotation Reach"}</SectionLabel>
+            <SectionLabel id="builder-new-feedback-lineup-reach-label">{reachLabel}</SectionLabel>
             <p id="builder-new-feedback-lineup-reach-copy" className="mt-2 text-[0.8125rem] leading-snug text-[#0e0907]/55">
-              {isPlayerRead ? "Player presence across current Lineup Combinations." : "Combo spread. Viability. Typical fit."}
+              {reachCopy}
             </p>
           </div>
           <div id="builder-new-feedback-lineup-reach-value" className="shrink-0 border border-[#d9d0c9]/70 bg-[#f0f0f0]/45 px-3 py-2 text-right">
             <p className="font-mono text-[1rem] font-semibold tabular-nums text-[#0e0907]">
-              {isPlayerRead
-                ? `${reach.playerLineups}/${reach.totalLineups}`
-                : `${rotationContext?.viable ?? 0}/${rotationContext?.total ?? 0}`}
+              {reachValue}
             </p>
-            <p className="text-[0.625rem] uppercase tracking-[0.14em] text-[#0e0907]/40">{isPlayerRead ? "combos" : "viable"}</p>
+            <p className="text-[0.625rem] uppercase tracking-[0.14em] text-[#0e0907]/40">
+              {reachValueLabel}
+            </p>
           </div>
         </div>
         <p id="builder-new-feedback-lineup-reach-status" className="mt-2 text-[0.75rem] text-[#0e0907]/50">
-          {!isPlayerRead && rotationContext
-            ? `${rotationContext.total} combos. ${rotationContext.viable} viable. Median ${rotationContext.medianScore.toFixed(2)}.`
-            : !isPlayerRead
-              ? "Need 5 Players before Lineup Combinations exist."
-              : reach.filledCount < 5
-            ? `Need ${Math.max(0, 5 - reach.filledCount)} more Player${5 - reach.filledCount === 1 ? "" : "s"} before Lineup Combinations exist.`
-            : lineupContext
-              ? `${targetPlayer?.name ?? "This Player"} in ${lineupContext.count} of ${lineupContext.total} combos.`
-              : reach.isInSelection
-                ? `${targetPlayer?.name ?? "This Player"} in ${reach.playerLineups} of ${reach.totalLineups} combos.`
-              : `${targetPlayer?.name ?? "This Player"} not in Build yet.`}
+          {reachStatus}
         </p>
-        {!isPlayerRead && rotationContext && (
-          <div id="builder-new-feedback-rotation-contexts" className="mt-3 grid items-stretch gap-2 xl:grid-cols-2">
-            {[
-              { id: "best", label: "Best Lineup", lineup: rotationContext.best, helper: "Highest-ranked Lineup Combination in the current Build." },
-              { id: "typical", label: "Typical Lineup", lineup: rotationContext.typical, helper: "Middle-ranked Lineup Combination in the current Build." },
-            ].map((context) => (
-              <FeedbackTooltip
-                key={context.id}
-                id={`builder-new-feedback-rotation-${context.id}-lineup-tooltip`}
-                as="div"
-                content={(
-                  <LineupMetricTooltip label={context.label}>
-                    {context.helper}
-                  </LineupMetricTooltip>
-                )}
-                className="w-full"
-              >
-                <div id={`builder-new-feedback-rotation-${context.id}-lineup`} className="flex h-full w-full flex-col border border-[#d9d0c9]/60 bg-[#f0f0f0]/45 px-2.5 py-2 transition-colors hover:border-[#ffa05c]/45">
-                  <div className="flex min-h-[48px] items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{context.label}</p>
-                      <p className="mt-1 text-[0.6875rem] leading-snug text-[#0e0907]/55">{lineupNames(context.lineup)}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="font-mono text-[0.8125rem] font-semibold tabular-nums text-[#0e0907]">{context.lineup.cohesion_score.toFixed(2)}</p>
-                      <p className="text-[0.5625rem] uppercase tracking-[0.12em] text-[#0e0907]/35">rank {context.lineup.rank}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 min-h-[78px]">
-                    <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{context.id === "best" ? "Lineup Works Through" : "Typical Fit"}</p>
-                    <div className="mt-1 grid gap-1">
-                      {topLineupSubscores(context.lineup).map((subscore) => (
-                        <div key={subscore.key} className="flex items-center justify-between gap-2">
-                          <span className="truncate text-[0.625rem] text-[#0e0907]/50">{subscore.label}</span>
-                          <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/70">{subscore.value.toFixed(1)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </FeedbackTooltip>
-            ))}
-          </div>
+        {!isPlayerRead && rotationLineupCards.length > 0 && (
+          <LineupContextSwitcher
+            id="builder-new-feedback-rotation-lineup-selector"
+            contexts={rotationLineupCards}
+          />
         )}
-        {isPlayerRead && lineupContext && (
-          <div id="builder-new-feedback-lineup-contexts" className="mt-3 grid items-stretch gap-2 xl:grid-cols-2">
-            {[
-              {
-                id: "best",
-                label: "Best With Player",
-                lineup: lineupContext.best,
-                worksLabel: "Lineup Works Through",
-                addsLabel: "Player Adds Here",
-              },
-              {
-                id: "median",
-                label: "Median With Player",
-                lineup: lineupContext.median,
-                worksLabel: "Typical Fit",
-                addsLabel: "Player Still Adds",
-              },
-            ].map((context) => (
-              <FeedbackTooltip
-                key={context.id}
-                id={`builder-new-feedback-${context.id}-lineup-tooltip`}
-                as="div"
-                content={(
-                  <LineupMetricTooltip label={context.label}>
-                    {context.id === "best"
-                      ? "Highest-ranked evaluated Lineup Combination that includes this Player."
-                      : "Middle evaluated Lineup Combination that includes this Player. This shows typical fit, not ceiling."}
-                  </LineupMetricTooltip>
-                )}
-                className="w-full"
-              >
-                <div id={`builder-new-feedback-${context.id}-lineup`} className="flex h-full w-full flex-col border border-[#d9d0c9]/60 bg-[#f0f0f0]/45 px-2.5 py-2 transition-colors hover:border-[#ffa05c]/45">
-                  <div className="flex min-h-[48px] items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{context.label}</p>
-                      <p className="mt-1 text-[0.6875rem] leading-snug text-[#0e0907]/55">{lineupNames(context.lineup)}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="font-mono text-[0.8125rem] font-semibold tabular-nums text-[#0e0907]">{context.lineup.cohesion_score.toFixed(2)}</p>
-                      <p className="text-[0.5625rem] uppercase tracking-[0.12em] text-[#0e0907]/35">rank {context.lineup.rank}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid flex-1 grid-rows-[minmax(78px,auto)_auto] gap-2">
-                    <div className="min-h-[78px]">
-                      <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{context.worksLabel}</p>
-                      <div className="mt-1 grid gap-1">
-                        {topLineupSubscores(context.lineup).map((subscore) => (
-                          <div key={subscore.key} className="flex items-center justify-between gap-2">
-                            <span className="truncate text-[0.625rem] text-[#0e0907]/50">{subscore.label}</span>
-                            <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/70">{subscore.value.toFixed(1)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    {playerAdds.length > 0 && (
-                      <div>
-                        <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{context.addsLabel}</p>
-                        <div className="mt-1 grid gap-1">
-                          {playerAdds.map((trait) => (
-                            <div key={trait.key} className="flex items-center justify-between gap-2">
-                              <span className="truncate text-[0.625rem] text-[#0e0907]/50">{trait.label}</span>
-                              <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/70">{formatScore(trait.value)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </FeedbackTooltip>
-            ))}
-          </div>
+        {isPlayerRead && playerLineupCards.length > 0 && (
+          <LineupContextSwitcher
+            id="builder-new-feedback-player-lineup-selector"
+            contexts={playerLineupCards}
+            playerAdds={playerAdds}
+          />
         )}
       </section>
 
@@ -1442,7 +1512,7 @@ function NewFeedbackRead({
         </div>
       </section>
 
-      {(strengths.length > 0 || warnings.length > 0 || focusedPlayerName) && (
+      {(strengths.length > 0 || warnings.length > 0 || isBuildPlayerRead) && (
         <section id="builder-new-feedback-note-context" className="grid gap-3 xl:grid-cols-2">
           <div id="builder-new-feedback-strengths" className="border border-[#059669]/20 bg-[#059669]/5 px-3 py-3">
             <SectionLabel id="builder-new-feedback-strengths-label">What Holds</SectionLabel>
@@ -1479,6 +1549,12 @@ function SkillProfileDiagnostic({
 }: Pick<BuilderFeedbackPanelProps, "allSlots" | "cornerstoneId" | "legendDetail" | "latestEval" | "inspectedPlayer">) {
   return (
     <div id="builder-skill-profile-diagnostic" className="space-y-5">
+      <section id="builder-skill-profile-purpose" className="border border-[#d9d0c9]/70 bg-[#f0f0f0]/45 px-3 py-3">
+        <SectionLabel id="builder-skill-profile-purpose-label">Skill Profile Matrix</SectionLabel>
+        <p id="builder-skill-profile-purpose-copy" className="mt-2 text-[0.8125rem] leading-snug text-[#0e0907]/55">
+          Audit every Player Skill Profile in the current Build. Use this tab for full coverage checks, not the primary contribution read.
+        </p>
+      </section>
       <RotationIdentityStrip evaluation={latestEval} />
       <PlayerContributionInspector evaluation={latestEval} player={inspectedPlayer} />
       <LineupImpactSummary evaluation={latestEval} />
@@ -1506,18 +1582,17 @@ export function BuilderFeedbackPanel({
   hasUnreadFeedback,
   latestEval,
   inspectedPlayer,
-  focusedPlayerName,
+  inspectionSource,
   onClearPlayerFocus,
+  onClearInspection,
   onCollapse,
   onExpand,
-  onEvaluation,
   onSuggestionFilter,
 }: BuilderFeedbackPanelProps) {
   const [activeTab, setActiveTab] = useState<FeedbackTab>("feedback");
   const tabs: { id: FeedbackTab; label: string; adminOnly?: boolean }[] = [
     { id: "feedback", label: "Feedback" },
-    { id: "new", label: "New Feedback" },
-    { id: "skills", label: "Skill Profile" },
+    { id: "skills", label: "Skill Matrix" },
     { id: "debug", label: "Debug", adminOnly: true },
   ];
 
@@ -1578,16 +1653,30 @@ export function BuilderFeedbackPanel({
               </button>
             ))}
           </div>
-          {focusedPlayerName && (
+          {inspectionSource === "playerpool-preview" && inspectedPlayer && (
             <p id="builder-feedback-focus-label" className="mt-1 truncate text-[0.6875rem] text-[#0e0907]/45">
-              Showing {focusedPlayerName}
+              Focus: <span className="text-[#0e0907]/60">{inspectedPlayer.name}</span>{" "}
+              <span className="text-[#0e0907]/60">Preview</span>
+              <button
+                id="builder-new-feedback-preview-clear"
+                type="button"
+                onClick={onClearInspection}
+                className="ml-2 font-medium text-[#a34400] hover:text-[#fe6d34]"
+              >
+                Show Build
+              </button>
+            </p>
+          )}
+          {inspectionSource === "build-player" && inspectedPlayer && (
+            <p id="builder-feedback-focus-label" className="mt-1 truncate text-[0.6875rem] text-[#0e0907]/45">
+              Focus: <span className="text-[#0e0907]/60">{inspectedPlayer.name}</span>
               <button
                 id="builder-feedback-clear-focus"
                 type="button"
                 onClick={onClearPlayerFocus}
                 className="ml-2 font-medium text-[#a34400] hover:text-[#fe6d34]"
               >
-                Show all
+                Show Build
               </button>
             </p>
           )}
@@ -1605,22 +1694,11 @@ export function BuilderFeedbackPanel({
 
       <div id="builder-feedback-content" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3">
         <div id="builder-feedback-tab-panel-feedback" className={cn(activeTab !== "feedback" && "hidden")}>
-          <AssistantGmNotes
-            allSlots={allSlots}
-            legendDetail={legendDetail}
-            isAdmin={isAdmin}
-            onEvaluation={onEvaluation}
-            onSuggestionFilter={onSuggestionFilter}
-            focusedPlayerName={focusedPlayerName}
-          />
-        </div>
-
-        <div id="builder-feedback-tab-panel-new" className={cn(activeTab !== "new" && "hidden")}>
           <NewFeedbackRead
             allSlots={allSlots}
             latestEval={latestEval}
             inspectedPlayer={inspectedPlayer}
-            focusedPlayerName={focusedPlayerName}
+            inspectionSource={inspectionSource}
             onSuggestionFilter={onSuggestionFilter}
           />
         </div>

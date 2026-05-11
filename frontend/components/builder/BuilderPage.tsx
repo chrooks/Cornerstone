@@ -18,12 +18,13 @@ import { listPlayersWithSkills, getLegend } from "@/lib/api";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { useRosterSlots } from "@/lib/hooks/useRosterSlots";
 import { useBuilderSalary } from "@/lib/hooks/useBuilderSalary";
+import { useBuilderEvaluation } from "@/lib/hooks/useBuilderEvaluation";
 import { BuilderHeader } from "./BuilderHeader";
 import { CourtStrip } from "./CourtStrip";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
-import { BuilderFeedbackPanel } from "./BuilderFeedbackPanel";
+import { BuilderFeedbackPanel, type BuilderInspectionSource } from "./BuilderFeedbackPanel";
 import type { SuggestionFilter } from "@/lib/noteFilters";
-import type { LegendDetail, PlayerWithSkills, RosterEvaluation } from "@/lib/types";
+import type { LegendDetail, PlayerWithSkills } from "@/lib/types";
 
 /** Default workspace split: PlayerPool gets 65%, Feedback gets 35% */
 const DEFAULT_FEEDBACK_FRAC = 0.35;
@@ -101,12 +102,11 @@ export function BuilderPage() {
   // ── Feedback collapse state ───────────────────────────────────────────────
   const [feedbackCollapsed, setFeedbackCollapsed] = useState(false);
   const [hasUnreadFeedback, setHasUnreadFeedback] = useState(false);
-  const [latestEval, setLatestEval] = useState<RosterEvaluation | null>(null);
-  /* When Feedback arrives while collapsed, pulse the indicator */
-  const handleEvaluation = useCallback((evaluation: RosterEvaluation) => {
-    setLatestEval(evaluation);
-    if (feedbackCollapsed) setHasUnreadFeedback(true);
-  }, [feedbackCollapsed]);
+  const { latestEval } = useBuilderEvaluation({ allSlots: roster.allSlots, legendDetail, isAdmin });
+
+  useEffect(() => {
+    if (latestEval && feedbackCollapsed) setHasUnreadFeedback(true);
+  }, [feedbackCollapsed, latestEval]);
 
   /* Expanding Feedback clears the unread indicator */
   const handleExpandFeedback = useCallback(() => {
@@ -116,16 +116,24 @@ export function BuilderPage() {
 
   // ── Player-scoped note filtering (slot click → filter Feedback) ──────────
   const [focusedPlayerName, setFocusedPlayerName] = useState<string | null>(null);
-  const [hoveredPoolPlayer, setHoveredPoolPlayer] = useState<PlayerWithSkills | null>(null);
+  const [previewPlayer, setPreviewPlayer] = useState<PlayerWithSkills | null>(null);
 
   const handleSlotClick = useCallback((slotIndex: number) => {
     const occupant = roster.allSlots[slotIndex - 1];
+    const selectedSlot = roster.selectedSlot;
+    roster.handleSlotClick(slotIndex);
+    setPreviewPlayer(null);
+
     if (!occupant) {
-      /* Empty slot — select it for the next player pick */
-      roster.handleSlotClick(slotIndex);
       setFocusedPlayerName(null);
       return;
     }
+
+    if (selectedSlot !== null) {
+      setFocusedPlayerName(null);
+      return;
+    }
+
     /* Toggle: click same player = deselect, click different = switch */
     setFocusedPlayerName((prev) =>
       prev === occupant.name ? null : occupant.name,
@@ -134,7 +142,18 @@ export function BuilderPage() {
 
   const handleClearPlayerFocus = useCallback(() => {
     setFocusedPlayerName(null);
+    setPreviewPlayer(null);
   }, []);
+
+  const handleClearInspection = useCallback(() => {
+    setPreviewPlayer(null);
+  }, []);
+
+  const handlePlayerPick = useCallback((player: PlayerWithSkills) => {
+    roster.handlePlayerClick(player);
+    setPreviewPlayer(null);
+    setFocusedPlayerName(null);
+  }, [roster]);
 
   // ── Suggestion-driven skill filter for PlayerPool ─────────────────────────
   const [suggestionFilterTrigger, setSuggestionFilterTrigger] = useState<SuggestionFilter | null>(null);
@@ -164,12 +183,26 @@ export function BuilderPage() {
     setHoveredCourtPlayerId(null);
   }, []);
 
-  const inspectedPlayer = useMemo(() => {
-    if (focusedPlayerName) {
-      return roster.allSlots.find((player) => player?.name === focusedPlayerName) ?? null;
+  const inspection = useMemo<{ player: PlayerWithSkills | null; source: BuilderInspectionSource }>(() => {
+    if (previewPlayer) {
+      const buildPlayer =
+        roster.allSlots.find((player) => player?.id === previewPlayer.id) ?? null;
+
+      if (buildPlayer) {
+        return { player: buildPlayer, source: "build-player" };
+      }
+
+      return { player: previewPlayer, source: "playerpool-preview" };
     }
-    return hoveredPoolPlayer;
-  }, [focusedPlayerName, hoveredPoolPlayer, roster.allSlots]);
+
+    if (focusedPlayerName) {
+      return {
+        player: roster.allSlots.find((player) => player?.name === focusedPlayerName) ?? null,
+        source: "build-player",
+      };
+    }
+    return { player: null, source: "build" };
+  }, [focusedPlayerName, previewPlayer, roster.allSlots]);
 
   // ── Workspace horizontal resize (PlayerPool | Feedback) ───────────────────
   const [feedbackFrac, setFeedbackFrac] = useState(DEFAULT_FEEDBACK_FRAC);
@@ -286,11 +319,10 @@ export function BuilderPage() {
             onSkillFilterInjected={() => setSuggestionFilterTrigger(null)}
             rosterPlayerIds={roster.rosterPlayerIds}
             selectedSlot={roster.selectedSlot}
-            onPlayerClick={roster.handlePlayerClick}
+            onPlayerClick={handlePlayerPick}
             onPlayerHover={(s) => salary.setPickerHoveredSalary(s)}
             onPlayerHoverEnd={() => salary.setPickerHoveredSalary(null)}
-            onPlayerInspectHover={setHoveredPoolPlayer}
-            onPlayerInspectHoverEnd={() => setHoveredPoolPlayer(null)}
+            onPlayerInspectHover={setPreviewPlayer}
             highlightedPlayerId={hoveredCourtPlayerId}
             isAdmin={isAdmin}
           />
@@ -324,12 +356,13 @@ export function BuilderPage() {
             collapsed={feedbackCollapsed}
             hasUnreadFeedback={hasUnreadFeedback}
             latestEval={latestEval}
-            inspectedPlayer={inspectedPlayer}
+            inspectedPlayer={inspection.player}
+            inspectionSource={inspection.source}
             focusedPlayerName={focusedPlayerName}
             onClearPlayerFocus={handleClearPlayerFocus}
+            onClearInspection={handleClearInspection}
             onCollapse={() => setFeedbackCollapsed(true)}
             onExpand={handleExpandFeedback}
-            onEvaluation={handleEvaluation}
             onSuggestionFilter={handleSuggestionFilter}
           />
         </div>
