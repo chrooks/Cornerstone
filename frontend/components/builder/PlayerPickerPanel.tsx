@@ -250,7 +250,7 @@ export function PlayerPickerPanel({
           viewSize={viewSize}
           onViewSizeChange={setViewSize}
           defaultHiddenColumns={PICKER_HIDDEN_COLUMNS}
-          cardGridClassName="grid grid-cols-4 gap-3"
+          cardGridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           panelListClassName="flex flex-col gap-3"
           contentClassName="flex-1 overflow-hidden min-h-0"
           tableRootClassName="flex h-full min-h-0 flex-col"

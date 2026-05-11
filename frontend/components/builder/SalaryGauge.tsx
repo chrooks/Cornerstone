@@ -48,7 +48,7 @@ export function SalaryGauge({ usedSalary, cap = SALARY_CAP, onRemainingClick, hi
 
   return (
     /* Single-line: [used label] [bar] [cap label] */
-    <div id="builder-salary-gauge" className="flex items-center gap-3">
+    <div id="builder-salary-gauge" className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:flex-nowrap">
       {/* Used salary — Geist Mono for all dollar figures */}
       <div id="builder-salary-used" className="shrink-0 flex flex-col items-start leading-tight">
         <span className={cn(
@@ -70,7 +70,7 @@ export function SalaryGauge({ usedSalary, cap = SALARY_CAP, onRemainingClick, hi
       {/* Bar track — warm muted background */}
       <div
         id="builder-salary-bar-track"
-        className="relative flex-1 h-2 rounded-full bg-[#d9d0c9]/40 overflow-hidden"
+        className="order-last relative h-2 basis-full overflow-hidden rounded-full bg-[#d9d0c9]/40 sm:order-none sm:flex-1 sm:basis-auto"
       >
         {/* Filled portion — total committed salary */}
         <div

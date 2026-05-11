@@ -27,7 +27,7 @@ export function ImpactTraitList({
         id={`${idBase}-list`}
         className={cn(
           "mt-2 grid gap-2",
-          scroll && "max-h-[420px] overflow-y-auto pr-1 [scrollbar-color:rgba(14,9,7,0.18)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb]:bg-[#0e0907]/15 hover:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/25",
+          scroll && "pr-1 lg:max-h-[420px] lg:overflow-y-auto lg:[scrollbar-color:rgba(14,9,7,0.18)_transparent] lg:[scrollbar-width:thin] lg:[&::-webkit-scrollbar]:w-1.5 lg:[&::-webkit-scrollbar-track]:bg-transparent lg:[&::-webkit-scrollbar-thumb]:rounded-sm lg:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/15 lg:hover:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/25",
         )}
       >
         {traits.length > 0 ? traits.map((trait) => {

@@ -1163,7 +1163,7 @@ function NewFeedbackRead({
             </p>
             <div
               id="builder-new-feedback-lineup-effects-scroll"
-              className="mt-2 grid max-h-[164px] gap-2 overflow-y-auto pr-1 [scrollbar-color:rgba(14,9,7,0.18)_transparent] [scrollbar-width:thin] sm:grid-cols-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb]:bg-[#0e0907]/15 hover:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/25"
+              className="mt-2 grid gap-2 pr-1 sm:grid-cols-2 lg:max-h-[164px] lg:overflow-y-auto lg:[scrollbar-color:rgba(14,9,7,0.18)_transparent] lg:[scrollbar-width:thin] lg:[&::-webkit-scrollbar]:w-1.5 lg:[&::-webkit-scrollbar-track]:bg-transparent lg:[&::-webkit-scrollbar-thumb]:rounded-sm lg:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/15 lg:hover:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/25"
             >
               {lineupSubscores.map((subscore) => (
                 <FeedbackTooltip
@@ -1335,7 +1335,7 @@ export function BuilderFeedbackPanel({
   const visibleTabs = tabs.filter((tab) => !tab.adminOnly || isAdmin);
 
   return (
-    <div id="builder-feedback-panel" className="flex h-full min-w-0 flex-col">
+    <div id="builder-feedback-panel" className="flex min-w-0 flex-col lg:h-full">
       {collapsed && (
         <button
           id="builder-notes-collapsed"
@@ -1344,7 +1344,7 @@ export function BuilderFeedbackPanel({
           title="Expand Feedback"
           aria-label={hasUnreadFeedback ? "Expand Feedback, new feedback available" : "Expand Feedback"}
           className={cn(
-            "flex h-full w-10 flex-shrink-0 flex-col items-center justify-center gap-2 border transition-colors hover:bg-[#0e0907]/[0.02]",
+            "flex min-h-12 w-full flex-shrink-0 items-center justify-center gap-2 border transition-colors hover:bg-[#0e0907]/[0.02] lg:h-full lg:w-10 lg:flex-col",
             hasUnreadFeedback
               ? "border-[#ffa05c] bg-[#ffa05c]/10 ring-1 ring-[#ffa05c]/45"
               : "border-[#d9d0c9] bg-[#f7f7f7]",
@@ -1357,7 +1357,7 @@ export function BuilderFeedbackPanel({
               hasUnreadFeedback ? "animate-pulse bg-[#ffa05c]" : "bg-[#d9d0c9]",
             )}
           />
-          <span className="text-[0.5625rem] font-medium uppercase tracking-wider text-[#0e0907]/35 [writing-mode:vertical-lr]">
+          <span className="text-[0.5625rem] font-medium uppercase tracking-wider text-[#0e0907]/35 lg:[writing-mode:vertical-lr]">
             Feedback
           </span>
         </button>
@@ -1365,7 +1365,7 @@ export function BuilderFeedbackPanel({
       <div
         id="builder-feedback-expanded-panel"
         className={cn(
-          "flex h-full min-w-0 flex-col overflow-hidden border border-[#d9d0c9] bg-[#f7f7f7]",
+          "flex min-w-0 flex-col overflow-visible border border-[#d9d0c9] bg-[#f7f7f7] lg:h-full lg:overflow-hidden",
           collapsed && "hidden",
         )}
       >
@@ -1408,13 +1408,13 @@ export function BuilderFeedbackPanel({
           type="button"
           onClick={onCollapse}
           title="Collapse feedback"
-          className="flex size-7 shrink-0 items-center justify-center text-[#0e0907]/35 transition-colors hover:bg-[#0e0907]/[0.04] hover:text-[#0e0907]/65"
+          className="hidden size-7 shrink-0 items-center justify-center text-[#0e0907]/35 transition-colors hover:bg-[#0e0907]/[0.04] hover:text-[#0e0907]/65 lg:flex"
         >
           <X className="size-4" aria-hidden />
         </button>
       </div>
 
-      <div id="builder-feedback-content" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3">
+      <div id="builder-feedback-content" className="flex-1 overflow-visible p-3 lg:min-h-0 lg:overflow-x-hidden lg:overflow-y-auto">
         <div id="builder-feedback-tab-panel-feedback" className={cn(activeTab !== "feedback" && "hidden")}>
           <NewFeedbackRead
             allSlots={allSlots}

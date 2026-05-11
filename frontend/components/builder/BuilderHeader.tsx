@@ -28,7 +28,7 @@ function Breadcrumb({ ruleset }: { ruleset: string }) {
     .join(" ");
 
   return (
-    <nav id="builder-breadcrumb" aria-label="Lab navigation" className="flex items-center gap-2 text-[0.8125rem]">
+    <nav id="builder-breadcrumb" aria-label="Lab navigation" className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem]">
       <Link href="/lab" className="text-[#0e0907]/45 hover:text-[#0e0907]/70 transition-colors">Lab</Link>
       <span className="text-[#0e0907]/25" aria-hidden="true">/</span>
       <Link href="/lab" className="text-[#0e0907]/45 hover:text-[#0e0907]/70 transition-colors">{rulesetName}</Link>
@@ -50,16 +50,16 @@ export function BuilderHeader({
   const searchParams = useSearchParams();
 
   return (
-    <div id="builder-header" className="flex flex-col gap-1.5 mb-3 flex-shrink-0">
+    <div id="builder-header" className="mb-3 flex flex-shrink-0 flex-col gap-1.5">
       {/* Row 1: Breadcrumb */}
       <Breadcrumb ruleset={ruleset} />
 
       {/* Row 2: Title + salary gauge + Evaluate CTA */}
-      <div className="flex items-center justify-between gap-4">
+      <div id="builder-header-main-row" className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center sm:gap-4">
         {/* Title */}
         <h1
           id="builder-title"
-          className="font-display text-[clamp(1.125rem,1.5vw+0.25rem,1.5rem)] font-semibold leading-[1.15] tracking-[-0.01em] text-[#0e0907] shrink-0"
+          className="min-w-0 shrink font-display text-[clamp(1.125rem,1.5vw+0.25rem,1.5rem)] font-semibold leading-[1.15] tracking-[-0.01em] text-[#0e0907]"
         >
           <span className="text-[#ffa05c] mr-1">★</span>
           {cornerstone.peak_year != null && (
@@ -69,7 +69,7 @@ export function BuilderHeader({
         </h1>
 
         {/* Evaluate CTA */}
-        <div className="flex items-center gap-4 shrink-0">
+        <div id="builder-header-actions" className="flex shrink-0 items-center gap-4">
           <Link
             id="builder-evaluate-btn"
             href={allSlotsFilled ? `/lab/${ruleset}/eval?${searchParams.toString()}` : "#"}

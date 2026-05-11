@@ -374,7 +374,7 @@ export function CourtStrip({
       className="border border-[#d9d0c9] bg-[#f7f7f7] rounded-lg overflow-hidden"
     >
       {/* Row 1: SalaryCap gauge — full width with hover preview */}
-      <div className="px-5 pt-3 pb-1.5 border-b border-[#d9d0c9]/50">
+      <div className="border-b border-[#d9d0c9]/50 px-3 pb-2 pt-3 sm:px-5 sm:pb-1.5">
         <SalaryGauge
           usedSalary={usedSalary}
           cap={SALARY_CAP}
@@ -385,34 +385,36 @@ export function CourtStrip({
       </div>
 
       {/* Row 2: Centered slot row with starter/bench divider */}
-      <div className="px-6 py-3 flex items-center justify-center">
-        {/* Left label */}
-        <div className="flex flex-col items-start mr-4 shrink-0">
-          <span className="text-[0.5625rem] font-semibold tracking-[1.5px] uppercase text-[#9a938a]">
-            Rotation
-          </span>
-          <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/35">
-            {filledCount} / {MAX_ROSTER_SLOTS}
-          </span>
-        </div>
+      <div id="builder-court-strip-scroll" className="overflow-x-auto [scrollbar-color:rgba(14,9,7,0.18)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb]:bg-[#0e0907]/15">
+        <div id="builder-court-strip-row" className="flex w-max min-w-full items-center justify-start px-3 py-3 sm:justify-center sm:px-6">
+          {/* Left label */}
+          <div className="mr-3 flex shrink-0 flex-col items-start sm:mr-4">
+            <span className="text-[0.5625rem] font-semibold uppercase tracking-[1.5px] text-[#9a938a]">
+              Rotation
+            </span>
+            <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/35">
+              {filledCount} / {MAX_ROSTER_SLOTS}
+            </span>
+          </div>
 
-        {/* Starter slots (1-5) — wider gaps */}
-        <div className="flex items-start gap-3">
-          {[1, 2, 3, 4, 5].map(renderSlot)}
-        </div>
+          {/* Starter slots (1-5) */}
+          <div id="builder-court-strip-starters" className="flex items-start gap-2 sm:gap-3">
+            {[1, 2, 3, 4, 5].map(renderSlot)}
+          </div>
 
-        {/* Starter/bench divider */}
-        <div className="flex flex-col items-center mx-4 self-stretch">
-          <div className="flex-1 w-px bg-[#d9d0c9]" />
-          <span className="text-[0.5rem] font-semibold tracking-[1px] uppercase text-[#9a938a] py-1">
-            Bench
-          </span>
-          <div className="flex-1 w-px bg-[#d9d0c9]" />
-        </div>
+          {/* Starter/bench divider */}
+          <div id="builder-court-strip-bench-divider" className="mx-3 flex self-stretch flex-col items-center sm:mx-4">
+            <div className="w-px flex-1 bg-[#d9d0c9]" />
+            <span className="py-1 text-[0.5rem] font-semibold uppercase tracking-[1px] text-[#9a938a]">
+              Bench
+            </span>
+            <div className="w-px flex-1 bg-[#d9d0c9]" />
+          </div>
 
-        {/* Bench slots (6-9) — wider gaps */}
-        <div className="flex items-start gap-3">
-          {[6, 7, 8, 9].map(renderSlot)}
+          {/* Bench slots (6-9) */}
+          <div id="builder-court-strip-bench" className="flex items-start gap-2 sm:gap-3">
+            {[6, 7, 8, 9].map(renderSlot)}
+          </div>
         </div>
       </div>
     </div>

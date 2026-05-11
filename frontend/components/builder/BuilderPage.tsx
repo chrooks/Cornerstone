@@ -11,7 +11,7 @@
  * Requires ?cornerstone=<id>. Redirects to /lab/[ruleset]/legends if missing.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { listPlayersWithSkills, getLegend } from "@/lib/api";
@@ -32,6 +32,7 @@ import type { LegendDetail, PlayerWithSkills } from "@/lib/types";
 const DEFAULT_FEEDBACK_FRAC = 0.35;
 const MIN_FEEDBACK_FRAC = 0.20;
 const MAX_FEEDBACK_FRAC = 0.50;
+type NarrowWorkspaceView = "players" | "feedback";
 
 export function BuilderPage() {
   const searchParams = useSearchParams();
@@ -104,6 +105,7 @@ export function BuilderPage() {
   // ── Feedback collapse state ───────────────────────────────────────────────
   const [feedbackCollapsed, setFeedbackCollapsed] = useState(false);
   const [hasUnreadFeedback, setHasUnreadFeedback] = useState(false);
+  const [narrowWorkspaceView, setNarrowWorkspaceView] = useState<NarrowWorkspaceView>("players");
   const { latestEval } = useBuilderEvaluation({ allSlots: roster.allSlots, legendDetail, isAdmin });
 
   useEffect(() => {
@@ -128,6 +130,7 @@ export function BuilderPage() {
       return;
     }
 
+    setNarrowWorkspaceView("feedback");
     /* Toggle: click same player = deselect, click different = switch */
     setFocusedPlayerName((prev) =>
       prev === occupant.name ? null : occupant.name,
@@ -142,6 +145,7 @@ export function BuilderPage() {
     setFocusedPlayerName(player.name);
     setFeedbackCollapsed(false);
     setHasUnreadFeedback(false);
+    setNarrowWorkspaceView("feedback");
   }, []);
 
   const handlePlayerPick = useCallback((player: PlayerWithSkills) => {
@@ -196,6 +200,7 @@ export function BuilderPage() {
   const handleSuggestionFilter = useCallback((filter: SuggestionFilter) => {
     setSuggestionFilterTrigger(filter);
     setPickerFlashKey((k) => k + 1);
+    setNarrowWorkspaceView("players");
   }, []);
 
   const handleSlotHover = useCallback((slotIndex: number) => {
@@ -283,7 +288,7 @@ export function BuilderPage() {
 
   // ── Builder workspace ─────────────────────────────────────────────────────
   return (
-    <main id="builder-page" className="max-w-screen-2xl mx-auto px-6 pt-4 pb-2 h-[calc(100vh-3rem)] flex flex-col">
+    <main id="builder-page" className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-screen-2xl flex-col px-3 pb-4 pt-3 sm:px-4 lg:h-[calc(100vh-3rem)] lg:px-6 lg:pb-2 lg:pt-4">
       {/* Row 1: Header — breadcrumb, title, SalaryCap gauge, Evaluate CTA */}
       <BuilderHeader
         cornerstone={cornerstone}
@@ -309,20 +314,71 @@ export function BuilderPage() {
         onSlotContextMenu={handleSlotContextMenu}
       />
 
+      <div
+        id="builder-narrow-workspace-tabs"
+        className="sticky top-12 z-20 mt-3 grid grid-cols-2 border border-[#d9d0c9] bg-[#f0f0f0]/95 text-[0.8125rem] font-medium backdrop-blur-sm lg:hidden"
+        role="tablist"
+        aria-label="Build workspace"
+      >
+        <button
+          id="builder-narrow-workspace-tab-players"
+          type="button"
+          role="tab"
+          aria-selected={narrowWorkspaceView === "players"}
+          aria-controls="builder-playerpool-panel"
+          onClick={() => setNarrowWorkspaceView("players")}
+          className={cn(
+            "border-r border-[#d9d0c9] px-3 py-2.5 transition-colors",
+            narrowWorkspaceView === "players"
+              ? "bg-[#0e0907] text-[#f8f3f1]"
+              : "text-[#0e0907]/55 hover:bg-[#0e0907]/[0.04] hover:text-[#0e0907]/75",
+          )}
+        >
+          Players
+        </button>
+        <button
+          id="builder-narrow-workspace-tab-feedback"
+          type="button"
+          role="tab"
+          aria-selected={narrowWorkspaceView === "feedback"}
+          aria-controls="builder-notes-panel"
+          onClick={() => {
+            handleExpandFeedback();
+            setNarrowWorkspaceView("feedback");
+          }}
+          className={cn(
+            "relative px-3 py-2.5 transition-colors",
+            narrowWorkspaceView === "feedback"
+              ? "bg-[#0e0907] text-[#f8f3f1]"
+              : "text-[#0e0907]/55 hover:bg-[#0e0907]/[0.04] hover:text-[#0e0907]/75",
+          )}
+        >
+          Feedback
+          {hasUnreadFeedback && (
+            <span
+              id="builder-narrow-workspace-feedback-dot"
+              className="absolute right-3 top-2 h-2 w-2 rounded-full bg-[#ffa05c]"
+              aria-hidden="true"
+            />
+          )}
+        </button>
+      </div>
+
       {/* Row 3: Workspace — PlayerPool (primary) | Feedback (secondary, collapsible) */}
       <div
         id="builder-workspace"
         ref={workspaceRef}
-        className="flex-1 flex min-h-0 mt-3 gap-0"
+        className="mt-3 flex flex-col gap-3 lg:min-h-0 lg:flex-1 lg:flex-row lg:gap-0"
       >
         {/* PlayerPool — primary workspace */}
         <div
           id="builder-playerpool-panel"
           className={cn(
-            "flex-1 min-w-0 border border-[#d9d0c9] rounded-lg p-3 overflow-hidden flex flex-col",
+            "flex min-h-[30rem] min-w-0 flex-1 flex-col overflow-visible rounded-lg border border-[#d9d0c9] p-3 lg:min-h-0 lg:overflow-hidden lg:[flex:var(--builder-playerpool-flex)]",
+            narrowWorkspaceView !== "players" && "hidden lg:flex",
             pickerFlashing && "border-[#ffa05c] ring-1 ring-[#ffa05c]/40",
           )}
-          style={!feedbackCollapsed ? { flex: `${1 - feedbackFrac} 1 0%` } : undefined}
+          style={!feedbackCollapsed ? { "--builder-playerpool-flex": `${1 - feedbackFrac} 1 0%` } as CSSProperties : undefined}
         >
           <PlayerPickerPanel
             players={activeRows}
@@ -365,7 +421,7 @@ export function BuilderPage() {
             aria-orientation="vertical"
             aria-label="Resize notes panel"
             onMouseDown={handleResizeStart}
-            className="flex items-center justify-center flex-shrink-0 cursor-col-resize group w-3 hover:w-4 transition-[width]"
+            className="group hidden flex-shrink-0 cursor-col-resize items-center justify-center transition-[width] lg:flex lg:w-3 lg:hover:w-4"
           >
             <div className="w-px h-12 rounded-full bg-[#d9d0c9] group-hover:bg-[#0e0907]/30 transition-colors" />
           </div>
@@ -374,8 +430,15 @@ export function BuilderPage() {
         {/* Feedback — secondary panel, collapsible */}
         <div
           id="builder-notes-panel"
-          className="flex-shrink-0 min-w-0 overflow-hidden flex flex-col"
-          style={feedbackCollapsed ? { flex: "0 0 2.5rem" } : { flex: `${feedbackFrac} 1 0%` }}
+          className={cn(
+            "flex min-w-0 flex-col overflow-visible lg:flex-shrink-0 lg:overflow-hidden lg:[flex:var(--builder-feedback-flex)]",
+            narrowWorkspaceView !== "feedback" && "hidden lg:flex",
+          )}
+          style={
+            feedbackCollapsed
+              ? { "--builder-feedback-flex": "0 0 2.5rem" } as CSSProperties
+              : { "--builder-feedback-flex": `${feedbackFrac} 1 0%` } as CSSProperties
+          }
         >
           <BuilderFeedbackPanel
             allSlots={roster.allSlots}

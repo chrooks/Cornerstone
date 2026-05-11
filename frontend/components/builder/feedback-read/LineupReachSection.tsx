@@ -32,7 +32,7 @@ export function LineupReachSection({
 }: LineupReachSectionProps) {
   return (
     <BuilderReadSection idBase={idBase} label={label} headerClassName="items-start gap-4">
-      <div id={`${idBase}-body`} className={metric ? "mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3" : "mt-2"}>
+      <div id={`${idBase}-body`} className={metric ? "mt-2 grid gap-x-4 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto]" : "mt-2"}>
         <p id={`${idBase}-copy`} className="max-w-[65ch] text-[0.8125rem] leading-snug text-[#0e0907]/55">
           {copy}
         </p>
