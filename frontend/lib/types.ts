@@ -640,6 +640,7 @@ export interface SavedTeamSummary {
 export interface CohesionLineupCombination extends CohesionLineupData {
   rank: number;
   combination_index: number;
+  is_viable: boolean;
   player_ids: string[];
   player_names: string[];
   is_starting_lineup: boolean;

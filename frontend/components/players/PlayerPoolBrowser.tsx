@@ -101,6 +101,10 @@ interface PlayerPoolBrowserProps {
   onRowContextMenu?: (event: React.MouseEvent, player: PlayerWithSkills) => void;
   onRowHover?: (player: PlayerWithSkills) => void;
   onRowHoverEnd?: () => void;
+  renderPlayerFit?: (player: PlayerWithSkills, context: {
+    surface: "panel" | "profile";
+    dismissProfile?: () => void;
+  }) => React.ReactNode;
   highlightedPlayerId?: string | null;
   isAdmin?: boolean;
 }
@@ -181,6 +185,7 @@ export function PlayerPoolBrowser({
   onRowContextMenu,
   onRowHover,
   onRowHoverEnd,
+  renderPlayerFit,
   highlightedPlayerId,
   isAdmin,
 }: PlayerPoolBrowserProps) {
@@ -200,6 +205,7 @@ export function PlayerPoolBrowser({
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [profilePlayer, setProfilePlayer] = useState<PlayerWithSkills | null>(null);
   const [profileBoxStats, setProfileBoxStats] = useState<Record<string, number | null> | null>(null);
   const profileCache = useRef(new Map<string, PlayerProfile>());
   const profileBoxStatsCache = useRef(new Map<string, Record<string, number | null> | null>());
@@ -246,6 +252,7 @@ export function PlayerPoolBrowser({
 
     setProfileModalOpen(true);
     setProfile(optimisticProfile);
+    setProfilePlayer(player);
     setProfileBoxStats(cachedBoxStats ?? null);
     setProfileLoading(false);
     setProfileError(null);
@@ -293,6 +300,7 @@ export function PlayerPoolBrowser({
     setProfileLoading(false);
     setProfileError(null);
     setProfile(null);
+    setProfilePlayer(null);
     setProfileBoxStats(null);
   }, []);
 
@@ -567,6 +575,7 @@ export function PlayerPoolBrowser({
                 })}
                 onHover={onRowHover}
                 onHoverEnd={onRowHoverEnd}
+                fitContent={renderPlayerFit?.(player, { surface: "panel" })}
               />
             );
           })}
@@ -634,6 +643,7 @@ export function PlayerPoolBrowser({
           loading={profileLoading}
           error={profileError}
           onDismiss={closeProfile}
+          fitContent={profilePlayer ? renderPlayerFit?.(profilePlayer, { surface: "profile", dismissProfile: closeProfile }) : null}
         />
       )}
     </div>

@@ -2,6 +2,7 @@
 
 import { PlayerCardView } from "./PlayerCardView";
 import { PlayerPanelView } from "./PlayerPanelView";
+import type { ReactNode } from "react";
 import type { PlayerWithSkills } from "@/lib/types";
 
 export type PlayerViewSize = "row" | "card" | "panel";
@@ -19,6 +20,7 @@ interface PlayerViewProps {
   onHoverEnd?: () => void;
   onDragStart?: (event: React.DragEvent, player: PlayerWithSkills) => void;
   onContextMenu?: (event: React.MouseEvent, player: PlayerWithSkills) => void;
+  fitContent?: ReactNode;
 }
 
 export function PlayerView({ size, skills, ...props }: PlayerViewProps) {

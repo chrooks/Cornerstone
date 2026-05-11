@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
@@ -41,8 +42,8 @@ export function PlayerCardView({
   const hasMore = allTopSkills.length > TOP_SKILL_COUNT;
   const isLegend = player.is_legend === true;
   const canAct = !!onPrimaryAction && !disabled;
-  const canOpenProfile = !!onOpenProfile && !disabled;
-  const canClickCard = canAct || canOpenProfile;
+  const canOpenProfile = !!onOpenProfile;
+  const canClickCard = canAct || (!primaryActionLabel && canOpenProfile && !disabled);
   const bioLine = [
     player.age != null ? `Age ${player.age}` : null,
     formatHeight(player.height) || null,
@@ -86,7 +87,7 @@ export function PlayerCardView({
       <div id={`player-card-view-header-${player.id}`} className="flex items-center gap-3">
         <PlayerHeadshot nba_api_id={player.nba_api_id} size={48} name={player.name} />
         <div className="min-w-0 flex-1">
-          <h3 id={`player-card-view-name-${player.id}`} className={cn("font-semibold text-sm text-[#0e0907] truncate", canOpenProfile && !disabled && "group-hover:underline")}>
+          <h3 id={`player-card-view-name-${player.id}`} className={cn("font-semibold text-sm text-[#0e0907] truncate", canClickCard && "group-hover:underline")}>
             {isLegend && <span className="text-[#ffa05c] mr-1" aria-label="Legend">★</span>}
             {isLegend && player.peak_year != null ? `${player.peak_year} ` : ""}{player.name}
           </h3>
@@ -98,6 +99,21 @@ export function PlayerCardView({
           <span id={`player-card-view-flags-${player.id}`} className="shrink-0 inline-flex items-center rounded-sm bg-[#ffa05c]/20 border border-[#ffa05c]/40 px-1.5 py-0.5 text-[10px] font-medium text-[#7e2c0c]">
             {player.flag_summary.unresolved} flag{player.flag_summary.unresolved !== 1 ? "s" : ""}
           </span>
+        )}
+        {onOpenProfile && (
+          <button
+            id={`player-card-view-inspect-${player.id}`}
+            type="button"
+            title="Inspect Player"
+            aria-label={`Inspect ${player.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenProfile(player);
+            }}
+            className="shrink-0 border border-[#d9d0c9] bg-[#f0f0f0]/45 p-1.5 text-[#0e0907]/55 transition-colors hover:border-[#ffa05c]/70 hover:bg-[#ffa05c]/10 hover:text-[#0e0907]"
+          >
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
         )}
       </div>
 

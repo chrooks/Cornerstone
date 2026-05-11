@@ -12,13 +12,14 @@
  *   - Rows are draggable to Build slots
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   PlayerPoolBrowser,
   type PlayerPoolFilterRequest,
   type PlayerPoolViewMode,
 } from "@/components/players/PlayerPoolBrowser";
 import { PlayerViewSizeToggle, type PlayerViewSize } from "@/components/players/PlayerView";
+import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 
@@ -63,10 +64,14 @@ interface PlayerPickerPanelProps {
   onPlayerHover?: (salary: number | null) => void;
   /** Called on player row/card mouseleave — clears gauge preview. */
   onPlayerHoverEnd?: () => void;
-  /** Called on player row/card mouseenter with the full player for inspection surfaces. */
-  onPlayerInspectHover?: (player: PlayerWithSkills) => void;
-  /** Called on player row/card mouseleave to clear inspection preview. */
-  onPlayerInspectHoverEnd?: () => void;
+  /** Builder-specific content for Panel/Profile inspection surfaces. */
+  renderPlayerFit?: (player: PlayerWithSkills, context: {
+    surface: "panel" | "profile";
+    inBuild: boolean;
+    canAddToBuild: boolean;
+    addToBuild: () => void;
+    dismissProfile?: () => void;
+  }) => ReactNode;
   /**
    * Player ID to visually highlight in the list — used by BuilderPage to mirror
    * the CourtLineup face hover into the picker list.
@@ -90,13 +95,13 @@ export function PlayerPickerPanel({
   onSkillFilterInjected,
   onPlayerHover,
   onPlayerHoverEnd,
-  onPlayerInspectHover,
-  onPlayerInspectHoverEnd,
+  renderPlayerFit,
   highlightedPlayerId,
   isAdmin,
 }: PlayerPickerPanelProps) {
   const [filterRequest, setFilterRequest] = useState<PlayerPoolFilterRequest | null>(null);
   const [viewSize, setViewSize] = useState<PlayerViewSize>("row");
+  const hasAvailableBuildSlot = rosterPlayerIds.size < MAX_ROSTER_SLOTS;
 
   // ── Hint banner dismissal (persisted) ────────────────────────────────────
   const HINT_STORAGE_KEY = "cornerstone:picker-hint-dismissed";
@@ -134,9 +139,10 @@ export function PlayerPickerPanel({
   // ── Unavailability check — in roster OR would exceed salary cap ───────────
   const isUnavailable = useCallback((player: PlayerWithSkills): boolean => {
     if (rosterPlayerIds.has(player.id)) return true;
+    if (!hasAvailableBuildSlot) return true;
     if (player.salary != null && player.salary > remainingSalary) return true;
     return false;
-  }, [rosterPlayerIds, remainingSalary]);
+  }, [hasAvailableBuildSlot, rosterPlayerIds, remainingSalary]);
 
   // ── Drag-and-drop ─────────────────────────────────────────────────────────
   const handleRowDragStart = useCallback((e: React.DragEvent, player: PlayerWithSkills) => {
@@ -159,13 +165,11 @@ export function PlayerPickerPanel({
 
   const handlePlayerHover = useCallback((player: PlayerWithSkills) => {
     onPlayerHover?.(player.salary ?? null);
-    onPlayerInspectHover?.(player);
-  }, [onPlayerHover, onPlayerInspectHover]);
+  }, [onPlayerHover]);
 
   const handlePlayerHoverEnd = useCallback(() => {
     onPlayerHoverEnd?.();
-    onPlayerInspectHoverEnd?.();
-  }, [onPlayerHoverEnd, onPlayerInspectHoverEnd]);
+  }, [onPlayerHoverEnd]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -198,7 +202,7 @@ export function PlayerPickerPanel({
           className="flex-shrink-0 flex items-center justify-between text-[0.8125rem] text-[#0e0907]/45 bg-[#f0f0f0] border border-[#d9d0c9]/60 rounded-sm px-3 py-1.5"
         >
           <span>
-            Left-click to add · Right-click to open profile · Click remaining salary to filter
+            Left-click to add · Right-click or inspect icon for Profile · Click remaining salary to filter
             {selectedSlot != null && selectedSlot !== 1 && (
               <span className="ml-2 text-[#ffa05c] font-medium">→ Slot {selectedSlot} selected</span>
             )}
@@ -259,12 +263,18 @@ export function PlayerPickerPanel({
           }
           onRowClick={handleRowClick}
           onRowDragStart={handleRowDragStart}
-          onRowHover={onPlayerHover || onPlayerInspectHover ? handlePlayerHover : undefined}
-          onRowHoverEnd={onPlayerHoverEnd || onPlayerInspectHoverEnd ? handlePlayerHoverEnd : undefined}
+          onRowHover={onPlayerHover ? handlePlayerHover : undefined}
+          onRowHoverEnd={onPlayerHoverEnd ? handlePlayerHoverEnd : undefined}
           highlightedPlayerId={highlightedPlayerId}
           isAdmin={isAdmin}
           getPrimaryActionLabel={(player) => isUnavailable(player) ? undefined : "Add to Rotation"}
           onPrimaryAction={(player) => handleRowClick(player)}
+          renderPlayerFit={(player, context) => renderPlayerFit?.(player, {
+            ...context,
+            inBuild: rosterPlayerIds.has(player.id),
+            canAddToBuild: !isUnavailable(player),
+            addToBuild: () => handleRowClick(player),
+          })}
           renderViewToggle={() => null}
         />
       )}

@@ -439,6 +439,7 @@ def _ranked_lineup_combinations(players: list[dict[str, Any]]) -> list[dict[str,
         evaluated.append({
             **_serialize_lineup_result(lineup, lineup_players),
             "combination_index": combo_index,
+            "is_viable": lineup.score >= weights_module.VIABLE_LINEUP_THRESHOLD,
             "player_ids": [_player_key(player, index) for index, player in enumerate(lineup_players)],
             "player_names": [str(player.get("name") or _player_key(player, index)) for index, player in enumerate(lineup_players)],
             "is_starting_lineup": lineup_keys == starting_keys,

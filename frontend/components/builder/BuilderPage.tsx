@@ -23,6 +23,8 @@ import { BuilderHeader } from "./BuilderHeader";
 import { CourtStrip } from "./CourtStrip";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
 import { BuilderFeedbackPanel, type BuilderInspectionSource } from "./BuilderFeedbackPanel";
+import { BuilderPlayerFit } from "./BuilderPlayerFit";
+import { PlayerProfileModal, playerWithSkillsToProfile } from "@/components/players/PlayerView";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 import type { LegendDetail, PlayerWithSkills } from "@/lib/types";
 
@@ -116,20 +118,12 @@ export function BuilderPage() {
 
   // ── Player-scoped note filtering (slot click → filter Feedback) ──────────
   const [focusedPlayerName, setFocusedPlayerName] = useState<string | null>(null);
-  const [previewPlayer, setPreviewPlayer] = useState<PlayerWithSkills | null>(null);
 
   const handleSlotClick = useCallback((slotIndex: number) => {
     const occupant = roster.allSlots[slotIndex - 1];
-    const selectedSlot = roster.selectedSlot;
     roster.handleSlotClick(slotIndex);
-    setPreviewPlayer(null);
 
     if (!occupant) {
-      setFocusedPlayerName(null);
-      return;
-    }
-
-    if (selectedSlot !== null) {
       setFocusedPlayerName(null);
       return;
     }
@@ -142,18 +136,50 @@ export function BuilderPage() {
 
   const handleClearPlayerFocus = useCallback(() => {
     setFocusedPlayerName(null);
-    setPreviewPlayer(null);
   }, []);
 
-  const handleClearInspection = useCallback(() => {
-    setPreviewPlayer(null);
+  const handleShowPlayerInFeedback = useCallback((player: PlayerWithSkills) => {
+    setFocusedPlayerName(player.name);
+    setFeedbackCollapsed(false);
+    setHasUnreadFeedback(false);
   }, []);
 
   const handlePlayerPick = useCallback((player: PlayerWithSkills) => {
+    const selectedSlot = roster.selectedSlot;
+    const canFillSelectedSlot =
+      selectedSlot !== null && roster.allSlots[selectedSlot - 1]?.id !== cornerstoneId;
+    const hasOpenSlot = roster.allSlots.some((slotPlayer) => slotPlayer === null);
+
     roster.handlePlayerClick(player);
-    setPreviewPlayer(null);
-    setFocusedPlayerName(null);
-  }, [roster]);
+    if (canFillSelectedSlot || hasOpenSlot) {
+      handleShowPlayerInFeedback(player);
+    }
+  }, [cornerstoneId, handleShowPlayerInFeedback, roster]);
+
+  const handleDropPlayer = useCallback((slotIndex: number, player: PlayerWithSkills) => {
+    const canDropIntoSlot = roster.allSlots[slotIndex - 1]?.id !== cornerstoneId;
+
+    roster.handleDropPlayer(slotIndex, player);
+    if (canDropIntoSlot) {
+      handleShowPlayerInFeedback(player);
+    }
+  }, [cornerstoneId, handleShowPlayerInFeedback, roster]);
+
+  const [buildProfilePlayer, setBuildProfilePlayer] = useState<PlayerWithSkills | null>(null);
+  const hasAvailableBuildSlot = roster.rosterPlayerIds.size < roster.allSlots.length;
+  const buildProfile = useMemo(
+    () => (buildProfilePlayer ? playerWithSkillsToProfile(buildProfilePlayer) : null),
+    [buildProfilePlayer],
+  );
+
+  const handleSlotContextMenu = useCallback((slotIndex: number) => {
+    const occupant = roster.allSlots[slotIndex - 1];
+    if (occupant) setBuildProfilePlayer(occupant);
+  }, [roster.allSlots]);
+
+  const handleCloseBuildProfile = useCallback(() => {
+    setBuildProfilePlayer(null);
+  }, []);
 
   // ── Suggestion-driven skill filter for PlayerPool ─────────────────────────
   const [suggestionFilterTrigger, setSuggestionFilterTrigger] = useState<SuggestionFilter | null>(null);
@@ -184,17 +210,6 @@ export function BuilderPage() {
   }, []);
 
   const inspection = useMemo<{ player: PlayerWithSkills | null; source: BuilderInspectionSource }>(() => {
-    if (previewPlayer) {
-      const buildPlayer =
-        roster.allSlots.find((player) => player?.id === previewPlayer.id) ?? null;
-
-      if (buildPlayer) {
-        return { player: buildPlayer, source: "build-player" };
-      }
-
-      return { player: previewPlayer, source: "playerpool-preview" };
-    }
-
     if (focusedPlayerName) {
       return {
         player: roster.allSlots.find((player) => player?.name === focusedPlayerName) ?? null,
@@ -202,7 +217,7 @@ export function BuilderPage() {
       };
     }
     return { player: null, source: "build" };
-  }, [focusedPlayerName, previewPlayer, roster.allSlots]);
+  }, [focusedPlayerName, roster.allSlots]);
 
   // ── Workspace horizontal resize (PlayerPool | Feedback) ───────────────────
   const [feedbackFrac, setFeedbackFrac] = useState(DEFAULT_FEEDBACK_FRAC);
@@ -287,10 +302,11 @@ export function BuilderPage() {
         onSalaryCapFilterClick={(max) => salary.setSalaryCapFilter(max)}
         onSlotClick={handleSlotClick}
         onRemoveSlot={roster.handleRemoveSlot}
-        onDropPlayer={roster.handleDropPlayer}
+        onDropPlayer={handleDropPlayer}
         onSwapSlots={roster.handleSwapSlots}
         onSlotHover={handleSlotHover}
         onSlotHoverEnd={handleSlotHoverEnd}
+        onSlotContextMenu={handleSlotContextMenu}
       />
 
       {/* Row 3: Workspace — PlayerPool (primary) | Feedback (secondary, collapsible) */}
@@ -322,7 +338,20 @@ export function BuilderPage() {
             onPlayerClick={handlePlayerPick}
             onPlayerHover={(s) => salary.setPickerHoveredSalary(s)}
             onPlayerHoverEnd={() => salary.setPickerHoveredSalary(null)}
-            onPlayerInspectHover={setPreviewPlayer}
+            renderPlayerFit={(player, context) => (
+              <BuilderPlayerFit
+                player={player}
+                allSlots={roster.allSlots}
+                latestEval={latestEval}
+                surface={context.surface}
+                canAddToBuild={context.canAddToBuild}
+                onAddToBuild={context.addToBuild}
+                onShowInFeedback={(focusedPlayer) => {
+                  handleShowPlayerInFeedback(focusedPlayer);
+                  context.dismissProfile?.();
+                }}
+              />
+            )}
             highlightedPlayerId={hoveredCourtPlayerId}
             isAdmin={isAdmin}
           />
@@ -360,13 +389,34 @@ export function BuilderPage() {
             inspectionSource={inspection.source}
             focusedPlayerName={focusedPlayerName}
             onClearPlayerFocus={handleClearPlayerFocus}
-            onClearInspection={handleClearInspection}
             onCollapse={() => setFeedbackCollapsed(true)}
             onExpand={handleExpandFeedback}
             onSuggestionFilter={handleSuggestionFilter}
           />
         </div>
       </div>
+
+      {buildProfile && buildProfilePlayer && (
+        <PlayerProfileModal
+          profile={buildProfile}
+          boxStats={null}
+          onDismiss={handleCloseBuildProfile}
+          fitContent={
+            <BuilderPlayerFit
+              player={buildProfilePlayer}
+              allSlots={roster.allSlots}
+              latestEval={latestEval}
+              surface="profile"
+              canAddToBuild={hasAvailableBuildSlot && !roster.rosterPlayerIds.has(buildProfilePlayer.id)}
+              onAddToBuild={handlePlayerPick}
+              onShowInFeedback={(focusedPlayer) => {
+                handleShowPlayerInFeedback(focusedPlayer);
+                handleCloseBuildProfile();
+              }}
+            />
+          }
+        />
+      )}
     </main>
   );
 }

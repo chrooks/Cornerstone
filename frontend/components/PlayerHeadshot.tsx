@@ -63,6 +63,7 @@ export function PlayerHeadshot({ nba_api_id, size = 48, name, className }: Playe
         alt={name ? `${name} headshot` : "Player headshot"}
         width={sourceSize}
         height={sourceSize}
+        draggable={false}
         className="w-full h-full object-cover"
         onError={() => setFailed(true)}
       />

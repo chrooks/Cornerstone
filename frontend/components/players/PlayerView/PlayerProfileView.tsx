@@ -58,7 +58,6 @@ interface PlayerProfileViewProps {
   boxStats?: Record<string, number | null> | null;
   fromBuilder?: boolean;
   isModal?: boolean;
-  onDismiss?: () => void;
 }
 
 export function PlayerProfileView({
@@ -66,24 +65,14 @@ export function PlayerProfileView({
   boxStats,
   fromBuilder = false,
   isModal = false,
-  onDismiss,
 }: PlayerProfileViewProps) {
   const { player } = profile;
   const backLabel = fromBuilder ? "Builder" : "Players";
 
   return (
     <section id={isModal ? "player-profile-modal-view" : "public-player-profile-view"} className="space-y-8">
-      <div id="player-profile-view-nav" className="flex items-center justify-between gap-3">
-        {isModal ? (
-          <button
-            id="player-profile-view-dismiss"
-            type="button"
-            onClick={onDismiss}
-            className="text-sm text-[#0e0907]/50 hover:text-[#0e0907] transition-colors"
-          >
-            Close
-          </button>
-        ) : (
+      {!isModal && (
+        <div id="player-profile-view-nav" className="flex items-center justify-between gap-3">
           <Link
             id="public-player-back-link"
             href={fromBuilder ? "/builder" : "/players"}
@@ -91,8 +80,8 @@ export function PlayerProfileView({
           >
             Back to {backLabel}
           </Link>
-        )}
-      </div>
+        </div>
+      )}
 
       <header id="player-profile-view-header" className="flex items-start gap-5">
         <PlayerHeadshot nba_api_id={player.nba_api_id} size={96} name={player.name} />

@@ -6,34 +6,46 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
 import {
+  ImpactTraitList,
+  LineupReachSection,
+  SkillProfileTrace,
+} from "@/components/builder/feedback-read";
+import {
+  buildSkillTraceEntries,
+  getImpactTraitKeysForSkill,
+  getLineupReach,
+  getPlayerLineupRead,
+  getRotationLineupRead,
+  rankImpactTraitEntries,
+} from "@/lib/builder-read-model";
+import {
   COMPOSITE_COLUMNS,
   IMPACT_TRAIT_DESCRIPTIONS,
   SUBSCORE_DESCRIPTIONS,
   SUBSCORE_LABELS,
 } from "@/lib/cohesion-constants";
+import { qualityTextColor } from "@/lib/cohesion-colors";
 import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { mapNoteToFilter } from "@/lib/noteFilters";
 import { formatSkillName, SKILL_DESCRIPTIONS } from "@/lib/skills";
-import { TIER_BADGE_CLASSES } from "@/lib/tiers";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import { FeedbackTooltip } from "./FeedbackTooltip";
 import { SkillGrid } from "./SkillGrid";
+import type { ImpactTraitReadEntry, LineupReadContext } from "@/lib/builder-read-model";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 import type {
   CohesionCompositeScores,
-  CohesionLineupCombination,
   CohesionPlayerComposites,
   LegendDetail,
   Note,
   PlayerSkillMap,
   PlayerWithSkills,
   RosterEvaluation,
-  SkillTier,
 } from "@/lib/types";
 
 type FeedbackTab = "feedback" | "skills" | "debug";
-export type BuilderInspectionSource = "build" | "build-player" | "playerpool-preview";
+export type BuilderInspectionSource = "build" | "build-player";
 
 type CompositeKey = keyof CohesionCompositeScores;
 
@@ -79,30 +91,6 @@ const THEORETICAL_MAX: Record<CompositeKey, number> = {
   transition: 42,
   perimeter_defense: 17,
   interior_defense: 18,
-};
-
-const SKILL_TO_IMPACT_TRAITS: Record<string, CompositeKey[]> = {
-  movement_shooter: ["spacing", "off_ball_impact", "shot_creation"],
-  spot_up_shooter: ["spacing", "pnr_screener", "off_ball_impact", "shot_creation", "transition"],
-  off_dribble_shooter: ["spacing", "shot_creation"],
-  high_flyer: ["finishing", "paint_touch", "off_ball_impact", "transition"],
-  crafty_finisher: ["finishing", "paint_touch", "off_ball_impact"],
-  driver: ["paint_touch", "shot_creation", "transition"],
-  vertical_spacer: ["paint_touch", "anchor", "pnr_screener"],
-  low_post_player: ["paint_touch", "post_game"],
-  mid_post_player: ["paint_touch", "post_game"],
-  rebounder: ["rebounding", "interior_defense", "anchor"],
-  offensive_rebounder: ["rebounding"],
-  perimeter_disruptor: ["perimeter_defense"],
-  versatile_defender: ["perimeter_defense", "interior_defense"],
-  rim_protector: ["interior_defense"],
-  screen_setter: ["anchor", "pnr_screener"],
-  pnr_finisher: ["pnr_screener"],
-  transition_threat: ["transition"],
-  cutter: ["off_ball_impact"],
-  passer: ["off_ball_impact", "shot_creation", "transition"],
-  pnr_ball_handler: ["shot_creation"],
-  isolation_scorer: ["shot_creation"],
 };
 
 const IMPACT_TRAIT_TO_LINEUP_EFFECTS: Record<CompositeKey, string[]> = {
@@ -162,7 +150,6 @@ interface BuilderFeedbackPanelProps {
   inspectionSource: BuilderInspectionSource;
   focusedPlayerName: string | null;
   onClearPlayerFocus: () => void;
-  onClearInspection: () => void;
   onCollapse: () => void;
   onExpand: () => void;
   onSuggestionFilter: (filter: SuggestionFilter, note: Note) => void;
@@ -464,223 +451,10 @@ function rawToTenPointScale(key: CompositeKey, raw: number): number {
   return Math.min(10, Math.max(0, (raw / max) * 10));
 }
 
-function skillEntries(skills: PlayerSkillMap | null | undefined) {
-  return Object.entries(skills ?? {})
-    .map(([skill, tier]) => ({
-      skill,
-      label: formatSkillName(skill),
-      tier: tier ?? "None",
-      value: TIER_VALUES[tier ?? "None"] ?? 0,
-    }))
-    .filter((entry) => entry.value > 0)
-    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
-}
-
-function isPlayerInCurrentSelection(allSlots: (PlayerWithSkills | null)[], player: PlayerWithSkills | null): boolean {
-  if (!player) return false;
-  return allSlots.some((slotPlayer) => slotPlayer?.id === player.id);
-}
-
-function combinationCount(total: number, pick: number): number {
-  if (total < pick || pick < 0) return 0;
-  if (pick === 0 || total === pick) return 1;
-  let numerator = 1;
-  let denominator = 1;
-  for (let index = 1; index <= pick; index += 1) {
-    numerator *= total - (pick - index);
-    denominator *= index;
-  }
-  return Math.round(numerator / denominator);
-}
-
-function lineupReach(allSlots: (PlayerWithSkills | null)[], player: PlayerWithSkills | null) {
-  const filledPlayers = allSlots.filter((slotPlayer): slotPlayer is PlayerWithSkills => slotPlayer !== null);
-  const totalLineups = combinationCount(filledPlayers.length, 5);
-  const isInSelection = isPlayerInCurrentSelection(allSlots, player);
-  const playerLineups = isInSelection ? combinationCount(filledPlayers.length - 1, 4) : 0;
-  return {
-    filledCount: filledPlayers.length,
-    isInSelection,
-    playerLineups,
-    totalLineups,
-  };
-}
-
-function playerIdentityKeys(player: PlayerWithSkills | null): Set<string> {
-  if (!player) return new Set();
-  return new Set([
-    player.id,
-    player.name,
-    player.name.toLowerCase(),
-  ].filter(Boolean));
-}
-
-function lineupHasPlayer(lineup: CohesionLineupCombination, player: PlayerWithSkills | null): boolean {
-  const keys = playerIdentityKeys(player);
-  if (keys.size === 0) return false;
-  return lineup.player_ids.some((id) => keys.has(id) || keys.has(id.toLowerCase()))
-    || lineup.player_names.some((name) => keys.has(name) || keys.has(name.toLowerCase()));
-}
-
-function playerLineupContext(
-  evaluation: RosterEvaluation | null,
-  player: PlayerWithSkills | null,
-) {
-  const combinations = evaluation?.lineup_combinations ?? [];
-  if (!player || combinations.length === 0) return null;
-
-  const withPlayer = combinations
-    .filter((lineup) => lineupHasPlayer(lineup, player))
-    .sort((a, b) => a.rank - b.rank || b.cohesion_score - a.cohesion_score);
-
-  if (withPlayer.length === 0) return null;
-
-  return {
-    total: combinations.length,
-    count: withPlayer.length,
-    starting: withPlayer.find((lineup) => lineup.is_starting_lineup) ?? null,
-    best: withPlayer[0],
-    median: withPlayer[Math.floor((withPlayer.length - 1) / 2)],
-  };
-}
-
-function rotationLineupContext(evaluation: RosterEvaluation | null) {
-  const combinations = evaluation?.lineup_combinations ?? [];
-  if (combinations.length === 0) return null;
-
-  return {
-    total: evaluation?.lineup_summary.total_lineups ?? combinations.length,
-    viable: evaluation?.lineup_summary.viable_lineups ?? 0,
-    medianScore: evaluation?.lineup_summary.median_score ?? 0,
-    starting: combinations.find((lineup) => lineup.is_starting_lineup) ?? combinations[0],
-    best: combinations[0],
-    median: combinations[Math.floor((combinations.length - 1) / 2)],
-  };
-}
-
-function compactPlayerName(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length <= 1) return name;
-
-  const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
-  const last = parts[parts.length - 1];
-  if (suffixes.has(last.toLowerCase()) && parts.length > 2) {
-    return parts[parts.length - 2];
-  }
-  return last;
-}
-
-function lineupNames(lineup: CohesionLineupCombination): string {
-  return lineup.player_names.map(compactPlayerName).join(" / ");
-}
-
-function topLineupSubscores(lineup: CohesionLineupCombination) {
-  return Object.entries(lineup.subscores)
-    .map(([key, value]) => ({ key, label: SUBSCORE_LABELS[key] ?? key.replaceAll("_", " "), value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 3);
-}
-
-interface LineupCardContext {
-  id: string;
-  label: string;
-  lineup: CohesionLineupCombination;
-  helper: string;
-  worksLabel: string;
-  addsLabel?: string;
-}
-
-function LineupContextSwitcher({
-  id,
-  contexts,
-  playerAdds = [],
-}: {
-  id: string;
-  contexts: LineupCardContext[];
-  playerAdds?: Array<{ key: string; label: string; value: number }>;
-}) {
-  const [selectedId, setSelectedId] = useState(contexts[0]?.id ?? "");
-  const selected = contexts.find((context) => context.id === selectedId) ?? contexts[0];
-
-  if (!selected) return null;
-
-  return (
-    <div id={id} className="mt-3 border border-[#d9d0c9]/60 bg-[#f0f0f0]/45">
-      <div id={`${id}-tabs`} className="flex border-b border-[#d9d0c9]/60">
-        {contexts.map((context) => (
-          <button
-            key={context.id}
-            id={`${id}-tab-${context.id}`}
-            type="button"
-            onClick={() => setSelectedId(context.id)}
-            className={cn(
-              "flex-1 px-2.5 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] transition-colors",
-              selected.id === context.id
-                ? "bg-[#0e0907] text-[#f8f3f1]"
-                : "text-[#0e0907]/40 hover:bg-[#0e0907]/[0.04] hover:text-[#0e0907]/65",
-            )}
-          >
-            {context.label}
-          </button>
-        ))}
-      </div>
-      <FeedbackTooltip
-        id={`${id}-${selected.id}-tooltip`}
-        as="div"
-        content={(
-          <LineupMetricTooltip label={selected.label}>
-            {selected.helper}
-          </LineupMetricTooltip>
-        )}
-        className="w-full"
-      >
-        <div id={`${id}-${selected.id}-card`} className="flex h-full w-full flex-col px-2.5 py-2 transition-colors hover:border-[#ffa05c]/45">
-          <div className="flex min-h-[48px] items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{selected.label}</p>
-              <p className="mt-1 text-[0.6875rem] leading-snug text-[#0e0907]/55">{lineupNames(selected.lineup)}</p>
-            </div>
-            <div className="shrink-0 text-right">
-              <p className="font-mono text-[0.8125rem] font-semibold tabular-nums text-[#0e0907]">{selected.lineup.cohesion_score.toFixed(2)}</p>
-              <p className="text-[0.5625rem] uppercase tracking-[0.12em] text-[#0e0907]/35">rank {selected.lineup.rank}</p>
-            </div>
-          </div>
-          <div className="mt-3 grid flex-1 grid-rows-[minmax(78px,auto)_auto] gap-2">
-            <div className="min-h-[78px]">
-              <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{selected.worksLabel}</p>
-              <div className="mt-1 grid gap-1">
-                {topLineupSubscores(selected.lineup).map((subscore) => (
-                  <div key={subscore.key} className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[0.625rem] text-[#0e0907]/50">{subscore.label}</span>
-                    <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/70">{subscore.value.toFixed(1)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {selected.addsLabel && playerAdds.length > 0 && (
-              <div>
-                <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.14em] text-[#0e0907]/35">{selected.addsLabel}</p>
-                <div className="mt-1 grid gap-1">
-                  {playerAdds.map((trait) => (
-                    <div key={trait.key} className="flex items-center justify-between gap-2">
-                      <span className="truncate text-[0.625rem] text-[#0e0907]/50">{trait.label}</span>
-                      <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/70">{formatScore(trait.value)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </FeedbackTooltip>
-    </div>
-  );
-}
-
 function allImpactTraitEntries(
   evaluation: RosterEvaluation | null,
   player: PlayerWithSkills | null,
-) {
+): ImpactTraitReadEntry[] {
   const playerName = player?.name.toLowerCase();
   const evaluatedPlayer = playerName
     ? evaluation?.player_composites.find((item) => item.name.toLowerCase() === playerName) ?? null
@@ -695,7 +469,9 @@ function allImpactTraitEntries(
       ...column,
       rawValue,
       normalizedValue,
+      affected: false,
       value: normalizedValue ?? rawToTenPointScale(key, rawValue),
+      valueLabel: normalizedValue == null ? `raw ${formatScore(rawValue)}` : formatScore(normalizedValue),
     };
   });
 }
@@ -705,6 +481,14 @@ function SectionLabel({ id, children }: { id: string; children: ReactNode }) {
     <p id={id} className="text-[0.625rem] font-semibold uppercase tracking-[0.18em] text-[#0e0907]/40">
       {children}
     </p>
+  );
+}
+
+function InlineData({ id, children, className }: { id: string; children: ReactNode; className?: string }) {
+  return (
+    <span id={id} className={cn("font-mono tabular-nums text-[#0e0907]/65", className)}>
+      {children}
+    </span>
   );
 }
 
@@ -1097,31 +881,30 @@ function NewFeedbackRead({
   const [selectedSkillKey, setSelectedSkillKey] = useState<string | null>(null);
   const targetPlayer = inspectedPlayer;
   const isPlayerRead = targetPlayer !== null;
-  const isPreviewRead = inspectionSource === "playerpool-preview" && targetPlayer !== null;
   const isBuildPlayerRead = inspectionSource === "build-player" && targetPlayer !== null;
-  const skills = skillEntries(targetPlayer?.skills);
-  const selectedSkill = skills.find((skill) => skill.skill === selectedSkillKey) ?? skills[0] ?? null;
-  const affectedTraitKeys = new Set(selectedSkill ? SKILL_TO_IMPACT_TRAITS[selectedSkill.skill] ?? [] : []);
+  const skills = buildSkillTraceEntries(targetPlayer?.skills);
+  const selectedSkill = skills.find((skill) => skill.skill === selectedSkillKey) ?? null;
+  const affectedTraitKeys = new Set(getImpactTraitKeysForSkill(selectedSkill?.skill));
   const affectedLineupEffectKeys = new Set(
     Array.from(affectedTraitKeys).flatMap((traitKey) => IMPACT_TRAIT_TO_LINEUP_EFFECTS[traitKey as CompositeKey] ?? []),
   );
-  const traits = allImpactTraitEntries(latestEval, targetPlayer);
-  const displayedTraits = (selectedSkill && affectedTraitKeys.size > 0
-    ? traits.filter((trait) => affectedTraitKeys.has(trait.key as CompositeKey))
-    : traits
-  ).sort((a, b) => b.value - a.value).slice(0, 5);
-  const playerAdds = traits
-    .filter((trait) => trait.value > 0)
-    .sort((a, b) => {
-      const aAffected = affectedTraitKeys.has(a.key as CompositeKey);
-      const bAffected = affectedTraitKeys.has(b.key as CompositeKey);
-      if (aAffected !== bAffected) return aAffected ? -1 : 1;
-      return b.value - a.value;
-    })
-    .slice(0, 3);
-  const reach = lineupReach(allSlots, targetPlayer);
-  const lineupContext = playerLineupContext(latestEval, targetPlayer);
-  const rotationContext = rotationLineupContext(latestEval);
+  const traits = allImpactTraitEntries(latestEval, targetPlayer).map((trait) => ({
+    ...trait,
+    affected: affectedTraitKeys.has(trait.key as CompositeKey),
+  }));
+  const displayedTraits = rankImpactTraitEntries(traits, {
+    includeZero: true,
+  });
+  const playerAdds = rankImpactTraitEntries(traits, { limit: 3 });
+  const reach = getLineupReach(allSlots, targetPlayer);
+  const playerLineupRead = getPlayerLineupRead(latestEval, targetPlayer, {
+    startingWorksLabel: "Starting Fit",
+    bestWorksLabel: "Lineup Works Through",
+    medianWorksLabel: "Typical Fit",
+    addsLabel: "Player Adds Here",
+    medianAddsLabel: "Player Still Adds",
+  });
+  const rotationLineupRead = getRotationLineupRead(latestEval);
   const normalizedNotes = useMemo(
     () => normalizeCohesionNotes(latestEval?.notes ?? []),
     [latestEval?.notes],
@@ -1148,80 +931,62 @@ function NewFeedbackRead({
       .sort((a, b) => b.value - a.value)
     : [];
   const scoreShape = scoreShapeText(scoreFactors);
-  const reachLabel = isPreviewRead ? "Preview Status" : isPlayerRead ? "Lineup Reach" : "Rotation Reach";
-  const reachCopy = isPreviewRead
-    ? "Not in the current Build. Skill Profile and raw Impact Trait reads are available before selection."
-    : isPlayerRead
-      ? "Player presence across current Lineup Combinations."
+  const reachLabel = isPlayerRead ? "Lineup Reach" : "Rotation Reach";
+  const reachCopy = isPlayerRead
+      ? "Player presence across viable Lineup Combinations."
       : "Lineup Combination spread. Viability. Typical fit.";
-  const reachValue = isPreviewRead
-    ? "Preview"
-    : isPlayerRead
-      ? `${reach.playerLineups}/${reach.totalLineups}`
-      : `${rotationContext?.viable ?? 0}/${rotationContext?.total ?? 0}`;
-  const reachValueLabel = isPreviewRead ? "not in Build" : isPlayerRead ? "Lineups" : "viable";
-  const reachStatus = isPreviewRead
-    ? "Lineup Combination reads use the current Build only. Add this Player to see live contribution across Lineup Combinations."
-    : !isPlayerRead && rotationContext
-      ? `${rotationContext.total} Lineup Combinations. ${rotationContext.viable} viable. Median ${rotationContext.medianScore.toFixed(2)}.`
+  const reachValue = isPlayerRead
+      ? `${playerLineupRead?.count ?? 0}/${playerLineupRead?.viableTotal ?? 0}`
+      : `${rotationLineupRead?.viable ?? 0}/${rotationLineupRead?.total ?? 0}`;
+  const reachValueLabel = isPlayerRead ? "viable" : "viable";
+  const reachQualityValue = isPlayerRead
+      ? playerLineupRead && playerLineupRead.viableTotal > 0 ? playerLineupRead.count / playerLineupRead.viableTotal : 0
+      : rotationLineupRead && rotationLineupRead.total > 0 ? rotationLineupRead.viable / rotationLineupRead.total : 0;
+  const reachQualityKind = "lineupViability";
+  const reachStatus = !isPlayerRead && rotationLineupRead
+      ? (
+        <>
+          <InlineData id="builder-new-feedback-lineup-reach-total-count">{rotationLineupRead.total}</InlineData> Lineup Combinations.{" "}
+          <InlineData id="builder-new-feedback-lineup-reach-viable-count" className={qualityTextColor(rotationLineupRead.total > 0 ? rotationLineupRead.viable / rotationLineupRead.total : 0, "lineupViability")}>{rotationLineupRead.viable}</InlineData> viable. Median{" "}
+          <InlineData id="builder-new-feedback-lineup-reach-median-score" className={qualityTextColor((rotationLineupRead.medianScore ?? 0) / 5, "ratio")}>{rotationLineupRead.medianScore.toFixed(2)}</InlineData>.
+        </>
+      )
       : !isPlayerRead
         ? "Need 5 Players before Lineup Combinations exist."
         : reach.filledCount < 5
-          ? `Need ${Math.max(0, 5 - reach.filledCount)} more Player${5 - reach.filledCount === 1 ? "" : "s"} before Lineup Combinations exist.`
-          : lineupContext
-            ? `${targetPlayer?.name ?? "This Player"} in ${lineupContext.count} of ${lineupContext.total} Lineup Combinations.`
+          ? (
+            <>
+              Need <InlineData id="builder-new-feedback-lineup-reach-needed-count">{Math.max(0, 5 - reach.filledCount)}</InlineData> more Player{5 - reach.filledCount === 1 ? "" : "s"} before Lineup Combinations exist.
+            </>
+          )
+          : playerLineupRead
+            ? playerLineupRead.viableTotal > 0
+              ? (
+                <>
+                  {targetPlayer?.name ?? "This Player"} in{" "}
+                  <InlineData id="builder-new-feedback-lineup-reach-player-viable-count" className={qualityTextColor(playerLineupRead.count / playerLineupRead.viableTotal, "lineupViability")}>{playerLineupRead.count}</InlineData> of{" "}
+                  <InlineData id="builder-new-feedback-lineup-reach-viable-total">{playerLineupRead.viableTotal}</InlineData> viable Lineup Combinations.{" "}
+                  <InlineData id="builder-new-feedback-lineup-reach-player-total-count">{playerLineupRead.allCount}</InlineData> of{" "}
+                  <InlineData id="builder-new-feedback-lineup-reach-total-count">{playerLineupRead.total}</InlineData> total.
+                </>
+              )
+              : (
+                <>
+                  No viable Lineup Combinations yet. {targetPlayer?.name ?? "This Player"} appears in{" "}
+                  <InlineData id="builder-new-feedback-lineup-reach-player-total-count">{playerLineupRead.allCount}</InlineData> of{" "}
+                  <InlineData id="builder-new-feedback-lineup-reach-total-count">{playerLineupRead.total}</InlineData> total.
+                </>
+              )
             : reach.isInSelection
-              ? `${targetPlayer?.name ?? "This Player"} in ${reach.playerLineups} of ${reach.totalLineups} Lineup Combinations.`
+              ? (
+                <>
+                  Waiting on live eval. {targetPlayer?.name ?? "This Player"} appears in{" "}
+                  <InlineData id="builder-new-feedback-lineup-reach-calculated-player-count">{reach.playerLineups}</InlineData> of{" "}
+                  <InlineData id="builder-new-feedback-lineup-reach-calculated-total">{reach.totalLineups}</InlineData> possible Lineup Combinations.
+                </>
+              )
               : `${targetPlayer?.name ?? "This Player"} not in Build yet.`;
-  const rotationLineupCards: LineupCardContext[] = rotationContext ? [
-    {
-      id: "starting",
-      label: "Starting",
-      lineup: rotationContext.starting,
-      helper: "The Starting Lineup uses the first five selected slots in the current Build.",
-      worksLabel: "Starting Fit",
-    },
-    {
-      id: "best",
-      label: "Best",
-      lineup: rotationContext.best,
-      helper: "Highest-ranked Lineup Combination in the current Build.",
-      worksLabel: "Lineup Works Through",
-    },
-    {
-      id: "median",
-      label: "Median",
-      lineup: rotationContext.median,
-      helper: "Middle-ranked Lineup Combination in the current Build.",
-      worksLabel: "Typical Fit",
-    },
-  ] : [];
-  const playerLineupCards: LineupCardContext[] = lineupContext ? [
-    lineupContext.starting ? {
-      id: "starting",
-      label: "Starting",
-      lineup: lineupContext.starting,
-      helper: "The Starting Lineup includes this Player.",
-      worksLabel: "Starting Fit",
-      addsLabel: "Player Adds Here",
-    } : null,
-    {
-      id: "best",
-      label: "Best",
-      lineup: lineupContext.best,
-      helper: "Highest-ranked evaluated Lineup Combination that includes this Player.",
-      worksLabel: "Lineup Works Through",
-      addsLabel: "Player Adds Here",
-    },
-    {
-      id: "median",
-      label: "Median",
-      lineup: lineupContext.median,
-      helper: "Middle evaluated Lineup Combination that includes this Player. This shows typical fit, not ceiling.",
-      worksLabel: "Typical Fit",
-      addsLabel: "Player Still Adds",
-    },
-  ].filter((context): context is LineupCardContext => context !== null) : [];
+  const lineupReachContexts = isPlayerRead ? playerLineupRead?.contexts ?? [] : rotationLineupRead?.contexts ?? [];
 
   return (
     <div id="builder-new-feedback-read" className="space-y-4">
@@ -1233,19 +998,16 @@ function NewFeedbackRead({
           <div className="min-w-0">
             <SectionLabel id="builder-new-feedback-current-read-label">Feedback Read</SectionLabel>
             <h3 id="builder-new-feedback-current-read-title" className="mt-1 text-[1rem] font-semibold text-[#0e0907]">
-              {isPreviewRead
-                ? `${targetPlayer.name} Contribution Preview`
-                : isBuildPlayerRead
-                  ? `${targetPlayer.name} Contribution`
-                  : "Build Cohesion"}
+              Build Cohesion
             </h3>
             <p id="builder-new-feedback-current-read-copy" className="mt-1 text-[0.8125rem] leading-snug text-[#0e0907]/55">
-              {isPreviewRead
-                ? `Preview only. ${selectedSkill ? `${selectedSkill.label} path highlighted.` : "Selected Skill shows path."} Add this Player to the Build for live Lineup Combination reads.`
-                : isBuildPlayerRead
-                  ? `Skill trace active. ${selectedSkill ? `${selectedSkill.label} path highlighted.` : "Selected Skill shows path."}`
-                : "Current Build snapshot."}
+              Current Build snapshot.
             </p>
+            {isBuildPlayerRead && (
+              <p id="builder-new-feedback-current-read-focus" className="mt-1 text-[0.75rem] leading-snug text-[#0e0907]/55">
+                Focus: <span className="font-medium text-[#0e0907]/70">{targetPlayer.name}</span>
+              </p>
+            )}
           </div>
           {latestEval ? (
             <CohesionScoreBadge
@@ -1265,13 +1027,18 @@ function NewFeedbackRead({
         </div>
       </section>
 
+      <FeedbackNotesSection
+        suggestions={suggestions}
+        strengths={strengths}
+        warnings={warnings}
+        isBuildPlayerRead={isBuildPlayerRead}
+        onSuggestionFilter={onSuggestionFilter}
+      />
+
       <section id="builder-new-feedback-score-factors" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
-        <SectionLabel id="builder-new-feedback-score-factors-label">{isPreviewRead ? "Build Score Factors" : "Score Factors"}</SectionLabel>
+        <SectionLabel id="builder-new-feedback-score-factors-label">Score Factors</SectionLabel>
         {scoreFactors.length > 0 ? (
           <>
-            <p id="builder-new-feedback-score-shape" className="mt-2 border border-[#d9d0c9]/55 bg-[#f0f0f0]/45 px-2.5 py-2 text-[0.75rem] leading-snug text-[#0e0907]/60">
-              {scoreShape}
-            </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               {scoreFactors.map((factor) => (
                 <FeedbackTooltip
@@ -1283,11 +1050,14 @@ function NewFeedbackRead({
                 >
                   <div id={`builder-new-feedback-score-factor-${factor.key}`} className="flex w-full items-center justify-between gap-3 border border-[#d9d0c9]/55 bg-[#f0f0f0]/45 px-2.5 py-1.5 transition-colors hover:border-[#ffa05c]/45">
                     <span className="truncate text-[0.75rem] text-[#0e0907]/65">{factor.label}</span>
-                    <span className="font-mono text-[0.6875rem] tabular-nums text-[#0e0907]">{Math.round(factor.value * 100)}%</span>
+                    <span className={cn("font-mono text-[0.6875rem] font-semibold tabular-nums", qualityTextColor(factor.value, "scoreFactor"))}>{Math.round(factor.value * 100)}%</span>
                   </div>
                 </FeedbackTooltip>
               ))}
             </div>
+            <p id="builder-new-feedback-score-shape" className="mt-2 text-[0.75rem] leading-snug text-[#0e0907]/50">
+              {scoreShape}
+            </p>
           </>
         ) : (
           <p id="builder-new-feedback-score-factors-empty" className="mt-2 text-[0.8125rem] text-[#0e0907]/50">
@@ -1297,155 +1067,99 @@ function NewFeedbackRead({
       </section>
 
       {isPlayerRead && (
-      <section id="builder-new-feedback-player-ladder" className="grid gap-3 xl:grid-cols-2">
-        <div id="builder-new-feedback-skills" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <SectionLabel id="builder-new-feedback-skills-label">Skill Profile</SectionLabel>
-            {skills.length > 0 && (
-              <span id="builder-new-feedback-skills-count" className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/35">
-                {skills.length} rated
-              </span>
-            )}
-          </div>
-          <div
-            id="builder-new-feedback-skills-scroll"
-            className="mt-2 grid max-h-[238px] gap-2 overflow-y-auto pr-1 [scrollbar-color:rgba(14,9,7,0.18)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb]:bg-[#0e0907]/15 hover:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/25"
-          >
-            {skills.length > 0 ? skills.map((skill) => (
-              <FeedbackTooltip
-                key={skill.skill}
-                id={`builder-new-feedback-skill-${skill.skill}-tooltip`}
-                as="div"
-                content={(
-                  <LineupMetricTooltip label={skill.label}>
-                    {SKILL_DESCRIPTIONS[skill.skill] ?? "Skill definition not written yet."}
-                  </LineupMetricTooltip>
-                )}
-                className="w-full"
-              >
-                <button
-                  id={`builder-new-feedback-skill-${skill.skill}`}
-                  type="button"
-                  onClick={() => setSelectedSkillKey(skill.skill)}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-3 border px-2.5 py-1.5 text-left transition-colors",
-                    selectedSkill?.skill === skill.skill
-                      ? "border-[#ffa05c]/70 bg-[#ffa05c]/10"
-                      : "border-[#d9d0c9]/55 bg-[#f0f0f0]/45 hover:border-[#ffa05c]/45",
-                  )}
-                >
-                  <span className="truncate text-[0.75rem] font-medium text-[#0e0907]/70">{skill.label}</span>
-                  <span className={cn("shrink-0 rounded-sm px-1.5 py-0.5 text-[0.625rem] font-semibold", TIER_BADGE_CLASSES[(skill.tier as SkillTier) ?? "None"] ?? TIER_BADGE_CLASSES.None)}>
-                    {skill.tier}
-                  </span>
-                </button>
-              </FeedbackTooltip>
-            )) : (
-              <p id="builder-new-feedback-skills-empty" className="text-[0.8125rem] text-[#0e0907]/50">
-                Select or hover a Player to see the Skills that feed this read.
-              </p>
-            )}
-          </div>
-          {selectedSkill && (
-            <p id="builder-new-feedback-selected-skill-copy" className="mt-3 border border-[#d9d0c9]/60 bg-[#f0f0f0]/45 px-2.5 py-2 text-[0.75rem] leading-snug text-[#0e0907]/55">
-              {selectedSkill.label} feeds{" "}
-              <span className="font-medium text-[#0e0907]/75">
-                {Array.from(affectedTraitKeys).map((key) => compositeLabel(key)).join(", ") || "no mapped Impact Trait yet"}
-              </span>
-              .
+        <section id="builder-new-feedback-player-contribution" className="space-y-3">
+          <div id="builder-new-feedback-player-contribution-header">
+            <SectionLabel id="builder-new-feedback-player-contribution-label">Player Contribution</SectionLabel>
+            <h3 id="builder-new-feedback-player-contribution-title" className="mt-1 text-[0.9375rem] font-semibold text-[#0e0907]">
+              {targetPlayer.name} Contribution
+            </h3>
+            <p id="builder-new-feedback-player-contribution-copy" className="mt-1 text-[0.75rem] leading-snug text-[#0e0907]/50">
+              Skill Profile and Impact Traits for the selected Player.
             </p>
-          )}
-        </div>
-
-        <div id="builder-new-feedback-impact-traits" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
-          <SectionLabel id="builder-new-feedback-impact-traits-label">Impact Traits</SectionLabel>
-          <div className="mt-2 grid gap-2">
-            {displayedTraits.length > 0 ? displayedTraits.map((trait) => {
-              const isAffected = selectedSkill ? affectedTraitKeys.has(trait.key as CompositeKey) : false;
-              return (
-              <FeedbackTooltip
-                key={trait.key}
-                id={`builder-new-feedback-impact-trait-${trait.key}-tooltip`}
-                as="div"
-                content={(
-                  <LineupMetricTooltip label={trait.label}>
-                    {IMPACT_TRAIT_DESCRIPTIONS[trait.key] ?? "Impact Trait description not written yet."}
-                  </LineupMetricTooltip>
-                )}
-                className="w-full"
-              >
-                <div
-                  id={`builder-new-feedback-impact-trait-${trait.key}`}
-                  className={cn(
-                    "w-full border px-2.5 py-1.5 transition-colors",
-                    isAffected
-                      ? "border-[#ffa05c]/70 bg-[#ffa05c]/10"
-                      : "border-[#d9d0c9]/55 bg-[#f0f0f0]/45",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="truncate text-[0.75rem] font-medium text-[#0e0907]/70">{trait.label}</span>
-                    <span className="font-mono text-[0.6875rem] tabular-nums text-[#0e0907]">
-                      {trait.normalizedValue == null ? `raw ${formatScore(trait.rawValue)}` : formatScore(trait.normalizedValue)}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-1 bg-[#d9d0c9]/50">
-                    <div className="h-full bg-[#ffa05c]" style={{ width: `${Math.min(100, Math.max(0, trait.value * 10))}%` }} />
-                  </div>
-                </div>
-              </FeedbackTooltip>
-              );
-            }) : (
-              <p id="builder-new-feedback-impact-traits-empty" className="text-[0.8125rem] text-[#0e0907]/50">
-                Impact Traits appear once a Player has Skill Profile data.
-              </p>
-            )}
           </div>
-        </div>
-      </section>
+          <div id="builder-new-feedback-player-ladder" className="grid gap-3 xl:grid-cols-2">
+            <SkillProfileTrace
+              idBase="builder-new-feedback-skills"
+              skills={skills}
+              selectedSkillKey={selectedSkillKey}
+              onSelectSkill={setSelectedSkillKey}
+              affectedTraitKeys={Array.from(affectedTraitKeys)}
+              traceVerb="feeds"
+              emptyText="Select a Player in the Build to see the Skills that feed this read."
+              scroll
+              renderSkillTooltip={(skill, trigger) => (
+                  <FeedbackTooltip
+                    key={skill.skill}
+                    id={`builder-new-feedback-skill-${skill.skill}-tooltip`}
+                    as="div"
+                    content={(
+                      <LineupMetricTooltip label={skill.label}>
+                        {SKILL_DESCRIPTIONS[skill.skill] ?? "Skill definition not written yet."}
+                      </LineupMetricTooltip>
+                    )}
+                    className="w-full"
+                  >
+                    {trigger}
+                  </FeedbackTooltip>
+              )}
+            />
+
+            <ImpactTraitList
+              idBase="builder-new-feedback-impact-traits"
+              label="Impact Traits"
+              traits={displayedTraits}
+              emptyText="Impact Traits appear once a Player has Skill Profile data."
+              scroll
+              renderTraitTooltip={(trait, trigger) => (
+                  <FeedbackTooltip
+                    key={trait.key}
+                    id={`builder-new-feedback-impact-trait-${trait.key}-tooltip`}
+                    as="div"
+                    content={(
+                      <LineupMetricTooltip label={trait.label}>
+                        {IMPACT_TRAIT_DESCRIPTIONS[trait.key] ?? "Impact Trait description not written yet."}
+                      </LineupMetricTooltip>
+                    )}
+                    className="w-full"
+                  >
+                    {trigger}
+                  </FeedbackTooltip>
+              )}
+            />
+          </div>
+        </section>
       )}
 
-      <section id="builder-new-feedback-lineup-reach" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <SectionLabel id="builder-new-feedback-lineup-reach-label">{reachLabel}</SectionLabel>
-            <p id="builder-new-feedback-lineup-reach-copy" className="mt-2 text-[0.8125rem] leading-snug text-[#0e0907]/55">
-              {reachCopy}
-            </p>
-          </div>
-          <div id="builder-new-feedback-lineup-reach-value" className="shrink-0 border border-[#d9d0c9]/70 bg-[#f0f0f0]/45 px-3 py-2 text-right">
-            <p className="font-mono text-[1rem] font-semibold tabular-nums text-[#0e0907]">
-              {reachValue}
-            </p>
-            <p className="text-[0.625rem] uppercase tracking-[0.14em] text-[#0e0907]/40">
-              {reachValueLabel}
-            </p>
-          </div>
-        </div>
-        <p id="builder-new-feedback-lineup-reach-status" className="mt-2 text-[0.75rem] text-[#0e0907]/50">
-          {reachStatus}
-        </p>
-        {!isPlayerRead && rotationLineupCards.length > 0 && (
-          <LineupContextSwitcher
-            id="builder-new-feedback-rotation-lineup-selector"
-            contexts={rotationLineupCards}
-          />
+      <LineupReachSection
+        idBase="builder-new-feedback-lineup-reach"
+        label={reachLabel}
+        copy={reachCopy}
+        status={reachStatus}
+        metric={{ value: reachValue, label: reachValueLabel, qualityValue: reachQualityValue, qualityKind: reachQualityKind }}
+        contexts={lineupReachContexts}
+        playerAdds={isPlayerRead ? playerAdds : []}
+        renderContextTooltip={(context: LineupReadContext, trigger) => (
+          <FeedbackTooltip
+            id={`builder-new-feedback-lineup-reach-${context.id}-tooltip`}
+            as="div"
+            content={(
+              <LineupMetricTooltip label={context.label}>
+                {context.helper ?? "Lineup Combination context for this read."}
+              </LineupMetricTooltip>
+            )}
+            className="w-full"
+          >
+            {trigger}
+          </FeedbackTooltip>
         )}
-        {isPlayerRead && playerLineupCards.length > 0 && (
-          <LineupContextSwitcher
-            id="builder-new-feedback-player-lineup-selector"
-            contexts={playerLineupCards}
-            playerAdds={playerAdds}
-          />
-        )}
-      </section>
+      />
 
       <section id="builder-new-feedback-lineup-effects" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
         <SectionLabel id="builder-new-feedback-lineup-effects-label">Lineup Effects</SectionLabel>
         {latestEval ? (
           <>
             <p id="builder-new-feedback-lineup-effects-copy" className="mt-2 text-[0.75rem] text-[#0e0907]/50">
-              {isPlayerRead ? "Amber rows touched by selected Skill path." : "Strongest current Lineup Subscores."}
+              {isPlayerRead && selectedSkill ? "Amber rows touched by selected Skill path." : "Strongest current Lineup Subscores."}
             </p>
             <div
               id="builder-new-feedback-lineup-effects-scroll"
@@ -1473,7 +1187,7 @@ function NewFeedbackRead({
                     )}
                   >
                     <span className="min-w-0 truncate text-[0.75rem] capitalize text-[#0e0907]/65">{subscore.label}</span>
-                    <span className="shrink-0 font-mono text-[0.6875rem] tabular-nums text-[#0e0907]">{subscore.value.toFixed(1)}</span>
+                    <span className={cn("shrink-0 font-mono text-[0.6875rem] font-semibold tabular-nums", qualityTextColor(subscore.value, "lineupSubscore"))}>{subscore.value.toFixed(1)}</span>
                   </div>
                 </FeedbackTooltip>
               ))}
@@ -1485,58 +1199,81 @@ function NewFeedbackRead({
           </p>
         )}
       </section>
-
-      <section id="builder-new-feedback-next-search" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
-        <SectionLabel id="builder-new-feedback-next-search-label">Next Search</SectionLabel>
-        <div className="mt-2 space-y-2">
-          {suggestions.length > 0 ? suggestions.map((note) => {
-            const filter = mapNoteToFilter(note);
-            return (
-              <button
-                key={note.trace_key}
-                id={`builder-new-feedback-suggestion-${note.trace_key}`}
-                type="button"
-                disabled={!filter}
-                onClick={() => filter && onSuggestionFilter(filter, note)}
-                className="flex w-full items-start justify-between gap-3 border border-[#d97706]/25 bg-[#d97706]/10 px-2.5 py-2 text-left text-[0.75rem] text-[#a34400] transition-colors enabled:hover:border-[#ffa05c]/60 enabled:hover:bg-[#ffa05c]/15 disabled:cursor-default disabled:opacity-70"
-              >
-                <span>{note.text}</span>
-                <span className="shrink-0 font-mono text-[0.625rem] uppercase tracking-[0.14em]">Filter</span>
-              </button>
-            );
-          }) : (
-            <p id="builder-new-feedback-next-search-empty" className="text-[0.8125rem] text-[#0e0907]/50">
-              Suggestions appear once the engine finds a pressure point.
-            </p>
-          )}
-        </div>
-      </section>
-
-      {(strengths.length > 0 || warnings.length > 0 || isBuildPlayerRead) && (
-        <section id="builder-new-feedback-note-context" className="grid gap-3 xl:grid-cols-2">
-          <div id="builder-new-feedback-strengths" className="border border-[#059669]/20 bg-[#059669]/5 px-3 py-3">
-            <SectionLabel id="builder-new-feedback-strengths-label">What Holds</SectionLabel>
-            <div className="mt-2 space-y-1.5">
-              {strengths.length > 0 ? strengths.map((note) => (
-                <p key={note.trace_key} className="text-[0.75rem] leading-snug text-[#047857]">{feedbackFragmentText(note.text)}</p>
-              )) : (
-                <p className="text-[0.75rem] text-[#0e0907]/50">No clear hold yet.</p>
-              )}
-            </div>
-          </div>
-          <div id="builder-new-feedback-warnings" className="border border-[#e53e3e]/20 bg-[#e53e3e]/5 px-3 py-3">
-            <SectionLabel id="builder-new-feedback-warnings-label">What Drags</SectionLabel>
-            <div className="mt-2 space-y-1.5">
-              {warnings.length > 0 ? warnings.map((note) => (
-                <p key={note.trace_key} className="text-[0.75rem] leading-snug text-[#b91c1c]">{feedbackFragmentText(note.text)}</p>
-              )) : (
-                <p className="text-[0.75rem] text-[#0e0907]/50">No drag yet.</p>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
     </div>
+  );
+}
+
+function FeedbackNotesSection({
+  suggestions,
+  strengths,
+  warnings,
+  isBuildPlayerRead,
+  onSuggestionFilter,
+}: {
+  suggestions: Note[];
+  strengths: Note[];
+  warnings: Note[];
+  isBuildPlayerRead: boolean;
+  onSuggestionFilter: (filter: SuggestionFilter, note: Note) => void;
+}) {
+  const showContext = strengths.length > 0 || warnings.length > 0 || isBuildPlayerRead;
+
+  return (
+    <section id="builder-new-feedback-primary-notes" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
+      <SectionLabel id="builder-new-feedback-primary-notes-label">Build Notes</SectionLabel>
+      <div className="mt-2 grid gap-3 2xl:grid-cols-[1.15fr_1fr]">
+        <div id="builder-new-feedback-next-search" className="border border-[#d97706]/25 bg-[#d97706]/10 px-3 py-3">
+          <SectionLabel id="builder-new-feedback-next-search-label">Next Search</SectionLabel>
+          <div className="mt-2 space-y-2">
+            {suggestions.length > 0 ? suggestions.map((note) => {
+              const filter = mapNoteToFilter(note);
+              return (
+                <button
+                  key={note.trace_key}
+                  id={`builder-new-feedback-suggestion-${note.trace_key}`}
+                  type="button"
+                  disabled={!filter}
+                  onClick={() => filter && onSuggestionFilter(filter, note)}
+                  className="flex w-full items-start justify-between gap-3 border border-[#d97706]/25 bg-[#f7f7f7]/65 px-2.5 py-2 text-left text-[0.75rem] text-[#a34400] transition-colors enabled:hover:border-[#ffa05c]/60 enabled:hover:bg-[#ffa05c]/15 disabled:cursor-default disabled:opacity-70"
+                >
+                  <span>{note.text}</span>
+                  <span className="shrink-0 font-mono text-[0.625rem] uppercase tracking-[0.14em]">Filter</span>
+                </button>
+              );
+            }) : (
+              <p id="builder-new-feedback-next-search-empty" className="text-[0.8125rem] text-[#0e0907]/50">
+                Suggestions appear once the engine finds a pressure point.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {showContext && (
+          <div id="builder-new-feedback-note-context" className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-1">
+            <div id="builder-new-feedback-strengths" className="border border-[#059669]/20 bg-[#059669]/5 px-3 py-3">
+              <SectionLabel id="builder-new-feedback-strengths-label">What Holds</SectionLabel>
+              <div className="mt-2 space-y-1.5">
+                {strengths.length > 0 ? strengths.map((note) => (
+                  <p key={note.trace_key} className="text-[0.75rem] leading-snug text-[#047857]">{feedbackFragmentText(note.text)}</p>
+                )) : (
+                  <p className="text-[0.75rem] text-[#0e0907]/50">No clear hold yet.</p>
+                )}
+              </div>
+            </div>
+            <div id="builder-new-feedback-warnings" className="border border-[#e53e3e]/20 bg-[#e53e3e]/5 px-3 py-3">
+              <SectionLabel id="builder-new-feedback-warnings-label">What Drags</SectionLabel>
+              <div className="mt-2 space-y-1.5">
+                {warnings.length > 0 ? warnings.map((note) => (
+                  <p key={note.trace_key} className="text-[0.75rem] leading-snug text-[#b91c1c]">{feedbackFragmentText(note.text)}</p>
+                )) : (
+                  <p className="text-[0.75rem] text-[#0e0907]/50">No drag yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -1584,7 +1321,6 @@ export function BuilderFeedbackPanel({
   inspectedPlayer,
   inspectionSource,
   onClearPlayerFocus,
-  onClearInspection,
   onCollapse,
   onExpand,
   onSuggestionFilter,
@@ -1653,20 +1389,6 @@ export function BuilderFeedbackPanel({
               </button>
             ))}
           </div>
-          {inspectionSource === "playerpool-preview" && inspectedPlayer && (
-            <p id="builder-feedback-focus-label" className="mt-1 truncate text-[0.6875rem] text-[#0e0907]/45">
-              Focus: <span className="text-[#0e0907]/60">{inspectedPlayer.name}</span>{" "}
-              <span className="text-[#0e0907]/60">Preview</span>
-              <button
-                id="builder-new-feedback-preview-clear"
-                type="button"
-                onClick={onClearInspection}
-                className="ml-2 font-medium text-[#a34400] hover:text-[#fe6d34]"
-              >
-                Show Build
-              </button>
-            </p>
-          )}
           {inspectionSource === "build-player" && inspectedPlayer && (
             <p id="builder-feedback-focus-label" className="mt-1 truncate text-[0.6875rem] text-[#0e0907]/45">
               Focus: <span className="text-[#0e0907]/60">{inspectedPlayer.name}</span>
@@ -1676,7 +1398,7 @@ export function BuilderFeedbackPanel({
                 onClick={onClearPlayerFocus}
                 className="ml-2 font-medium text-[#a34400] hover:text-[#fe6d34]"
               >
-                Show Build
+                Show Team Eval
               </button>
             </p>
           )}

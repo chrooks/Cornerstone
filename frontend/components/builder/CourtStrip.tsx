@@ -12,6 +12,7 @@
  * Starting Lineup / bench boundary.
  */
 
+import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SalaryGauge } from "./SalaryGauge";
@@ -40,6 +41,7 @@ function getSlotTier(slot: number): TierConfig {
 
 const SLOT_SIZE = 56;
 const CORNERSTONE_SIZE = 68;
+const SLOT_DRAG_THRESHOLD_PX = 6;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -61,6 +63,7 @@ interface CourtStripProps {
   onSwapSlots?: (fromSlot: number, toSlot: number) => void;
   onSlotHover?: (slotIndex: number) => void;
   onSlotHoverEnd?: () => void;
+  onSlotContextMenu?: (slotIndex: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,11 +76,13 @@ function SlotCircle({
   size,
   isCornerstone,
   isFocused,
+  isDragging,
   onClick,
   onRemove,
-  onDragStart,
+  onPointerDown,
   onDragOver,
   onDrop,
+  onContextMenu,
   onMouseEnter,
   onMouseLeave,
 }: {
@@ -86,11 +91,13 @@ function SlotCircle({
   size: number;
   isCornerstone: boolean;
   isFocused: boolean;
+  isDragging: boolean;
   onClick: () => void;
   onRemove: () => void;
-  onDragStart?: (e: React.DragEvent) => void;
+  onPointerDown?: (e: React.PointerEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }) {
@@ -105,6 +112,7 @@ function SlotCircle({
   return (
     <div
       id={`builder-slot-${slotIndex}`}
+      data-builder-slot-index={slotIndex}
       role="button"
       tabIndex={isCornerstone ? -1 : 0}
       aria-label={
@@ -116,13 +124,17 @@ function SlotCircle({
       }
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(); }}
-      draggable={!isEmpty && !isCornerstone}
-      onDragStart={onDragStart}
+      draggable={false}
+      onPointerDown={onPointerDown}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      onContextMenu={onContextMenu}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className="flex flex-col items-start gap-0 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md"
+      className={cn(
+        "flex flex-col items-start gap-0 select-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md",
+        isDragging ? "cursor-grabbing" : !isEmpty && !isCornerstone ? "cursor-grab" : "cursor-pointer",
+      )}
     >
       {/* Slot number chip */}
       <div id={`builder-slot-${slotIndex}-tab`} className="flex justify-start" style={{ width: size }}>
@@ -169,6 +181,7 @@ function SlotCircle({
           <button
             id={`builder-slot-${slotIndex}-remove`}
             type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
             className="absolute -right-2 -bottom-2 flex h-5 w-5 items-center justify-center rounded-sm border border-[#d9d0c9] bg-[#f7f7f7] text-[11px] font-semibold text-[#0e0907]/65 transition-colors hover:border-[#e53e3e] hover:bg-[#e53e3e] hover:text-[#f8f3f1]"
             aria-label={`Remove ${name}`}
@@ -215,9 +228,18 @@ export function CourtStrip({
   onSwapSlots,
   onSlotHover,
   onSlotHoverEnd,
+  onSlotContextMenu,
 }: CourtStripProps) {
   const slots = allSlots.slice(0, MAX_ROSTER_SLOTS);
   const filledCount = slots.filter(Boolean).length;
+  const slotDragRef = useRef<{
+    sourceSlot: number;
+    startX: number;
+    startY: number;
+    active: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
+  const [draggingSlot, setDraggingSlot] = useState<number | null>(null);
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
@@ -245,12 +267,74 @@ export function CourtStrip({
     }
   }
 
-  function makeDragStart(slotIndex: number, occupant: PlayerWithSkills) {
-    return (e: React.DragEvent) => {
-      e.dataTransfer.setData("application/builder-slot", String(slotIndex));
-      e.dataTransfer.setData("application/builder-player", JSON.stringify(occupant));
-      e.dataTransfer.effectAllowed = "move";
+  function handleSlotPointerDown(e: React.PointerEvent, sourceSlot: number) {
+    if (e.button !== 0 || !onSwapSlots) return;
+
+    slotDragRef.current = {
+      sourceSlot,
+      startX: e.clientX,
+      startY: e.clientY,
+      active: false,
     };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const drag = slotDragRef.current;
+      if (!drag) return;
+
+      const moved =
+        Math.hypot(moveEvent.clientX - drag.startX, moveEvent.clientY - drag.startY) >=
+        SLOT_DRAG_THRESHOLD_PX;
+
+      if (!drag.active && moved) {
+        drag.active = true;
+        setDraggingSlot(drag.sourceSlot);
+        document.body.style.cursor = "grabbing";
+        document.body.style.userSelect = "none";
+      }
+
+      if (drag.active) moveEvent.preventDefault();
+    };
+
+    const finishPointerDrag = (upEvent: PointerEvent) => {
+      const drag = slotDragRef.current;
+      if (drag?.active) {
+        const target = document
+          .elementFromPoint(upEvent.clientX, upEvent.clientY)
+          ?.closest<HTMLElement>("[data-builder-slot-index]");
+        const targetSlot = Number(target?.dataset.builderSlotIndex);
+
+        if (Number.isFinite(targetSlot) && targetSlot !== drag.sourceSlot) {
+          onSwapSlots(drag.sourceSlot, targetSlot);
+        }
+
+        suppressClickRef.current = true;
+        window.setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 0);
+      }
+
+      slotDragRef.current = null;
+      setDraggingSlot(null);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishPointerDrag);
+      window.removeEventListener("pointercancel", cancelPointerDrag);
+    };
+
+    const cancelPointerDrag = () => {
+      slotDragRef.current = null;
+      setDraggingSlot(null);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishPointerDrag);
+      window.removeEventListener("pointercancel", cancelPointerDrag);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishPointerDrag);
+    window.addEventListener("pointercancel", cancelPointerDrag);
   }
 
   function renderSlot(slot: number) {
@@ -265,11 +349,19 @@ export function CourtStrip({
         size={slot === 1 ? CORNERSTONE_SIZE : SLOT_SIZE}
         isCornerstone={isCornerstone}
         isFocused={isFocused}
-        onClick={() => onSlotClick(slot)}
+        isDragging={draggingSlot === slot}
+        onClick={() => {
+          if (suppressClickRef.current) return;
+          onSlotClick(slot);
+        }}
         onRemove={() => onRemoveSlot(slot)}
-        onDragStart={occupant && !isCornerstone ? makeDragStart(slot, occupant) : undefined}
+        onPointerDown={occupant && !isCornerstone ? (e) => handleSlotPointerDown(e, slot) : undefined}
         onDragOver={handleDragOver}
         onDrop={(e) => handleDrop(e, slot)}
+        onContextMenu={occupant ? (event) => {
+          event.preventDefault();
+          onSlotContextMenu?.(slot);
+        } : undefined}
         onMouseEnter={onSlotHover ? () => onSlotHover(slot) : undefined}
         onMouseLeave={onSlotHoverEnd}
       />

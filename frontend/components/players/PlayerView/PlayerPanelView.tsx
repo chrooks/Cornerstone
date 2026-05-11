@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
@@ -23,6 +23,7 @@ interface PlayerPanelViewProps {
   onHoverEnd?: () => void;
   onDragStart?: (event: React.DragEvent, player: PlayerWithSkills) => void;
   onContextMenu?: (event: React.MouseEvent, player: PlayerWithSkills) => void;
+  fitContent?: ReactNode;
 }
 
 function TierBadge({ tier }: { tier: string | null | undefined }) {
@@ -42,12 +43,14 @@ export function PlayerPanelView({
   onHoverEnd,
   onDragStart,
   onContextMenu,
+  fitContent,
 }: PlayerPanelViewProps) {
+  const [activeTab, setActiveTab] = useState<"player" | "build-fit">("player");
   const profile = skills ?? player.skills;
   const isLegend = player.is_legend === true;
   const canAct = !!onPrimaryAction && !disabled;
-  const canOpenProfile = !!onOpenProfile && !disabled;
-  const canClickPanel = canAct || canOpenProfile;
+  const canOpenProfile = !!onOpenProfile;
+  const canClickPanel = canAct || (!primaryActionLabel && canOpenProfile && !disabled);
   const tierCounts = useMemo(() => {
     if (!profile) return null;
     const counts: Record<string, number> = {};
@@ -164,14 +167,47 @@ export function PlayerPanelView({
                 }}
                 className="inline-flex items-center px-4 py-2.5 rounded-sm border border-[#d9d0c9] text-[#0e0907]/65 text-[0.8125rem] font-medium tracking-[0.01em] transition-colors duration-150 hover:bg-[#f0f0f0] hover:text-[#0e0907]"
               >
-                Profile
+                Inspect
               </button>
             )}
           </div>
         </div>
 
-        <div id={`player-panel-view-skills-${player.id}`} className="flex-1 px-6 py-6 min-w-0">
-          {profile ? (
+        <div
+          id={`player-panel-view-detail-${player.id}`}
+          className="flex-1 px-6 py-6 min-w-0"
+          onClick={fitContent ? (event) => event.stopPropagation() : undefined}
+        >
+          {fitContent && (
+            <div id={`player-panel-view-tabs-${player.id}`} className="mb-4 flex border border-[#d9d0c9]">
+              {[
+                { id: "player" as const, label: "Player" },
+                { id: "build-fit" as const, label: "Build Fit" },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  id={`player-panel-view-tab-${player.id}-${tab.id}`}
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setActiveTab(tab.id);
+                  }}
+                  className={cn(
+                    "flex-1 px-3 py-2 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] transition-colors",
+                    activeTab === tab.id
+                      ? "bg-[#0e0907] text-[#f8f3f1]"
+                      : "text-[#0e0907]/45 hover:bg-[#0e0907]/[0.04] hover:text-[#0e0907]/70",
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {fitContent && activeTab === "build-fit" ? (
+            <div id={`player-panel-view-build-fit-${player.id}`}>{fitContent}</div>
+          ) : profile ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-5">
               {Object.entries(PUBLIC_SKILL_CATEGORIES).map(([category, skillNames]) => (
                 <div key={category}>

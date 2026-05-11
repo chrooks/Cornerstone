@@ -101,37 +101,27 @@ export function useRosterSlots(
     [allSlots, cornerstoneId, syncUrl],
   );
 
-  // ── Slot click — select, deselect, or swap ─────────────────────────────
+  // ── Slot click — select an empty placement target or clear targeting ───
   const handleSlotClick = useCallback(
     (slotIndex: number) => {
       // Cornerstone slot is not clickable
       if (allSlots[slotIndex - 1]?.id === cornerstoneId) return;
 
-      // Clicking already-selected slot deselects
+      // Filled slots are inspected by the caller; movement happens by drag-drop.
+      if (allSlots[slotIndex - 1] !== null) {
+        setSelectedSlot(null);
+        return;
+      }
+
+      // Clicking already-selected empty slot deselects it.
       if (selectedSlot === slotIndex) {
         setSelectedSlot(null);
         return;
       }
 
-      // With a slot already selected, perform a swap
-      if (
-        selectedSlot !== null &&
-        (allSlots[selectedSlot - 1] !== null || allSlots[slotIndex - 1] !== null)
-      ) {
-        const newSlots = [...allSlots];
-        [newSlots[selectedSlot - 1], newSlots[slotIndex - 1]] = [
-          newSlots[slotIndex - 1],
-          newSlots[selectedSlot - 1],
-        ];
-        setAllSlots(newSlots);
-        setSelectedSlot(null);
-        syncUrl(cornerstoneId, newSlots);
-        return;
-      }
-
       setSelectedSlot(slotIndex);
     },
-    [selectedSlot, allSlots, cornerstoneId, syncUrl],
+    [selectedSlot, allSlots, cornerstoneId],
   );
 
   // ── Remove slot occupant ────────────────────────────────────────────────

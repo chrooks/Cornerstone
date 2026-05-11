@@ -11,6 +11,7 @@ import pytest
 
 from app import create_app
 from api import builder
+from services.cohesion_engine.weights import VIABLE_LINEUP_THRESHOLD
 
 
 @pytest.fixture()
@@ -112,4 +113,6 @@ def test_evaluate_returns_ranked_lineup_combinations_for_current_selection(clien
     assert scores == sorted(scores, reverse=True)
     assert [lineup["rank"] for lineup in combinations] == list(range(1, len(combinations) + 1))
     assert sum(1 for lineup in combinations if lineup["is_starting_lineup"]) == 1
-    assert {"rank", "player_names", "player_ids", "subscores"}.issubset(combinations[0])
+    assert {"rank", "player_names", "player_ids", "subscores", "is_viable"}.issubset(combinations[0])
+    assert all(lineup["is_viable"] is (lineup["cohesion_score"] >= VIABLE_LINEUP_THRESHOLD) for lineup in combinations)
+    assert sum(1 for lineup in combinations if lineup["is_viable"]) == payload["lineup_summary"]["viable_lineups"]
