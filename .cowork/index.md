@@ -1,6 +1,6 @@
 # Project Index
 
-Last updated: 2026-05-10 by /handoff
+Last updated: 2026-05-12 by /handoff
 
 ## Source-of-truth documents
 
@@ -14,6 +14,9 @@ Last updated: 2026-05-10 by /handoff
 
 ## Handoffs
 
+- [admin-ruleset-creator](handoffs/2026-05-12-admin-ruleset-creator.md) — Build the admin RuleSet creator/publisher page
+- [rules-implementation-audit](handoffs/2026-05-12-rules-implementation-audit.md) — Audit real RuleSet implementation before the next rules/domain slice
+- [builder-responsive-plan](handoffs/2026-05-11-builder-responsive-plan.md) — Builder Feedback read committed; next scope is the responsive layout pass for `/lab/[ruleset]/build`
 - [builder-feedback-read-next-steps](handoffs/2026-05-10-builder-feedback-read-next-steps.md) — Builder Feedback read implemented; next scope is PlayerPool Contribution Preview honesty and responsiveness tuning
 - [profile-real-saved-teams-schema](handoffs/2026-05-10-profile-real-saved-teams-schema.md) — Profile mock complete; next scope is real Saved Team data, RuleSet, and evaluation schema
 - [save-team-workflow](handoffs/2026-05-09-save-team-workflow.md) — Final Eval refresh complete; next scope is Save Team workflow from final Eval

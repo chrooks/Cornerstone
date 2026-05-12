@@ -618,6 +618,45 @@ export interface RuleSetSummary {
   rules: Record<string, unknown> | null;
 }
 
+/** A single RuleSet Version (draft, published, or retired). */
+export interface RuleSetVersionSummary {
+  id: string;
+  version_label: string;
+  rules_hash: string;
+  rules_json: Record<string, unknown>;
+  status: "draft" | "published" | "retired";
+  published_at: string | null;
+  created_at: string;
+}
+
+/** RuleSet with all its versions — returned by admin detail endpoint. */
+export interface RuleSetDetail extends RuleSetSummary {
+  versions: RuleSetVersionSummary[];
+}
+
+/** Payload for POST /api/rulesets. */
+export interface CreateRuleSetPayload {
+  slug: string;
+  name: string;
+  description?: string;
+  status?: "active" | "coming_soon" | "archived";
+  display_order?: number;
+}
+
+/** Payload for PATCH /api/rulesets/<slug>. */
+export interface UpdateRuleSetPayload {
+  name?: string;
+  description?: string;
+  status?: "active" | "coming_soon" | "archived";
+  display_order?: number;
+}
+
+/** Payload for POST /api/rulesets/<slug>/versions. */
+export interface CreateRuleSetVersionPayload {
+  version_label: string;
+  rules_json: Record<string, unknown>;
+}
+
 /** Minimal user-owned profile data for the Profile page. */
 export interface UserProfile {
   id: string | null;

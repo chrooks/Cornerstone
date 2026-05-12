@@ -32,6 +32,10 @@ import type {
   SaveTeamPayload,
   SavedTeamSummary,
   RuleSetSummary,
+  RuleSetVersionSummary,
+  CreateRuleSetPayload,
+  UpdateRuleSetPayload,
+  CreateRuleSetVersionPayload,
   RebuildCheckResponse,
   UserProfile,
 } from "./types";
@@ -594,6 +598,62 @@ export async function getLegendClaudeSuggestion(
 /** List published RuleSets for Lab selection. */
 export async function listRuleSets(): Promise<ApiResponse<RuleSetSummary[]>> {
   return apiFetch<RuleSetSummary[]>("/api/rulesets");
+}
+
+// ---------------------------------------------------------------------------
+// RuleSets (Admin)
+// ---------------------------------------------------------------------------
+
+/** Create a new RuleSet. */
+export async function createRuleSet(
+  payload: CreateRuleSetPayload,
+): Promise<ApiResponse<RuleSetSummary>> {
+  return apiFetch<RuleSetSummary>("/api/rulesets", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Update RuleSet metadata. */
+export async function updateRuleSet(
+  slug: string,
+  payload: UpdateRuleSetPayload,
+): Promise<ApiResponse<RuleSetSummary>> {
+  return apiFetch<RuleSetSummary>(`/api/rulesets/${encodeURIComponent(slug)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** List all versions for a RuleSet (admin). */
+export async function listRuleSetVersions(
+  slug: string,
+): Promise<ApiResponse<RuleSetVersionSummary[]>> {
+  return apiFetch<RuleSetVersionSummary[]>(
+    `/api/rulesets/${encodeURIComponent(slug)}/versions`,
+  );
+}
+
+/** Create a new draft RuleSet Version. */
+export async function createRuleSetVersion(
+  slug: string,
+  payload: CreateRuleSetVersionPayload,
+): Promise<ApiResponse<RuleSetVersionSummary>> {
+  return apiFetch<RuleSetVersionSummary>(
+    `/api/rulesets/${encodeURIComponent(slug)}/versions`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+/** Publish a draft RuleSet Version. */
+export async function publishRuleSetVersion(
+  slug: string,
+  versionId: string,
+): Promise<ApiResponse<RuleSetVersionSummary>> {
+  return apiFetch<RuleSetVersionSummary>(
+    `/api/rulesets/${encodeURIComponent(slug)}/versions/${encodeURIComponent(versionId)}/publish`,
+    { method: "POST" },
+  );
 }
 
 /** Get the current user's minimal User Profile. */
