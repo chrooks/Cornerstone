@@ -285,9 +285,9 @@ export default function SavedTeamDetailPage() {
 
       <section
         id="saved-team-detail-header"
-        className="mt-5 grid gap-5 rounded-md border border-[oklch(0.78_0.08_62)] bg-[oklch(0.985_0.005_62)] p-5 lg:grid-cols-[minmax(0,1fr)_auto]"
+        className="relative mt-5 rounded-md border border-[oklch(0.78_0.08_62)] bg-[oklch(0.985_0.005_62)] p-5"
       >
-        <div className="min-w-0">
+        <div className="min-w-0 lg:pr-56">
           <p className="font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.47_0.07_55)]">
             Historical Eval
           </p>
@@ -307,15 +307,16 @@ export default function SavedTeamDetailPage() {
             <span aria-hidden="true">/</span>
             <span>{formatDate(savedTeam.created_at)}</span>
           </p>
-          <p
-            id="saved-team-detail-description"
-            className="mt-5 max-w-[72ch] text-sm leading-6 text-[oklch(0.34_0.02_45)]"
-          >
-            {description}
-          </p>
         </div>
 
-        <div id="saved-team-detail-score-corner" className="justify-self-start lg:justify-self-end lg:self-start">
+        <p
+          id="saved-team-detail-description"
+          className="mt-5 w-full max-w-none text-sm leading-6 text-[oklch(0.34_0.02_45)]"
+        >
+          {description}
+        </p>
+
+        <div id="saved-team-detail-score-corner" className="mt-4 w-fit lg:absolute lg:right-5 lg:top-5 lg:mt-0">
           <CohesionScoreBadge
             id="saved-team-detail-score"
             value={score}
