@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { listPlayersWithSkills, getLegend } from "@/lib/api";
+import { listPlayersWithSkills, getLegend, listRuleSets } from "@/lib/api";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { useRosterSlots } from "@/lib/hooks/useRosterSlots";
 import { useBuilderSalary } from "@/lib/hooks/useBuilderSalary";
@@ -26,7 +26,7 @@ import { BuilderFeedbackPanel, type BuilderInspectionSource } from "./BuilderFee
 import { BuilderPlayerFit } from "./BuilderPlayerFit";
 import { PlayerProfileModal, playerWithSkillsToProfile } from "@/components/players/PlayerView";
 import type { SuggestionFilter } from "@/lib/noteFilters";
-import type { LegendDetail, PlayerWithSkills } from "@/lib/types";
+import type { LegendDetail, PlayerWithSkills, RuleSetSummary } from "@/lib/types";
 
 /** Default workspace split: PlayerPool gets 65%, Feedback gets 35% */
 const DEFAULT_FEEDBACK_FRAC = 0.35;
@@ -93,14 +93,41 @@ export function BuilderPage() {
       .catch(() => {/* grid handles missing profile gracefully */});
   }, [cornerstoneId]);
 
+  // ── Fetch active RuleSet for live rules_json ─────────────────────────────
+  const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
+
+  useEffect(() => {
+    listRuleSets().then((res) => {
+      if (res.success && res.data) {
+        const match = res.data.find((rs) => rs.slug === ruleset);
+        if (match) setResolvedRuleSet(match);
+      }
+    });
+  }, [ruleset]);
+
+  // Extract rules from the published version's rules_json
+  const rulesJson = resolvedRuleSet?.rules ?? null;
+  const maxRosterSlots = typeof rulesJson?.team_size === "number"
+    ? (rulesJson.team_size as number)
+    : undefined;
+  const salaryCap = typeof rulesJson?.salary_cap === "number"
+    ? (rulesJson.salary_cap as number)
+    : undefined;
+  const legendSalary = typeof rulesJson?.cornerstone_salary === "number"
+    ? (rulesJson.cornerstone_salary as number)
+    : undefined;
+
   // ── Domain hooks ──────────────────────────────────────────────────────────
-  const roster = useRosterSlots(cornerstoneId, legendRows, activeRows);
+  const roster = useRosterSlots(cornerstoneId, legendRows, activeRows, maxRosterSlots);
 
   // ── Hover state — bridges court strip ↔ salary gauge ↔ picker ────────────
   const [hoveredSlotIndex, setHoveredSlotIndex] = useState<number | null>(null);
   const [hoveredCourtPlayerId, setHoveredCourtPlayerId] = useState<string | null>(null);
 
-  const salary = useBuilderSalary(roster.allSlots, cornerstoneId, hoveredSlotIndex);
+  const salary = useBuilderSalary(roster.allSlots, cornerstoneId, hoveredSlotIndex, {
+    salaryCap,
+    legendSalary,
+  });
 
   // ── Feedback collapse state ───────────────────────────────────────────────
   const [feedbackCollapsed, setFeedbackCollapsed] = useState(false);
@@ -302,6 +329,8 @@ export function BuilderPage() {
         cornerstoneId={cornerstoneId}
         focusedPlayerName={focusedPlayerName}
         usedSalary={salary.usedSalary}
+        salaryCap={salary.salaryCap}
+        maxRosterSlots={maxRosterSlots}
         highlightRange={salary.highlightRange}
         pickerHoveredSalary={salary.pickerHoveredSalary}
         onSalaryCapFilterClick={(max) => salary.setSalaryCapFilter(max)}
@@ -385,6 +414,7 @@ export function BuilderPage() {
             loading={false}
             error={null}
             remainingSalary={salary.remainingSalary}
+            maxRosterSlots={maxRosterSlots}
             salaryFilterTrigger={salary.salaryCapFilter}
             onSalaryFilterInjected={() => salary.setSalaryCapFilter(null)}
             skillFilterTrigger={suggestionFilterTrigger}

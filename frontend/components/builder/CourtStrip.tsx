@@ -16,7 +16,7 @@ import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SalaryGauge } from "./SalaryGauge";
-import { SALARY_CAP, MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { DEFAULT_SALARY_CAP, DEFAULT_MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import type { PlayerWithSkills } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -53,6 +53,8 @@ interface CourtStripProps {
   focusedPlayerName: string | null;
   /* Salary props for the integrated SalaryGauge */
   usedSalary: number;
+  salaryCap?: number;
+  maxRosterSlots?: number;
   highlightRange: { startFrac: number; endFrac: number } | null;
   pickerHoveredSalary: number | null;
   onSalaryCapFilterClick: (max: number) => void;
@@ -219,6 +221,8 @@ export function CourtStrip({
   cornerstoneId,
   focusedPlayerName,
   usedSalary,
+  salaryCap = DEFAULT_SALARY_CAP,
+  maxRosterSlots = DEFAULT_MAX_ROSTER_SLOTS,
   highlightRange,
   pickerHoveredSalary,
   onSalaryCapFilterClick,
@@ -230,7 +234,7 @@ export function CourtStrip({
   onSlotHoverEnd,
   onSlotContextMenu,
 }: CourtStripProps) {
-  const slots = allSlots.slice(0, MAX_ROSTER_SLOTS);
+  const slots = allSlots.slice(0, maxRosterSlots);
   const filledCount = slots.filter(Boolean).length;
   const slotDragRef = useRef<{
     sourceSlot: number;
@@ -377,7 +381,7 @@ export function CourtStrip({
       <div className="border-b border-[#d9d0c9]/50 px-3 pb-2 pt-3 sm:px-5 sm:pb-1.5">
         <SalaryGauge
           usedSalary={usedSalary}
-          cap={SALARY_CAP}
+          cap={salaryCap}
           highlightRange={highlightRange}
           previewSalary={pickerHoveredSalary}
           onRemainingClick={(max) => onSalaryCapFilterClick(max)}
@@ -393,7 +397,7 @@ export function CourtStrip({
               Rotation
             </span>
             <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/35">
-              {filledCount} / {MAX_ROSTER_SLOTS}
+              {filledCount} / {maxRosterSlots}
             </span>
           </div>
 

@@ -19,7 +19,7 @@ import {
   type PlayerPoolViewMode,
 } from "@/components/players/PlayerPoolBrowser";
 import { PlayerViewSizeToggle, type PlayerViewSize } from "@/components/players/PlayerView";
-import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { DEFAULT_MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 
@@ -77,6 +77,8 @@ interface PlayerPickerPanelProps {
    * the CourtLineup face hover into the picker list.
    */
   highlightedPlayerId?: string | null;
+  /** Max roster slots from rules_json. */
+  maxRosterSlots?: number;
   /** When true, profile links route to /admin/players/[id]. */
   isAdmin?: boolean;
 }
@@ -96,12 +98,13 @@ export function PlayerPickerPanel({
   onPlayerHover,
   onPlayerHoverEnd,
   renderPlayerFit,
+  maxRosterSlots = DEFAULT_MAX_ROSTER_SLOTS,
   highlightedPlayerId,
   isAdmin,
 }: PlayerPickerPanelProps) {
   const [filterRequest, setFilterRequest] = useState<PlayerPoolFilterRequest | null>(null);
   const [viewSize, setViewSize] = useState<PlayerViewSize>("row");
-  const hasAvailableBuildSlot = rosterPlayerIds.size < MAX_ROSTER_SLOTS;
+  const hasAvailableBuildSlot = rosterPlayerIds.size < maxRosterSlots;
 
   // ── Hint banner dismissal (persisted) ────────────────────────────────────
   const HINT_STORAGE_KEY = "cornerstone:picker-hint-dismissed";

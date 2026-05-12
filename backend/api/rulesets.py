@@ -159,6 +159,8 @@ def get_ruleset(slug: str):
 
 VALID_STATUSES = {"active", "coming_soon", "archived"}
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+VALID_TEAM_SIZES = {5, 9, 12}
+TEAM_SIZE_LABELS = {5: "Lineup", 9: "Rotation", 12: "Roster"}
 
 
 @rulesets_bp.route("/rulesets", methods=["POST"])
@@ -284,6 +286,15 @@ def create_version(slug: str):
             return _err("version_label is required")
         if not rules_json or not isinstance(rules_json, dict):
             return _err("rules_json must be a non-empty JSON object")
+
+        # Validate team_size is one of the allowed values
+        team_size = rules_json.get("team_size")
+        if team_size is not None and team_size not in VALID_TEAM_SIZES:
+            return _err(f"team_size must be one of: {sorted(VALID_TEAM_SIZES)}")
+
+        # Derive team_label from team_size (canonical source of truth)
+        if team_size is not None:
+            rules_json = {**rules_json, "team_label": TEAM_SIZE_LABELS[team_size]}
 
         rules_hash = canonical_rules_hash(rules_json)
 

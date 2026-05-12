@@ -322,9 +322,36 @@ def test_create_version_returns_201_with_server_computed_hash(admin_client):
     assert data["success"] is True
     assert data["data"]["version_label"] == "v2"
     assert data["data"]["status"] == "draft"
-    assert data["data"]["rules_json"] == rules
+    # team_label is derived server-side from team_size
+    assert data["data"]["rules_json"]["team_size"] == 5
+    assert data["data"]["rules_json"]["team_label"] == "Lineup"
+    assert data["data"]["rules_json"]["salary_cap"] == 100_000_000
     # Hash must be server-computed, not empty
     assert len(data["data"]["rules_hash"]) == 32
+
+
+def test_create_version_rejects_invalid_team_size(admin_client):
+    resp = admin_client.post(
+        "/api/rulesets/standard/versions",
+        json={"version_label": "v2", "rules_json": {"team_size": 7}},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    data = resp.get_json()
+    assert resp.status_code == 400
+    assert "team_size" in data["error"].lower()
+
+
+def test_create_version_derives_team_label_from_team_size(admin_client):
+    resp = admin_client.post(
+        "/api/rulesets/standard/versions",
+        json={"version_label": "v2", "rules_json": {"team_size": 5, "salary_cap": 100_000_000}},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    data = resp.get_json()
+    assert resp.status_code == 201
+    assert data["data"]["rules_json"]["team_label"] == "Lineup"
 
 
 def test_create_version_rejects_missing_rules_json(admin_client):

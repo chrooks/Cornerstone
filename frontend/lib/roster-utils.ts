@@ -5,7 +5,7 @@
  * Single source of truth for how roster state maps to/from URL params and API payloads.
  */
 
-import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { DEFAULT_MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import type { LegendDetail, PlayerWithSkills } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -22,19 +22,20 @@ export function readSlotsFromParams(
   params: URLSearchParams,
   cornerstoneId: string | null,
   playerMap: Map<string, PlayerWithSkills>,
+  maxSlots: number = DEFAULT_MAX_ROSTER_SLOTS,
 ): (PlayerWithSkills | null)[] {
-  const slots: (PlayerWithSkills | null)[] = Array(MAX_ROSTER_SLOTS).fill(null);
+  const slots: (PlayerWithSkills | null)[] = Array(maxSlots).fill(null);
 
   if (params.has("s1")) {
     // New format: all slots explicitly encoded as s1..sN
-    for (let i = 1; i <= MAX_ROSTER_SLOTS; i++) {
+    for (let i = 1; i <= maxSlots; i++) {
       const id = params.get(`s${i}`);
       if (id) slots[i - 1] = playerMap.get(id) ?? null;
     }
   } else {
     // Legacy format: cornerstone implicit in slot 1, players in s2..sN
     if (cornerstoneId) slots[0] = playerMap.get(cornerstoneId) ?? null;
-    for (let i = 2; i <= MAX_ROSTER_SLOTS; i++) {
+    for (let i = 2; i <= maxSlots; i++) {
       const id = params.get(`s${i}`);
       if (id) slots[i - 1] = playerMap.get(id) ?? null;
     }

@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { DEFAULT_MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import { readSlotsFromParams, buildSlotsParams } from "@/lib/roster-utils";
 import type { PlayerWithSkills } from "@/lib/types";
 
@@ -35,11 +35,13 @@ export interface UseRosterSlotsReturn {
  * @param cornerstoneId - UUID of the selected cornerstone legend (from URL)
  * @param legendRows - All legend PlayerWithSkills entries
  * @param activeRows - All non-legend PlayerWithSkills entries
+ * @param maxSlots - Max roster slots from rules_json (falls back to DEFAULT_maxSlots)
  */
 export function useRosterSlots(
   cornerstoneId: string | null,
   legendRows: PlayerWithSkills[],
   activeRows: PlayerWithSkills[],
+  maxSlots: number = DEFAULT_MAX_ROSTER_SLOTS,
 ): UseRosterSlotsReturn {
   const router = useRouter();
   const pathname = usePathname();
@@ -47,7 +49,7 @@ export function useRosterSlots(
 
   // ── Flat 8-slot lineup state ────────────────────────────────────────────
   const [allSlots, setAllSlots] = useState<(PlayerWithSkills | null)[]>(
-    Array(MAX_ROSTER_SLOTS).fill(null),
+    Array(maxSlots).fill(null),
   );
 
   // ── Currently selected slot (1-based). null = no active selection. ──────
@@ -79,13 +81,13 @@ export function useRosterSlots(
   const handleSelectLegend = useCallback(
     (legend: PlayerWithSkills) => {
       // Place legend in slot 1, clear all other slots
-      const newSlots = Array<PlayerWithSkills | null>(MAX_ROSTER_SLOTS).fill(null);
+      const newSlots = Array<PlayerWithSkills | null>(maxSlots).fill(null);
       newSlots[0] = legend;
       setAllSlots(newSlots);
       setSelectedSlot(null);
       syncUrl(legend.id, newSlots);
     },
-    [syncUrl],
+    [syncUrl, maxSlots],
   );
 
   // ── Fill a slot with a player ───────────────────────────────────────────
@@ -130,7 +132,7 @@ export function useRosterSlots(
       const occupant = allSlots[slotIndex - 1];
       if (occupant?.id === cornerstoneId) {
         // Removing the legend → return to picker mode
-        const cleared = Array<PlayerWithSkills | null>(MAX_ROSTER_SLOTS).fill(null);
+        const cleared = Array<PlayerWithSkills | null>(maxSlots).fill(null);
         setAllSlots(cleared);
         setSelectedSlot(null);
         syncUrl(null, cleared);
@@ -141,7 +143,7 @@ export function useRosterSlots(
         syncUrl(cornerstoneId, newSlots);
       }
     },
-    [allSlots, cornerstoneId, syncUrl],
+    [allSlots, cornerstoneId, syncUrl, maxSlots],
   );
 
   // ── Player click from picker ────────────────────────────────────────────

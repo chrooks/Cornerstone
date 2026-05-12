@@ -10,7 +10,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { SALARY_CAP } from "@/lib/builder-config";
+import { DEFAULT_SALARY_CAP } from "@/lib/builder-config";
 import { SalaryGauge } from "./SalaryGauge";
 import { CourtLineup } from "./CourtLineup";
 import { SkillGrid } from "./SkillGrid";
@@ -26,6 +26,7 @@ interface BuilderLeftPanelProps {
   legendDetail: LegendDetail | null;
   selectedSlot: number | null;
   usedSalary: number;
+  salaryCap?: number;
   highlightRange: { startFrac: number; endFrac: number } | null;
   pickerHoveredSalary: number | null;
   onSalaryCapFilterClick: (max: number) => void;
@@ -55,6 +56,7 @@ export function BuilderLeftPanel({
   legendDetail,
   selectedSlot,
   usedSalary,
+  salaryCap = DEFAULT_SALARY_CAP,
   highlightRange,
   pickerHoveredSalary,
   onSalaryCapFilterClick,
@@ -110,7 +112,7 @@ export function BuilderLeftPanel({
         <div className="px-5 pt-3 pb-2">
           <SalaryGauge
             usedSalary={usedSalary}
-            cap={SALARY_CAP}
+            cap={salaryCap}
             highlightRange={highlightRange}
             previewSalary={pickerHoveredSalary}
             onRemainingClick={(max) => onSalaryCapFilterClick(max)}
