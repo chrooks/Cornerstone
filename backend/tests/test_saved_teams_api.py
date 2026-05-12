@@ -30,6 +30,7 @@ class _FakeQuery:
         self.db = db
         self.table_name = table_name
         self._insert_payload = None
+        self._update_payload = None
         self._delete = False
         self._filters: dict[str, object] = {}
         self._limit = None
@@ -39,6 +40,10 @@ class _FakeQuery:
 
     def insert(self, payload):
         self._insert_payload = payload
+        return self
+
+    def update(self, payload):
+        self._update_payload = payload
         return self
 
     def delete(self):
@@ -59,6 +64,8 @@ class _FakeQuery:
     def execute(self):
         if self._insert_payload is not None:
             return _FakeResult(self.db.insert(self.table_name, self._insert_payload))
+        if self._update_payload is not None:
+            return _FakeResult(self.db.update(self.table_name, self._update_payload, self._filters))
         if self._delete:
             return _FakeResult(self.db.delete(self.table_name, self._filters))
         rows = self.db.select(self.table_name, self._filters)
@@ -133,6 +140,14 @@ class _FakeSupabase:
             self.rows[table_name].append(stored)
             inserted.append(stored)
         return inserted
+
+    def update(self, table_name: str, payload: dict, filters: dict[str, object]):
+        updated = []
+        for row in self.rows.get(table_name, []):
+            if all(row.get(key) == value for key, value in filters.items()):
+                row.update(payload)
+                updated.append(row)
+        return updated
 
     def delete(self, table_name: str, filters: dict[str, object]):
         before = len(self.rows.get(table_name, []))
@@ -730,6 +745,123 @@ def test_rebuild_check_no_published_snapshot(client, fake_supabase):
 
     assert resp.status_code == 400
     assert "Snapshot Release" in data["error"]
+
+
+SAVED_TEAM_FIXTURE = {
+    "id": "saved-team-1",
+    "user_id": USER_ID,
+    "ruleset_slug": "standard",
+    "ruleset_id": STANDARD_RULESET_ID,
+    "ruleset_version_id": STANDARD_RULESET_VERSION_ID,
+    "ruleset_version_hash": STANDARD_RULES_HASH,
+    "snapshot_release_id": SNAPSHOT_RELEASE_ID,
+    "name": "Hakeem Standard Rotation",
+    "visibility": "private",
+    "cornerstone_legend_id": LEGEND_ID,
+    "total_salary": 134_000_000,
+    "created_at": "2026-05-11T00:00:00Z",
+    "updated_at": "2026-05-11T00:00:00Z",
+}
+
+
+def _seed_existing_saved_team(fake_supabase):
+    fake_supabase.rows["saved_teams"].append(dict(SAVED_TEAM_FIXTURE))
+    fake_supabase.rows["saved_team_players"].extend(_player_insert_rows("saved-team-1"))
+    fake_supabase.rows["saved_team_evaluations"].append({
+        "id": "saved-eval-1",
+        "saved_team_id": "saved-team-1",
+        "evaluation_version": "cohesion-v1",
+        "star_rating": 4.2,
+        "starting_lineup_score": 4.5,
+        "team_description": "A real saved evaluation.",
+        "created_at": "2026-05-11T00:00:00Z",
+    })
+
+
+def delete_saved_team(client, saved_team_id: str, token: str | None = "test-token"):
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    resp = client.delete(f"/api/saved-teams/{saved_team_id}", headers=headers)
+    return resp, resp.get_json()
+
+
+def patch_saved_team(client, saved_team_id: str, body: dict, token: str | None = "test-token"):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    resp = client.patch(
+        f"/api/saved-teams/{saved_team_id}",
+        data=json.dumps(body),
+        headers=headers,
+    )
+    return resp, resp.get_json()
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/saved-teams/<id>
+# ---------------------------------------------------------------------------
+
+
+def test_delete_saved_team_removes_team_and_children(client, fake_supabase):
+    _seed_existing_saved_team(fake_supabase)
+
+    resp, data = delete_saved_team(client, "saved-team-1")
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    assert len(fake_supabase.rows["saved_teams"]) == 0
+    assert len(fake_supabase.rows["saved_team_players"]) == 0
+    assert len(fake_supabase.rows["saved_team_evaluations"]) == 0
+
+
+def test_delete_saved_team_not_found(client, fake_supabase):
+    resp, data = delete_saved_team(client, "nonexistent-id")
+
+    assert resp.status_code == 404
+    assert data["success"] is False
+
+
+def test_delete_saved_team_requires_auth(client, fake_supabase):
+    _seed_existing_saved_team(fake_supabase)
+
+    resp, data = delete_saved_team(client, "saved-team-1", token=None)
+
+    assert resp.status_code == 401
+    assert len(fake_supabase.rows["saved_teams"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/saved-teams/<id>
+# ---------------------------------------------------------------------------
+
+
+def test_rename_saved_team(client, fake_supabase):
+    _seed_existing_saved_team(fake_supabase)
+
+    resp, data = patch_saved_team(client, "saved-team-1", {"name": "Dream Shake Squad"})
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    assert data["data"]["name"] == "Dream Shake Squad"
+    assert fake_supabase.rows["saved_teams"][0]["name"] == "Dream Shake Squad"
+
+
+def test_rename_saved_team_rejects_empty_name(client, fake_supabase):
+    _seed_existing_saved_team(fake_supabase)
+
+    resp, data = patch_saved_team(client, "saved-team-1", {"name": "   "})
+
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert fake_supabase.rows["saved_teams"][0]["name"] == "Hakeem Standard Rotation"
+
+
+def test_rename_saved_team_not_found(client, fake_supabase):
+    resp, data = patch_saved_team(client, "nonexistent-id", {"name": "Nope"})
+
+    assert resp.status_code == 404
+    assert data["success"] is False
 
 
 def test_save_team_reports_missing_snapshot_release_migration(monkeypatch):

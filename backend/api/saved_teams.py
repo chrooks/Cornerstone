@@ -675,3 +675,66 @@ def create_saved_team():
     except Exception:
         logger.exception("Error in POST /api/saved-teams")
         return _err("Internal server error", status=500)
+
+
+@saved_teams_bp.route("/saved-teams/<saved_team_id>", methods=["DELETE"])
+@require_user
+def delete_saved_team(saved_team_id: str):
+    try:
+        supabase = get_supabase()
+
+        res = (
+            supabase.table("saved_teams")
+            .select("id")
+            .eq("id", saved_team_id)
+            .eq("user_id", g.user_id)
+            .limit(1)
+            .execute()
+        )
+        if not (res.data or []):
+            return _err("Saved Team not found", status=404)
+
+        # Children cascade via FK ON DELETE CASCADE, but delete explicitly
+        # for the fake test DB which doesn't enforce FK cascades.
+        supabase.table("saved_team_evaluations").delete().eq("saved_team_id", saved_team_id).execute()
+        supabase.table("saved_team_players").delete().eq("saved_team_id", saved_team_id).execute()
+        supabase.table("saved_teams").delete().eq("id", saved_team_id).execute()
+
+        return _ok({"id": saved_team_id, "deleted": True})
+
+    except Exception:
+        logger.exception("Error in DELETE /api/saved-teams/%s", saved_team_id)
+        return _err("Internal server error", status=500)
+
+
+@saved_teams_bp.route("/saved-teams/<saved_team_id>", methods=["PATCH"])
+@require_user
+def update_saved_team(saved_team_id: str):
+    body = request.get_json(silent=True) or {}
+
+    name = body.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return _err("name is required and must be a non-empty string")
+
+    try:
+        supabase = get_supabase()
+
+        res = (
+            supabase.table("saved_teams")
+            .select("id, name")
+            .eq("id", saved_team_id)
+            .eq("user_id", g.user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if not rows:
+            return _err("Saved Team not found", status=404)
+
+        supabase.table("saved_teams").update({"name": name.strip()}).eq("id", saved_team_id).execute()
+
+        return _ok({"id": saved_team_id, "name": name.strip()})
+
+    except Exception:
+        logger.exception("Error in PATCH /api/saved-teams/%s", saved_team_id)
+        return _err("Internal server error", status=500)

@@ -14,17 +14,19 @@ import {
   Lock,
   Loader2,
   Minus,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
   Star,
+  Trash2,
   Trophy,
   UserRound,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getUserProfile, listPlayersWithSkills, listSavedTeams, getRebuildCheck } from "@/lib/api";
+import { getUserProfile, listPlayersWithSkills, listSavedTeams, getRebuildCheck, deleteSavedTeam, renameSavedTeam } from "@/lib/api";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
 import type { PlayerWithSkills, RebuildCheckResponse, RebuildPlayerReport, SavedTeamSummary, UserProfile } from "@/lib/types";
@@ -680,16 +682,57 @@ function SavedTeamRecord({
   team,
   featured = false,
   featuredLabel,
+  onDelete,
+  onRename,
 }: {
   team: MockSavedTeam;
   featured?: boolean;
   featuredLabel?: string;
+  onDelete: (id: string) => void;
+  onRename: (id: string, newName: string) => void;
 }) {
   const openButtonClassName = "inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded border border-[oklch(0.18_0.02_45)] bg-[oklch(0.18_0.02_45)] px-3 py-2 text-sm font-semibold text-[oklch(0.92_0.08_64)] transition-colors duration-150 hover:bg-[oklch(0.25_0.03_45)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]";
   const secondaryButtonClassName = "inline-flex min-h-10 flex-1 items-center justify-center rounded border border-[oklch(0.83_0.02_62)] bg-[oklch(0.96_0.006_62)] px-3 py-2 text-sm font-semibold text-[oklch(0.22_0.02_45)] transition-colors duration-150 hover:border-[oklch(0.73_0.08_53)] hover:bg-[oklch(0.92_0.035_64)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]";
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [rebuildModalOpen, setRebuildModalOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(team.name);
+  const [renameLoading, setRenameLoading] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const summaryParts = splitSummary(team.summary);
+
+  function handleRenameSubmit() {
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed === team.name) {
+      setRenaming(false);
+      setRenameValue(team.name);
+      return;
+    }
+    setRenameLoading(true);
+    renameSavedTeam(team.id, trimmed)
+      .then((res) => {
+        if (res.success && res.data) {
+          onRename(team.id, res.data.name);
+        }
+        setRenaming(false);
+      })
+      .catch(() => setRenaming(false))
+      .finally(() => setRenameLoading(false));
+  }
+
+  function handleDelete() {
+    setDeleteLoading(true);
+    deleteSavedTeam(team.id)
+      .then((res) => {
+        if (res.success) {
+          onDelete(team.id);
+        }
+        setConfirmingDelete(false);
+      })
+      .catch(() => setConfirmingDelete(false))
+      .finally(() => setDeleteLoading(false));
+  }
 
   return (
     <article
@@ -710,9 +753,45 @@ function SavedTeamRecord({
               </p>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              <h2 id={`profile-saved-team-${team.id}-name`} className={cn("font-display font-semibold leading-tight tracking-[-0.01em] text-[oklch(0.16_0.018_45)]", featured ? "text-2xl" : "text-xl")}>
-                {team.name}
-              </h2>
+              {renaming ? (
+                <form
+                  id={`profile-saved-team-${team.id}-rename-form`}
+                  className="flex items-center gap-1.5"
+                  onSubmit={(e) => { e.preventDefault(); handleRenameSubmit(); }}
+                >
+                  <input
+                    id={`profile-saved-team-${team.id}-rename-input`}
+                    type="text"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Escape") { setRenaming(false); setRenameValue(team.name); } }}
+                    disabled={renameLoading}
+                    autoFocus
+                    className={cn("rounded border border-[oklch(0.73_0.08_53)] bg-white px-2 py-1 font-display font-semibold leading-tight tracking-[-0.01em] text-[oklch(0.16_0.018_45)] outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.74_0.16_55)]", featured ? "text-2xl" : "text-xl")}
+                  />
+                  <button type="submit" disabled={renameLoading} className="rounded-sm p-1 text-green-700 hover:bg-green-50" title="Save">
+                    <Check className="h-4 w-4" />
+                  </button>
+                  <button type="button" onClick={() => { setRenaming(false); setRenameValue(team.name); }} className="rounded-sm p-1 text-[oklch(0.42_0.02_45)] hover:bg-[oklch(0.92_0.035_64)]" title="Cancel">
+                    <X className="h-4 w-4" />
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <h2 id={`profile-saved-team-${team.id}-name`} className={cn("font-display font-semibold leading-tight tracking-[-0.01em] text-[oklch(0.16_0.018_45)]", featured ? "text-2xl" : "text-xl")}>
+                    {team.name}
+                  </h2>
+                  <button
+                    id={`profile-saved-team-${team.id}-rename-btn`}
+                    type="button"
+                    onClick={() => { setRenameValue(team.name); setRenaming(true); }}
+                    className="rounded-sm p-1 text-[oklch(0.49_0.02_45)] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[oklch(0.92_0.035_64)] hover:text-[oklch(0.18_0.02_45)]"
+                    title="Rename"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )}
               {team.favorite && (
                 <span
                   className="inline-flex h-6 w-6 items-center justify-center rounded-sm border border-[oklch(0.76_0.13_74)] bg-[oklch(0.94_0.035_74)] text-[oklch(0.39_0.11_55)]"
@@ -839,6 +918,38 @@ function SavedTeamRecord({
             Rebuild
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </button>
+          {confirmingDelete ? (
+            <div id={`profile-saved-team-${team.id}-delete-confirm`} className="flex items-center gap-1.5">
+              <button
+                id={`profile-saved-team-${team.id}-delete-yes-btn`}
+                type="button"
+                onClick={handleDelete}
+                disabled={deleteLoading}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded border border-red-400 bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                Delete
+              </button>
+              <button
+                id={`profile-saved-team-${team.id}-delete-cancel-btn`}
+                type="button"
+                onClick={() => setConfirmingDelete(false)}
+                className="min-h-10 rounded border border-[oklch(0.83_0.02_62)] px-3 py-2 text-sm font-semibold text-[oklch(0.42_0.02_45)] hover:border-[oklch(0.73_0.08_53)]"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              id={`profile-saved-team-${team.id}-delete-btn`}
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              className="inline-flex min-h-10 items-center justify-center rounded border border-[oklch(0.83_0.02_62)] bg-[oklch(0.96_0.006_62)] px-3 py-2 text-sm text-[oklch(0.42_0.02_45)] transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+              title="Delete this Saved Team"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </aside>
 
@@ -1336,6 +1447,8 @@ export default function ProfilePage() {
                   team={team}
                   featured={index === 0}
                   featuredLabel={index === 0 ? featuredSavedTeamLabel : undefined}
+                  onDelete={(id) => setSavedTeams((prev) => prev.filter((t) => t.id !== id))}
+                  onRename={(id, newName) => setSavedTeams((prev) => prev.map((t) => t.id === id ? { ...t, name: newName } : t))}
                 />
               ))}
             </div>

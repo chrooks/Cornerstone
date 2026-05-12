@@ -650,6 +650,27 @@ export async function getRebuildCheck(
   );
 }
 
+/** Delete a Saved Team. */
+export async function deleteSavedTeam(
+  savedTeamId: string,
+): Promise<ApiResponse<{ id: string; deleted: boolean }>> {
+  return apiFetch<{ id: string; deleted: boolean }>(
+    `/api/saved-teams/${encodeURIComponent(savedTeamId)}`,
+    { method: "DELETE" },
+  );
+}
+
+/** Rename a Saved Team. */
+export async function renameSavedTeam(
+  savedTeamId: string,
+  name: string,
+): Promise<ApiResponse<{ id: string; name: string }>> {
+  return apiFetch<{ id: string; name: string }>(
+    `/api/saved-teams/${encodeURIComponent(savedTeamId)}`,
+    { method: "PATCH", body: JSON.stringify({ name }) },
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Cohesion Calibration (admin-only)
 // ---------------------------------------------------------------------------
