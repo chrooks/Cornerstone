@@ -81,6 +81,10 @@ interface PlayerPickerPanelProps {
   maxRosterSlots?: number;
   /** When true, profile links route to /admin/players/[id]. */
   isAdmin?: boolean;
+  /** Max rookie deal players allowed by the RuleSet. undefined = no limit. */
+  rookieDealLimit?: number;
+  /** Current count of rookie deal players in the roster. */
+  rosterRookieDealCount?: number;
 }
 
 export function PlayerPickerPanel({
@@ -101,6 +105,8 @@ export function PlayerPickerPanel({
   maxRosterSlots = DEFAULT_MAX_ROSTER_SLOTS,
   highlightedPlayerId,
   isAdmin,
+  rookieDealLimit,
+  rosterRookieDealCount = 0,
 }: PlayerPickerPanelProps) {
   const [filterRequest, setFilterRequest] = useState<PlayerPoolFilterRequest | null>(null);
   const [viewSize, setViewSize] = useState<PlayerViewSize>("row");
@@ -139,13 +145,15 @@ export function PlayerPickerPanel({
     });
   }, [skillFilterTrigger]);
 
-  // ── Unavailability check — in roster OR would exceed salary cap ───────────
+  // ── Unavailability check — in roster, over budget, or rookie deal limit hit
+  const rookieDealLimitReached = rookieDealLimit != null && rosterRookieDealCount >= rookieDealLimit;
   const isUnavailable = useCallback((player: PlayerWithSkills): boolean => {
     if (rosterPlayerIds.has(player.id)) return true;
     if (!hasAvailableBuildSlot) return true;
     if (player.salary != null && player.salary > remainingSalary) return true;
+    if (player.is_rookie_deal && rookieDealLimitReached) return true;
     return false;
-  }, [hasAvailableBuildSlot, rosterPlayerIds, remainingSalary]);
+  }, [hasAvailableBuildSlot, rosterPlayerIds, remainingSalary, rookieDealLimitReached]);
 
   // ── Drag-and-drop ─────────────────────────────────────────────────────────
   const handleRowDragStart = useCallback((e: React.DragEvent, player: PlayerWithSkills) => {

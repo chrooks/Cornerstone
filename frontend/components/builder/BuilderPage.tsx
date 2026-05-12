@@ -116,6 +116,9 @@ export function BuilderPage() {
   const legendSalary = typeof rulesJson?.cornerstone_salary === "number"
     ? (rulesJson.cornerstone_salary as number)
     : undefined;
+  const rookieDealLimit = typeof rulesJson?.rookie_deal_limit === "number"
+    ? (rulesJson.rookie_deal_limit as number)
+    : undefined;
 
   // ── Domain hooks ──────────────────────────────────────────────────────────
   const roster = useRosterSlots(cornerstoneId, legendRows, activeRows, maxRosterSlots);
@@ -198,6 +201,10 @@ export function BuilderPage() {
 
   const [buildProfilePlayer, setBuildProfilePlayer] = useState<PlayerWithSkills | null>(null);
   const hasAvailableBuildSlot = roster.rosterPlayerIds.size < roster.allSlots.length;
+  const rosterRookieDealCount = useMemo(
+    () => roster.allSlots.filter((p) => p?.is_rookie_deal).length,
+    [roster.allSlots],
+  );
   const buildProfile = useMemo(
     () => (buildProfilePlayer ? playerWithSkillsToProfile(buildProfilePlayer) : null),
     [buildProfilePlayer],
@@ -334,6 +341,8 @@ export function BuilderPage() {
         highlightRange={salary.highlightRange}
         pickerHoveredSalary={salary.pickerHoveredSalary}
         onSalaryCapFilterClick={(max) => salary.setSalaryCapFilter(max)}
+        rookieDealLimit={rookieDealLimit}
+        rosterRookieDealCount={rosterRookieDealCount}
         onSlotClick={handleSlotClick}
         onRemoveSlot={roster.handleRemoveSlot}
         onDropPlayer={handleDropPlayer}
@@ -440,6 +449,8 @@ export function BuilderPage() {
             )}
             highlightedPlayerId={hoveredCourtPlayerId}
             isAdmin={isAdmin}
+            rookieDealLimit={rookieDealLimit}
+            rosterRookieDealCount={rosterRookieDealCount}
           />
         </div>
 
