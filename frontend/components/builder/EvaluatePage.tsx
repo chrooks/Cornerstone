@@ -373,6 +373,7 @@ export function EvaluatePage() {
           team_snapshot: player!.team,
           position_snapshot: player!.position,
           skill_profile_snapshot: (player!.skills ?? {}) as Record<string, string>,
+          is_rookie_deal: player!.is_rookie_deal ?? false,
         };
       }),
       evaluation: {

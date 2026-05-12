@@ -367,6 +367,8 @@ export interface PlayerWithSkills {
   peak_year?: number | null;
   /** NBA.com player ID — used to construct headshot URLs. */
   nba_api_id?: number | null;
+  /** True when the player is on a rookie scale contract (first round pick, ≤3 years experience). */
+  is_rookie_deal?: boolean;
   /** Composite skill profile condensed to final_tier per skill, or null if no profile exists yet. */
   skills: PlayerSkillMap | null;
   /** Aggregate flag status — used to surface review badges in the explorer. */
@@ -680,6 +682,8 @@ export interface SaveTeamPlayerPayload {
   team_snapshot: string | null;
   position_snapshot: string | null;
   skill_profile_snapshot: Record<string, string>;
+  /** True when the player is on a rookie scale contract. */
+  is_rookie_deal?: boolean;
 }
 
 /** Request payload for POST /api/saved-teams. */

@@ -409,7 +409,14 @@ export function PlayerTable({
       case "weight":
         return <span>{player.weight != null ? `${player.weight}` : "—"}</span>;
       case "salary":
-        return <span className="tabular-nums">{formatSalary(player.salary)}</span>;
+        return (
+          <span className="tabular-nums">
+            {formatSalary(player.salary)}
+            {player.is_rookie_deal && (
+              <span className="ml-1.5 text-[0.6875rem] text-[#f3a181]/60 font-medium" title="This player is currently on their rookie deal">RD</span>
+            )}
+          </span>
+        );
       case "games_played":
         return <span className="tabular-nums text-muted-foreground">{player.games_played ?? "—"}</span>;
       case "capable_plus_count": {
