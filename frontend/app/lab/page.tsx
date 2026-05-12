@@ -15,7 +15,7 @@ interface RuleSetDef {
   slug: string;
   name: string;
   subtitle: string;
-  status: "active" | "coming-soon";
+  status: "active" | "coming_soon" | "archived";
   rules: {
     teamSize: number;
     teamLabel: string;
@@ -56,7 +56,7 @@ function mapRuleSetSummary(ruleSet: RuleSetSummary): RuleSetDef {
     slug: ruleSet.slug,
     name: ruleSet.name,
     subtitle: ruleSet.description ?? "RuleSet details are being prepared.",
-    status: ruleSet.status === "active" ? "active" : "coming-soon",
+    status: ruleSet.status,
     rules: {
       teamSize: asNumber(rules.team_size, 9),
       teamLabel: asString(rules.team_label, "Rotation"),
@@ -222,7 +222,7 @@ function CommunityPanel({ rs }: { rs: RuleSetDef }) {
 /* ── Single RuleSet card with notebook bookmark tabs ── */
 function RuleSetCard({ rs }: { rs: RuleSetDef }) {
   const [activeTab, setActiveTab] = useState<TabId>("rules");
-  const isComingSoon = rs.status === "coming-soon";
+  const isComingSoon = rs.status === "coming_soon";
 
   /* Arrow key navigation between tabs (roving tabindex pattern) */
   const handleTabKeyDown = useCallback(
