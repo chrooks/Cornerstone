@@ -17,9 +17,6 @@ logger = logging.getLogger(__name__)
 
 saved_teams_bp = Blueprint("saved_teams", __name__, url_prefix="/api")
 
-STANDARD_RULESET = "standard"
-STANDARD_ROTATION_SIZE = 9
-STANDARD_SALARY_CAP = 195_000_000
 EVALUATION_VERSION = "cohesion-v1"
 
 
@@ -96,10 +93,13 @@ def _is_missing_snapshot_release_table(exc: Exception) -> bool:
     )
 
 
-def _validate_standard_saved_team(body: dict[str, Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
-    ruleset_slug = body.get("ruleset_slug")
-    if ruleset_slug != STANDARD_RULESET:
-        return None, "ruleset_slug must be 'standard'"
+def _validate_saved_team(
+    body: dict[str, Any],
+    rules_json: dict[str, Any],
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    team_size = rules_json.get("team_size", 9)
+    team_label = rules_json.get("team_label", "Rotation")
+    salary_cap = rules_json.get("salary_cap", 195_000_000)
 
     cornerstone_legend_id = body.get("cornerstone_legend_id")
     if not _validate_uuid(cornerstone_legend_id):
@@ -108,8 +108,8 @@ def _validate_standard_saved_team(body: dict[str, Any]) -> tuple[list[dict[str, 
     players = body.get("players")
     if not isinstance(players, list):
         return None, "players must be an array"
-    if len(players) != STANDARD_ROTATION_SIZE:
-        return None, f"Standard RuleSet Saved Team must include exactly {STANDARD_ROTATION_SIZE} players"
+    if len(players) != team_size:
+        return None, f"{team_label} must include exactly {team_size} players"
 
     slots: list[int] = []
     cornerstone_rows: list[dict[str, Any]] = []
@@ -130,10 +130,10 @@ def _validate_standard_saved_team(body: dict[str, Any]) -> tuple[list[dict[str, 
         if is_cornerstone:
             cornerstone_rows.append(player)
 
-        salary = player.get("salary_snapshot", 0)
-        if not isinstance(salary, int) or salary < 0:
+        salary_value = player.get("salary_snapshot", 0)
+        if not isinstance(salary_value, int) or salary_value < 0:
             return None, "salary_snapshot must be a non-negative integer"
-        total_salary += salary
+        total_salary += salary_value
 
         name = player.get("player_name_snapshot")
         if not isinstance(name, str) or not name.strip():
@@ -152,20 +152,31 @@ def _validate_standard_saved_team(body: dict[str, Any]) -> tuple[list[dict[str, 
         if player_id is None and legend_id is None:
             return None, "each saved Team player needs player_id or legend_id"
 
-    if sorted(slots) != list(range(1, STANDARD_ROTATION_SIZE + 1)):
-        return None, "Standard RuleSet slots must be exactly 1 through 9"
-    if len(cornerstone_rows) != 1:
-        return None, "Standard RuleSet Saved Team must include exactly one Cornerstone"
+    if sorted(slots) != list(range(1, team_size + 1)):
+        return None, f"{team_label} slots must be exactly 1 through {team_size}"
 
-    cornerstone = cornerstone_rows[0]
-    if cornerstone["slot"] != 1:
-        return None, "Standard RuleSet Cornerstone must be in slot 1"
-    if cornerstone.get("legend_id") != cornerstone_legend_id:
-        return None, "Cornerstone legend_id must match cornerstone_legend_id"
-    if cornerstone.get("player_id") is not None:
-        return None, "Cornerstone must use legend_id, not player_id"
-    if total_salary > STANDARD_SALARY_CAP:
-        return None, f"Saved Team exceeds Standard RuleSet SalaryCap of ${STANDARD_SALARY_CAP:,}"
+    # Cornerstone validation (when rules_json declares a cornerstone rule)
+    cornerstone_rule = rules_json.get("cornerstone_rule")
+    if cornerstone_rule:
+        if len(cornerstone_rows) != 1:
+            return None, f"{team_label} must include exactly one Cornerstone"
+        cornerstone = cornerstone_rows[0]
+        if cornerstone["slot"] != 1:
+            return None, "Cornerstone must be in slot 1"
+        if cornerstone.get("legend_id") != cornerstone_legend_id:
+            return None, "Cornerstone legend_id must match cornerstone_legend_id"
+        if cornerstone.get("player_id") is not None:
+            return None, "Cornerstone must use legend_id, not player_id"
+
+    if total_salary > salary_cap:
+        return None, f"Saved Team exceeds SalaryCap of ${salary_cap:,}"
+
+    # RookieDeal limit (M3)
+    rookie_deal_limit = rules_json.get("rookie_deal_limit")
+    if rookie_deal_limit is not None:
+        rookie_count = sum(1 for p in players if p.get("is_rookie_deal"))
+        if rookie_count > rookie_deal_limit:
+            return None, f"{team_label} allows at most {rookie_deal_limit} rookie-deal players"
 
     return players, None
 
@@ -176,6 +187,27 @@ def _auto_name(body: dict[str, Any], players: list[dict[str, Any]]) -> str:
         return raw_name.strip()
     cornerstone = next(player for player in players if player["is_cornerstone"])
     return f"{cornerstone['player_name_snapshot'].strip()} Standard Rotation"
+
+
+def _resolve_snapshot_player(
+    supabase,
+    snapshot_release_id: str,
+    source_player_id: str | None,
+) -> tuple[str | None, str | None]:
+    if not source_player_id:
+        return None, None
+    res = (
+        supabase.table("snapshot_players")
+        .select("id, canonical_player_id")
+        .eq("snapshot_release_id", snapshot_release_id)
+        .eq("source_player_id", source_player_id)
+        .limit(1)
+        .execute()
+    )
+    rows = res.data or []
+    if not rows:
+        return None, None
+    return rows[0]["id"], rows[0]["canonical_player_id"]
 
 
 def _player_insert_rows(saved_team_id: str, players: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -332,13 +364,54 @@ def get_saved_team(saved_team_id: str):
 def create_saved_team():
     body = request.get_json(silent=True) or {}
 
-    players, validation_error = _validate_standard_saved_team(body)
-    if validation_error:
-        return _err(validation_error)
-    assert players is not None
+    # --- H2: Client must assert which RuleSet Version it built against ---
+    client_version_id = body.get("ruleset_version_id")
+    client_rules_hash = body.get("rules_hash")
+    if not client_version_id or not _validate_uuid(client_version_id):
+        return _err("ruleset_version_id is required")
+    if not client_rules_hash or not isinstance(client_rules_hash, str):
+        return _err("rules_hash is required")
 
     try:
         supabase = get_supabase()
+
+        # Load and verify the client-asserted RuleSet Version
+        version_res = (
+            supabase.table("ruleset_versions")
+            .select("id, ruleset_id, version_label, rules_hash, rules_json, status, published_at")
+            .eq("id", client_version_id)
+            .eq("status", "published")
+            .limit(1)
+            .execute()
+        )
+        version_rows = version_res.data or []
+        if not version_rows:
+            return _err("RuleSet Version not found or not published", status=400)
+        ruleset_version_row = version_rows[0]
+
+        if client_rules_hash != ruleset_version_row["rules_hash"]:
+            return _err(
+                "RuleSet Version has changed since you started building. Reload to get the current version.",
+                status=409,
+            )
+
+        # Resolve parent RuleSet
+        ruleset_res = (
+            supabase.table("rulesets")
+            .select("id, slug, name, status")
+            .eq("id", ruleset_version_row["ruleset_id"])
+            .limit(1)
+            .execute()
+        )
+        ruleset_rows = ruleset_res.data or []
+        if not ruleset_rows:
+            return _err("A published RuleSet Version is required", status=400)
+        ruleset_row = ruleset_rows[0]
+
+        players, validation_error = _validate_saved_team(body, ruleset_version_row["rules_json"])
+        if validation_error:
+            return _err(validation_error)
+        assert players is not None
 
         snapshot_release_id = body.get("snapshot_release_id")
         if snapshot_release_id is not None and not _validate_uuid(snapshot_release_id):
@@ -356,20 +429,15 @@ def create_saved_team():
         if published_snapshot_id is None:
             return _err("A published Snapshot Release is required", status=400)
 
-        ruleset_version = _published_ruleset_version(supabase, STANDARD_RULESET)
-        if ruleset_version is None:
-            return _err("A published RuleSet Version is required", status=400)
-        ruleset_row, ruleset_version_row = ruleset_version
-
         total_salary = sum(player.get("salary_snapshot", 0) for player in players)
         evaluation = body.get("evaluation") if isinstance(body.get("evaluation"), dict) else {}
 
         saved_team_insert = {
             "user_id": g.user_id,
-            "ruleset_slug": STANDARD_RULESET,
+            "ruleset_slug": ruleset_row["slug"],
             "ruleset_id": ruleset_row["id"],
             "ruleset_version_id": ruleset_version_row["id"],
-            "ruleset_version_hash": ruleset_version_row["rules_hash"],
+            "ruleset_version_hash": client_rules_hash,
             "snapshot_release_id": published_snapshot_id,
             "name": _auto_name(body, players),
             "visibility": "private",
@@ -380,6 +448,14 @@ def create_saved_team():
         team_res = supabase.table("saved_teams").insert(saved_team_insert).execute()
         saved_team = team_res.data[0]
         saved_team_id = saved_team["id"]
+
+        # M4: resolve Snapshot Player + Canonical Player ids for each non-Legend player
+        for player in players:
+            source_pid = player.get("player_id")
+            if source_pid:
+                snap_id, canon_id = _resolve_snapshot_player(supabase, published_snapshot_id, source_pid)
+                player["snapshot_player_id"] = snap_id
+                player["canonical_player_id"] = canon_id
 
         try:
             supabase.table("saved_team_players").insert(

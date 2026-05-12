@@ -17,6 +17,7 @@ SNAPSHOT_RELEASE_ID = "22222222-2222-2222-2222-222222222222"
 LEGEND_ID = "33333333-3333-3333-3333-333333333333"
 STANDARD_RULESET_ID = "55555555-5555-5555-5555-555555555555"
 STANDARD_RULESET_VERSION_ID = "66666666-6666-6666-6666-666666666666"
+STANDARD_RULES_HASH = "standard-v1"
 
 
 class _FakeResult:
@@ -91,8 +92,17 @@ class _FakeSupabase:
                     "id": STANDARD_RULESET_VERSION_ID,
                     "ruleset_id": STANDARD_RULESET_ID,
                     "version_label": "v1",
-                    "rules_hash": "standard-v1",
-                    "rules_json": {"team_size": 9, "salary_cap": 195_000_000},
+                    "rules_hash": STANDARD_RULES_HASH,
+                    "rules_json": {
+                        "team_size": 9,
+                        "team_label": "Rotation",
+                        "salary_cap": 195_000_000,
+                        "salary_cap_display": "$195M",
+                        "cornerstone_rule": "1 Legend required ($54M)",
+                        "cornerstone_salary": 54_000_000,
+                        "player_pool": "2025-26 Snapshot + Legends",
+                        "rookie_deal_limit": 2,
+                    },
                     "status": "published",
                     "published_at": "2026-05-11T00:00:00Z",
                 }
@@ -217,6 +227,8 @@ def valid_payload() -> dict:
     }
     return {
         "ruleset_slug": "standard",
+        "ruleset_version_id": STANDARD_RULESET_VERSION_ID,
+        "rules_hash": STANDARD_RULES_HASH,
         "snapshot_release_id": SNAPSHOT_RELEASE_ID,
         "cornerstone_legend_id": LEGEND_ID,
         "players": [valid_player(slot) for slot in range(1, 10)],
@@ -369,6 +381,106 @@ def test_save_team_rejects_standard_rotation_over_salary_cap(client):
     assert resp.status_code == 400
     assert data["success"] is False
     assert "SalaryCap" in data["error"]
+
+
+def test_save_team_requires_ruleset_version_id_and_rules_hash(client):
+    body = valid_payload()
+    del body["ruleset_version_id"]
+    del body["rules_hash"]
+
+    resp, data = post_saved_team(client, body)
+
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "ruleset_version_id" in data["error"]
+
+
+def test_save_team_reads_team_size_from_rules_json(client, fake_supabase):
+    """Prove validator reads team_size from rules_json, not a Python constant."""
+    fake_supabase.rows["ruleset_versions"][0]["rules_json"]["team_size"] = 5
+    body = valid_payload()
+
+    resp, data = post_saved_team(client, body)
+
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "5" in data["error"]
+
+
+CANONICAL_PLAYER_IDS = {
+    slot: f"77777777-7777-7777-7777-77777777777{slot}" for slot in range(2, 10)
+}
+SNAPSHOT_PLAYER_IDS = {
+    slot: f"88888888-8888-8888-8888-88888888888{slot}" for slot in range(2, 10)
+}
+
+
+def test_save_team_resolves_snapshot_player_ids_on_insert(client, fake_supabase):
+    """Server resolves snapshot_player_id + canonical_player_id from source_player_id."""
+    for slot in range(2, 10):
+        source_player_id = f"44444444-4444-4444-4444-44444444444{slot}"
+        fake_supabase.rows.setdefault("snapshot_players", []).append({
+            "id": SNAPSHOT_PLAYER_IDS[slot],
+            "snapshot_release_id": SNAPSHOT_RELEASE_ID,
+            "canonical_player_id": CANONICAL_PLAYER_IDS[slot],
+            "source_player_id": source_player_id,
+            "name": f"Player {slot}",
+        })
+
+    resp, data = post_saved_team(client, valid_payload())
+
+    assert resp.status_code == 201
+    assert data["success"] is True
+
+    saved_players = fake_supabase.rows["saved_team_players"]
+    for row in saved_players:
+        if row["is_cornerstone"]:
+            assert row.get("snapshot_player_id") is None
+            continue
+        slot = row["slot"]
+        assert row["snapshot_player_id"] == SNAPSHOT_PLAYER_IDS[slot]
+        assert row["canonical_player_id"] == CANONICAL_PLAYER_IDS[slot]
+
+
+def test_save_team_rejects_too_many_rookie_deals(client):
+    """Prove validator enforces rookie_deal_limit from rules_json."""
+    body = valid_payload()
+    rookie_count = 0
+    for player in body["players"]:
+        if not player["is_cornerstone"] and rookie_count < 3:
+            player["is_rookie_deal"] = True
+            rookie_count += 1
+
+    resp, data = post_saved_team(client, body)
+
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "rookie-deal" in data["error"]
+    assert "2" in data["error"]
+
+
+def test_save_team_reads_salary_cap_from_rules_json(client, fake_supabase):
+    """Prove validator reads salary_cap from rules_json, not a Python constant."""
+    fake_supabase.rows["ruleset_versions"][0]["rules_json"]["salary_cap"] = 100_000_000
+    body = valid_payload()
+
+    resp, data = post_saved_team(client, body)
+
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "SalaryCap" in data["error"]
+    assert "100,000,000" in data["error"]
+
+
+def test_save_team_rejects_rules_hash_mismatch(client):
+    body = valid_payload()
+    body["rules_hash"] = "wrong-hash-from-stale-client"
+
+    resp, data = post_saved_team(client, body)
+
+    assert resp.status_code == 409
+    assert data["success"] is False
+    assert "changed" in data["error"]
 
 
 def test_save_team_reports_missing_snapshot_release_migration(monkeypatch):

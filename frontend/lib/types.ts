@@ -646,6 +646,8 @@ export interface SaveTeamPlayerPayload {
 /** Request payload for POST /api/saved-teams. */
 export interface SaveTeamPayload {
   ruleset_slug: string;
+  ruleset_version_id: string;
+  rules_hash: string;
   snapshot_release_id?: string;
   name?: string;
   cornerstone_legend_id: string;

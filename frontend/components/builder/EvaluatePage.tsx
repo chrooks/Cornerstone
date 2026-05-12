@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, useParams, usePathname } from "next/navigation";
-import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam } from "@/lib/api";
+import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam, listRuleSets } from "@/lib/api";
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { readSlotsFromParams, buildPlayerPayload } from "@/lib/roster-utils";
@@ -24,7 +24,7 @@ import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { NotesList } from "./NotesList";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
-import type { LegendDetail, PlayerWithSkills, RosterEvaluation, SaveTeamPayload, SavedTeamSummary } from "@/lib/types";
+import type { LegendDetail, PlayerWithSkills, RosterEvaluation, RuleSetSummary, SaveTeamPayload, SavedTeamSummary } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // TeamDescriptionCard — LLM-generated GM-memo narrative (final mode only)
@@ -255,6 +255,7 @@ export function EvaluatePage() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedTeam, setSavedTeam] = useState<SavedTeamSummary | null>(null);
+  const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
 
   // Capture searchParams at mount — stable ref avoids closure staleness
   const paramsRef = useRef(searchParams.toString());
@@ -263,10 +264,15 @@ export function EvaluatePage() {
   useEffect(() => {
     if (!cornerstoneId) { router.replace(buildPath); return; }
 
-    Promise.all([listPlayersWithSkills(), getLegend(cornerstoneId)])
-      .then(([playersRes, legendRes]) => {
+    Promise.all([listPlayersWithSkills(), getLegend(cornerstoneId), listRuleSets()])
+      .then(([playersRes, legendRes, rulesetsRes]) => {
         if (!playersRes.success || !playersRes.data) throw new Error(playersRes.error ?? "Failed to load players");
         if (!legendRes.success || !legendRes.data) throw new Error(legendRes.error ?? "Failed to load legend");
+
+        // Resolve RuleSet Version for the current Lab RuleSet slug
+        const rulesetSlug = ruleset ?? "standard";
+        const matched = (rulesetsRes.data ?? []).find((rs) => rs.slug === rulesetSlug);
+        if (matched) setResolvedRuleSet(matched);
 
         const playerMap = new Map(playersRes.data.map((p) => [p.id, p]));
         const slots = readSlotsFromParams(new URLSearchParams(paramsRef.current), cornerstoneId, playerMap);
@@ -328,12 +334,15 @@ export function EvaluatePage() {
 
   function buildSavePayload(): SaveTeamPayload | null {
     if (!dataReady || !evaluation) return null;
+    if (!resolvedRuleSet?.current_version) return null;
 
     const filledSlots = dataReady.slots.slice(0, MAX_ROSTER_SLOTS);
     if (filledSlots.some((player) => player === null)) return null;
 
     return {
       ruleset_slug: ruleset ?? "standard",
+      ruleset_version_id: resolvedRuleSet.current_version.id,
+      rules_hash: resolvedRuleSet.current_version.rules_hash,
       cornerstone_legend_id: dataReady.legend.id,
       players: filledSlots.map((player, index) => {
         const slot = index + 1;
