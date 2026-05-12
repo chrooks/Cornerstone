@@ -17,7 +17,7 @@ SNAPSHOT_RELEASE_ID = "22222222-2222-2222-2222-222222222222"
 LEGEND_ID = "33333333-3333-3333-3333-333333333333"
 STANDARD_RULESET_ID = "55555555-5555-5555-5555-555555555555"
 STANDARD_RULESET_VERSION_ID = "66666666-6666-6666-6666-666666666666"
-STANDARD_RULES_HASH = "standard-v1"
+STANDARD_RULES_HASH = "375b5966733c5d3dd5350098e70c55a0"
 
 
 class _FakeResult:
@@ -307,7 +307,7 @@ def test_save_team_persists_valid_standard_rotation(client, fake_supabase):
     assert saved_team["user_id"] == USER_ID
     assert saved_team["ruleset_id"] == STANDARD_RULESET_ID
     assert saved_team["ruleset_version_id"] == STANDARD_RULESET_VERSION_ID
-    assert saved_team["ruleset_version_hash"] == "standard-v1"
+    assert saved_team["ruleset_version_hash"] == STANDARD_RULES_HASH
     assert saved_team["total_salary"] == 134_000_000
     assert len(fake_supabase.rows["saved_team_players"]) == 9
     assert [row["slot"] for row in fake_supabase.rows["saved_team_players"]] == list(range(1, 10))
@@ -505,7 +505,7 @@ def test_list_saved_teams_returns_current_user_summaries(client, fake_supabase):
         "ruleset_slug": "standard",
         "ruleset_id": STANDARD_RULESET_ID,
         "ruleset_version_id": STANDARD_RULESET_VERSION_ID,
-        "ruleset_version_hash": "standard-v1",
+        "ruleset_version_hash": STANDARD_RULES_HASH,
         "snapshot_release_id": SNAPSHOT_RELEASE_ID,
         "name": "Hakeem Standard Rotation",
         "visibility": "private",
@@ -547,7 +547,7 @@ def test_get_saved_team_detail_is_scoped_to_current_user(client, fake_supabase):
         "ruleset_slug": "standard",
         "ruleset_id": STANDARD_RULESET_ID,
         "ruleset_version_id": STANDARD_RULESET_VERSION_ID,
-        "ruleset_version_hash": "standard-v1",
+        "ruleset_version_hash": STANDARD_RULES_HASH,
         "snapshot_release_id": SNAPSHOT_RELEASE_ID,
         "name": "Hakeem Standard Rotation",
         "visibility": "private",
@@ -574,7 +574,7 @@ def test_get_saved_team_detail_returns_full_historical_eval_payload(client, fake
         "ruleset_slug": "standard",
         "ruleset_id": STANDARD_RULESET_ID,
         "ruleset_version_id": STANDARD_RULESET_VERSION_ID,
-        "ruleset_version_hash": "standard-v1",
+        "ruleset_version_hash": STANDARD_RULES_HASH,
         "snapshot_release_id": SNAPSHOT_RELEASE_ID,
         "name": "Hakeem Standard Rotation",
         "visibility": "private",

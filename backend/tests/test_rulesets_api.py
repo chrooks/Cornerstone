@@ -71,12 +71,14 @@ class _FakeSupabase:
                     "id": STANDARD_VERSION_ID,
                     "ruleset_id": STANDARD_RULESET_ID,
                     "version_label": "v1",
-                    "rules_hash": "standard-v1",
+                    "rules_hash": "375b5966733c5d3dd5350098e70c55a0",
                     "rules_json": {
                         "team_size": 9,
                         "team_label": "Rotation",
                         "salary_cap": 195_000_000,
+                        "salary_cap_display": "$195M",
                         "cornerstone_rule": "1 Legend required ($54M)",
+                        "cornerstone_salary": 54_000_000,
                         "player_pool": "2025-26 Snapshot + Legends",
                         "rookie_deal_limit": 2,
                     },
@@ -96,6 +98,17 @@ class _FakeSupabase:
         return rows
 
 
+def test_canonical_rules_hash_is_deterministic():
+    """Same rules_json produces same hash regardless of key order."""
+    from api.rulesets import canonical_rules_hash
+
+    ordered_a = {"salary_cap": 195_000_000, "team_size": 9, "rookie_deal_limit": 2}
+    ordered_b = {"team_size": 9, "rookie_deal_limit": 2, "salary_cap": 195_000_000}
+
+    assert canonical_rules_hash(ordered_a) == canonical_rules_hash(ordered_b)
+    assert len(canonical_rules_hash(ordered_a)) == 32
+
+
 def test_list_rulesets_returns_published_versions(monkeypatch):
     monkeypatch.setattr(rulesets, "get_supabase", lambda: _FakeSupabase())
 
@@ -113,3 +126,31 @@ def test_list_rulesets_returns_published_versions(monkeypatch):
     assert data["data"][0]["rules"]["team_size"] == 9
     assert data["data"][1]["slug"] == "free-for-all"
     assert data["data"][1]["current_version"] is None
+
+
+def test_get_ruleset_returns_single_ruleset(monkeypatch):
+    monkeypatch.setattr(rulesets, "get_supabase", lambda: _FakeSupabase())
+
+    app = create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        resp = client.get("/api/rulesets/standard")
+
+    data = resp.get_json()
+    assert resp.status_code == 200
+    assert data["success"] is True
+    assert data["data"]["slug"] == "standard"
+    assert data["data"]["current_version"]["id"] == STANDARD_VERSION_ID
+
+
+def test_get_ruleset_returns_404_for_unknown_slug(monkeypatch):
+    monkeypatch.setattr(rulesets, "get_supabase", lambda: _FakeSupabase())
+
+    app = create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        resp = client.get("/api/rulesets/nonexistent")
+
+    data = resp.get_json()
+    assert resp.status_code == 404
+    assert data["success"] is False
