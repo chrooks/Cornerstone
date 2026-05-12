@@ -682,6 +682,68 @@ export interface SavedTeamSummary {
   players?: SaveTeamPlayerPayload[];
 }
 
+// ---------------------------------------------------------------------------
+// Rebuild compatibility check
+// ---------------------------------------------------------------------------
+
+/** Version drift between original and current RuleSet Version. */
+export interface VersionDrift {
+  original: {
+    id: string;
+    version_label: string;
+    rules_hash: string;
+    rules_json: Record<string, unknown>;
+  } | null;
+  current: {
+    id: string;
+    version_label: string;
+    rules_hash: string;
+    rules_json: Record<string, unknown>;
+  };
+  changed: boolean;
+}
+
+/** Saved player snapshot data frozen at save time. */
+export interface RebuildPlayerSaved {
+  player_name_snapshot: string;
+  salary_snapshot: number;
+  skill_profile_snapshot: Record<string, string>;
+}
+
+/** Current player data from the current Snapshot Release. */
+export interface RebuildPlayerCurrent {
+  source_player_id: string;
+  name: string;
+  salary: number;
+  team: string | null;
+  position: string | null;
+  skill_profile_snapshot: Record<string, string>;
+}
+
+/** One player's resolution report from rebuild-check. */
+export interface RebuildPlayerReport {
+  slot: number;
+  status: "matched" | "missing";
+  saved: RebuildPlayerSaved;
+  current: RebuildPlayerCurrent | null;
+}
+
+/** Full response from GET /api/saved-teams/<id>/rebuild-check. */
+export interface RebuildCheckResponse {
+  saved_team_id: string;
+  ruleset_slug: string;
+  version_drift: VersionDrift;
+  cornerstone: {
+    legend_id: string;
+    name: string;
+    status: "legend";
+    available: boolean;
+  };
+  players: RebuildPlayerReport[];
+  rebuild_ready: boolean;
+  builder_url_params: Record<string, string>;
+}
+
 /** One ranked five-player combination returned by calibration rotation diagnostics. */
 export interface CohesionLineupCombination extends CohesionLineupData {
   rank: number;

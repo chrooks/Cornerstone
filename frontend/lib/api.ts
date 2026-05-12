@@ -32,6 +32,7 @@ import type {
   SaveTeamPayload,
   SavedTeamSummary,
   RuleSetSummary,
+  RebuildCheckResponse,
   UserProfile,
 } from "./types";
 
@@ -638,6 +639,15 @@ export async function listSavedTeams(): Promise<ApiResponse<SavedTeamSummary[]>>
 /** Get one Saved Team owned by the current user. */
 export async function getSavedTeam(savedTeamId: string): Promise<ApiResponse<SavedTeamSummary>> {
   return apiFetch<SavedTeamSummary>(`/api/saved-teams/${encodeURIComponent(savedTeamId)}`);
+}
+
+/** Fetch a rebuild compatibility report for a Saved Team. */
+export async function getRebuildCheck(
+  savedTeamId: string,
+): Promise<ApiResponse<RebuildCheckResponse>> {
+  return apiFetch<RebuildCheckResponse>(
+    `/api/saved-teams/${encodeURIComponent(savedTeamId)}/rebuild-check`,
+  );
 }
 
 // ---------------------------------------------------------------------------

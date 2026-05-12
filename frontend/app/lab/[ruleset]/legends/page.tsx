@@ -10,7 +10,7 @@
 
 import Link from "next/link";
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { listLegends, getLegend } from "@/lib/api";
 import { PlayerPoolBrowser, type PlayerPoolBrowserCounts, type PlayerPoolViewMode } from "@/components/players/PlayerPoolBrowser";
 import { RandomPlayerButton } from "@/components/players/RandomPlayerButton";
@@ -136,11 +136,19 @@ export default function LegendsPage() {
   }, []);
 
   /* ── Row click in table → navigate to build with this cornerstone ── */
+  const searchParams = useSearchParams();
   const handleRowClick = useCallback(
     (player: PlayerWithSkills) => {
-      window.location.href = `/lab/${ruleset}/build?cornerstone=${player.id}`;
+      const params = new URLSearchParams();
+      params.set("cornerstone", player.id);
+      // Forward supporting player params from rebuild redirect (s2–s9)
+      for (let slot = 2; slot <= 9; slot++) {
+        const value = searchParams.get(`s${slot}`);
+        if (value) params.set(`s${slot}`, value);
+      }
+      window.location.href = `/lab/${ruleset}/build?${params.toString()}`;
     },
-    [ruleset],
+    [ruleset, searchParams],
   );
 
   return (

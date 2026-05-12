@@ -483,6 +483,255 @@ def test_save_team_rejects_rules_hash_mismatch(client):
     assert "changed" in data["error"]
 
 
+CURRENT_SNAPSHOT_RELEASE_ID = "99999999-9999-9999-9999-999999999999"
+
+
+def get_rebuild_check(client, saved_team_id: str, token: str | None = "test-token"):
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    resp = client.get(f"/api/saved-teams/{saved_team_id}/rebuild-check", headers=headers)
+    return resp, resp.get_json()
+
+
+def _seed_saved_team(fake_supabase, *, missing_slots: list[int] | None = None):
+    """Populate fake DB with a saved team, its players, and current snapshot players.
+
+    Returns the saved_team_id. Adds a second published snapshot release
+    (CURRENT_SNAPSHOT_RELEASE_ID) so rebuild resolves against a different release
+    than the one the team was saved under.
+
+    If missing_slots is provided, those slot numbers will NOT have a matching
+    snapshot player in the current release (simulating a missing player).
+    """
+    saved_team_id = "saved-team-rebuild"
+    missing = set(missing_slots or [])
+
+    # Mark old release as superseded so the new one is the only published release
+    for release in fake_supabase.rows["snapshot_releases"]:
+        if release["id"] == SNAPSHOT_RELEASE_ID:
+            release["status"] = "superseded"
+
+    fake_supabase.rows["snapshot_releases"].append({
+        "id": CURRENT_SNAPSHOT_RELEASE_ID,
+        "season": "2025-26",
+        "label": "2025-26 Current",
+        "status": "published",
+        "published_at": "2026-05-12T00:00:00Z",
+    })
+
+    fake_supabase.rows["saved_teams"].append({
+        "id": saved_team_id,
+        "user_id": USER_ID,
+        "ruleset_slug": "standard",
+        "ruleset_id": STANDARD_RULESET_ID,
+        "ruleset_version_id": STANDARD_RULESET_VERSION_ID,
+        "ruleset_version_hash": STANDARD_RULES_HASH,
+        "snapshot_release_id": SNAPSHOT_RELEASE_ID,
+        "name": "Hakeem Standard Rotation",
+        "visibility": "private",
+        "cornerstone_legend_id": LEGEND_ID,
+        "total_salary": 134_000_000,
+        "created_at": "2026-05-11T00:00:00Z",
+        "updated_at": "2026-05-11T00:00:00Z",
+    })
+
+    # Cornerstone (slot 1, legend)
+    fake_supabase.rows["saved_team_players"].append({
+        "id": "stp-1",
+        "saved_team_id": saved_team_id,
+        "player_id": None,
+        "source_player_id": None,
+        "snapshot_player_id": None,
+        "canonical_player_id": None,
+        "legend_id": LEGEND_ID,
+        "slot": 1,
+        "is_cornerstone": True,
+        "salary_snapshot": 54_000_000,
+        "player_name_snapshot": "Hakeem Olajuwon",
+        "team_snapshot": None,
+        "position_snapshot": "C",
+        "skill_profile_snapshot": {"rim_protector": "All-Time Great"},
+    })
+
+    # Supporting players (slots 2-9)
+    for slot in range(2, 10):
+        fake_supabase.rows["saved_team_players"].append({
+            "id": f"stp-{slot}",
+            "saved_team_id": saved_team_id,
+            "player_id": f"44444444-4444-4444-4444-44444444444{slot}",
+            "source_player_id": f"44444444-4444-4444-4444-44444444444{slot}",
+            "snapshot_player_id": SNAPSHOT_PLAYER_IDS[slot],
+            "canonical_player_id": CANONICAL_PLAYER_IDS[slot],
+            "legend_id": None,
+            "slot": slot,
+            "is_cornerstone": False,
+            "salary_snapshot": 10_000_000,
+            "player_name_snapshot": f"Player {slot}",
+            "team_snapshot": "OKC",
+            "position_snapshot": "G",
+            "skill_profile_snapshot": {"spot_up_shooter": "Elite"},
+        })
+
+    # Current snapshot players (in the new release)
+    for slot in range(2, 10):
+        if slot in missing:
+            continue
+        fake_supabase.rows.setdefault("snapshot_players", []).append({
+            "id": f"current-snap-{slot}",
+            "snapshot_release_id": CURRENT_SNAPSHOT_RELEASE_ID,
+            "canonical_player_id": CANONICAL_PLAYER_IDS[slot],
+            "source_player_id": f"44444444-4444-4444-4444-44444444444{slot}",
+            "name": f"Player {slot}",
+            "team": "OKC",
+            "position": "G",
+            "salary": 12_000_000,
+            "skill_profile_snapshot": {"spot_up_shooter": "Elite", "defender": "Proficient"},
+        })
+
+    return saved_team_id
+
+
+# ---------------------------------------------------------------------------
+# rebuild-check endpoint tests
+# ---------------------------------------------------------------------------
+
+
+def test_rebuild_check_all_matched(client, fake_supabase):
+    """All players resolve against current Snapshot Release."""
+    saved_team_id = _seed_saved_team(fake_supabase)
+
+    resp, data = get_rebuild_check(client, saved_team_id)
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    result = data["data"]
+    assert result["saved_team_id"] == saved_team_id
+    assert result["ruleset_slug"] == "standard"
+    assert result["rebuild_ready"] is True
+
+    # Cornerstone
+    assert result["cornerstone"]["legend_id"] == LEGEND_ID
+    assert result["cornerstone"]["available"] is True
+    assert result["cornerstone"]["status"] == "legend"
+
+    # All 8 supporting players matched
+    players = result["players"]
+    assert len(players) == 8
+    for report in players:
+        assert report["status"] == "matched"
+        assert report["current"] is not None
+        assert report["current"]["salary"] == 12_000_000
+
+    # Version drift unchanged (same version)
+    assert result["version_drift"]["changed"] is False
+
+    # Builder URL params complete
+    params = result["builder_url_params"]
+    assert params["cornerstone"] == LEGEND_ID
+    for slot in range(2, 10):
+        assert f"s{slot}" in params
+
+
+def test_rebuild_check_player_missing(client, fake_supabase):
+    """One player absent from current Snapshot Release → status 'missing'."""
+    saved_team_id = _seed_saved_team(fake_supabase, missing_slots=[5])
+
+    resp, data = get_rebuild_check(client, saved_team_id)
+
+    assert resp.status_code == 200
+    result = data["data"]
+    assert result["rebuild_ready"] is True
+
+    by_slot = {p["slot"]: p for p in result["players"]}
+    assert by_slot[5]["status"] == "missing"
+    assert by_slot[5]["current"] is None
+    assert by_slot[5]["saved"]["player_name_snapshot"] == "Player 5"
+
+    # Missing slot absent from builder_url_params
+    assert "s5" not in result["builder_url_params"]
+    # Other matched slots present
+    assert "s2" in result["builder_url_params"]
+
+
+def test_rebuild_check_cornerstone_unavailable(client, fake_supabase):
+    """Legend deleted → cornerstone.available is False, 'cornerstone' absent from URL params."""
+    saved_team_id = _seed_saved_team(fake_supabase)
+    fake_supabase.rows["legends"].clear()
+
+    resp, data = get_rebuild_check(client, saved_team_id)
+
+    assert resp.status_code == 200
+    result = data["data"]
+    assert result["rebuild_ready"] is True
+    assert result["cornerstone"]["available"] is False
+    assert "cornerstone" not in result["builder_url_params"]
+
+
+def test_rebuild_check_version_changed(client, fake_supabase):
+    """Original and current RuleSet Versions differ → version_drift.changed is True."""
+    saved_team_id = _seed_saved_team(fake_supabase)
+
+    # Add a newer published version
+    new_version_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    fake_supabase.rows["ruleset_versions"].append({
+        "id": new_version_id,
+        "ruleset_id": STANDARD_RULESET_ID,
+        "version_label": "v2",
+        "rules_hash": "new-hash-v2",
+        "rules_json": {"team_size": 9, "salary_cap": 210_000_000},
+        "status": "published",
+        "published_at": "2026-05-12T00:00:00Z",
+    })
+    # Mark original as superseded so the fake returns the new one
+    fake_supabase.rows["ruleset_versions"][0]["status"] = "superseded"
+
+    resp, data = get_rebuild_check(client, saved_team_id)
+
+    assert resp.status_code == 200
+    result = data["data"]
+    drift = result["version_drift"]
+    assert drift["changed"] is True
+    assert drift["original"]["id"] == STANDARD_RULESET_VERSION_ID
+    assert drift["current"]["id"] == new_version_id
+    assert drift["current"]["rules_json"]["salary_cap"] == 210_000_000
+
+
+def test_rebuild_check_version_unchanged(client, fake_supabase):
+    """Same RuleSet Version → version_drift.changed is False."""
+    saved_team_id = _seed_saved_team(fake_supabase)
+
+    resp, data = get_rebuild_check(client, saved_team_id)
+
+    assert resp.status_code == 200
+    drift = data["data"]["version_drift"]
+    assert drift["changed"] is False
+    assert drift["original"]["id"] == drift["current"]["id"]
+
+
+def test_rebuild_check_not_found(client, fake_supabase):
+    """Nonexistent Saved Team → 404."""
+    resp, data = get_rebuild_check(client, "nonexistent-id")
+
+    assert resp.status_code == 404
+    assert data["success"] is False
+    assert "not found" in data["error"]
+
+
+def test_rebuild_check_no_published_snapshot(client, fake_supabase):
+    """No published Snapshot Release → 400."""
+    saved_team_id = _seed_saved_team(fake_supabase)
+    # Remove all published releases
+    fake_supabase.rows["snapshot_releases"] = [
+        r for r in fake_supabase.rows["snapshot_releases"] if r["status"] != "published"
+    ]
+
+    resp, data = get_rebuild_check(client, saved_team_id)
+
+    assert resp.status_code == 400
+    assert "Snapshot Release" in data["error"]
+
+
 def test_save_team_reports_missing_snapshot_release_migration(monkeypatch):
     db = _FakeSupabase(missing_snapshot_releases=True)
     monkeypatch.setattr(auth, "_verify_jwt", lambda _token: {"sub": USER_ID})

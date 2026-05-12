@@ -4,11 +4,16 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   ArrowRight,
   CalendarDays,
+  Check,
+  ChevronDown,
   CircleDollarSign,
   ClipboardList,
   Lock,
+  Loader2,
+  Minus,
   Plus,
   RefreshCw,
   Search,
@@ -16,12 +21,13 @@ import {
   Star,
   Trophy,
   UserRound,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getUserProfile, listPlayersWithSkills, listSavedTeams } from "@/lib/api";
+import { getUserProfile, listPlayersWithSkills, listSavedTeams, getRebuildCheck } from "@/lib/api";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
-import type { PlayerWithSkills, SavedTeamSummary, UserProfile } from "@/lib/types";
+import type { PlayerWithSkills, RebuildCheckResponse, RebuildPlayerReport, SavedTeamSummary, UserProfile } from "@/lib/types";
 
 type ProfileLoadState = "loading" | "ready" | "signed-out" | "error";
 type SavedTeamType = "Lineup" | "Rotation" | "Roster";
@@ -71,11 +77,6 @@ interface MockSavedTeam {
   }>;
   summary: string;
   tags: string[];
-}
-
-interface SavedTeamBuilderTarget {
-  href: string | null;
-  missingPlayers: string[];
 }
 
 const DEFAULT_SAVED_TEAM_SORTS: SavedTeamSort[] = [
@@ -321,34 +322,6 @@ function enrichSavedTeamPortraits(
   }));
 }
 
-function buildSavedTeamBuilderTarget(
-  team: MockSavedTeam,
-  playerRows: PlayerWithSkills[],
-): SavedTeamBuilderTarget {
-  const resolvedPlayers = team.players.map((player, index) =>
-    resolveSavedTeamPlayer(player, playerRows, index === 0)
-  );
-  const missingPlayers = team.players
-    .filter((_, index) => resolvedPlayers[index] == null)
-    .map((player) => player.name);
-  const cornerstone = resolvedPlayers[0];
-
-  if (!cornerstone || missingPlayers.length > 0) {
-    return { href: null, missingPlayers };
-  }
-
-  const params = new URLSearchParams();
-  params.set("cornerstone", cornerstone.id);
-  resolvedPlayers.forEach((player, index) => {
-    if (player) params.set(`s${index + 1}`, player.id);
-  });
-
-  return {
-    href: `/lab/${getRulesetSlug(team.ruleset)}/build?${params.toString()}`,
-    missingPlayers: [],
-  };
-}
-
 function SavedTeamSkeleton() {
   return (
     <div id="profile-saved-team-skeleton" className="space-y-3">
@@ -413,28 +386,310 @@ function SavedTeamHeadshot({
   );
 }
 
+// ---------------------------------------------------------------------------
+// RebuildCheckModal — compatibility report before re-entering the Builder
+// ---------------------------------------------------------------------------
+
+type RebuildModalState = "loading" | "ready" | "error";
+
+function skillTierLabel(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "final_tier" in value) {
+    return String((value as Record<string, unknown>).final_tier ?? "—");
+  }
+  return "—";
+}
+
+function RebuildPlayerRow({ report }: { report: RebuildPlayerReport }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const currentPlayer = report.status === "matched" ? report.current : null;
+  const matched = currentPlayer != null;
+  const salaryDelta = currentPlayer ? currentPlayer.salary - report.saved.salary_snapshot : 0;
+
+  const savedSkills = report.saved.skill_profile_snapshot ?? {};
+  const currentSkills = currentPlayer ? currentPlayer.skill_profile_snapshot ?? {} : {};
+  const allSkillKeys = Array.from(new Set([...Object.keys(savedSkills), ...Object.keys(currentSkills)])).sort();
+  const changedSkills = allSkillKeys.filter((key) => skillTierLabel(savedSkills[key]) !== skillTierLabel(currentSkills[key]));
+  const hasSkillDiffs = matched && changedSkills.length > 0;
+
+  return (
+    <div id={`rebuild-player-slot-${report.slot}`} className="border-b border-[oklch(0.88_0.015_62)] last:border-b-0">
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-[oklch(0.92_0.035_64)] font-mono text-xs font-semibold text-[oklch(0.28_0.03_45)]">
+          {report.slot}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-[oklch(0.18_0.02_45)]">
+            {report.saved.player_name_snapshot}
+          </p>
+          {currentPlayer && salaryDelta !== 0 && (
+            <p className="text-xs text-[oklch(0.42_0.02_45)]">
+              {formatMoney(report.saved.salary_snapshot)} → {formatMoney(currentPlayer.salary)}
+              <span className={cn("ml-1 font-mono", salaryDelta > 0 ? "text-red-600" : "text-green-700")}>
+                ({salaryDelta > 0 ? "+" : ""}{formatMoney(salaryDelta)})
+              </span>
+            </p>
+          )}
+        </div>
+
+        {matched ? (
+          <span className="inline-flex items-center gap-1 rounded-sm bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">
+            <Check className="h-3 w-3" aria-hidden="true" />
+            Matched
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-sm bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800">
+            <Minus className="h-3 w-3" aria-hidden="true" />
+            Missing
+          </span>
+        )}
+
+        {hasSkillDiffs && (
+          <button
+            id={`rebuild-player-slot-${report.slot}-expand-btn`}
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            aria-expanded={expanded}
+            className="flex h-6 w-6 items-center justify-center rounded-sm text-[oklch(0.42_0.02_45)] transition-colors hover:bg-[oklch(0.92_0.035_64)] hover:text-[oklch(0.18_0.02_45)]"
+            title="Show skill changes"
+          >
+            <ChevronDown className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+
+      {expanded && hasSkillDiffs && (
+        <div id={`rebuild-player-slot-${report.slot}-skill-diffs`} className="border-t border-dashed border-[oklch(0.88_0.015_62)] bg-[oklch(0.96_0.006_62)] px-3 py-2">
+          <p className="mb-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
+            Skill changes
+          </p>
+          <ul className="space-y-0.5">
+            {changedSkills.map((key) => (
+              <li key={key} className="flex items-center justify-between text-xs">
+                <span className="text-[oklch(0.34_0.02_45)]">{key.replace(/_/g, " ")}</span>
+                <span className="font-mono text-[oklch(0.42_0.02_45)]">
+                  {skillTierLabel(savedSkills[key])} → {skillTierLabel(currentSkills[key])}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RebuildCheckModal({
+  savedTeamId,
+  savedTeamName,
+  rulesetSlug,
+  onClose,
+}: {
+  savedTeamId: string;
+  savedTeamName: string;
+  rulesetSlug: string;
+  onClose: () => void;
+}) {
+  const [state, setState] = useState<RebuildModalState>("loading");
+  const [report, setReport] = useState<RebuildCheckResponse | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setState("loading");
+    getRebuildCheck(savedTeamId)
+      .then((res) => {
+        if (!alive) return;
+        if (res.success && res.data) {
+          setReport(res.data);
+          setState("ready");
+        } else {
+          setErrorMessage(res.error ?? "Could not load rebuild report.");
+          setState("error");
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setErrorMessage("Network error loading rebuild report.");
+          setState("error");
+        }
+      });
+    return () => { alive = false; };
+  }, [savedTeamId]);
+
+  const versionChanged = report?.version_drift?.changed ?? false;
+  const cornerstoneAvailable = report?.cornerstone?.available ?? false;
+  const matchedCount = report?.players.filter((p) => p.status === "matched").length ?? 0;
+  const missingCount = report?.players.filter((p) => p.status === "missing").length ?? 0;
+  const totalPlayers = report?.players.length ?? 0;
+
+  function buildTargetUrl(): string {
+    if (!report) return "#";
+    const params = report.builder_url_params;
+    const paramStr = new URLSearchParams(params).toString();
+
+    if (!cornerstoneAvailable) {
+      // Redirect to Legends picker with supporting player params
+      return `/lab/${rulesetSlug}/legends${paramStr ? `?${paramStr}` : ""}`;
+    }
+    return `/lab/${rulesetSlug}/build?${paramStr}`;
+  }
+
+  return (
+    <div
+      id="rebuild-check-modal-overlay"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        id="rebuild-check-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rebuild-check-modal-title"
+        className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] shadow-xl"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[oklch(0.86_0.018_62)] px-5 py-4">
+          <div>
+            <h2 id="rebuild-check-modal-title" className="font-display text-lg font-semibold text-[oklch(0.16_0.018_45)]">
+              Rebuild Compatibility
+            </h2>
+            <p className="mt-0.5 text-sm text-[oklch(0.42_0.02_45)]">{savedTeamName}</p>
+          </div>
+          <button
+            id="rebuild-check-modal-close-btn"
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-sm text-[oklch(0.42_0.02_45)] transition-colors hover:bg-[oklch(0.92_0.035_64)] hover:text-[oklch(0.18_0.02_45)]"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body — scrollable */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {state === "loading" && (
+            <div id="rebuild-check-modal-loading" className="flex flex-col items-center gap-3 py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-[oklch(0.47_0.07_55)]" aria-hidden="true" />
+              <p className="text-sm text-[oklch(0.42_0.02_45)]">Checking compatibility…</p>
+            </div>
+          )}
+
+          {state === "error" && (
+            <div id="rebuild-check-modal-error" className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+              {errorMessage}
+            </div>
+          )}
+
+          {state === "ready" && report && (
+            <div id="rebuild-check-modal-report" className="space-y-4">
+              {/* Version drift banner */}
+              {versionChanged && (
+                <div id="rebuild-version-drift-banner" className="flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 p-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+                  <div className="text-sm text-amber-900">
+                    <p className="font-semibold">Rule Set Version changed</p>
+                    <p className="mt-1 text-xs text-amber-800">
+                      {report.version_drift.original?.version_label ?? "?"} → {report.version_drift.current.version_label}
+                      {(() => {
+                        const origCap = report.version_drift.original?.rules_json?.salary_cap;
+                        const currCap = report.version_drift.current.rules_json?.salary_cap;
+                        if (typeof origCap === "number" && typeof currCap === "number" && origCap !== currCap) {
+                          return ` · SalaryCap: ${formatMoney(origCap)} → ${formatMoney(currCap)}`;
+                        }
+                        return "";
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Cornerstone status */}
+              {!cornerstoneAvailable && (
+                <div id="rebuild-cornerstone-warning" className="flex items-start gap-2.5 rounded-md border border-orange-300 bg-orange-50 p-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-600" aria-hidden="true" />
+                  <div className="text-sm text-orange-900">
+                    <p className="font-semibold">Cornerstone Legend unavailable</p>
+                    <p className="mt-0.5 text-xs text-orange-800">
+                      {report.cornerstone.name} is no longer available. You&apos;ll pick a new Cornerstone first.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {cornerstoneAvailable && (
+                <div id="rebuild-cornerstone-status" className="flex items-center gap-3 rounded-md border border-[oklch(0.88_0.015_62)] bg-[oklch(0.96_0.006_62)] px-3 py-2.5">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-[oklch(0.66_0.16_55)] font-mono text-xs font-semibold text-white">
+                    1
+                  </span>
+                  <p className="flex-1 text-sm font-semibold text-[oklch(0.18_0.02_45)]">{report.cornerstone.name}</p>
+                  <span className="inline-flex items-center gap-1 rounded-sm bg-[oklch(0.92_0.035_64)] px-2 py-0.5 text-xs font-semibold text-[oklch(0.28_0.03_45)]">
+                    Legend
+                  </span>
+                </div>
+              )}
+
+              {/* Summary line */}
+              <p id="rebuild-check-modal-summary" className="text-sm text-[oklch(0.42_0.02_45)]">
+                {matchedCount} of {totalPlayers} supporting player{totalPlayers !== 1 ? "s" : ""} matched
+                {missingCount > 0 && (
+                  <span className="text-orange-700"> · {missingCount} missing (slot{missingCount !== 1 ? "s" : ""} will be empty)</span>
+                )}
+              </p>
+
+              {/* Player rows */}
+              <div id="rebuild-check-modal-players" className="overflow-hidden rounded-md border border-[oklch(0.88_0.015_62)]">
+                {report.players.map((player) => (
+                  <RebuildPlayerRow key={player.slot} report={player} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {state === "ready" && report && (
+          <div className="flex items-center justify-end gap-2 border-t border-[oklch(0.86_0.018_62)] px-5 py-3">
+            <button
+              id="rebuild-check-modal-cancel-btn"
+              type="button"
+              onClick={onClose}
+              className="min-h-9 rounded border border-[oklch(0.83_0.02_62)] bg-[oklch(0.96_0.006_62)] px-4 py-1.5 text-sm font-semibold text-[oklch(0.22_0.02_45)] transition-colors hover:border-[oklch(0.73_0.08_53)] hover:bg-[oklch(0.92_0.035_64)]"
+            >
+              Cancel
+            </button>
+            <Link
+              id="rebuild-check-modal-continue-btn"
+              href={buildTargetUrl()}
+              className="inline-flex min-h-9 items-center gap-2 rounded border border-[oklch(0.18_0.02_45)] bg-[oklch(0.18_0.02_45)] px-4 py-1.5 text-sm font-semibold text-[oklch(0.92_0.08_64)] transition-colors hover:bg-[oklch(0.25_0.03_45)]"
+            >
+              {cornerstoneAvailable ? "Continue to Builder" : "Pick a Cornerstone"}
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SavedTeamRecord({
   team,
-  builderTarget,
-  builderTargetsLoading,
   featured = false,
   featuredLabel,
 }: {
   team: MockSavedTeam;
-  builderTarget: SavedTeamBuilderTarget;
-  builderTargetsLoading: boolean;
   featured?: boolean;
   featuredLabel?: string;
 }) {
   const openButtonClassName = "inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded border border-[oklch(0.18_0.02_45)] bg-[oklch(0.18_0.02_45)] px-3 py-2 text-sm font-semibold text-[oklch(0.92_0.08_64)] transition-colors duration-150 hover:bg-[oklch(0.25_0.03_45)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]";
   const secondaryButtonClassName = "inline-flex min-h-10 flex-1 items-center justify-center rounded border border-[oklch(0.83_0.02_62)] bg-[oklch(0.96_0.006_62)] px-3 py-2 text-sm font-semibold text-[oklch(0.22_0.02_45)] transition-colors duration-150 hover:border-[oklch(0.73_0.08_53)] hover:bg-[oklch(0.92_0.035_64)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]";
   const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const [rebuildModalOpen, setRebuildModalOpen] = useState(false);
   const summaryParts = splitSummary(team.summary);
-  const openUnavailableReason = builderTargetsLoading
-    ? "Resolving this Saved Team against the current PlayerPool."
-    : builderTarget.missingPlayers.length > 0
-      ? `Could not find ${builderTarget.missingPlayers.join(", ")} in the current PlayerPool.`
-      : "This Saved Team cannot be opened yet.";
 
   return (
     <article
@@ -575,29 +830,26 @@ function SavedTeamRecord({
           >
             See Eval
           </Link>
-          {builderTarget.href ? (
-            <Link
-              id={`profile-saved-team-${team.id}-rebuild-link`}
-              href={builderTarget.href}
-              className={openButtonClassName}
-            >
-              Rebuild
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          ) : (
-            <button
-              id={`profile-saved-team-${team.id}-rebuild-btn`}
-              type="button"
-              disabled
-              title={openUnavailableReason}
-              className={cn(openButtonClassName, "cursor-not-allowed opacity-45 hover:bg-[oklch(0.18_0.02_45)]")}
-            >
-              Rebuild
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
+          <button
+            id={`profile-saved-team-${team.id}-rebuild-btn`}
+            type="button"
+            onClick={() => setRebuildModalOpen(true)}
+            className={openButtonClassName}
+          >
+            Rebuild
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       </aside>
+
+      {rebuildModalOpen && (
+        <RebuildCheckModal
+          savedTeamId={team.id}
+          savedTeamName={team.name}
+          rulesetSlug={getRulesetSlug(team.ruleset)}
+          onClose={() => setRebuildModalOpen(false)}
+        />
+      )}
     </article>
   );
 }
@@ -612,8 +864,6 @@ export default function ProfilePage() {
   const [savedTeamFilters, setSavedTeamFilters] = useState<SavedTeamAppliedFilter[]>([]);
   const [savedTeamSorts, setSavedTeamSorts] = useState<SavedTeamSort[]>(DEFAULT_SAVED_TEAM_SORTS);
   const [builderPlayerRows, setBuilderPlayerRows] = useState<PlayerWithSkills[]>([]);
-  const [builderTargetsLoading, setBuilderTargetsLoading] = useState(true);
-  const [builderTargetsError, setBuilderTargetsError] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -661,24 +911,15 @@ export default function ProfilePage() {
 
   useEffect(() => {
     let alive = true;
-    setBuilderTargetsLoading(true);
-    setBuilderTargetsError(false);
 
     listPlayersWithSkills()
       .then((res) => {
         if (!alive) return;
         if (res.success && res.data) {
           setBuilderPlayerRows(res.data);
-          return;
         }
-        setBuilderTargetsError(true);
       })
-      .catch(() => {
-        if (alive) setBuilderTargetsError(true);
-      })
-      .finally(() => {
-        if (alive) setBuilderTargetsLoading(false);
-      });
+      .catch(() => {});
 
     return () => {
       alive = false;
@@ -714,17 +955,6 @@ export default function ProfilePage() {
       return 0;
     });
   }, [displaySavedTeams, savedTeamFilters, savedTeamSorts]);
-
-  const builderTargetsByTeamId = useMemo(() => {
-    return new Map(
-      displaySavedTeams.map((team) => [
-        team.id,
-        builderTargetsError
-          ? { href: null, missingPlayers: [] }
-          : buildSavedTeamBuilderTarget(team, builderPlayerRows),
-      ])
-    );
-  }, [displaySavedTeams, builderPlayerRows, builderTargetsError]);
 
   const hasActiveAdvancedFilters = savedTeamFilters.length > 0 || !isDefaultSavedTeamSort(savedTeamSorts);
   const featuredSavedTeamLabel = getFeaturedSavedTeamLabel(savedTeamFilters, savedTeamSorts);
@@ -1104,8 +1334,6 @@ export default function ProfilePage() {
                 <SavedTeamRecord
                   key={team.id}
                   team={team}
-                  builderTarget={builderTargetsByTeamId.get(team.id) ?? { href: null, missingPlayers: [] }}
-                  builderTargetsLoading={builderTargetsLoading}
                   featured={index === 0}
                   featuredLabel={index === 0 ? featuredSavedTeamLabel : undefined}
                 />
