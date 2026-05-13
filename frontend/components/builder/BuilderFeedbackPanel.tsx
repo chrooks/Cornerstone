@@ -119,6 +119,11 @@ const SCORE_FACTOR_WEIGHTS: Record<string, string> = {
   floor: "10%",
 };
 
+const LINEUP_ONLY_SCORE_FACTOR_WEIGHTS: Record<string, string> = {
+  starting_5: "90%",
+  archetype_diversity: "10%",
+};
+
 const SCORE_FACTOR_DERIVATIONS: Record<string, string> = {
   starting_5: "starting Lineup Cohesion Score divided by 5.0",
   depth: "60% bench viable Lineup Combination rate plus 40% bench median quality",
@@ -146,6 +151,8 @@ interface BuilderFeedbackPanelProps {
   collapsed: boolean;
   hasUnreadFeedback: boolean;
   latestEval: RosterEvaluation | null;
+  /** Max roster slots from rules_json. When 5 (Lineup), rotation sections are hidden. */
+  maxRosterSlots?: number;
   inspectedPlayer: PlayerWithSkills | null;
   inspectionSource: BuilderInspectionSource;
   focusedPlayerName: string | null;
@@ -775,13 +782,17 @@ function PlayerContributionInspector({
   );
 }
 
-function LineupImpactSummary({ evaluation }: { evaluation: RosterEvaluation | null }) {
+function LineupImpactSummary({ evaluation, isLineupOnly = false }: { evaluation: RosterEvaluation | null; isLineupOnly?: boolean }) {
+  const LINEUP_FACTOR_KEYS = new Set(["starting_5", "archetype_diversity"]);
+  const LINEUP_LABELS: Record<string, string> = { starting_5: "Lineup Strength", archetype_diversity: "Versatility" };
   const breakdown = evaluation
-    ? Object.entries(evaluation.star_rating_breakdown).map(([key, value]) => ({
-      key,
-      label: scoreFactorLabel(key),
-      value,
-    }))
+    ? Object.entries(evaluation.star_rating_breakdown)
+      .filter(([key]) => !isLineupOnly || LINEUP_FACTOR_KEYS.has(key))
+      .map(([key, value]) => ({
+        key,
+        label: isLineupOnly ? (LINEUP_LABELS[key] ?? scoreFactorLabel(key)) : scoreFactorLabel(key),
+        value,
+      }))
     : [];
 
   return (
@@ -789,55 +800,61 @@ function LineupImpactSummary({ evaluation }: { evaluation: RosterEvaluation | nu
       <SectionLabel id="builder-skill-lineup-impact-label">Lineup Impact</SectionLabel>
       {evaluation ? (
         <>
-          <div id="builder-skill-lineup-summary" className="grid gap-2 sm:grid-cols-3">
+          <div id="builder-skill-lineup-summary" className={cn("grid gap-2", isLineupOnly ? "sm:grid-cols-1" : "sm:grid-cols-3")}>
             <FeedbackTooltip
               id="builder-skill-lineup-starting-tooltip"
               as="div"
               content={(
-                <LineupMetricTooltip label="Starting Lineup">
-                  Cohesion score for slots 1 through 5. It reflects how the starting group fits across spacing, creation, defense, rebounding, and synergy checks.
+                <LineupMetricTooltip label={isLineupOnly ? "Lineup Strength" : "Starting Lineup"}>
+                  {isLineupOnly
+                    ? "Cohesion score for this starting five."
+                    : "Cohesion score for slots 1 through 5. It reflects how the starting group fits across spacing, creation, defense, rebounding, and synergy checks."}
                 </LineupMetricTooltip>
               )}
               className="w-full"
             >
               <div className="w-full border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-2 transition-colors hover:border-[#ffa05c]/45">
-                <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-[#0e0907]/35">Starting Lineup</p>
+                <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-[#0e0907]/35">{isLineupOnly ? "Lineup Strength" : "Starting Lineup"}</p>
                 <p className="mt-1 font-mono text-[0.8125rem] tabular-nums text-[#0e0907]">{evaluation.starting_lineup.cohesion_score.toFixed(2)}</p>
               </div>
             </FeedbackTooltip>
-            <FeedbackTooltip
-              id="builder-skill-lineup-viable-tooltip"
-              as="div"
-              content={(
-                <LineupMetricTooltip label="Viable Combos">
-                  Number of evaluated lineup combinations above the engine&apos;s viability floor. A high count means the build can survive substitutions.
-                </LineupMetricTooltip>
-              )}
-              className="w-full"
-            >
-              <div className="w-full border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-2 transition-colors hover:border-[#ffa05c]/45">
-                <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-[#0e0907]/35">Viable Combos</p>
-                <p className="mt-1 font-mono text-[0.8125rem] tabular-nums text-[#0e0907]">
-                  {evaluation.lineup_summary.viable_lineups}/{evaluation.lineup_summary.total_lineups}
-                </p>
-              </div>
-            </FeedbackTooltip>
-            <FeedbackTooltip
-              id="builder-skill-lineup-median-tooltip"
-              as="div"
-              align="right"
-              content={(
-                <LineupMetricTooltip label="Median">
-                  Middle evaluated lineup score. It shows the typical substitution quality, not the best or worst group.
-                </LineupMetricTooltip>
-              )}
-              className="w-full"
-            >
-              <div className="w-full border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-2 transition-colors hover:border-[#ffa05c]/45">
-                <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-[#0e0907]/35">Median</p>
-                <p className="mt-1 font-mono text-[0.8125rem] tabular-nums text-[#0e0907]">{evaluation.lineup_summary.median_score.toFixed(2)}</p>
-              </div>
-            </FeedbackTooltip>
+            {!isLineupOnly && (
+              <>
+                <FeedbackTooltip
+                  id="builder-skill-lineup-viable-tooltip"
+                  as="div"
+                  content={(
+                    <LineupMetricTooltip label="Viable Combos">
+                      Number of evaluated lineup combinations above the engine&apos;s viability floor. A high count means the build can survive substitutions.
+                    </LineupMetricTooltip>
+                  )}
+                  className="w-full"
+                >
+                  <div className="w-full border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-2 transition-colors hover:border-[#ffa05c]/45">
+                    <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-[#0e0907]/35">Viable Combos</p>
+                    <p className="mt-1 font-mono text-[0.8125rem] tabular-nums text-[#0e0907]">
+                      {evaluation.lineup_summary.viable_lineups}/{evaluation.lineup_summary.total_lineups}
+                    </p>
+                  </div>
+                </FeedbackTooltip>
+                <FeedbackTooltip
+                  id="builder-skill-lineup-median-tooltip"
+                  as="div"
+                  align="right"
+                  content={(
+                    <LineupMetricTooltip label="Median">
+                      Middle evaluated lineup score. It shows the typical substitution quality, not the best or worst group.
+                    </LineupMetricTooltip>
+                  )}
+                  className="w-full"
+                >
+                  <div className="w-full border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-2 transition-colors hover:border-[#ffa05c]/45">
+                    <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-[#0e0907]/35">Median</p>
+                    <p className="mt-1 font-mono text-[0.8125rem] tabular-nums text-[#0e0907]">{evaluation.lineup_summary.median_score.toFixed(2)}</p>
+                  </div>
+                </FeedbackTooltip>
+              </>
+            )}
           </div>
           <div id="builder-skill-lineup-breakdown" className="grid gap-2 sm:grid-cols-2">
             {breakdown.map((item) => (
@@ -876,8 +893,9 @@ function NewFeedbackRead({
   latestEval,
   inspectedPlayer,
   inspectionSource,
+  isLineupOnly = false,
   onSuggestionFilter,
-}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "inspectedPlayer" | "inspectionSource" | "onSuggestionFilter">) {
+}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "inspectedPlayer" | "inspectionSource" | "onSuggestionFilter"> & { isLineupOnly?: boolean }) {
   const [selectedSkillKey, setSelectedSkillKey] = useState<string | null>(null);
   const targetPlayer = inspectedPlayer;
   const isPlayerRead = targetPlayer !== null;
@@ -925,9 +943,19 @@ function NewFeedbackRead({
         return b.value - a.value;
       })
     : [];
+  const LINEUP_ONLY_FACTOR_KEYS = new Set(["starting_5", "archetype_diversity"]);
+  const LINEUP_ONLY_LABELS: Record<string, string> = {
+    starting_5: "Lineup Strength",
+    archetype_diversity: "Versatility",
+  };
   const scoreFactors = latestEval
     ? Object.entries(latestEval.star_rating_breakdown)
-      .map(([key, value]) => ({ key, label: scoreFactorLabel(key), value }))
+      .filter(([key]) => !isLineupOnly || LINEUP_ONLY_FACTOR_KEYS.has(key))
+      .map(([key, value]) => ({
+        key,
+        label: isLineupOnly ? (LINEUP_ONLY_LABELS[key] ?? scoreFactorLabel(key)) : scoreFactorLabel(key),
+        value,
+      }))
       .sort((a, b) => b.value - a.value)
     : [];
   const scoreShape = scoreShapeText(scoreFactors);
@@ -1130,29 +1158,31 @@ function NewFeedbackRead({
         </section>
       )}
 
-      <LineupReachSection
-        idBase="builder-new-feedback-lineup-reach"
-        label={reachLabel}
-        copy={reachCopy}
-        status={reachStatus}
-        metric={{ value: reachValue, label: reachValueLabel, qualityValue: reachQualityValue, qualityKind: reachQualityKind }}
-        contexts={lineupReachContexts}
-        playerAdds={isPlayerRead ? playerAdds : []}
-        renderContextTooltip={(context: LineupReadContext, trigger) => (
-          <FeedbackTooltip
-            id={`builder-new-feedback-lineup-reach-${context.id}-tooltip`}
-            as="div"
-            content={(
-              <LineupMetricTooltip label={context.label}>
-                {context.helper ?? "Lineup Combination context for this read."}
-              </LineupMetricTooltip>
-            )}
-            className="w-full"
-          >
-            {trigger}
-          </FeedbackTooltip>
-        )}
-      />
+      {!isLineupOnly && (
+        <LineupReachSection
+          idBase="builder-new-feedback-lineup-reach"
+          label={reachLabel}
+          copy={reachCopy}
+          status={reachStatus}
+          metric={{ value: reachValue, label: reachValueLabel, qualityValue: reachQualityValue, qualityKind: reachQualityKind }}
+          contexts={lineupReachContexts}
+          playerAdds={isPlayerRead ? playerAdds : []}
+          renderContextTooltip={(context: LineupReadContext, trigger) => (
+            <FeedbackTooltip
+              id={`builder-new-feedback-lineup-reach-${context.id}-tooltip`}
+              as="div"
+              content={(
+                <LineupMetricTooltip label={context.label}>
+                  {context.helper ?? "Lineup Combination context for this read."}
+                </LineupMetricTooltip>
+              )}
+              className="w-full"
+            >
+              {trigger}
+            </FeedbackTooltip>
+          )}
+        />
+      )}
 
       <section id="builder-new-feedback-lineup-effects" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
         <SectionLabel id="builder-new-feedback-lineup-effects-label">Lineup Effects</SectionLabel>
@@ -1283,7 +1313,8 @@ function SkillProfileDiagnostic({
   legendDetail,
   latestEval,
   inspectedPlayer,
-}: Pick<BuilderFeedbackPanelProps, "allSlots" | "cornerstoneId" | "legendDetail" | "latestEval" | "inspectedPlayer">) {
+  isLineupOnly = false,
+}: Pick<BuilderFeedbackPanelProps, "allSlots" | "cornerstoneId" | "legendDetail" | "latestEval" | "inspectedPlayer"> & { isLineupOnly?: boolean }) {
   return (
     <div id="builder-skill-profile-diagnostic" className="space-y-5">
       <section id="builder-skill-profile-purpose" className="border border-[#d9d0c9]/70 bg-[#f0f0f0]/45 px-3 py-3">
@@ -1294,7 +1325,7 @@ function SkillProfileDiagnostic({
       </section>
       <RotationIdentityStrip evaluation={latestEval} />
       <PlayerContributionInspector evaluation={latestEval} player={inspectedPlayer} />
-      <LineupImpactSummary evaluation={latestEval} />
+      <LineupImpactSummary evaluation={latestEval} isLineupOnly={isLineupOnly} />
       <section id="builder-skill-profile-matrix" className="space-y-3">
         <SectionLabel id="builder-skill-profile-matrix-label">Full Skill Profile</SectionLabel>
         <div className="h-[360px] overflow-hidden border border-[#d9d0c9]/70 bg-[#f7f7f7]">
@@ -1318,6 +1349,7 @@ export function BuilderFeedbackPanel({
   collapsed,
   hasUnreadFeedback,
   latestEval,
+  maxRosterSlots,
   inspectedPlayer,
   inspectionSource,
   onClearPlayerFocus,
@@ -1325,6 +1357,7 @@ export function BuilderFeedbackPanel({
   onExpand,
   onSuggestionFilter,
 }: BuilderFeedbackPanelProps) {
+  const isLineupOnly = (maxRosterSlots ?? 9) <= 5;
   const [activeTab, setActiveTab] = useState<FeedbackTab>("feedback");
   const tabs: { id: FeedbackTab; label: string; adminOnly?: boolean }[] = [
     { id: "feedback", label: "Feedback" },
@@ -1421,6 +1454,7 @@ export function BuilderFeedbackPanel({
             latestEval={latestEval}
             inspectedPlayer={inspectedPlayer}
             inspectionSource={inspectionSource}
+            isLineupOnly={isLineupOnly}
             onSuggestionFilter={onSuggestionFilter}
           />
         </div>
@@ -1432,6 +1466,7 @@ export function BuilderFeedbackPanel({
             legendDetail={legendDetail}
             latestEval={latestEval}
             inspectedPlayer={inspectedPlayer}
+            isLineupOnly={isLineupOnly}
           />
         </div>
 

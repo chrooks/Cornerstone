@@ -366,7 +366,7 @@ export function EvaluatePage() {
         const slot = index + 1;
         const isCornerstone = legend
           ? (player!.id === legend.id || player!.is_legend === true)
-          : player!.id === cornerstoneId;
+          : cornerstoneId ? player!.id === cornerstoneId : index === 0;
 
         if (isCornerstone && legend) {
           return {
@@ -387,7 +387,7 @@ export function EvaluatePage() {
         return {
           slot,
           is_cornerstone: isCornerstone,
-          player_id: player!.id,
+          player_id: player!.is_legend ? null : player!.id,
           legend_id: player!.is_legend ? player!.id : null,
           salary_snapshot: player!.salary ?? 0,
           player_name_snapshot: player!.name,
@@ -548,7 +548,7 @@ export function EvaluatePage() {
         <div id="eval-results" className="space-y-6">
 
           {/* Score display */}
-          <CohesionScoreDisplay evaluation={evaluation} />
+          <CohesionScoreDisplay evaluation={evaluation} isLineupOnly={evaluation.player_composites.length <= 5} />
 
           {/* Team Identity — LLM GM-memo narrative (final mode only) */}
           <TeamDescriptionCard

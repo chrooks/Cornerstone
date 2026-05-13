@@ -145,12 +145,14 @@ function SubscoreGrade({
   score,
   rotationScore,
   description,
+  hideRotation = false,
 }: {
   id: string;
   label: string;
   score: number;
   rotationScore?: number;
   description: string;
+  hideRotation?: boolean;
 }) {
   const rounded = Math.round(score * 10) / 10;
   const hasRotation = rotationScore != null;
@@ -182,21 +184,25 @@ function SubscoreGrade({
               {rounded.toFixed(1)}
             </span>
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[0.6875rem] text-[#0e0907]/48">Rotation Median</span>
-            <span
-              id={`${id}-rotation`}
-              className={cn("font-mono text-xs tabular-nums", hasRotation ? subscoreColorClass(rotationScore) : "text-[#0e0907]/35")}
-            >
-              {hasRotation ? rotRounded.toFixed(1) : "--"}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-3 border-t border-[#d9d0c9]/60 pt-1">
-            <span className="text-[0.625rem] text-[#0e0907]/38">Durability</span>
-            <span id={`${id}-delta`} className={cn("font-mono text-[0.6875rem] tabular-nums", deltaToneClass(score, rotationScore))}>
-              {deltaLabel(score, rotationScore)}
-            </span>
-          </div>
+          {!hideRotation && (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[0.6875rem] text-[#0e0907]/48">Rotation Median</span>
+                <span
+                  id={`${id}-rotation`}
+                  className={cn("font-mono text-xs tabular-nums", hasRotation ? subscoreColorClass(rotationScore) : "text-[#0e0907]/35")}
+                >
+                  {hasRotation ? rotRounded.toFixed(1) : "--"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-[#d9d0c9]/60 pt-1">
+                <span className="text-[0.625rem] text-[#0e0907]/38">Durability</span>
+                <span id={`${id}-delta`} className={cn("font-mono text-[0.6875rem] tabular-nums", deltaToneClass(score, rotationScore))}>
+                  {deltaLabel(score, rotationScore)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -211,17 +217,27 @@ function SubscoreGrade({
 
 interface CohesionScoreDisplayProps {
   evaluation: RosterEvaluation;
+  /** When true, hide rotation/bench sections and relabel for pure lineup eval. */
+  isLineupOnly?: boolean;
 }
 
-export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) {
+const LINEUP_ONLY_FACTOR_KEYS = new Set(["starting_5", "archetype_diversity"]);
+const LINEUP_ONLY_LABELS: Record<string, string> = {
+  starting_5: "Lineup Strength",
+  archetype_diversity: "Versatility",
+};
+
+export function CohesionScoreDisplay({ evaluation, isLineupOnly = false }: CohesionScoreDisplayProps) {
   const { star_rating, star_rating_breakdown, starting_lineup, lineup_summary } = evaluation;
-  const rotationMedian = lineup_summary.rotation_median_subscores;
-  const factorEntries = Object.entries(star_rating_breakdown).map(([key, value]) => ({
-    key,
-    label: scoreFactorLabel(key),
-    value,
-    description: scoreFactorExplainer(key),
-  }));
+  const rotationMedian = isLineupOnly ? undefined : lineup_summary.rotation_median_subscores;
+  const factorEntries = Object.entries(star_rating_breakdown)
+    .filter(([key]) => !isLineupOnly || LINEUP_ONLY_FACTOR_KEYS.has(key))
+    .map(([key, value]) => ({
+      key,
+      label: isLineupOnly ? (LINEUP_ONLY_LABELS[key] ?? scoreFactorLabel(key)) : scoreFactorLabel(key),
+      value,
+      description: scoreFactorExplainer(key),
+    }));
 
   return (
     <div id="cohesion-score-display" className="space-y-5 border border-[#d9d0c9] bg-[#f7f7f7] p-4 sm:p-5">
@@ -238,10 +254,12 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
             Final Team Read
           </p>
           <h2 className="mt-1 text-xl font-semibold tracking-tight text-[#0e0907]">
-            Rotation Cohesion
+            {isLineupOnly ? "Lineup Cohesion" : "Rotation Cohesion"}
           </h2>
           <p className="mt-1 max-w-[62ch] text-sm leading-6 text-[#0e0907]/62">
-            The engine evaluates the Starting Lineup, then tests the full Rotation across its Lineup Combinations.
+            {isLineupOnly
+              ? "The engine evaluates how these five players fit together across spacing, creation, defense, and synergy."
+              : "The engine evaluates the Starting Lineup, then tests the full Rotation across its Lineup Combinations."}
           </p>
         </div>
         <CohesionScoreBadge
@@ -255,25 +273,29 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
 
       <div className="w-full h-px bg-border" />
 
-      <div id="cohesion-rotation-summary" className="grid gap-2 sm:grid-cols-3">
+      <div id="cohesion-rotation-summary" className={cn("grid gap-2", isLineupOnly ? "sm:grid-cols-1" : "sm:grid-cols-3")}>
         <SummaryMetric
           id="cohesion-summary-starting-lineup"
-          label="Starting Lineup"
+          label={isLineupOnly ? "Lineup Strength" : "Starting Lineup"}
           value={starting_lineup.cohesion_score.toFixed(2)}
-          description="Cohesion score for slots 1 through 5."
+          description={isLineupOnly ? "Cohesion score for this starting five." : "Cohesion score for slots 1 through 5."}
         />
-        <SummaryMetric
-          id="cohesion-summary-viable-combos"
-          label="Viable Combos"
-          value={`${lineup_summary.viable_lineups}/${lineup_summary.total_lineups}`}
-          description="Lineup Combinations above the engine viability floor."
-        />
-        <SummaryMetric
-          id="cohesion-summary-median-combo"
-          label="Median Combo"
-          value={lineup_summary.median_score.toFixed(2)}
-          description="Middle Lineup Combination score across the Rotation."
-        />
+        {!isLineupOnly && (
+          <>
+            <SummaryMetric
+              id="cohesion-summary-viable-combos"
+              label="Viable Combos"
+              value={`${lineup_summary.viable_lineups}/${lineup_summary.total_lineups}`}
+              description="Lineup Combinations above the engine viability floor."
+            />
+            <SummaryMetric
+              id="cohesion-summary-median-combo"
+              label="Median Combo"
+              value={lineup_summary.median_score.toFixed(2)}
+              description="Middle Lineup Combination score across the Rotation."
+            />
+          </>
+        )}
       </div>
 
       <div className="w-full h-px bg-border" />
@@ -307,7 +329,7 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
           <p className="text-xs font-semibold text-muted-foreground">
             Subscores
           </p>
-          {rotationMedian && Object.keys(rotationMedian).length > 0 && (
+          {!isLineupOnly && rotationMedian && Object.keys(rotationMedian).length > 0 && (
             <p id="cohesion-subscores-legend" className="text-[9px] text-muted-foreground/60">
               Starting Lineup / <span className="opacity-50">Rotation Median</span>
             </p>
@@ -327,6 +349,7 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
                   score={starting_lineup.subscores[entry.key] ?? 0}
                   rotationScore={rotationMedian?.[entry.key]}
                   description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
+                  hideRotation={isLineupOnly}
                 />
               ))}
             </div>
@@ -348,6 +371,7 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
             score={starting_lineup.accentuation.strength_amplification}
             rotationScore={rotationMedian?.accentuation_strength}
             description={SUBSCORE_DESCRIPTIONS.accentuation_strength}
+            hideRotation={isLineupOnly}
           />
           <SubscoreGrade
             id="cohesion-accentuation-weakness"
@@ -355,6 +379,7 @@ export function CohesionScoreDisplay({ evaluation }: CohesionScoreDisplayProps) 
             score={starting_lineup.accentuation.weakness_coverage}
             rotationScore={rotationMedian?.accentuation_weakness}
             description={SUBSCORE_DESCRIPTIONS.accentuation_weakness}
+            hideRotation={isLineupOnly}
           />
         </div>
       </div>

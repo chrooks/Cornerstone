@@ -149,7 +149,7 @@ export function BuilderPage() {
   const [feedbackCollapsed, setFeedbackCollapsed] = useState(false);
   const [hasUnreadFeedback, setHasUnreadFeedback] = useState(false);
   const [narrowWorkspaceView, setNarrowWorkspaceView] = useState<NarrowWorkspaceView>("players");
-  const { latestEval } = useBuilderEvaluation({ allSlots: roster.allSlots, legendDetail, isAdmin });
+  const { latestEval } = useBuilderEvaluation({ allSlots: roster.allSlots, legendDetail, cornerstoneId, isAdmin });
 
   useEffect(() => {
     if (latestEval && feedbackCollapsed) setHasUnreadFeedback(true);
@@ -504,6 +504,7 @@ export function BuilderPage() {
             collapsed={feedbackCollapsed}
             hasUnreadFeedback={hasUnreadFeedback}
             latestEval={latestEval}
+            maxRosterSlots={maxRosterSlots}
             inspectedPlayer={inspection.player}
             inspectionSource={inspection.source}
             focusedPlayerName={focusedPlayerName}

@@ -106,10 +106,11 @@ export function buildPlayerPayload(
       });
     });
   } else {
-    // Active player cornerstone: all players come from allSlots
+    // Active player cornerstone (or FFA): all players come from allSlots
+    // When cornerstoneId is null (FFA), slot 1 is treated as cornerstone
     allSlots.forEach((p, index) => {
       if (p === null) return;
-      const isCornerstone = p.id === cornerstoneId;
+      const isCornerstone = cornerstoneId ? p.id === cornerstoneId : index === 0;
       result.push({
         name: p.name,
         slot: isCornerstone ? 0 : index + 1,

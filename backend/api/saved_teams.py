@@ -347,7 +347,7 @@ def _resolve_cornerstone_for_rebuild(
                 "available": True,
             }
 
-    # Fall back to active player cornerstone from saved roster
+    # Fall back to cornerstone row from saved roster
     cornerstone_row = next(
         (p for p in saved_team_players if p.get("is_cornerstone")),
         None,
@@ -361,6 +361,20 @@ def _resolve_cornerstone_for_rebuild(
             "status": "missing",
             "available": False,
         }
+
+    # Cornerstone row may be a Legend (FFA saves with legend_id on the row)
+    row_legend_id = cornerstone_row.get("legend_id")
+    if row_legend_id:
+        available, name = _check_legend_available(supabase, row_legend_id)
+        if available:
+            return {
+                "id": row_legend_id,
+                "legend_id": row_legend_id,
+                "player_id": None,
+                "name": name,
+                "status": "legend",
+                "available": True,
+            }
 
     # Active player cornerstone — resolve via source_player_id
     source_id = cornerstone_row.get("source_player_id")
@@ -415,6 +429,33 @@ def _resolve_players_for_rebuild(
             "salary_snapshot": player.get("salary_snapshot", 0),
             "skill_profile_snapshot": player.get("skill_profile_snapshot", {}),
         }
+
+        # Legend supporting players (FFA) — resolve via legends table
+        legend_id = player.get("legend_id")
+        if legend_id and not player.get("source_player_id"):
+            available, name = _check_legend_available(supabase, legend_id)
+            if available:
+                reports.append({
+                    "slot": player["slot"],
+                    "status": "matched",
+                    "saved": saved_data,
+                    "current": {
+                        "source_player_id": legend_id,
+                        "name": name,
+                        "salary": player.get("salary_snapshot", 0),
+                        "team": player.get("team_snapshot"),
+                        "position": player.get("position_snapshot"),
+                        "skill_profile_snapshot": player.get("skill_profile_snapshot", {}),
+                    },
+                })
+            else:
+                reports.append({
+                    "slot": player["slot"],
+                    "status": "missing",
+                    "saved": saved_data,
+                    "current": None,
+                })
+            continue
 
         canonical_id = player.get("canonical_player_id")
         source_id = player.get("source_player_id")
@@ -544,9 +585,15 @@ def rebuild_check(saved_team_id: str):
         }
 
         # Builder URL params
+        rules_json = current_ruleset_version.get("rules_json") or {}
+        cornerstone_source = rules_json.get("cornerstone_source", "legend")
         builder_params: dict[str, str] = {}
         if cornerstone_info["available"]:
-            builder_params["cornerstone"] = cornerstone_info["id"]
+            if cornerstone_source == "all":
+                # FFA: cornerstone goes into s1 (no separate cornerstone param)
+                builder_params["s1"] = cornerstone_info["id"]
+            else:
+                builder_params["cornerstone"] = cornerstone_info["id"]
         for report in player_reports:
             if report["status"] == "matched" and report["current"]:
                 builder_params[f"s{report['slot']}"] = report["current"]["source_player_id"]
