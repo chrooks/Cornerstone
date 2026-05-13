@@ -312,7 +312,7 @@ def test_save_team_persists_valid_standard_rotation(client, fake_supabase):
 
     assert resp.status_code == 201
     assert data["success"] is True
-    assert data["data"]["name"] == "Hakeem Olajuwon Standard Rotation"
+    assert data["data"]["name"] == "Hakeem Olajuwon Rotation"
     assert data["data"]["ruleset_slug"] == "standard"
     assert data["data"]["ruleset_version_id"] == STANDARD_RULESET_VERSION_ID
     assert data["data"]["snapshot_release_id"] == SNAPSHOT_RELEASE_ID

@@ -12,10 +12,10 @@ import type { PlayerWithSkills } from "@/lib/types";
 export interface UseBuilderSalaryReturn {
   /** Total salary consumed by the current lineup. */
   usedSalary: number;
-  /** Remaining cap space. */
-  remainingSalary: number;
-  /** Active salary cap (from RuleSet or default). */
-  salaryCap: number;
+  /** Remaining cap space (null when no cap). */
+  remainingSalary: number | null;
+  /** Active salary cap (null when uncapped, e.g. Free For All). */
+  salaryCap: number | null;
   /** Active legend salary (from RuleSet or default). */
   legendSalary: number;
   /** Highlight range (as fractions of cap) for the hovered slot in the salary gauge. */
@@ -49,7 +49,7 @@ export function useBuilderSalary(
   hoveredSlotIndex: number | null,
   options?: UseBuilderSalaryOptions,
 ): UseBuilderSalaryReturn {
-  const salaryCap = options?.salaryCap ?? DEFAULT_SALARY_CAP;
+  const salaryCap = options?.salaryCap ?? null;
   const legendSalary = options?.legendSalary ?? DEFAULT_LEGEND_SALARY;
   // ── Salary cap filter for player picker ──────────────────────────────────
   const [salaryCapFilter, setSalaryCapFilter] = useState<number | null>(null);
@@ -67,11 +67,11 @@ export function useBuilderSalary(
     }, 0);
   }, [allSlots, cornerstoneId, legendSalary]);
 
-  const remainingSalary = salaryCap - usedSalary;
+  const remainingSalary = salaryCap !== null ? salaryCap - usedSalary : null;
 
   // ── Highlight range for hovered slot ─────────────────────────────────────
   const highlightRange = useMemo((): { startFrac: number; endFrac: number } | null => {
-    if (hoveredSlotIndex === null) return null;
+    if (hoveredSlotIndex === null || salaryCap === null) return null;
 
     const orderedSalaries = allSlots.map((p) => {
       if (!p) return 0;

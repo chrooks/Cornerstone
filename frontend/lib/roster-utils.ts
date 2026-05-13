@@ -64,13 +64,16 @@ export function buildSlotsParams(
 /**
  * Build the player payload for POST /api/builder/evaluate.
  *
- * The cornerstone legend gets slot=0, is_cornerstone=true.
- * Supporting players from allSlots get slot=index+1, is_cornerstone=false.
- * Legend entries in allSlots are skipped (the legend is represented by legendDetail).
+ * When legendDetail is provided, the cornerstone legend gets slot=0,
+ * is_cornerstone=true, and legend entries in allSlots are skipped.
+ *
+ * When legendDetail is null (e.g. Free For All with active player cornerstone),
+ * the cornerstone is identified by cornerstoneId in allSlots and included directly.
  */
 export function buildPlayerPayload(
   allSlots: (PlayerWithSkills | null)[],
-  legendDetail: LegendDetail,
+  legendDetail: LegendDetail | null,
+  cornerstoneId?: string | null,
 ) {
   const result: Array<{
     name: string;
@@ -80,28 +83,42 @@ export function buildPlayerPayload(
     skills: Record<string, string>;
   }> = [];
 
-  // Cornerstone legend always goes as slot=0, is_cornerstone=true
-  result.push({
-    name: legendDetail.name,
-    slot: 0,
-    is_cornerstone: true,
-    height: legendDetail.height,
-    skills: Object.fromEntries(
-      Object.entries(legendDetail.profile).map(([k, v]) => [k, v ?? "None"]),
-    ),
-  });
-
-  // Supporting players from allSlots (0-indexed in array → slot = index + 1)
-  allSlots.forEach((p, index) => {
-    if (p === null || p.is_legend) return;
+  if (legendDetail) {
+    // Legend cornerstone: extract from legendDetail, skip legend entries in allSlots
     result.push({
-      name: p.name,
-      slot: index + 1,
-      is_cornerstone: false,
-      height: p.height,
-      skills: (p.skills ?? {}) as Record<string, string>,
+      name: legendDetail.name,
+      slot: 0,
+      is_cornerstone: true,
+      height: legendDetail.height,
+      skills: Object.fromEntries(
+        Object.entries(legendDetail.profile).map(([k, v]) => [k, v ?? "None"]),
+      ),
     });
-  });
+
+    allSlots.forEach((p, index) => {
+      if (p === null || p.is_legend) return;
+      result.push({
+        name: p.name,
+        slot: index + 1,
+        is_cornerstone: false,
+        height: p.height,
+        skills: (p.skills ?? {}) as Record<string, string>,
+      });
+    });
+  } else {
+    // Active player cornerstone: all players come from allSlots
+    allSlots.forEach((p, index) => {
+      if (p === null) return;
+      const isCornerstone = p.id === cornerstoneId;
+      result.push({
+        name: p.name,
+        slot: isCornerstone ? 0 : index + 1,
+        is_cornerstone: isCornerstone,
+        height: p.height,
+        skills: (p.skills ?? {}) as Record<string, string>,
+      });
+    });
+  }
 
   return result;
 }

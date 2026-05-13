@@ -47,7 +47,7 @@ export function useRosterSlots(
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // ── Flat 8-slot lineup state ────────────────────────────────────────────
+  // ── Flat slot lineup state ───────────────────────────────────────────────
   const [allSlots, setAllSlots] = useState<(PlayerWithSkills | null)[]>(
     Array(maxSlots).fill(null),
   );
@@ -55,17 +55,26 @@ export function useRosterSlots(
   // ── Currently selected slot (1-based). null = no active selection. ──────
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
 
+  // Resize slot array when maxSlots changes (e.g. RuleSet loads after mount)
+  useEffect(() => {
+    setAllSlots((prev) => {
+      if (prev.length === maxSlots) return prev;
+      if (maxSlots < prev.length) return prev.slice(0, maxSlots);
+      return [...prev, ...Array(maxSlots - prev.length).fill(null)];
+    });
+  }, [maxSlots]);
+
   // Hydrate slot state from URL once player/legend data loads
   useEffect(() => {
-    if (legendRows.length === 0) return;
+    if (legendRows.length === 0 && activeRows.length === 0) return;
     const allPlayerMap = new Map<string, PlayerWithSkills>([
       ...legendRows.map((p): [string, PlayerWithSkills] => [p.id, p]),
       ...activeRows.map((p): [string, PlayerWithSkills] => [p.id, p]),
     ]);
     const params = new URLSearchParams(searchParams.toString());
-    setAllSlots(readSlotsFromParams(params, cornerstoneId, allPlayerMap));
+    setAllSlots(readSlotsFromParams(params, cornerstoneId, allPlayerMap, maxSlots));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [legendRows, activeRows]);
+  }, [legendRows, activeRows, maxSlots]);
 
   // ── URL sync helper ─────────────────────────────────────────────────────
   const syncUrl = useCallback(

@@ -693,7 +693,7 @@ export interface SaveTeamPayload {
   rules_hash: string;
   snapshot_release_id?: string;
   name?: string;
-  cornerstone_legend_id: string;
+  cornerstone_legend_id: string | null;
   players: SaveTeamPlayerPayload[];
   evaluation: RosterEvaluation & {
     starting_lineup_score?: number;

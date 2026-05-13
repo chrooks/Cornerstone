@@ -40,8 +40,8 @@ interface PlayerPickerPanelProps {
   error: string | null;
   /** IDs already in the roster — shown as "in roster" and not selectable. */
   rosterPlayerIds: Set<string>;
-  /** Remaining salary budget. Players whose salary exceeds this are disabled. */
-  remainingSalary: number;
+  /** Remaining salary budget. Players whose salary exceeds this are disabled. null = no cap. */
+  remainingSalary: number | null;
   /** Currently selected slot (1-based). null = no active selection. Used only for the hint banner. */
   selectedSlot: number | null;
   /** Called on left-click — parent fills the appropriate slot. */
@@ -150,7 +150,7 @@ export function PlayerPickerPanel({
   const isUnavailable = useCallback((player: PlayerWithSkills): boolean => {
     if (rosterPlayerIds.has(player.id)) return true;
     if (!hasAvailableBuildSlot) return true;
-    if (player.salary != null && player.salary > remainingSalary) return true;
+    if (remainingSalary !== null && player.salary != null && player.salary > remainingSalary) return true;
     if (player.is_rookie_deal && rookieDealLimitReached) return true;
     return false;
   }, [hasAvailableBuildSlot, rosterPlayerIds, remainingSalary, rookieDealLimitReached]);

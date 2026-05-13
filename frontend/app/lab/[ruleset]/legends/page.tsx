@@ -11,7 +11,7 @@
 import Link from "next/link";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { listLegends, getLegend } from "@/lib/api";
+import { listLegends, getLegend, listPlayersWithSkills, listRuleSets } from "@/lib/api";
 import { PlayerPoolBrowser, type PlayerPoolBrowserCounts, type PlayerPoolViewMode } from "@/components/players/PlayerPoolBrowser";
 import { RandomPlayerButton } from "@/components/players/RandomPlayerButton";
 import { PlayerViewSizeToggle } from "@/components/players/PlayerView";
@@ -19,7 +19,7 @@ import { SORT_FIELD_OPTIONS, type SortKey } from "@/components/players/SortContr
 import {
   AVAILABLE_FILTERS,
 } from "@/components/players/playerFilters";
-import type { LegendSummary, LegendDetail, PlayerWithSkills } from "@/lib/types";
+import type { LegendSummary, LegendDetail, PlayerWithSkills, RuleSetSummary } from "@/lib/types";
 
 /* ── Transform a LegendDetail into PlayerWithSkills so the shared
      filter/sort/table infra works without modification ── */
@@ -89,15 +89,25 @@ export default function LegendsPage() {
   const params = useParams();
   const ruleset = (params.ruleset as string) ?? "standard";
 
+  /* ── RuleSet state — drives cornerstone_source and team_size ── */
+  const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
+  const cornerstoneSource: "legend" | "all" =
+    resolvedRuleSet?.rules?.cornerstone_source === "all" ? "all" : "legend";
+  const maxSlots = typeof resolvedRuleSet?.rules?.team_size === "number"
+    ? (resolvedRuleSet.rules.team_size as number)
+    : 9;
+
   /* ── Data state ── */
   const [legends, setLegends] = useState<LegendSummary[]>([]);
   const [details, setDetails] = useState<Record<string, LegendDetail>>({});
+  const [allPlayers, setAllPlayers] = useState<PlayerWithSkills[]>([]);
   const [loading, setLoading] = useState(true);
 
   /* ── PlayerWithSkills projection for filter/sort infra ── */
   const playersProjection = useMemo(() => {
+    if (cornerstoneSource === "all") return allPlayers;
     return legends.map((l) => legendToPlayerWithSkills(l, details[l.id] ?? null));
-  }, [legends, details]);
+  }, [cornerstoneSource, allPlayers, legends, details]);
 
   /* ── Sort state ── */
   const defaultSortKeys: SortKey[] = [{ field: "alltime_plus_count", direction: "desc" }];
@@ -109,10 +119,30 @@ export default function LegendsPage() {
   });
   const [visibleLegendPlayers, setVisibleLegendPlayers] = useState<PlayerWithSkills[]>([]);
 
-  /* ── Fetch legends on mount ── */
+  /* ── Fetch RuleSet on mount ── */
   useEffect(() => {
+    listRuleSets().then((res) => {
+      if (res.success && res.data) {
+        const match = res.data.find((rs) => rs.slug === ruleset);
+        if (match) setResolvedRuleSet(match);
+      }
+    });
+  }, [ruleset]);
+
+  /* ── Fetch player data once cornerstone_source is known ── */
+  useEffect(() => {
+    if (!resolvedRuleSet) return;
     let cancelled = false;
-    async function load() {
+
+    async function loadAllPlayers() {
+      const res = await listPlayersWithSkills();
+      if (!cancelled && res.success && res.data) {
+        setAllPlayers(res.data);
+        setLoading(false);
+      }
+    }
+
+    async function loadLegendsOnly() {
       const res = await listLegends();
       if (!cancelled && res.success && res.data) {
         setLegends(res.data);
@@ -131,9 +161,15 @@ export default function LegendsPage() {
         }
       }
     }
-    load();
+
+    if (cornerstoneSource === "all") {
+      loadAllPlayers();
+    } else {
+      loadLegendsOnly();
+    }
+
     return () => { cancelled = true; };
-  }, []);
+  }, [resolvedRuleSet, cornerstoneSource]);
 
   /* ── Row click in table → navigate to build with this cornerstone ── */
   const searchParams = useSearchParams();
@@ -141,14 +177,14 @@ export default function LegendsPage() {
     (player: PlayerWithSkills) => {
       const params = new URLSearchParams();
       params.set("cornerstone", player.id);
-      // Forward supporting player params from rebuild redirect (s2–s9)
-      for (let slot = 2; slot <= 9; slot++) {
+      // Forward supporting player params from rebuild redirect
+      for (let slot = 2; slot <= maxSlots; slot++) {
         const value = searchParams.get(`s${slot}`);
         if (value) params.set(`s${slot}`, value);
       }
       window.location.href = `/lab/${ruleset}/build?${params.toString()}`;
     },
-    [ruleset, searchParams],
+    [ruleset, searchParams, maxSlots],
   );
 
   return (
@@ -168,8 +204,8 @@ export default function LegendsPage() {
             {!loading && (
               <p className="text-[0.8125rem] text-[#0e0907]/45 mt-1">
                 {browserCounts.filteredCount === browserCounts.totalCount
-                  ? `${browserCounts.totalCount} legends`
-                  : `${browserCounts.filteredCount} of ${browserCounts.totalCount} legends`}
+                  ? `${browserCounts.totalCount} ${cornerstoneSource === "all" ? "players" : "legends"}`
+                  : `${browserCounts.filteredCount} of ${browserCounts.totalCount} ${cornerstoneSource === "all" ? "players" : "legends"}`}
               </p>
             )}
           </div>
@@ -178,7 +214,7 @@ export default function LegendsPage() {
               id="legends-random-cornerstone-btn"
               players={visibleLegendPlayers}
               label="Random Cornerstone"
-              emptyLabel="No Legends"
+              emptyLabel={cornerstoneSource === "all" ? "No Players" : "No Legends"}
               onPick={handleRowClick}
             />
           )}
@@ -205,16 +241,16 @@ export default function LegendsPage() {
             pageSizeOptions={[8, 16, 32]}
             viewSizes={["row", "card", "panel"]}
             defaultViewSize="panel"
-            defaultHiddenColumns={LEGEND_HIDDEN_COLUMNS}
-            availableFilters={LEGEND_FILTERS}
-            sortFieldOptions={LEGEND_SORT_FIELDS}
-            emptyMessage="No legends match your filters."
+            defaultHiddenColumns={cornerstoneSource === "all" ? [] : LEGEND_HIDDEN_COLUMNS}
+            availableFilters={cornerstoneSource === "all" ? AVAILABLE_FILTERS : LEGEND_FILTERS}
+            sortFieldOptions={cornerstoneSource === "all" ? SORT_FIELD_OPTIONS : LEGEND_SORT_FIELDS}
+            emptyMessage={cornerstoneSource === "all" ? "No players match your filters." : "No legends match your filters."}
             clearFiltersLabel="Clear filters"
             onCountsChange={setBrowserCounts}
             onVisiblePlayersChange={setVisibleLegendPlayers}
             onRowClick={handleRowClick}
-            getPanelSkills={(player) => details[player.id]?.profile}
-            getProfileLegendDetail={(player) => details[player.id] ?? null}
+            getPanelSkills={cornerstoneSource === "all" ? undefined : (player) => details[player.id]?.profile}
+            getProfileLegendDetail={cornerstoneSource === "all" ? undefined : (player) => details[player.id] ?? null}
             getPrimaryActionLabel={() => "Select as Cornerstone"}
             onPrimaryAction={(player) => handleRowClick(player)}
             renderViewToggle={({ viewSize, setViewSize }) => (

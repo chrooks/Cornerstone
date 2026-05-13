@@ -16,6 +16,7 @@ interface RuleSetDef {
   name: string;
   subtitle: string;
   status: "active" | "coming_soon" | "archived";
+  cornerstoneSource: "legend" | "all";
   rules: {
     teamSize: number;
     teamLabel: string;
@@ -57,6 +58,7 @@ function mapRuleSetSummary(ruleSet: RuleSetSummary): RuleSetDef {
     name: ruleSet.name,
     subtitle: ruleSet.description ?? "RuleSet details are being prepared.",
     status: ruleSet.status,
+    cornerstoneSource: rules.cornerstone_source === "all" ? "all" : "legend",
     rules: {
       teamSize: asNumber(rules.team_size, 9),
       teamLabel: asString(rules.team_label, "Rotation"),
@@ -358,7 +360,7 @@ function RuleSetCard({ rs }: { rs: RuleSetDef }) {
           {rs.status === "active" ? (
             <Link
               id={`ruleset-${rs.slug}-cta`}
-              href={`/lab/${rs.slug}/legends`}
+              href={rs.cornerstoneSource === "all" ? `/lab/${rs.slug}/build` : `/lab/${rs.slug}/legends`}
               className="
                 inline-flex items-center px-5 py-2.5 rounded-md
                 bg-[#ffa05c] text-[#0e0907] text-[0.8125rem] font-medium tracking-[0.01em]

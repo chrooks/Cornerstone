@@ -180,7 +180,7 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 
 interface DataReady {
   slots: (PlayerWithSkills | null)[];
-  legend: LegendDetail;
+  legend: LegendDetail | null;
 }
 
 const TEAM_DESCRIPTION_CACHE_VERSION = "team-description-v1";
@@ -199,14 +199,14 @@ function hashString(value: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function teamDescriptionCacheKey(slots: (PlayerWithSkills | null)[], legend: LegendDetail): string {
+function teamDescriptionCacheKey(slots: (PlayerWithSkills | null)[], legend: LegendDetail | null): string {
+  const cornerstone = legend
+    ? { id: legend.id, height: legend.height, skills: sortedSkillEntries(legend.profile) }
+    : { id: slots[0]?.id ?? null, height: slots[0]?.height ?? null, skills: sortedSkillEntries((slots[0]?.skills ?? {}) as Record<string, string>) };
+
   const fingerprint = {
     version: TEAM_DESCRIPTION_CACHE_VERSION,
-    cornerstone: {
-      id: legend.id,
-      height: legend.height,
-      skills: sortedSkillEntries(legend.profile),
-    },
+    cornerstone,
     slots: slots.map((player, index) => (
       player
         ? {
@@ -260,14 +260,15 @@ export function EvaluatePage() {
   // Capture searchParams at mount — stable ref avoids closure staleness
   const paramsRef = useRef(searchParams.toString());
 
-  // Phase 1: load players + legend
+  // Phase 1: load players + legend (legend fetch conditional on cornerstone type)
   useEffect(() => {
-    if (!cornerstoneId) { router.replace(buildPath); return; }
+    // FFA RuleSets have no cornerstone param — slots are encoded as s1..sN
+    const hasSlotParams = new URLSearchParams(paramsRef.current).has("s1");
+    if (!cornerstoneId && !hasSlotParams) { router.replace(buildPath); return; }
 
-    Promise.all([listPlayersWithSkills(), getLegend(cornerstoneId), listRuleSets()])
-      .then(([playersRes, legendRes, rulesetsRes]) => {
+    Promise.all([listPlayersWithSkills(), listRuleSets()])
+      .then(async ([playersRes, rulesetsRes]) => {
         if (!playersRes.success || !playersRes.data) throw new Error(playersRes.error ?? "Failed to load players");
-        if (!legendRes.success || !legendRes.data) throw new Error(legendRes.error ?? "Failed to load legend");
 
         // Resolve RuleSet Version for the current Lab RuleSet slug
         const rulesetSlug = ruleset ?? "standard";
@@ -276,7 +277,20 @@ export function EvaluatePage() {
 
         const playerMap = new Map(playersRes.data.map((p) => [p.id, p]));
         const slots = readSlotsFromParams(new URLSearchParams(paramsRef.current), cornerstoneId, playerMap);
-        setDataReady({ slots, legend: legendRes.data });
+
+        // Determine if cornerstone is a Legend — fetch detail only if so
+        let legend: LegendDetail | null = null;
+        if (cornerstoneId) {
+          const cornerstonePlayer = playerMap.get(cornerstoneId);
+          if (cornerstonePlayer?.is_legend) {
+            const legendRes = await getLegend(cornerstoneId);
+            if (legendRes.success && legendRes.data) {
+              legend = legendRes.data;
+            }
+          }
+        }
+
+        setDataReady({ slots, legend });
         setEvalState("evaluating");
       })
       .catch((err: unknown) => {
@@ -291,7 +305,7 @@ export function EvaluatePage() {
   useEffect(() => {
     if (!dataReady || adminLoading) return;
 
-    const players = buildPlayerPayload(dataReady.slots, dataReady.legend);
+    const players = buildPlayerPayload(dataReady.slots, dataReady.legend, cornerstoneId);
     const descriptionCacheKey = teamDescriptionCacheKey(dataReady.slots, dataReady.legend);
     const cachedDescription = readCachedTeamDescription(descriptionCacheKey);
     setEvalState("evaluating");
@@ -336,38 +350,45 @@ export function EvaluatePage() {
     if (!dataReady || !evaluation) return null;
     if (!resolvedRuleSet?.current_version) return null;
 
-    const filledSlots = dataReady.slots.slice(0, MAX_ROSTER_SLOTS);
+    const rulesJson = resolvedRuleSet.rules ?? {};
+    const maxSlots = typeof rulesJson.team_size === "number" ? (rulesJson.team_size as number) : MAX_ROSTER_SLOTS;
+    const filledSlots = dataReady.slots.slice(0, maxSlots);
     if (filledSlots.some((player) => player === null)) return null;
+
+    const legend = dataReady.legend;
 
     return {
       ruleset_slug: ruleset ?? "standard",
       ruleset_version_id: resolvedRuleSet.current_version.id,
       rules_hash: resolvedRuleSet.current_version.rules_hash,
-      cornerstone_legend_id: dataReady.legend.id,
+      cornerstone_legend_id: legend?.id ?? null,
       players: filledSlots.map((player, index) => {
         const slot = index + 1;
-        const isCornerstone = player!.id === dataReady.legend.id || player!.is_legend === true;
-        if (isCornerstone) {
+        const isCornerstone = legend
+          ? (player!.id === legend.id || player!.is_legend === true)
+          : player!.id === cornerstoneId;
+
+        if (isCornerstone && legend) {
           return {
             slot,
             is_cornerstone: true,
             player_id: null,
-            legend_id: dataReady.legend.id,
+            legend_id: legend.id,
             salary_snapshot: LEGEND_SALARY,
-            player_name_snapshot: dataReady.legend.name,
-            team_snapshot: dataReady.legend.team,
-            position_snapshot: dataReady.legend.position,
+            player_name_snapshot: legend.name,
+            team_snapshot: legend.team,
+            position_snapshot: legend.position,
             skill_profile_snapshot: Object.fromEntries(
-              Object.entries(dataReady.legend.profile).map(([skill, tier]) => [skill, tier ?? "None"]),
+              Object.entries(legend.profile).map(([skill, tier]) => [skill, tier ?? "None"]),
             ),
           };
         }
 
         return {
           slot,
-          is_cornerstone: false,
+          is_cornerstone: isCornerstone,
           player_id: player!.id,
-          legend_id: null,
+          legend_id: player!.is_legend ? player!.id : null,
           salary_snapshot: player!.salary ?? 0,
           player_name_snapshot: player!.name,
           team_snapshot: player!.team,

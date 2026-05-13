@@ -64,19 +64,15 @@ export function BuilderPage() {
       .finally(() => setDataLoading(false));
   }, []);
 
-  // ── Cornerstone — derived from URL + legend rows ──────────────────────────
+  // ── Cornerstone — derived from URL + all player rows ───────────────────────
   const cornerstoneId = searchParams.get("cornerstone");
   const cornerstone = useMemo(
-    () => legendRows.find((l) => l.id === cornerstoneId) ?? null,
-    [legendRows, cornerstoneId],
+    () =>
+      legendRows.find((l) => l.id === cornerstoneId) ??
+      activeRows.find((p) => p.id === cornerstoneId) ??
+      null,
+    [legendRows, activeRows, cornerstoneId],
   );
-
-  // ── No cornerstone → redirect to Legends picker ──────────────────────────
-  useEffect(() => {
-    if (!dataLoading && !cornerstoneId) {
-      router.replace(`/lab/${ruleset}/legends`);
-    }
-  }, [dataLoading, cornerstoneId, ruleset, router]);
 
   // ── Full Legend profile for Skill Profile and Feedback ────────────────────
   const [legendDetail, setLegendDetail] = useState<LegendDetail | null>(null);
@@ -86,12 +82,17 @@ export function BuilderPage() {
       setLegendDetail(null);
       return;
     }
+    // Only fetch legend detail if cornerstone is a Legend
+    if (!cornerstone?.is_legend) {
+      setLegendDetail(null);
+      return;
+    }
     getLegend(cornerstoneId)
       .then((res) => {
         if (res.success && res.data) setLegendDetail(res.data);
       })
       .catch(() => {/* grid handles missing profile gracefully */});
-  }, [cornerstoneId]);
+  }, [cornerstoneId, cornerstone?.is_legend]);
 
   // ── Fetch active RuleSet for live rules_json ─────────────────────────────
   const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
@@ -119,6 +120,18 @@ export function BuilderPage() {
   const rookieDealLimit = typeof rulesJson?.rookie_deal_limit === "number"
     ? (rulesJson.rookie_deal_limit as number)
     : undefined;
+  const cornerstoneSource: "legend" | "all" =
+    rulesJson?.cornerstone_source === "all" ? "all" : "legend";
+  const teamLabel = typeof rulesJson?.team_label === "string"
+    ? (rulesJson.team_label as string)
+    : undefined;
+
+  // ── No cornerstone → redirect to cornerstone picker (legend-only RuleSets)
+  useEffect(() => {
+    if (!dataLoading && resolvedRuleSet && !cornerstoneId && cornerstoneSource === "legend") {
+      router.replace(`/lab/${ruleset}/legends`);
+    }
+  }, [dataLoading, resolvedRuleSet, cornerstoneId, cornerstoneSource, ruleset, router]);
 
   // ── Domain hooks ──────────────────────────────────────────────────────────
   const roster = useRosterSlots(cornerstoneId, legendRows, activeRows, maxRosterSlots);
@@ -316,7 +329,8 @@ export function BuilderPage() {
     );
   }
 
-  if (!cornerstoneId || !cornerstone) {
+  // Legend-only RuleSets need a cornerstone to render; FFA starts empty
+  if (cornerstoneSource === "legend" && (!cornerstoneId || !cornerstone)) {
     return null;
   }
 
@@ -325,8 +339,9 @@ export function BuilderPage() {
     <main id="builder-page" className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-screen-2xl flex-col px-3 pb-4 pt-3 sm:px-4 lg:h-[calc(100vh-3rem)] lg:px-6 lg:pb-2 lg:pt-4">
       {/* Row 1: Header — breadcrumb, title, SalaryCap gauge, Evaluate CTA */}
       <BuilderHeader
-        cornerstone={cornerstone}
+        cornerstone={cornerstone ?? null}
         ruleset={ruleset}
+        teamLabel={teamLabel}
         allSlotsFilled={roster.allSlots.every((p) => p !== null)}
       />
 
@@ -419,7 +434,7 @@ export function BuilderPage() {
           style={!feedbackCollapsed ? { "--builder-playerpool-flex": `${1 - feedbackFrac} 1 0%` } as CSSProperties : undefined}
         >
           <PlayerPickerPanel
-            players={activeRows}
+            players={cornerstoneSource === "all" ? [...activeRows, ...legendRows] : activeRows}
             loading={false}
             error={null}
             remainingSalary={salary.remainingSalary}
