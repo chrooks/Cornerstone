@@ -300,6 +300,7 @@ def _serialize_saved_team(
         "name": saved_team["name"],
         "ruleset_slug": saved_team["ruleset_slug"],
         "ruleset_version_id": saved_team.get("ruleset_version_id"),
+        "ruleset_version_label": saved_team.get("ruleset_version_label"),
         "ruleset_version_hash": saved_team.get("ruleset_version_hash"),
         "snapshot_release_id": saved_team["snapshot_release_id"],
         "visibility": saved_team["visibility"],
@@ -658,6 +659,15 @@ def get_saved_team(saved_team_id: str):
             return _err("Saved Team not found", status=404)
 
         saved_team = rows[0]
+
+        # Resolve version_label for display
+        version_id = saved_team.get("ruleset_version_id")
+        if version_id:
+            ver_res = supabase.table("ruleset_versions").select("version_label").eq("id", version_id).limit(1).execute()
+            ver_rows = ver_res.data or []
+            if ver_rows:
+                saved_team["ruleset_version_label"] = ver_rows[0].get("version_label")
+
         return _ok(_serialize_saved_team(
             saved_team,
             _players_for_saved_team(supabase, saved_team["id"]),

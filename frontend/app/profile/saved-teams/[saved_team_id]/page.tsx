@@ -350,10 +350,10 @@ export default function SavedTeamDetailPage() {
         <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">
           <dt className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
             <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
-            RuleSet Version ID
+            Rule Set
           </dt>
-          <dd id="saved-team-detail-ruleset-version" className="mt-2 break-all font-mono text-sm text-[oklch(0.18_0.02_45)]">
-            {savedTeam.ruleset_version_id ?? "Unknown"}
+          <dd id="saved-team-detail-ruleset-version" className="mt-2 font-mono text-sm text-[oklch(0.18_0.02_45)]">
+            {formatRulesetName(savedTeam.ruleset_slug)}{savedTeam.ruleset_version_label ? ` · ${savedTeam.ruleset_version_label}` : ""}
           </dd>
         </div>
         <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">

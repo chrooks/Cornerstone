@@ -706,6 +706,7 @@ export interface SavedTeamSummary {
   name: string;
   ruleset_slug: string;
   ruleset_version_id: string | null;
+  ruleset_version_label?: string | null;
   ruleset_version_hash: string | null;
   snapshot_release_id: string;
   visibility: "private" | "unlisted" | "public";

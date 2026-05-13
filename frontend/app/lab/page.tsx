@@ -83,8 +83,8 @@ function RulesPanel({ rs }: { rs: RuleSetDef }) {
     { label: "Format", value: rs.rules.teamLabel },
     { label: "Salary Cap", value: rs.rules.salaryCap },
     { label: "Cornerstone", value: rs.rules.cornerstoneRule },
-    { label: "PlayerPool", value: rs.rules.playerPool },
-    { label: "RookieDeal Limit", value: rs.rules.rookieDealLimit === 0 ? "None" : `${rs.rules.rookieDealLimit} max` },
+    { label: "Player Pool", value: rs.rules.playerPool },
+    { label: "Rookie Deal Limit", value: rs.rules.rookieDealLimit === 0 ? "None" : `${rs.rules.rookieDealLimit} max` },
   ];
 
   return (
