@@ -56,6 +56,7 @@ interface MockSavedTeam {
   cornerstone: string;
   favorite: boolean;
   ruleset: string;
+  rulesetSlug: string;
   snapshotRelease: string;
   evaluationVersion: string;
   createdAt: string;
@@ -249,6 +250,7 @@ function mapSavedTeamSummary(team: SavedTeamSummary, profile: UserProfile | null
     cornerstone: cornerstone?.player_name_snapshot ?? "Unknown Cornerstone",
     favorite: normalizePlayerName(profile?.favorite_player_name ?? "") === normalizePlayerName(cornerstone?.player_name_snapshot ?? ""),
     ruleset: formatRulesetName(team.ruleset_slug),
+    rulesetSlug: team.ruleset_slug,
     snapshotRelease: team.snapshot_release_id,
     evaluationVersion: team.evaluation?.evaluation_version ?? "cohesion-v1",
     createdAt: formatSavedDate(team.created_at),
@@ -600,7 +602,7 @@ function RebuildCheckModal({
                         const origCap = report.version_drift.original?.rules_json?.salary_cap;
                         const currCap = report.version_drift.current.rules_json?.salary_cap;
                         if (typeof origCap === "number" && typeof currCap === "number" && origCap !== currCap) {
-                          return ` · SalaryCap: ${formatMoney(origCap)} → ${formatMoney(currCap)}`;
+                          return ` · Salary Cap: ${formatMoney(origCap)} → ${formatMoney(currCap)}`;
                         }
                         return "";
                       })()}
@@ -816,12 +818,19 @@ function SavedTeamRecord({
             value={team.starRating}
             featured={featured}
             ariaLabel={`${team.name} Cohesion score: ${team.starRating.toFixed(1)} out of 5`}
-            breakdown={[
-              { label: "Starting Lineup", value: team.scoreBreakdown.startingLineup },
-              { label: "Depth", value: team.scoreBreakdown.depth },
-              { label: "Versatility", value: team.scoreBreakdown.versatility },
-              { label: "Floor", value: team.scoreBreakdown.floor },
-            ]}
+            breakdown={
+              team.teamType === "Lineup"
+                ? [
+                    { label: "Lineup Strength", value: team.scoreBreakdown.startingLineup },
+                    { label: "Versatility", value: team.scoreBreakdown.versatility },
+                  ]
+                : [
+                    { label: "Starting Lineup", value: team.scoreBreakdown.startingLineup },
+                    { label: "Depth", value: team.scoreBreakdown.depth },
+                    { label: "Versatility", value: team.scoreBreakdown.versatility },
+                    { label: "Floor", value: team.scoreBreakdown.floor },
+                  ]
+            }
           />
         </div>
 
@@ -848,16 +857,23 @@ function SavedTeamRecord({
 
         <div
           id={`profile-saved-team-${team.id}-players`}
-          className={cn("grid grid-cols-5 sm:grid-cols-9", featured ? "gap-3" : "gap-2.5")}
+          className={cn(
+            team.players.length > 9
+              ? "flex overflow-x-auto"
+              : "grid grid-cols-5 sm:grid-cols-9",
+            featured ? "gap-3" : "gap-2.5",
+          )}
         >
           {team.players.map((player, index) => (
             <div
               key={`${team.id}-${player.name}`}
               className={cn(
                 "relative flex aspect-[4/5] items-end justify-center overflow-hidden rounded-md border bg-[oklch(0.95_0.006_62)]",
-                featured
-                  ? "min-h-[3.7rem] sm:min-h-[4.35rem] lg:min-h-[4.8rem]"
-                  : "min-h-[3.2rem] sm:min-h-[3.7rem] lg:min-h-[4rem]",
+                team.players.length > 9
+                  ? "shrink-0 min-h-[2.8rem] min-w-[3rem] w-16 sm:min-h-[3.2rem] lg:min-h-[3.5rem]"
+                  : featured
+                    ? "min-h-[3.7rem] sm:min-h-[4.35rem] lg:min-h-[4.8rem]"
+                    : "min-h-[3.2rem] sm:min-h-[3.7rem] lg:min-h-[4rem]",
                 index === 0
                   ? "border-[oklch(0.66_0.16_55)]"
                   : "border-[oklch(0.84_0.018_62)]"
@@ -886,19 +902,21 @@ function SavedTeamRecord({
             </dt>
             <dd className="mt-1 font-mono text-sm tabular-nums text-[oklch(0.18_0.02_45)]">{team.snapshotRelease}</dd>
           </div>
-          <div>
-            <dt className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
-              <CircleDollarSign className="h-3.5 w-3.5" aria-hidden="true" />
-              SalaryCap
-            </dt>
-            <dd className="mt-1">
-              <SalaryCapMeter
-                id={`profile-saved-team-${team.id}-salary-meter`}
-                used={team.salaryUsed}
-                cap={team.salaryCap}
-              />
-            </dd>
-          </div>
+          {!team.rulesetSlug.startsWith("free-for-all") && (
+            <div>
+              <dt className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
+                <CircleDollarSign className="h-3.5 w-3.5" aria-hidden="true" />
+                Salary Cap
+              </dt>
+              <dd className="mt-1">
+                <SalaryCapMeter
+                  id={`profile-saved-team-${team.id}-salary-meter`}
+                  used={team.salaryUsed}
+                  cap={team.salaryCap}
+                />
+              </dd>
+            </div>
+          )}
         </dl>
 
         <div id={`profile-saved-team-${team.id}-actions`} className="flex flex-wrap gap-2">
@@ -957,7 +975,7 @@ function SavedTeamRecord({
         <RebuildCheckModal
           savedTeamId={team.id}
           savedTeamName={team.name}
-          rulesetSlug={getRulesetSlug(team.ruleset)}
+          rulesetSlug={team.rulesetSlug}
           onClose={() => setRebuildModalOpen(false)}
         />
       )}

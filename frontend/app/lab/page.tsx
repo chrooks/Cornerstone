@@ -6,7 +6,7 @@ import { listRuleSets } from "@/lib/api";
 import type { RuleSetSummary } from "@/lib/types";
 
 /* ── Tab type for the notebook-style RuleSet cards ── */
-type TabId = "rules" | "players" | "community";
+type TabId = "rules" | "community";
 
 /* ── RuleSet data model ──
    Each RuleSet defines the constraints for a Lab session.
@@ -24,11 +24,6 @@ interface RuleSetDef {
     cornerstoneRule: string;
     playerPool: string;
     rookieDealLimit: number;
-  };
-  players: {
-    legendCount: number;
-    activeCount: string;
-    sampleNames: string[];
   };
   community: {
     teamsBuilt: number;
@@ -67,13 +62,6 @@ function mapRuleSetSummary(ruleSet: RuleSetSummary): RuleSetDef {
       playerPool: asString(rules.player_pool, isStandard ? "Current Snapshot + Legends" : "PlayerPool details pending"),
       rookieDealLimit: asNumber(rules.rookie_deal_limit, 0),
     },
-    players: {
-      legendCount: isStandard ? 36 : 0,
-      activeCount: isStandard ? "450+" : "-",
-      sampleNames: isStandard
-        ? ["M. Jordan", "L. James", "K. Bryant", "S. Curry", "T. Duncan", "H. Olajuwon"]
-        : [],
-    },
     community: {
       teamsBuilt: 0,
       topCornerstone: "-",
@@ -85,7 +73,6 @@ function mapRuleSetSummary(ruleSet: RuleSetSummary): RuleSetDef {
 /* ── Notebook tab labels ── */
 const TABS: { id: TabId; label: string }[] = [
   { id: "rules", label: "Rules" },
-  { id: "players", label: "Players" },
   { id: "community", label: "Community" },
 ];
 
@@ -94,7 +81,7 @@ function RulesPanel({ rs }: { rs: RuleSetDef }) {
   const items = [
     { label: "Team Size", value: `${rs.rules.teamSize} players`, mono: `${rs.rules.teamSize}` },
     { label: "Format", value: rs.rules.teamLabel },
-    { label: "SalaryCap", value: rs.rules.salaryCap },
+    { label: "Salary Cap", value: rs.rules.salaryCap },
     { label: "Cornerstone", value: rs.rules.cornerstoneRule },
     { label: "PlayerPool", value: rs.rules.playerPool },
     { label: "RookieDeal Limit", value: rs.rules.rookieDealLimit === 0 ? "None" : `${rs.rules.rookieDealLimit} max` },
@@ -118,59 +105,6 @@ function RulesPanel({ rs }: { rs: RuleSetDef }) {
         </div>
       ))}
     </dl>
-  );
-}
-
-/* ── Players tab content: PlayerPool preview with legend count and sample names ── */
-function PlayersPanel({ rs }: { rs: RuleSetDef }) {
-  return (
-    <div id={`ruleset-${rs.slug}-players`} className="flex flex-col gap-4">
-      {/* Stat readouts in mono */}
-      <div className="flex gap-6">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[0.6875rem] font-medium tracking-[0.03em] uppercase text-[#0e0907]/45">
-            Legends
-          </span>
-          <span className="font-mono text-xl tabular-nums text-[#0e0907]">
-            {rs.players.legendCount}
-          </span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[0.6875rem] font-medium tracking-[0.03em] uppercase text-[#0e0907]/45">
-            Active
-          </span>
-          <span className="font-mono text-xl tabular-nums text-[#0e0907]">
-            {rs.players.activeCount}
-          </span>
-        </div>
-      </div>
-
-      {/* Sample legend names as compact chips */}
-      {rs.players.sampleNames.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <span className="text-[0.6875rem] font-medium tracking-[0.01em] text-[#0e0907]/45 uppercase">
-            Sample Legends
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {rs.players.sampleNames.map((name) => (
-              <span
-                key={name}
-                className="inline-flex px-2 py-0.5 text-[0.75rem] font-medium text-[#0e0907]/70 bg-[#0e0907]/[0.04] border border-[#d9d0c9]/80 rounded-sm"
-              >
-                {name}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Empty state for coming-soon RuleSets */}
-      {rs.players.sampleNames.length === 0 && (
-        <p className="text-[0.8125rem] text-[#0e0907]/40 italic">
-          PlayerPool details available at launch.
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -349,7 +283,6 @@ function RuleSetCard({ rs }: { rs: RuleSetDef }) {
               hidden={activeTab !== tab.id}
             >
               {tab.id === "rules" && <RulesPanel rs={rs} />}
-              {tab.id === "players" && <PlayersPanel rs={rs} />}
               {tab.id === "community" && <CommunityPanel rs={rs} />}
             </div>
           ))}
