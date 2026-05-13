@@ -58,7 +58,7 @@ SUGGESTION_TEMPLATES: dict[str, str] = {
     "off_ball": "Add an off-ball threat - a cutter or movement shooter.",
     "off_ball_impact": "Add an off-ball threat - a cutter or movement shooter.",
     DEFENSE_GAP_CATEGORY: "Add a versatile defender to close the gap.",
-    DEPTH_CATEGORY: "Add more players to fill out the rotation.",
+    DEPTH_CATEGORY: "Add more players to fill out the team.",
 }
 
 # Maps composite categories to archetype labels for opportunity suggestions.
@@ -553,7 +553,7 @@ def _opportunity_suggestions(
                 category,
                 severity,
                 avg,
-                f"{archetype.capitalize()} would most improve this rotation.",
+                f"{archetype.capitalize()} would most improve this team.",
             )
         )
 
@@ -669,7 +669,7 @@ def _mode_b_notes(
                         key,
                         severity * 0.8,  # slightly lower than starting-lineup weaknesses
                         med,
-                        f"Rotation-wide {label} is a concern across viable lineups.",
+                        f"Team-wide {label} is a concern across viable lineups.",
                     )
                 )
 
@@ -743,7 +743,7 @@ def generate_notes(
                 DEPTH_CATEGORY,
                 1.0,
                 float(len(players)),
-                f"Only {len(players)} player{'s' if len(players) != 1 else ''} in the rotation"
+                f"Only {len(players)} player{'s' if len(players) != 1 else ''} on the team"
                 f" \u2014 need at least {NOTE_MIN_ROSTER_SIZE} for a viable lineup.",
             ),
         )

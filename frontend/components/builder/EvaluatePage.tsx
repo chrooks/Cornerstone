@@ -19,7 +19,7 @@ import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam, listRuleSet
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { readSlotsFromParams, buildPlayerPayload } from "@/lib/roster-utils";
-import { LEGEND_SALARY, MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { LEGEND_SALARY, MAX_ROSTER_SLOTS, teamLabelForSize } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { NotesList } from "./NotesList";
@@ -118,13 +118,19 @@ function RotationSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSki
   const players = allSlots.filter(Boolean) as PlayerWithSkills[];
   const starterPlayers = players.slice(0, 5);
   const benchPlayers = players.slice(5);
+  // Scale portraits down for larger rosters so 12 fits without scrolling
+  const compact = players.length > 9;
+  const portraitSize = compact ? 48 : 64;
+  const sizeClass = compact ? "h-12 w-12" : "h-16 w-16";
+  const nameWidth = compact ? "w-[3.5rem]" : "w-[4.5rem]";
+  const gap = compact ? "gap-2" : "gap-3";
 
   function renderPlayer(p: PlayerWithSkills, index: number) {
     const isCornerstone = p.id === cornerstoneId;
     return (
       <div key={p.id} id={`eval-slot-${index + 1}`} className="flex-shrink-0 flex flex-col items-center gap-1">
-        <div className="relative h-16 w-16 overflow-hidden border-2 border-border">
-          <PlayerHeadshot nba_api_id={p.nba_api_id} size={64} name={p.name} />
+        <div className={`relative ${sizeClass} overflow-hidden border-2 border-border`}>
+          <PlayerHeadshot nba_api_id={p.nba_api_id} size={portraitSize} name={p.name} />
           {isCornerstone && (
             <span
               id={`eval-slot-${index + 1}-legend-badge`}
@@ -136,7 +142,7 @@ function RotationSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSki
         </div>
         <p
           id={`eval-slot-${index + 1}-name`}
-          className="w-[4.5rem] truncate text-center text-[10px] leading-tight text-muted-foreground"
+          className={`${nameWidth} truncate text-center text-[10px] leading-tight text-muted-foreground`}
           title={p.name}
         >
           {p.name.split(" ").pop()}
@@ -146,22 +152,22 @@ function RotationSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSki
   }
 
   return (
-    <div id="eval-rotation-summary" className="overflow-x-auto border border-[#d9d0c9] bg-[#f7f7f7] px-6 py-3">
-      <div id="eval-rotation-summary-list" className="mx-auto flex w-max items-start justify-center">
-        <div id="eval-rotation-starters" className="flex items-start gap-3">
+    <div id="eval-rotation-summary" className="border border-[#d9d0c9] bg-[#f7f7f7] px-6 py-3">
+      <div id="eval-rotation-summary-list" className={`mx-auto flex flex-wrap items-start justify-center ${gap}`}>
+        <div id="eval-rotation-starters" className={`flex items-start ${gap}`}>
           {starterPlayers.map((player, index) => renderPlayer(player, index))}
         </div>
 
         {benchPlayers.length > 0 && (
           <>
-            <div id="eval-rotation-boundary" className="mx-4 flex self-stretch flex-col items-center">
+            <div id="eval-rotation-boundary" className="mx-2 flex self-stretch flex-col items-center">
               <div className="w-px flex-1 bg-[#d9d0c9]" />
               <span className="py-1 text-[0.5rem] font-semibold uppercase tracking-[1px] text-[#9a938a]">
                 Bench
               </span>
               <div className="w-px flex-1 bg-[#d9d0c9]" />
             </div>
-            <div id="eval-rotation-bench" className="flex items-start gap-3">
+            <div id="eval-rotation-bench" className={`flex items-start ${gap}`}>
               {benchPlayers.map((player, index) => renderPlayer(player, index + 5))}
             </div>
           </>
@@ -276,7 +282,8 @@ export function EvaluatePage() {
         if (matched) setResolvedRuleSet(matched);
 
         const playerMap = new Map(playersRes.data.map((p) => [p.id, p]));
-        const slots = readSlotsFromParams(new URLSearchParams(paramsRef.current), cornerstoneId, playerMap);
+        const teamSize = typeof matched?.rules?.team_size === "number" ? (matched.rules.team_size as number) : MAX_ROSTER_SLOTS;
+        const slots = readSlotsFromParams(new URLSearchParams(paramsRef.current), cornerstoneId, playerMap, teamSize);
 
         // Determine if cornerstone is a Legend — fetch detail only if so
         let legend: LegendDetail | null = null;
@@ -421,7 +428,8 @@ export function EvaluatePage() {
     const payload = buildSavePayload();
     if (!payload) {
       setSaveState("error");
-      setSaveError("Complete this Rotation before saving.");
+      const label = (resolvedRuleSet?.rules?.team_label as string | undefined) ?? "Rotation";
+      setSaveError(`Complete this ${label} before saving.`);
       return;
     }
 
@@ -548,7 +556,11 @@ export function EvaluatePage() {
         <div id="eval-results" className="space-y-6">
 
           {/* Score display */}
-          <CohesionScoreDisplay evaluation={evaluation} isLineupOnly={evaluation.player_composites.length <= 5} />
+          <CohesionScoreDisplay
+            evaluation={evaluation}
+            isLineupOnly={evaluation.player_composites.length <= 5}
+            teamLabel={resolvedRuleSet?.rules?.team_label as string | undefined}
+          />
 
           {/* Team Identity — LLM GM-memo narrative (final mode only) */}
           <TeamDescriptionCard

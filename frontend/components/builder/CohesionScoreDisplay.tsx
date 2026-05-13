@@ -146,6 +146,7 @@ function SubscoreGrade({
   rotationScore,
   description,
   hideRotation = false,
+  medianLabel = "Rotation Median",
 }: {
   id: string;
   label: string;
@@ -153,6 +154,7 @@ function SubscoreGrade({
   rotationScore?: number;
   description: string;
   hideRotation?: boolean;
+  medianLabel?: string;
 }) {
   const rounded = Math.round(score * 10) / 10;
   const hasRotation = rotationScore != null;
@@ -187,7 +189,7 @@ function SubscoreGrade({
           {!hideRotation && (
             <>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-[0.6875rem] text-[#0e0907]/48">Rotation Median</span>
+                <span className="text-[0.6875rem] text-[#0e0907]/48">{medianLabel}</span>
                 <span
                   id={`${id}-rotation`}
                   className={cn("font-mono text-xs tabular-nums", hasRotation ? subscoreColorClass(rotationScore) : "text-[#0e0907]/35")}
@@ -219,6 +221,8 @@ interface CohesionScoreDisplayProps {
   evaluation: RosterEvaluation;
   /** When true, hide rotation/bench sections and relabel for pure lineup eval. */
   isLineupOnly?: boolean;
+  /** Team label derived from the RuleSet (e.g. "Lineup", "Rotation", "Roster"). Falls back to isLineupOnly toggle. */
+  teamLabel?: string;
 }
 
 const LINEUP_ONLY_FACTOR_KEYS = new Set(["starting_5", "archetype_diversity"]);
@@ -227,7 +231,8 @@ const LINEUP_ONLY_LABELS: Record<string, string> = {
   archetype_diversity: "Versatility",
 };
 
-export function CohesionScoreDisplay({ evaluation, isLineupOnly = false }: CohesionScoreDisplayProps) {
+export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLabel }: CohesionScoreDisplayProps) {
+  const resolvedLabel = teamLabel ?? (isLineupOnly ? "Lineup" : "Rotation");
   const { star_rating, star_rating_breakdown, starting_lineup, lineup_summary } = evaluation;
   const rotationMedian = isLineupOnly ? undefined : lineup_summary.rotation_median_subscores;
   const factorEntries = Object.entries(star_rating_breakdown)
@@ -254,12 +259,12 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false }: Cohes
             Final Team Read
           </p>
           <h2 className="mt-1 text-xl font-semibold tracking-tight text-[#0e0907]">
-            {isLineupOnly ? "Lineup Cohesion" : "Rotation Cohesion"}
+            {resolvedLabel} Cohesion
           </h2>
           <p className="mt-1 max-w-[62ch] text-sm leading-6 text-[#0e0907]/62">
             {isLineupOnly
               ? "The engine evaluates how these five players fit together across spacing, creation, defense, and synergy."
-              : "The engine evaluates the Starting Lineup, then tests the full Rotation across its Lineup Combinations."}
+              : `The engine evaluates the Starting Lineup, then tests the full ${resolvedLabel} across its Lineup Combinations.`}
           </p>
         </div>
         <CohesionScoreBadge
@@ -331,7 +336,7 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false }: Cohes
           </p>
           {!isLineupOnly && rotationMedian && Object.keys(rotationMedian).length > 0 && (
             <p id="cohesion-subscores-legend" className="text-[9px] text-muted-foreground/60">
-              Starting Lineup / <span className="opacity-50">Rotation Median</span>
+              Starting Lineup / <span className="opacity-50">{resolvedLabel} Median</span>
             </p>
           )}
         </div>
@@ -350,6 +355,7 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false }: Cohes
                   rotationScore={rotationMedian?.[entry.key]}
                   description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
                   hideRotation={isLineupOnly}
+                  medianLabel={`${resolvedLabel} Median`}
                 />
               ))}
             </div>
@@ -372,6 +378,7 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false }: Cohes
             rotationScore={rotationMedian?.accentuation_strength}
             description={SUBSCORE_DESCRIPTIONS.accentuation_strength}
             hideRotation={isLineupOnly}
+            medianLabel={`${resolvedLabel} Median`}
           />
           <SubscoreGrade
             id="cohesion-accentuation-weakness"
@@ -380,6 +387,7 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false }: Cohes
             rotationScore={rotationMedian?.accentuation_weakness}
             description={SUBSCORE_DESCRIPTIONS.accentuation_weakness}
             hideRotation={isLineupOnly}
+            medianLabel={`${resolvedLabel} Median`}
           />
         </div>
       </div>

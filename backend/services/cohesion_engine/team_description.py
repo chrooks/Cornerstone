@@ -158,7 +158,7 @@ def _slot_label(player: dict[str, Any] | None, total_players: int = 9) -> str:
     a build-around pick from supporting cast.
     """
     if not player:
-        return "rotation"
+        return "team member"
     if player.get("is_cornerstone") and total_players > 5:
         return "cornerstone"
     slot = player.get("slot")
@@ -167,7 +167,8 @@ def _slot_label(player: dict[str, Any] | None, total_players: int = 9) -> str:
             return "starter"
         if slot <= 9:
             return "bench"
-    return "starter" if total_players <= 5 else "rotation"
+        return "reserve"
+    return "starter" if total_players <= 5 else "team member"
 
 
 def _player_line(
@@ -206,36 +207,76 @@ def _note_lines(evaluation: RosterEvaluation) -> list[str]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Evaluation framing — keyed on team_size today, swappable to
+# rules_json.eval_context (e.g. "tournament") when that field ships.
+# ---------------------------------------------------------------------------
+
+_SHARED_VOICE = (
+    "Write in the voice of an experienced GM: direct, specific, basketball-literate. "
+    "Output plain prose paragraphs only, with no headers, no bullets, no markdown, "
+    "and no horizontal rules. Start directly with the summary sentence."
+)
+
+# TODO: When rules_json gains an `eval_context` field (e.g. "season", "playoff",
+# "tournament"), re-key this dict from int → str, thread eval_context into
+# generate_team_description(), and swap the lookup in _memo_instructions().
+# This lets a 12-man Olympic roster use a "tournament" framing instead of "season".
+_MEMO_FRAMINGS: dict[int, str] = {
+    5: (
+        "Write a 2-paragraph memo about this starting five. Start with exactly one "
+        "standalone summary sentence suitable for a Saved Team card. After that first "
+        "sentence, continue with the longer evaluation detail. The rest of the first "
+        "paragraph should establish the lineup's basketball identity: how these five "
+        "players fit together on the court, what style they impose, and what makes the "
+        "unit cohesive or dangerous when the pressure is highest — think closeout game, "
+        "backs against the wall. Second paragraph: analyze vulnerabilities and matchup "
+        "concerns that would be exposed in a high-stakes game, and what kind of player "
+        "or archetype would complement this five if the roster expanded. This is a pure "
+        "starting-five evaluation — do not mention bench depth, rotation, or reserves. "
+        + _SHARED_VOICE
+    ),
+    9: (
+        "Write a 2-3 paragraph memo about this rotation built for a playoff run. Start "
+        "with exactly one standalone summary sentence suitable for a Saved Team card. "
+        "After that first sentence, continue with the longer evaluation detail. The rest "
+        "of the first paragraph should establish the starting five's basketball identity: "
+        "how they fit together and what style they impose. Second paragraph: analyze the "
+        "bench and how it extends or changes the identity — can this rotation adapt to "
+        "different opponents across a seven-game series? Does the bench reinforce the "
+        "starters' strengths or cover their blind spots? Third paragraph, if warranted: "
+        "matchup vulnerabilities and the kind of addition that would make the group more "
+        "versatile in a playoff bracket. "
+        + _SHARED_VOICE
+    ),
+    12: (
+        "Write a 2-3 paragraph memo about this full roster built for a season-long "
+        "campaign. Start with exactly one standalone summary sentence suitable for a "
+        "Saved Team card. After that first sentence, continue with the longer evaluation "
+        "detail. The rest of the first paragraph should establish the starting five's "
+        "basketball identity: how they fit together and what style they impose. Second "
+        "paragraph: analyze the full depth chart — can this roster sustain its identity "
+        "across 82 games? Is there enough positional depth to absorb injuries, manage "
+        "minutes, and handle the grind of a long season without the starters wearing "
+        "down? Third paragraph, if warranted: where the roster is thin, what archetypes "
+        "are missing, and whether this team can still be standing in June. "
+        + _SHARED_VOICE
+    ),
+}
+
+# Fallback when team_size doesn't match a known framing — uses the rotation
+# framing as the most general middle ground.
+_DEFAULT_FRAMING_KEY = 9
+
+
 def _memo_instructions(evaluation: RosterEvaluation) -> str:
-    """Return the closing paragraph instructions, adapted to team size."""
+    """Return closing paragraph instructions, adapted to team size.
+
+    Keyed on player count today. To key on rules_json.eval_context instead,
+    change the lookup key here — the framings dict and callers stay the same.
+    """
     player_count = len(evaluation.player_composites)
-    if player_count <= 5:
-        return (
-            "Write a 2-paragraph memo about this starting five. Start with exactly one "
-            "standalone summary sentence suitable for a Saved Team card. After that first "
-            "sentence, continue with the longer evaluation detail. The rest of the first "
-            "paragraph should establish the lineup's basketball identity: how these five "
-            "players fit together on the court, what style they impose, and what makes the "
-            "unit cohesive or dangerous. Second paragraph: analyze vulnerabilities, matchup "
-            "concerns, and what kind of player or archetype would complement this five if "
-            "the roster expanded. This is a pure starting-five evaluation — do not mention "
-            "bench depth, rotation, or reserves. Write in the voice of an experienced GM: "
-            "direct, specific, basketball-literate. Output plain prose paragraphs only, "
-            "with no headers, no bullets, no markdown, and no horizontal rules. Start "
-            "directly with the summary sentence."
-        )
-    return (
-        "Write a 2-3 paragraph memo. Start with exactly one standalone summary sentence "
-        "suitable for a Saved Team card. After that first sentence, continue with the longer "
-        "evaluation detail. The rest of the first paragraph should establish the team's "
-        "basketball identity, how the best players fit together, and what style this roster "
-        "can impose. Second paragraph: analyze the rotation depth and whether the bench "
-        "reinforces or changes the identity. Third paragraph, if warranted: vulnerabilities "
-        "and the kind of addition that would make the roster more complete. Write in the "
-        "voice of an experienced GM: direct, specific, basketball-literate. Output plain "
-        "prose paragraphs only, with no headers, no bullets, no markdown, and no horizontal "
-        "rules. Start directly with the summary sentence."
-    )
+    return _MEMO_FRAMINGS.get(player_count, _MEMO_FRAMINGS[_DEFAULT_FRAMING_KEY])
 
 
 def _build_prompt(
