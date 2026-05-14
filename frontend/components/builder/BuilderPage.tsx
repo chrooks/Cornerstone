@@ -19,6 +19,7 @@ import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { useRosterSlots } from "@/lib/hooks/useRosterSlots";
 import { useBuilderSalary } from "@/lib/hooks/useBuilderSalary";
 import { useBuilderEvaluation } from "@/lib/hooks/useBuilderEvaluation";
+import { resolveRuleSetRules } from "@/lib/rulesets";
 import { BuilderHeader } from "./BuilderHeader";
 import { CourtStrip } from "./CourtStrip";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
@@ -108,9 +109,11 @@ export function BuilderPage() {
 
   // Extract rules from the published version's rules_json
   const rulesJson = resolvedRuleSet?.rules ?? null;
-  const maxRosterSlots = typeof rulesJson?.team_size === "number"
-    ? (rulesJson.team_size as number)
-    : undefined;
+  const resolvedRules = useMemo(
+    () => resolveRuleSetRules(rulesJson, new URLSearchParams(searchParams.toString())),
+    [rulesJson, searchParams],
+  );
+  const maxRosterSlots = resolvedRules.teamSize;
   const salaryCap = typeof rulesJson?.salary_cap === "number"
     ? (rulesJson.salary_cap as number)
     : undefined;
@@ -120,18 +123,16 @@ export function BuilderPage() {
   const rookieDealLimit = typeof rulesJson?.rookie_deal_limit === "number"
     ? (rulesJson.rookie_deal_limit as number)
     : undefined;
-  const cornerstoneSource: "legend" | "all" =
-    rulesJson?.cornerstone_source === "all" ? "all" : "legend";
-  const teamLabel = typeof rulesJson?.team_label === "string"
-    ? (rulesJson.team_label as string)
-    : undefined;
+  const cornerstoneSource = resolvedRules.cornerstoneSource;
+  const teamLabel = resolvedRules.teamLabel;
 
   // ── No cornerstone → redirect to cornerstone picker (legend-only RuleSets)
   useEffect(() => {
     if (!dataLoading && resolvedRuleSet && !cornerstoneId && cornerstoneSource === "legend") {
-      router.replace(`/lab/${ruleset}/legends`);
+      const teamSize = searchParams.get("team_size");
+      router.replace(`/lab/${ruleset}/legends${teamSize ? `?team_size=${teamSize}` : ""}`);
     }
-  }, [dataLoading, resolvedRuleSet, cornerstoneId, cornerstoneSource, ruleset, router]);
+  }, [dataLoading, resolvedRuleSet, cornerstoneId, cornerstoneSource, ruleset, router, searchParams]);
 
   // ── Domain hooks ──────────────────────────────────────────────────────────
   const roster = useRosterSlots(cornerstoneId, legendRows, activeRows, maxRosterSlots);
@@ -326,6 +327,29 @@ export function BuilderPage() {
       <div id="builder-error" className="max-w-screen-2xl mx-auto px-6 py-8">
         <p className="text-[#e53e3e] text-[0.9375rem]">{dataError}</p>
       </div>
+    );
+  }
+
+  if (resolvedRuleSet && !resolvedRules.isValidTeamSizeParam) {
+    return (
+      <main id="builder-invalid-team-size" className="mx-auto max-w-screen-md px-6 py-10">
+        <div className="border border-[#d9d0c9] bg-[#f7f7f7] p-5">
+          <h1 className="font-display text-[1.5rem] font-semibold leading-[1.15] tracking-[-0.01em] text-[#0e0907]">
+            Team size is not available
+          </h1>
+          <p className="mt-2 text-[0.9375rem] leading-relaxed text-[#0e0907]/60">
+            Pick an available size for this RuleSet before building.
+          </p>
+          <button
+            id="builder-invalid-team-size-back"
+            type="button"
+            onClick={() => router.replace("/lab")}
+            className="mt-4 inline-flex items-center rounded-md bg-[#ffa05c] px-5 py-2 text-[0.8125rem] font-medium text-[#0e0907] transition-colors hover:bg-[#fe6d34] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffa05c]"
+          >
+            Back to Lab
+          </button>
+        </div>
+      </main>
     );
   }
 

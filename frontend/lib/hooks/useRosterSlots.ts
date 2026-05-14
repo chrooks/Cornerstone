@@ -80,10 +80,12 @@ export function useRosterSlots(
   const syncUrl = useCallback(
     (newCornerstoneId: string | null, newSlots: (PlayerWithSkills | null)[]) => {
       const params = buildSlotsParams(newCornerstoneId, newSlots);
+      const teamSize = searchParams.get("team_size");
+      if (teamSize) params.set("team_size", teamSize);
       const qs = params.toString();
       router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
     },
-    [pathname, router],
+    [pathname, router, searchParams],
   );
 
   // ── Legend selection ─────────────────────────────────────────────────────

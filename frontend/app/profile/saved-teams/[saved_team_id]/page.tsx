@@ -55,6 +55,13 @@ function getTeamKind(playerCount: number): string {
   return "Lineup";
 }
 
+function getTeamKindFromSize(teamSize: number | null | undefined, playerCount: number): string {
+  if (teamSize === 12) return "Roster";
+  if (teamSize === 9) return "Rotation";
+  if (teamSize === 5) return "Lineup";
+  return getTeamKind(playerCount);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -253,7 +260,7 @@ export default function SavedTeamDetailPage() {
   const fullEvaluation = savedTeam ? getSavedEvaluation(savedTeam) : null;
   const score = fullEvaluation?.star_rating ?? (savedTeam ? getFallbackScore(savedTeam) : 0);
   const description = fullEvaluation?.team_description ?? (savedTeam ? getFallbackDescription(savedTeam) : "");
-  const teamKind = getTeamKind(orderedPlayers.length);
+  const teamKind = getTeamKindFromSize(savedTeam?.team_size, orderedPlayers.length);
   const salaryTotal = savedTeam?.total_salary ?? orderedPlayers.reduce((sum, player) => sum + player.salary_snapshot, 0);
   const hasSalaryCap = !savedTeam?.ruleset_slug?.startsWith("free-for-all");
   const hasCornerstone = orderedPlayers.some((p) => p.is_cornerstone) && hasSalaryCap;
@@ -345,7 +352,7 @@ export default function SavedTeamDetailPage() {
 
       <dl
         id="saved-team-detail-context"
-        className={cn("mt-5 grid gap-3 md:grid-cols-2", hasSalaryCap ? "xl:grid-cols-4" : "xl:grid-cols-3")}
+        className={cn("mt-5 grid gap-3 md:grid-cols-2", hasSalaryCap ? "xl:grid-cols-4" : "xl:grid-cols-4")}
       >
         <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">
           <dt className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
@@ -363,6 +370,15 @@ export default function SavedTeamDetailPage() {
           </dt>
           <dd id="saved-team-detail-snapshot-release" className="mt-2 break-all font-mono text-sm text-[oklch(0.18_0.02_45)]">
             {savedTeam.snapshot_release_id}
+          </dd>
+        </div>
+        <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">
+          <dt className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
+            <UsersRound className="h-3.5 w-3.5" aria-hidden="true" />
+            Team Size
+          </dt>
+          <dd id="saved-team-detail-team-size" className="mt-2 font-mono text-sm text-[oklch(0.18_0.02_45)]">
+            {teamKind}
           </dd>
         </div>
         <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">

@@ -731,6 +731,35 @@ export async function renameSavedTeam(
   );
 }
 
+/** Update a Saved Team's visibility (private, unlisted, or public). */
+export async function updateSavedTeamVisibility(
+  savedTeamId: string,
+  visibility: "private" | "unlisted" | "public",
+): Promise<ApiResponse<{ id: string; name: string; visibility: string }>> {
+  return apiFetch<{ id: string; name: string; visibility: string }>(
+    `/api/saved-teams/${encodeURIComponent(savedTeamId)}`,
+    { method: "PATCH", body: JSON.stringify({ visibility }) },
+  );
+}
+
+/** Get a public or unlisted Saved Team (no auth required). */
+export async function getSharedTeam(
+  savedTeamId: string,
+): Promise<ApiResponse<SavedTeamSummary>> {
+  return apiFetch<SavedTeamSummary>(
+    `/api/shared/${encodeURIComponent(savedTeamId)}`,
+  );
+}
+
+/** Fetch a rebuild compatibility report for a shared (public/unlisted) Saved Team. */
+export async function getSharedRebuildCheck(
+  savedTeamId: string,
+): Promise<ApiResponse<RebuildCheckResponse>> {
+  return apiFetch<RebuildCheckResponse>(
+    `/api/shared/${encodeURIComponent(savedTeamId)}/rebuild-check`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Cohesion Calibration (admin-only)
 // ---------------------------------------------------------------------------

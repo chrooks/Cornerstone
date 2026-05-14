@@ -163,6 +163,30 @@ VALID_TEAM_SIZES = {5, 9, 12}
 TEAM_SIZE_LABELS = {5: "Lineup", 9: "Rotation", 12: "Roster"}
 
 
+def _normalize_rules_json(rules_json: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    normalized = dict(rules_json)
+
+    team_size = normalized.get("team_size")
+    if team_size is not None:
+        if isinstance(team_size, bool) or team_size not in VALID_TEAM_SIZES:
+            return None, f"team_size must be one of: {sorted(VALID_TEAM_SIZES)}"
+        normalized["team_label"] = TEAM_SIZE_LABELS[team_size]
+
+    allowed_team_sizes = normalized.get("allowed_team_sizes")
+    if allowed_team_sizes is not None:
+        if not isinstance(allowed_team_sizes, list) or not allowed_team_sizes:
+            return None, "allowed_team_sizes must be a non-empty array"
+        if any(isinstance(size, bool) or size not in VALID_TEAM_SIZES for size in allowed_team_sizes):
+            return None, f"allowed_team_sizes must only contain: {sorted(VALID_TEAM_SIZES)}"
+        if len(set(allowed_team_sizes)) != len(allowed_team_sizes):
+            return None, "allowed_team_sizes must not contain duplicates"
+        normalized["allowed_team_sizes"] = sorted(allowed_team_sizes)
+        if team_size is not None and team_size not in normalized["allowed_team_sizes"]:
+            return None, "team_size must be included in allowed_team_sizes"
+
+    return normalized, None
+
+
 @rulesets_bp.route("/rulesets", methods=["POST"])
 @require_admin
 def create_ruleset():
@@ -287,14 +311,10 @@ def create_version(slug: str):
         if not rules_json or not isinstance(rules_json, dict):
             return _err("rules_json must be a non-empty JSON object")
 
-        # Validate team_size is one of the allowed values
-        team_size = rules_json.get("team_size")
-        if team_size is not None and team_size not in VALID_TEAM_SIZES:
-            return _err(f"team_size must be one of: {sorted(VALID_TEAM_SIZES)}")
-
-        # Derive team_label from team_size (canonical source of truth)
-        if team_size is not None:
-            rules_json = {**rules_json, "team_label": TEAM_SIZE_LABELS[team_size]}
+        rules_json, validation_error = _normalize_rules_json(rules_json)
+        if validation_error:
+            return _err(validation_error)
+        assert rules_json is not None
 
         rules_hash = canonical_rules_hash(rules_json)
 

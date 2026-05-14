@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
@@ -11,6 +12,10 @@ import {
   ChevronDown,
   CircleDollarSign,
   ClipboardList,
+  Copy,
+  Eye,
+  EyeOff,
+  Link2,
   Lock,
   Loader2,
   Minus,
@@ -26,13 +31,14 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getUserProfile, listPlayersWithSkills, listSavedTeams, getRebuildCheck, deleteSavedTeam, renameSavedTeam } from "@/lib/api";
+import { getUserProfile, listPlayersWithSkills, listSavedTeams, getRebuildCheck, deleteSavedTeam, renameSavedTeam, updateSavedTeamVisibility } from "@/lib/api";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
 import type { PlayerWithSkills, RebuildCheckResponse, RebuildPlayerReport, SavedTeamSummary, UserProfile } from "@/lib/types";
 
 type ProfileLoadState = "loading" | "ready" | "signed-out" | "error";
 type SavedTeamType = "Lineup" | "Rotation" | "Roster";
+type SavedTeamSize = 5 | 9 | 12;
 type DateFilter = "all" | "last-7" | "last-30";
 type SavedTeamFilterField = "name" | "cornerstone" | "ruleset" | "snapshot" | "date" | "team-size" | "favorite" | "score";
 type SortField = "date" | "score" | "name" | "cornerstone" | "ruleset" | "snapshot" | "team-size";
@@ -62,6 +68,7 @@ interface MockSavedTeam {
   createdAt: string;
   savedAt: string;
   teamType: SavedTeamType;
+  teamSize: SavedTeamSize | null;
   starRating: number;
   scoreBreakdown: {
     startingLineup: number;
@@ -78,6 +85,7 @@ interface MockSavedTeam {
     playerId: string | null;
     legendId: string | null;
   }>;
+  visibility: "private" | "unlisted" | "public";
   summary: string;
   tags: string[];
 }
@@ -108,7 +116,19 @@ const SORT_FIELD_LABELS: Record<SortField, string> = {
 };
 
 const SORT_FIELD_ORDER: SortField[] = ["date", "score", "name", "cornerstone", "ruleset", "snapshot", "team-size"];
-const TEAM_SIZE_ORDER: Record<SavedTeamType, number> = { Lineup: 5, Rotation: 9, Roster: 12 };
+const TEAM_SIZE_ORDER: Record<SavedTeamType, SavedTeamSize> = { Lineup: 5, Rotation: 9, Roster: 12 };
+const TEAM_TYPE_BY_SIZE: Record<SavedTeamSize, SavedTeamType> = { 5: "Lineup", 9: "Rotation", 12: "Roster" };
+const VALID_TEAM_SIZES: SavedTeamSize[] = [5, 9, 12];
+const PROFILE_FILTER_QUERY_KEYS: Record<SavedTeamFilterField, string> = {
+  name: "name",
+  cornerstone: "cornerstone",
+  ruleset: "ruleset",
+  snapshot: "snapshot",
+  date: "date",
+  "team-size": "team_size",
+  favorite: "favorite",
+  score: "score",
+};
 
 function formatMoney(value: number): string {
   return `$${(value / 1_000_000).toFixed(1)}M`;
@@ -133,6 +153,22 @@ function getSavedTeamType(playerCount: number): SavedTeamType {
   if (playerCount >= 12) return "Roster";
   if (playerCount >= 9) return "Rotation";
   return "Lineup";
+}
+
+function getSavedTeamTypeFromSize(teamSize: number | null | undefined, playerCount: number): SavedTeamType {
+  if (teamSize === 12) return "Roster";
+  if (teamSize === 9) return "Rotation";
+  if (teamSize === 5) return "Lineup";
+  return getSavedTeamType(playerCount);
+}
+
+function getSavedTeamSizeFromType(teamType: SavedTeamType): SavedTeamSize {
+  return TEAM_SIZE_ORDER[teamType];
+}
+
+function normalizeSavedTeamSize(teamSize: number | null | undefined, playerCount: number): SavedTeamSize | null {
+  if (teamSize === 5 || teamSize === 9 || teamSize === 12) return teamSize;
+  return getSavedTeamSizeFromType(getSavedTeamType(playerCount));
 }
 
 function getShortName(name: string): string {
@@ -172,7 +208,114 @@ function compareText(a: string, b: string): number {
   return a.localeCompare(b, undefined, { sensitivity: "base" });
 }
 
+function createFilterId(field: SavedTeamFilterField, value: string): string {
+  return `${field}-${value}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function createSort(field: SortField, direction: SortDirection): SavedTeamSort {
+  return { id: `${field}-${direction}`, field, direction };
+}
+
+function parseTeamSizeParam(value: string): SavedTeamSize | null {
+  const numericValue = Number(value);
+  return VALID_TEAM_SIZES.includes(numericValue as SavedTeamSize) ? numericValue as SavedTeamSize : null;
+}
+
+function addUrlFilter(
+  filters: SavedTeamAppliedFilter[],
+  field: SavedTeamFilterField,
+  value: string,
+) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return;
+  if (filters.some((filter) => filter.field === field && filter.value === trimmedValue)) return;
+  filters.push({
+    id: createFilterId(field, trimmedValue),
+    field,
+    value: trimmedValue,
+  });
+}
+
+function filtersFromSearchParams(params: URLSearchParams): SavedTeamAppliedFilter[] {
+  const filters: SavedTeamAppliedFilter[] = [];
+
+  params.getAll(PROFILE_FILTER_QUERY_KEYS.name).forEach((value) => addUrlFilter(filters, "name", value));
+  params.getAll(PROFILE_FILTER_QUERY_KEYS.cornerstone).forEach((value) => addUrlFilter(filters, "cornerstone", value));
+  params.getAll(PROFILE_FILTER_QUERY_KEYS.ruleset).forEach((value) => addUrlFilter(filters, "ruleset", value));
+  params.getAll(PROFILE_FILTER_QUERY_KEYS.snapshot).forEach((value) => addUrlFilter(filters, "snapshot", value));
+
+  params.getAll(PROFILE_FILTER_QUERY_KEYS["team-size"]).forEach((value) => {
+    const teamSize = parseTeamSizeParam(value);
+    if (teamSize) addUrlFilter(filters, "team-size", String(teamSize));
+  });
+  params.getAll(PROFILE_FILTER_QUERY_KEYS.date).forEach((value) => {
+    if (value === "last-7" || value === "last-30") addUrlFilter(filters, "date", value);
+  });
+  params.getAll(PROFILE_FILTER_QUERY_KEYS.favorite).forEach((value) => {
+    if (value === "yes" || value === "no") addUrlFilter(filters, "favorite", value);
+  });
+  params.getAll(PROFILE_FILTER_QUERY_KEYS.score).forEach((value) => {
+    const score = Number(value);
+    if (Number.isFinite(score)) addUrlFilter(filters, "score", value);
+  });
+
+  return filters;
+}
+
+function sortsFromSearchParams(params: URLSearchParams): SavedTeamSort[] {
+  const sorts = params.getAll("sort").reduce<SavedTeamSort[]>((acc, value) => {
+    const [field, direction] = value.split(":");
+    if (!SORT_FIELD_ORDER.includes(field as SortField)) return acc;
+    if (direction !== "asc" && direction !== "desc") return acc;
+    if (acc.some((sort) => sort.field === field)) return acc;
+    acc.push(createSort(field as SortField, direction));
+    return acc;
+  }, []);
+
+  return sorts.length > 0 ? sorts : DEFAULT_SAVED_TEAM_SORTS;
+}
+
+function searchParamsFromProfileState(filters: SavedTeamAppliedFilter[], sorts: SavedTeamSort[]): URLSearchParams {
+  const params = new URLSearchParams();
+
+  filters.forEach((filter) => {
+    const key = PROFILE_FILTER_QUERY_KEYS[filter.field];
+    if (!key) return;
+    params.append(key, filter.value);
+  });
+
+  if (!isDefaultSavedTeamSort(sorts)) {
+    sorts.forEach((sort) => {
+      params.append("sort", `${sort.field}:${sort.direction}`);
+    });
+  }
+
+  return params;
+}
+
+function profileStateFromSearchParams(params: URLSearchParams): {
+  filters: SavedTeamAppliedFilter[];
+  sorts: SavedTeamSort[];
+} {
+  return {
+    filters: filtersFromSearchParams(params),
+    sorts: sortsFromSearchParams(params),
+  };
+}
+
+function currentProfileStateFromLocation() {
+  if (typeof window === "undefined") {
+    return { filters: [], sorts: DEFAULT_SAVED_TEAM_SORTS };
+  }
+  return profileStateFromSearchParams(new URLSearchParams(window.location.search));
+}
+
 function getFilterDisplayValue(filter: SavedTeamAppliedFilter): string {
+  if (filter.field === "ruleset") return formatRulesetName(filter.value);
+  if (filter.field === "team-size") {
+    const teamSize = parseTeamSizeParam(filter.value);
+    return teamSize ? TEAM_TYPE_BY_SIZE[teamSize] : filter.value;
+  }
   if (filter.field === "favorite") return filter.value === "yes" ? "Yes" : "No";
   if (filter.field === "date") {
     if (filter.value === "last-7") return "Last 7 days";
@@ -187,9 +330,9 @@ function matchesSavedTeamFilter(team: MockSavedTeam, filter: SavedTeamAppliedFil
 
   if (filter.field === "name") return team.name.toLowerCase().includes(normalizedValue);
   if (filter.field === "cornerstone") return team.cornerstone.toLowerCase().includes(normalizedValue);
-  if (filter.field === "ruleset") return team.ruleset === filter.value;
+  if (filter.field === "ruleset") return team.rulesetSlug === filter.value;
   if (filter.field === "snapshot") return team.snapshotRelease === filter.value;
-  if (filter.field === "team-size") return team.teamType === filter.value;
+  if (filter.field === "team-size") return team.teamSize === parseTeamSizeParam(filter.value);
   if (filter.field === "date") return matchesDateFilter(team.savedAt, filter.value as DateFilter);
   if (filter.field === "favorite") return filter.value === "yes" ? team.favorite : !team.favorite;
   if (filter.field === "score") return team.starRating >= Number(filter.value);
@@ -203,9 +346,9 @@ function compareSavedTeamsBySort(a: MockSavedTeam, b: MockSavedTeam, sort: Saved
   if (sort.field === "score") return a.starRating - b.starRating;
   if (sort.field === "name") return compareText(a.name, b.name);
   if (sort.field === "cornerstone") return compareText(a.cornerstone, b.cornerstone);
-  if (sort.field === "ruleset") return compareText(a.ruleset, b.ruleset);
+  if (sort.field === "ruleset") return compareText(a.rulesetSlug, b.rulesetSlug);
   if (sort.field === "snapshot") return compareText(a.snapshotRelease, b.snapshotRelease);
-  if (sort.field === "team-size") return TEAM_SIZE_ORDER[a.teamType] - TEAM_SIZE_ORDER[b.teamType];
+  if (sort.field === "team-size") return (a.teamSize ?? TEAM_SIZE_ORDER[a.teamType]) - (b.teamSize ?? TEAM_SIZE_ORDER[b.teamType]);
   return 0;
 }
 
@@ -242,7 +385,8 @@ function mapSavedTeamSummary(team: SavedTeamSummary, profile: UserProfile | null
   const savedAt = team.created_at?.slice(0, 10) ?? "";
   const starRating = team.evaluation?.star_rating ?? 0;
   const startingLineup = team.evaluation?.starting_lineup_score ?? starRating;
-  const teamType = getSavedTeamType(players.length);
+  const teamType = getSavedTeamTypeFromSize(team.team_size, players.length);
+  const teamSize = normalizeSavedTeamSize(team.team_size, players.length);
 
   return {
     id: team.id,
@@ -256,6 +400,7 @@ function mapSavedTeamSummary(team: SavedTeamSummary, profile: UserProfile | null
     createdAt: formatSavedDate(team.created_at),
     savedAt,
     teamType,
+    teamSize,
     starRating,
     scoreBreakdown: {
       startingLineup,
@@ -272,13 +417,10 @@ function mapSavedTeamSummary(team: SavedTeamSummary, profile: UserProfile | null
       playerId: player.player_id,
       legendId: player.legend_id,
     })),
+    visibility: team.visibility,
     summary: team.evaluation?.team_description ?? "Saved evaluation details are attached to this Team.",
     tags: [team.evaluation?.evaluation_version ?? "cohesion-v1", team.ruleset_slug],
   };
-}
-
-function getRulesetSlug(ruleset: string): string {
-  return ruleset.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "standard";
 }
 
 function resolveSavedTeamPlayer(
@@ -686,12 +828,14 @@ function SavedTeamRecord({
   featuredLabel,
   onDelete,
   onRename,
+  onVisibilityChange,
 }: {
   team: MockSavedTeam;
   featured?: boolean;
   featuredLabel?: string;
   onDelete: (id: string) => void;
   onRename: (id: string, newName: string) => void;
+  onVisibilityChange: (id: string, visibility: "private" | "unlisted" | "public") => void;
 }) {
   const openButtonClassName = "inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded border border-[oklch(0.18_0.02_45)] bg-[oklch(0.18_0.02_45)] px-3 py-2 text-sm font-semibold text-[oklch(0.92_0.08_64)] transition-colors duration-150 hover:bg-[oklch(0.25_0.03_45)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]";
   const secondaryButtonClassName = "inline-flex min-h-10 flex-1 items-center justify-center rounded border border-[oklch(0.83_0.02_62)] bg-[oklch(0.96_0.006_62)] px-3 py-2 text-sm font-semibold text-[oklch(0.22_0.02_45)] transition-colors duration-150 hover:border-[oklch(0.73_0.08_53)] hover:bg-[oklch(0.92_0.035_64)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]";
@@ -702,7 +846,32 @@ function SavedTeamRecord({
   const [renameLoading, setRenameLoading] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [visibilityUpdating, setVisibilityUpdating] = useState(false);
+  const [copied, setCopied] = useState(false);
   const summaryParts = splitSummary(team.summary);
+
+  const shareableUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/shared/${team.id}`
+    : "";
+  const isShareable = team.visibility !== "private";
+
+  function handleVisibilityChange(visibility: "private" | "unlisted" | "public") {
+    if (visibility === team.visibility) return;
+    setVisibilityUpdating(true);
+    updateSavedTeamVisibility(team.id, visibility)
+      .then((res) => {
+        if (res.success) onVisibilityChange(team.id, visibility);
+      })
+      .catch(() => {})
+      .finally(() => setVisibilityUpdating(false));
+  }
+
+  function handleCopyLink() {
+    navigator.clipboard.writeText(shareableUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }
 
   function handleRenameSubmit() {
     const trimmed = renameValue.trim();
@@ -897,6 +1066,13 @@ function SavedTeamRecord({
           </div>
           <div>
             <dt className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
+              <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+              Team Size
+            </dt>
+            <dd className="mt-1 font-mono text-sm tabular-nums text-[oklch(0.18_0.02_45)]">{team.teamType}</dd>
+          </div>
+          <div>
+            <dt className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
               <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
               Snapshot Release
             </dt>
@@ -918,6 +1094,70 @@ function SavedTeamRecord({
             </div>
           )}
         </dl>
+
+        <div id={`profile-saved-team-${team.id}-visibility`}>
+          <dt className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+            Sharing
+          </dt>
+          <div
+            className="mt-1.5 inline-flex rounded-sm border border-[oklch(0.83_0.02_62)]"
+            role="radiogroup"
+            aria-label="Saved Team visibility"
+          >
+            {([
+              { value: "private" as const, label: "Private", Icon: EyeOff },
+              { value: "unlisted" as const, label: "Unlisted", Icon: Link2 },
+              { value: "public" as const, label: "Public", Icon: Eye },
+            ]).map(({ value, label, Icon }) => {
+              const isActive = team.visibility === value;
+              return (
+                <button
+                  key={value}
+                  id={`profile-saved-team-${team.id}-visibility-${value}`}
+                  role="radio"
+                  aria-checked={isActive}
+                  disabled={visibilityUpdating}
+                  onClick={() => handleVisibilityChange(value)}
+                  className={cn(
+                    "flex items-center gap-1 px-2 py-1 text-[0.6875rem] font-medium transition-colors duration-150",
+                    "border-r border-[oklch(0.83_0.02_62)] last:border-r-0",
+                    isActive
+                      ? "bg-[oklch(0.92_0.055_64)] text-[oklch(0.24_0.04_45)]"
+                      : "bg-transparent text-[oklch(0.44_0.02_45)] hover:bg-[oklch(0.94_0.018_62)]",
+                    visibilityUpdating && "cursor-wait opacity-60",
+                  )}
+                >
+                  <Icon className="h-2.5 w-2.5" aria-hidden="true" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {isShareable && (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <input
+                type="text"
+                readOnly
+                value={shareableUrl}
+                className="min-w-0 flex-1 rounded-sm border border-[oklch(0.83_0.02_62)] bg-[oklch(0.96_0.006_62)] px-1.5 py-0.5 font-mono text-[0.625rem] text-[oklch(0.34_0.02_45)] focus:border-[oklch(0.66_0.16_55)] focus:outline-none"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+              <button
+                onClick={handleCopyLink}
+                className={cn(
+                  "inline-flex items-center gap-0.5 rounded-sm border px-1.5 py-0.5 text-[0.625rem] font-medium transition-colors duration-150",
+                  copied
+                    ? "border-[oklch(0.72_0.15_155)] bg-[oklch(0.94_0.04_155)] text-[oklch(0.30_0.08_155)]"
+                    : "border-[oklch(0.83_0.02_62)] text-[oklch(0.34_0.02_45)] hover:bg-[oklch(0.94_0.018_62)]",
+                )}
+              >
+                {copied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          )}
+        </div>
 
         <div id={`profile-saved-team-${team.id}-actions`} className="flex flex-wrap gap-2">
           <Link
@@ -984,15 +1224,25 @@ function SavedTeamRecord({
 }
 
 export default function ProfilePage() {
+  const router = useRouter();
+  const initialProfileState = currentProfileStateFromLocation();
   const [loadState, setLoadState] = useState<ProfileLoadState>("loading");
   const [email, setEmail] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [savedTeams, setSavedTeams] = useState<MockSavedTeam[]>([]);
   const [filterField, setFilterField] = useState<SavedTeamFilterField>("name");
   const [filterValue, setFilterValue] = useState("");
-  const [savedTeamFilters, setSavedTeamFilters] = useState<SavedTeamAppliedFilter[]>([]);
-  const [savedTeamSorts, setSavedTeamSorts] = useState<SavedTeamSort[]>(DEFAULT_SAVED_TEAM_SORTS);
+  const [savedTeamFilters, setSavedTeamFilters] = useState<SavedTeamAppliedFilter[]>(initialProfileState.filters);
+  const [savedTeamSorts, setSavedTeamSorts] = useState<SavedTeamSort[]>(initialProfileState.sorts);
   const [builderPlayerRows, setBuilderPlayerRows] = useState<PlayerWithSkills[]>([]);
+
+  function setProfileViewState(nextFilters: SavedTeamAppliedFilter[], nextSorts: SavedTeamSort[]) {
+    setSavedTeamFilters(nextFilters);
+    setSavedTeamSorts(nextSorts);
+    const params = searchParamsFromProfileState(nextFilters, nextSorts);
+    const query = params.toString();
+    router.replace(query ? `/profile?${query}` : "/profile", { scroll: false });
+  }
 
   useEffect(() => {
     let alive = true;
@@ -1039,6 +1289,20 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
+    function syncFromLocation() {
+      const nextState = currentProfileStateFromLocation();
+      setSavedTeamFilters(nextState.filters);
+      setSavedTeamSorts(nextState.sorts);
+    }
+
+    syncFromLocation();
+    window.addEventListener("popstate", syncFromLocation);
+    return () => {
+      window.removeEventListener("popstate", syncFromLocation);
+    };
+  }, []);
+
+  useEffect(() => {
     let alive = true;
 
     listPlayersWithSkills()
@@ -1056,15 +1320,16 @@ export default function ProfilePage() {
   }, []);
 
   const rulesetOptions = useMemo(
-    () => getUniqueValues(savedTeams.map((team) => team.ruleset)),
+    () => getUniqueValues(savedTeams.map((team) => team.rulesetSlug)),
     [savedTeams]
   );
   const snapshotOptions = useMemo(
     () => getUniqueValues(savedTeams.map((team) => team.snapshotRelease)),
     [savedTeams]
   );
-  const teamTypeOptions = useMemo(
-    () => getUniqueValues(savedTeams.map((team) => team.teamType)),
+  const teamSizeOptions = useMemo(
+    () => Array.from(new Set(savedTeams.map((team) => team.teamSize).filter((size): size is SavedTeamSize => size !== null)))
+      .sort((a, b) => a - b),
     [savedTeams]
   );
 
@@ -1092,8 +1357,7 @@ export default function ProfilePage() {
   function resetSavedTeamControls() {
     setFilterField("name");
     setFilterValue("");
-    setSavedTeamFilters([]);
-    setSavedTeamSorts(DEFAULT_SAVED_TEAM_SORTS);
+    setProfileViewState([], DEFAULT_SAVED_TEAM_SORTS);
   }
 
   function addSavedTeamFilter() {
@@ -1101,45 +1365,39 @@ export default function ProfilePage() {
     if (!nextValue) return;
 
     const nextFilter: SavedTeamAppliedFilter = {
-      id: `${filterField}-${nextValue}`.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      id: createFilterId(filterField, nextValue),
       field: filterField,
       value: nextValue,
     };
 
-    setSavedTeamFilters((current) => {
-      if (current.some((filter) => filter.field === nextFilter.field && filter.value === nextFilter.value)) return current;
-      return [...current, nextFilter];
-    });
+    if (savedTeamFilters.some((filter) => filter.field === nextFilter.field && filter.value === nextFilter.value)) return;
+    setProfileViewState([...savedTeamFilters, nextFilter], savedTeamSorts);
     setFilterValue("");
   }
 
   function removeSavedTeamFilter(id: string) {
-    setSavedTeamFilters((current) => current.filter((filter) => filter.id !== id));
+    const next = savedTeamFilters.filter((filter) => filter.id !== id);
+    setProfileViewState(next, savedTeamSorts);
   }
 
   function addSavedTeamSort(field: SortField) {
-    setSavedTeamSorts((current) => {
-      if (current.some((sort) => sort.field === field)) return current;
-      const direction: SortDirection = field === "date" || field === "score" ? "desc" : "asc";
-      return [...current, { id: `${field}-${direction}`, field, direction }];
-    });
+    if (savedTeamSorts.some((sort) => sort.field === field)) return;
+    const direction: SortDirection = field === "date" || field === "score" ? "desc" : "asc";
+    setProfileViewState(savedTeamFilters, [...savedTeamSorts, createSort(field, direction)]);
   }
 
   function toggleSavedTeamSortDirection(id: string) {
-    setSavedTeamSorts((current) =>
-      current.map((sort) =>
+    const next = savedTeamSorts.map((sort) =>
         sort.id === id
-          ? { ...sort, direction: sort.direction === "asc" ? "desc" : "asc" }
+          ? createSort(sort.field, sort.direction === "asc" ? "desc" : "asc")
           : sort
-      )
     );
+    setProfileViewState(savedTeamFilters, next);
   }
 
   function removeSavedTeamSort(id: string) {
-    setSavedTeamSorts((current) => {
-      const next = current.filter((sort) => sort.id !== id);
-      return next.length > 0 ? next : DEFAULT_SAVED_TEAM_SORTS;
-    });
+    const next = savedTeamSorts.filter((sort) => sort.id !== id);
+    setProfileViewState(savedTeamFilters, next.length > 0 ? next : DEFAULT_SAVED_TEAM_SORTS);
   }
 
   const username = getUsername(email);
@@ -1314,13 +1572,13 @@ export default function ProfilePage() {
                   >
                     <option value="">Value...</option>
                     {filterField === "ruleset" && rulesetOptions.map((ruleset) => (
-                      <option key={ruleset} value={ruleset}>{ruleset}</option>
+                      <option key={ruleset} value={ruleset}>{formatRulesetName(ruleset)}</option>
                     ))}
                     {filterField === "snapshot" && snapshotOptions.map((snapshot) => (
                       <option key={snapshot} value={snapshot}>{snapshot}</option>
                     ))}
-                    {filterField === "team-size" && teamTypeOptions.map((teamType) => (
-                      <option key={teamType} value={teamType}>{teamType}</option>
+                    {filterField === "team-size" && teamSizeOptions.map((teamSize) => (
+                      <option key={teamSize} value={teamSize}>{TEAM_TYPE_BY_SIZE[teamSize]}</option>
                     ))}
                     {filterField === "date" && (
                       <>
@@ -1365,7 +1623,7 @@ export default function ProfilePage() {
                 <button
                   id="profile-clear-filters-btn"
                   type="button"
-                  onClick={() => setSavedTeamFilters([])}
+                  onClick={() => setProfileViewState([], savedTeamSorts)}
                   disabled={savedTeamFilters.length === 0}
                   className="min-h-9 rounded border border-[oklch(0.83_0.02_62)] px-3 text-sm font-semibold text-[oklch(0.49_0.02_45)] transition-colors duration-150 hover:border-[oklch(0.73_0.08_53)] hover:text-[oklch(0.18_0.02_45)] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]"
                 >
@@ -1442,7 +1700,7 @@ export default function ProfilePage() {
                 <button
                   id="profile-clear-sorts-btn"
                   type="button"
-                  onClick={() => setSavedTeamSorts(DEFAULT_SAVED_TEAM_SORTS)}
+                  onClick={() => setProfileViewState(savedTeamFilters, DEFAULT_SAVED_TEAM_SORTS)}
                   className="min-h-7 px-2 text-xs font-semibold text-[oklch(0.49_0.02_45)] transition-colors duration-150 hover:text-[oklch(0.18_0.02_45)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[oklch(0.74_0.16_55)]"
                 >
                   Clear sorts
@@ -1467,6 +1725,7 @@ export default function ProfilePage() {
                   featuredLabel={index === 0 ? featuredSavedTeamLabel : undefined}
                   onDelete={(id) => setSavedTeams((prev) => prev.filter((t) => t.id !== id))}
                   onRename={(id, newName) => setSavedTeams((prev) => prev.map((t) => t.id === id ? { ...t, name: newName } : t))}
+                  onVisibilityChange={(id, visibility) => setSavedTeams((prev) => prev.map((t) => t.id === id ? { ...t, visibility } : t))}
                 />
               ))}
             </div>

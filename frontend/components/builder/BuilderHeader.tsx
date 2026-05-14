@@ -23,11 +23,12 @@ interface BuilderHeaderProps {
 }
 
 /* ── Breadcrumb ── */
-function Breadcrumb({ ruleset, teamLabel, hasCornerstone }: { ruleset: string; teamLabel: string; hasCornerstone: boolean }) {
+function Breadcrumb({ ruleset, teamLabel, hasCornerstone, teamSize }: { ruleset: string; teamLabel: string; hasCornerstone: boolean; teamSize: string | null }) {
   const rulesetName = ruleset
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+  const legendsHref = `/lab/${ruleset}/legends${teamSize ? `?team_size=${teamSize}` : ""}`;
 
   return (
     <nav id="builder-breadcrumb" aria-label="Lab navigation" className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem]">
@@ -37,7 +38,7 @@ function Breadcrumb({ ruleset, teamLabel, hasCornerstone }: { ruleset: string; t
       {hasCornerstone && (
         <>
           <span className="text-[#0e0907]/25" aria-hidden="true">/</span>
-          <Link href={`/lab/${ruleset}/legends`} className="text-[#0e0907]/45 hover:text-[#0e0907]/70 transition-colors">
+          <Link href={legendsHref} className="text-[#0e0907]/45 hover:text-[#0e0907]/70 transition-colors">
             Pick Your Cornerstone
           </Link>
         </>
@@ -55,11 +56,12 @@ export function BuilderHeader({
   allSlotsFilled,
 }: BuilderHeaderProps) {
   const searchParams = useSearchParams();
+  const teamSize = searchParams.get("team_size");
 
   return (
     <div id="builder-header" className="mb-3 flex flex-shrink-0 flex-col gap-1.5">
       {/* Row 1: Breadcrumb */}
-      <Breadcrumb ruleset={ruleset} teamLabel={teamLabel} hasCornerstone={cornerstone !== null} />
+      <Breadcrumb ruleset={ruleset} teamLabel={teamLabel} hasCornerstone={cornerstone !== null} teamSize={teamSize} />
 
       {/* Row 2: Title + salary gauge + Evaluate CTA */}
       <div id="builder-header-main-row" className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center sm:gap-4">

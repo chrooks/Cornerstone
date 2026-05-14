@@ -119,11 +119,6 @@ const SCORE_FACTOR_WEIGHTS: Record<string, string> = {
   floor: "10%",
 };
 
-const LINEUP_ONLY_SCORE_FACTOR_WEIGHTS: Record<string, string> = {
-  starting_5: "90%",
-  archetype_diversity: "10%",
-};
-
 const SCORE_FACTOR_DERIVATIONS: Record<string, string> = {
   starting_5: "starting Lineup Cohesion Score divided by 5.0",
   depth: "60% bench viable Lineup Combination rate plus 40% bench median quality",

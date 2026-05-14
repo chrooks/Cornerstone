@@ -19,7 +19,8 @@ import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam, listRuleSet
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { readSlotsFromParams, buildPlayerPayload } from "@/lib/roster-utils";
-import { LEGEND_SALARY, MAX_ROSTER_SLOTS, teamLabelForSize } from "@/lib/builder-config";
+import { resolveRuleSetRules } from "@/lib/rulesets";
+import { LEGEND_SALARY } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { NotesList } from "./NotesList";
@@ -282,7 +283,8 @@ export function EvaluatePage() {
         if (matched) setResolvedRuleSet(matched);
 
         const playerMap = new Map(playersRes.data.map((p) => [p.id, p]));
-        const teamSize = typeof matched?.rules?.team_size === "number" ? (matched.rules.team_size as number) : MAX_ROSTER_SLOTS;
+        const resolvedRules = resolveRuleSetRules(matched?.rules, new URLSearchParams(paramsRef.current));
+        const teamSize = resolvedRules.teamSize;
         const slots = readSlotsFromParams(new URLSearchParams(paramsRef.current), cornerstoneId, playerMap, teamSize);
 
         // Determine if cornerstone is a Legend — fetch detail only if so
@@ -358,7 +360,8 @@ export function EvaluatePage() {
     if (!resolvedRuleSet?.current_version) return null;
 
     const rulesJson = resolvedRuleSet.rules ?? {};
-    const maxSlots = typeof rulesJson.team_size === "number" ? (rulesJson.team_size as number) : MAX_ROSTER_SLOTS;
+    const resolvedRules = resolveRuleSetRules(rulesJson, new URLSearchParams(paramsRef.current));
+    const maxSlots = resolvedRules.teamSize;
     const filledSlots = dataReady.slots.slice(0, maxSlots);
     if (filledSlots.some((player) => player === null)) return null;
 
@@ -368,6 +371,7 @@ export function EvaluatePage() {
       ruleset_slug: ruleset ?? "standard",
       ruleset_version_id: resolvedRuleSet.current_version.id,
       rules_hash: resolvedRuleSet.current_version.rules_hash,
+      team_size: maxSlots,
       cornerstone_legend_id: legend?.id ?? null,
       players: filledSlots.map((player, index) => {
         const slot = index + 1;

@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { DEFAULT_SALARY_CAP, DEFAULT_LEGEND_SALARY } from "@/lib/builder-config";
+import { DEFAULT_LEGEND_SALARY } from "@/lib/builder-config";
 import type { PlayerWithSkills } from "@/lib/types";
 
 export interface UseBuilderSalaryReturn {

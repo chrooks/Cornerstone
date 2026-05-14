@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState, useCallback, useEffect, type KeyboardEvent } from "react";
 import { listRuleSets } from "@/lib/api";
+import { teamLabelForSize } from "@/lib/builder-config";
+import { resolveRuleSetRules } from "@/lib/rulesets";
 import type { RuleSetSummary } from "@/lib/types";
 
 /* ── Tab type for the notebook-style RuleSet cards ── */
@@ -19,6 +21,7 @@ interface RuleSetDef {
   cornerstoneSource: "legend" | "all";
   rules: {
     teamSize: number;
+    allowedTeamSizes: number[];
     teamLabel: string;
     salaryCap: string;
     cornerstoneRule: string;
@@ -47,16 +50,18 @@ function formatSalaryCap(value: unknown): string {
 
 function mapRuleSetSummary(ruleSet: RuleSetSummary): RuleSetDef {
   const rules = ruleSet.rules ?? {};
+  const resolvedRules = resolveRuleSetRules(rules);
   const isStandard = ruleSet.slug === "standard";
   return {
     slug: ruleSet.slug,
     name: ruleSet.name,
     subtitle: ruleSet.description ?? "RuleSet details are being prepared.",
     status: ruleSet.status,
-    cornerstoneSource: rules.cornerstone_source === "all" ? "all" : "legend",
+    cornerstoneSource: resolvedRules.cornerstoneSource,
     rules: {
-      teamSize: asNumber(rules.team_size, 9),
-      teamLabel: asString(rules.team_label, "Rotation"),
+      teamSize: resolvedRules.teamSize,
+      allowedTeamSizes: resolvedRules.allowedTeamSizes,
+      teamLabel: resolvedRules.teamLabel,
       salaryCap: asString(rules.salary_cap_display, formatSalaryCap(rules.salary_cap)),
       cornerstoneRule: asString(rules.cornerstone_rule, isStandard ? "1 Legend required ($54M)" : "Any Player, any slot"),
       playerPool: asString(rules.player_pool, isStandard ? "Current Snapshot + Legends" : "PlayerPool details pending"),
@@ -78,8 +83,11 @@ const TABS: { id: TabId; label: string }[] = [
 
 /* ── Rules tab content: displays RuleSet constraints as a structured list ── */
 function RulesPanel({ rs }: { rs: RuleSetDef }) {
+  const teamSizeValue = rs.rules.allowedTeamSizes.length > 1
+    ? rs.rules.allowedTeamSizes.map((size) => `${teamLabelForSize(size)} (${size})`).join(" / ")
+    : `${rs.rules.teamSize} players`;
   const items = [
-    { label: "Team Size", value: `${rs.rules.teamSize} players`, mono: `${rs.rules.teamSize}` },
+    { label: "Team Size", value: teamSizeValue, mono: `${rs.rules.teamSize}` },
     { label: "Format", value: rs.rules.teamLabel },
     { label: "Salary Cap", value: rs.rules.salaryCap },
     { label: "Cornerstone", value: rs.rules.cornerstoneRule },
@@ -158,7 +166,13 @@ function CommunityPanel({ rs }: { rs: RuleSetDef }) {
 /* ── Single RuleSet card with notebook bookmark tabs ── */
 function RuleSetCard({ rs }: { rs: RuleSetDef }) {
   const [activeTab, setActiveTab] = useState<TabId>("rules");
+  const [selectedTeamSize, setSelectedTeamSize] = useState(rs.rules.teamSize);
   const isComingSoon = rs.status === "coming_soon";
+  const hasTeamSizeChoices = rs.rules.allowedTeamSizes.length > 1;
+  const selectedTeamLabel = teamLabelForSize(selectedTeamSize);
+  const entryHref = `${rs.cornerstoneSource === "all" ? `/lab/${rs.slug}/build` : `/lab/${rs.slug}/legends`}${
+    hasTeamSizeChoices ? `?team_size=${selectedTeamSize}` : ""
+  }`;
 
   /* Arrow key navigation between tabs (roving tabindex pattern) */
   const handleTabKeyDown = useCallback(
@@ -289,11 +303,46 @@ function RuleSetCard({ rs }: { rs: RuleSetDef }) {
         </div>
 
         {/* CTA footer */}
-        <div className="px-5 pb-5 pt-2 mt-auto">
+        <div className="px-5 pb-5 pt-2 mt-auto space-y-3">
+          {rs.status === "active" && hasTeamSizeChoices && (
+            <div id={`ruleset-${rs.slug}-team-size-picker`} className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-[#0e0907]/45">
+                  Team Size
+                </span>
+                <span className="font-mono text-[0.75rem] tabular-nums text-[#0e0907]/55">
+                  {selectedTeamSize}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 border border-[#d9d0c9] bg-[#ebe7e4]">
+                {rs.rules.allowedTeamSizes.map((size) => {
+                  const selected = selectedTeamSize === size;
+                  return (
+                    <button
+                      key={size}
+                      id={`ruleset-${rs.slug}-size-${size}`}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setSelectedTeamSize(size)}
+                      className={`
+                        px-2.5 py-2 text-[0.75rem] font-medium transition-colors duration-150
+                        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ffa05c]
+                        ${selected
+                          ? "bg-[#0e0907] text-[#f8f3f1]"
+                          : "border-l border-[#d9d0c9] first:border-l-0 text-[#0e0907]/55 hover:bg-[#f7f7f7] hover:text-[#0e0907]"}
+                      `}
+                    >
+                      {teamLabelForSize(size)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {rs.status === "active" ? (
             <Link
               id={`ruleset-${rs.slug}-cta`}
-              href={rs.cornerstoneSource === "all" ? `/lab/${rs.slug}/build` : `/lab/${rs.slug}/legends`}
+              href={entryHref}
               className="
                 inline-flex items-center px-5 py-2.5 rounded-md
                 bg-[#ffa05c] text-[#0e0907] text-[0.8125rem] font-medium tracking-[0.01em]
@@ -302,7 +351,7 @@ function RuleSetCard({ rs }: { rs: RuleSetDef }) {
                 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffa05c]
               "
             >
-              Enter Lab &rarr;
+              Enter {selectedTeamLabel} &rarr;
             </Link>
           ) : (
             <span
