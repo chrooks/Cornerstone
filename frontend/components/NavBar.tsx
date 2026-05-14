@@ -54,6 +54,7 @@ export function NavBar() {
     { href: "/lab", label: "Lab" },
     { href: "/players", label: "Players" },
     { href: "/players?f=Legend|Yes|AND|0", label: "Legends" },
+    { href: "/community", label: "Community" },
   ];
 
   const adminActive = pathname.startsWith("/admin");

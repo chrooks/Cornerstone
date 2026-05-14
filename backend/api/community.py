@@ -211,6 +211,45 @@ def community_teams() -> tuple:
 
         legend_names = _resolve_legend_names(supabase, visible_teams)
 
+        # Fetch players for all visible teams (compact snapshot)
+        players_by_team: dict[str, list[dict]] = {}
+        if team_ids:
+            players_res = (
+                supabase.table("saved_team_players")
+                .select("saved_team_id, slot, is_cornerstone, player_name_snapshot, position_snapshot, player_id, legend_id")
+                .in_("saved_team_id", team_ids)
+                .order("slot")
+                .execute()
+            )
+            all_stp = players_res.data or []
+
+            # Resolve nba_api_id for portrait URLs
+            player_ids = list({p["player_id"] for p in all_stp if p.get("player_id")})
+            legend_ids_for_portraits = list({p["legend_id"] for p in all_stp if p.get("legend_id")})
+
+            nba_api_map: dict[str, int | None] = {}
+            if player_ids:
+                p_res = supabase.table("players").select("id, nba_api_id").in_("id", player_ids).execute()
+                for row in p_res.data or []:
+                    nba_api_map[row["id"]] = row.get("nba_api_id")
+            if legend_ids_for_portraits:
+                l_res = supabase.table("legends").select("id, nba_api_id").in_("id", legend_ids_for_portraits).execute()
+                for row in l_res.data or []:
+                    nba_api_map[row["id"]] = row.get("nba_api_id")
+
+            for p in all_stp:
+                tid = p["saved_team_id"]
+                pid = p.get("player_id") or p.get("legend_id")
+                players_by_team.setdefault(tid, []).append({
+                    "name": p.get("player_name_snapshot", "Unknown"),
+                    "position": p.get("position_snapshot"),
+                    "is_cornerstone": p.get("is_cornerstone", False),
+                    "slot": p.get("slot", 0),
+                    "player_id": p.get("player_id"),
+                    "legend_id": p.get("legend_id"),
+                    "nba_api_id": nba_api_map.get(pid) if pid else None,
+                })
+
         # Build team entries with evaluation data
         entries = []
         for team in visible_teams:
@@ -226,6 +265,7 @@ def community_teams() -> tuple:
                 "star_rating": ev.get("star_rating"),
                 "starting_lineup_score": ev.get("starting_lineup_score"),
                 "created_at": team.get("created_at"),
+                "players": players_by_team.get(team["id"], []),
             })
 
         # Sort

@@ -836,6 +836,17 @@ export interface CommunityRuleSetStats {
 /** Keyed by ruleset_slug. */
 export type CommunityStatsMap = Record<string, CommunityRuleSetStats>;
 
+/** Compact player snapshot in a community team entry. */
+export interface CommunityTeamPlayer {
+  name: string;
+  position: string | null;
+  is_cornerstone: boolean;
+  slot: number;
+  player_id: string | null;
+  legend_id: string | null;
+  nba_api_id: number | null;
+}
+
 /** Single entry in the community teams leaderboard. */
 export interface CommunityTeamEntry {
   id: string;
@@ -846,6 +857,7 @@ export interface CommunityTeamEntry {
   star_rating: number | null;
   starting_lineup_score: number | null;
   created_at: string | null;
+  players: CommunityTeamPlayer[];
 }
 
 /** Paginated response from GET /api/community/teams. */
