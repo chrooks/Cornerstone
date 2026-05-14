@@ -23,6 +23,8 @@ from .weights import (
     ARCHETYPE_LABELS,
     DEPTH_QUALITY_WEIGHT,
     DEPTH_VIABLE_RATIO_WEIGHT,
+    LINEUP_ARCHETYPE_MAX,
+    LINEUP_ONLY_ROLLUP_WEIGHTS,
     ROSTER_ROLLUP_WEIGHTS,
     STAR_RATING_MAX,
     VIABLE_LINEUP_THRESHOLD,
@@ -185,20 +187,13 @@ def _star_breakdown(
 
     scores = [lineup.score for lineup in lineups]
     depth = _depth_components(lineups)
+    archetype_denominator = LINEUP_ARCHETYPE_MAX if len(lineups) == 1 else len(ARCHETYPE_LABELS)
     return {
         "starting_5": round(min(1.0, starting_lineup.score / STAR_RATING_MAX), 3),
         "depth": float(depth["score"]),
-        "archetype_diversity": round(min(1.0, len(archetypes) / len(ARCHETYPE_LABELS)), 3),
+        "archetype_diversity": round(min(1.0, len(archetypes) / archetype_denominator), 3),
         "floor": round(min(1.0, median(scores) / STAR_RATING_MAX), 3),
     }
-
-
-LINEUP_ONLY_ROLLUP_WEIGHTS: dict[str, float] = {
-    "starting_5": 0.90,
-    "depth": 0.0,
-    "archetype_diversity": 0.10,
-    "floor": 0.0,
-}
 
 
 def _rollup_star_rating(breakdown: dict[str, float], lineup_only: bool = False) -> float:
@@ -217,7 +212,7 @@ def _rollup_star_rating(breakdown: dict[str, float], lineup_only: bool = False) 
 
 def evaluate_roster(players: list[dict[str, Any]], mode: str = "live") -> RosterEvaluation:
     """
-    Evaluate a 1-9 player roster.
+    Evaluate a Team with at least five Players as Lineup Combinations.
 
     Live mode returns structured notes. Final mode also attempts the optional
     Claude-generated team narrative and degrades to None if that call fails.

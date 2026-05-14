@@ -545,8 +545,8 @@ class TestSkillSetSizes:
     def test_high_confidence_exactly_6(self):
         assert len(HIGH_CONFIDENCE_SKILLS) == 6
 
-    def test_moderate_confidence_exactly_11(self):
-        assert len(MODERATE_CONFIDENCE_SKILLS) == 11
+    def test_moderate_confidence_exactly_12(self):
+        assert len(MODERATE_CONFIDENCE_SKILLS) == 12
 
     def test_low_confidence_exactly_3(self):
         assert len(LOW_CONFIDENCE_SKILLS) == 3

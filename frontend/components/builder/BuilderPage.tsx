@@ -353,6 +353,7 @@ export function BuilderPage() {
     );
   }
 
+
   // Legend-only RuleSets need a cornerstone to render; FFA starts empty
   if (cornerstoneSource === "legend" && (!cornerstoneId || !cornerstone)) {
     return null;

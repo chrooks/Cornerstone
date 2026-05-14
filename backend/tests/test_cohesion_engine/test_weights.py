@@ -28,7 +28,7 @@ def test_composite_coefficients_match_resolved_formulas():
     assert weights.COMPOSITE_COEFFICIENTS["shot_creation_spacing"] == 0.3
     assert weights.COMPOSITE_COEFFICIENTS["transition_passer_scale"] == 0.2
     assert weights.COMPOSITE_COEFFICIENTS["perimeter_defense_versatile_defender"] == 0.7
-    assert weights.COMPOSITE_COEFFICIENTS["interior_defense_versatile_defender"] == 0.5
+    assert weights.COMPOSITE_COEFFICIENTS["interior_defense_versatile_defender"] == 0.25
     assert weights.COMPOSITE_COEFFICIENTS["interior_defense_rebounder"] == 0.3
 
 
@@ -41,7 +41,7 @@ def test_theoretical_maxima_match_impl_spec_fallback_table():
         "post_game": 17.0,
         "pnr_screener": 50.0,
         "off_ball_impact": 61.0,
-        "shot_creation": 60.0,
+        "shot_creation": 50.0,
         "rebounding": 20.0,
         "transition": 42.0,
         "perimeter_defense": 17.0,
@@ -58,24 +58,24 @@ def test_bell_curve_tables_and_peak_shifts_match_impl_spec():
         "Capable": 2,
         "Proficient": 3,
         "Elite": 5,
-        "All-Time Great": 7,
+        "All-Time Great": 9,
     }
     assert weights.PD_DOWN == {
         "None": 0,
-        "Capable": 1,
-        "Proficient": 2,
-        "Elite": 3,
-        "All-Time Great": 5,
+        "Capable": 2,
+        "Proficient": 4,
+        "Elite": 6,
+        "All-Time Great": 8,
     }
     assert weights.RP_UP == {
         "None": 0,
-        "Capable": 1,
-        "Proficient": 2,
-        "Elite": 3,
-        "All-Time Great": 4,
+        "Capable": 2,
+        "Proficient": 3,
+        "Elite": 5,
+        "All-Time Great": 6,
     }
-    assert weights.PEAK_SHIFT_PD_ONLY == -2
-    assert weights.PEAK_SHIFT_RP_ONLY == 2
+    assert weights.PEAK_SHIFT_PD_ONLY == -1
+    assert weights.PEAK_SHIFT_RP_ONLY == 1
 
 
 def test_synergy_scale_factors_match_impl_spec_table():
@@ -129,6 +129,13 @@ def test_ratio_accentuation_note_and_layer_2_constants_exist():
         "archetype_diversity": 0.20,
         "floor": 0.10,
     }
+    assert weights.LINEUP_ONLY_ROLLUP_WEIGHTS == {
+        "starting_5": 0.90,
+        "depth": 0.0,
+        "archetype_diversity": 0.10,
+        "floor": 0.0,
+    }
+    assert weights.LINEUP_ARCHETYPE_MAX == 3
     assert weights.VIABLE_LINEUP_THRESHOLD == 2.75
     assert weights.DEPTH_VIABLE_RATIO_WEIGHT == 0.60
     assert weights.DEPTH_QUALITY_WEIGHT == 0.40

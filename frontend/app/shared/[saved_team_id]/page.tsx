@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
 import { CohesionScoreDisplay } from "@/components/builder/CohesionScoreDisplay";
+import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { getSharedTeam, getSharedRebuildCheck } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { RebuildCheckResponse, RebuildPlayerReport, RosterEvaluation, SavedTeamSummary, SaveTeamPlayerPayload } from "@/lib/types";
@@ -93,6 +94,7 @@ function PlayerSnapshotRow({
       )}
     >
       <div
+        id={`shared-team-player-slot-${player.slot}-portrait`}
         className={cn(
           "flex h-12 w-12 items-center justify-center overflow-hidden rounded-sm border font-mono text-xs font-semibold",
           showCornerstone && player.is_cornerstone
@@ -101,7 +103,16 @@ function PlayerSnapshotRow({
         )}
         aria-hidden="true"
       >
-        {formatPlayerInitials(player.player_name_snapshot)}
+        {player.nba_api_id ? (
+          <PlayerHeadshot
+            nba_api_id={player.nba_api_id}
+            name={player.player_name_snapshot}
+            size={48}
+            className="h-full w-full rounded-none"
+          />
+        ) : (
+          formatPlayerInitials(player.player_name_snapshot)
+        )}
       </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">

@@ -5,8 +5,8 @@ Integration tests for Phase 4 roster-level scoring.
 from __future__ import annotations
 
 from backend.services.cohesion_engine import evaluate_roster as package_evaluate_roster
-from backend.services.cohesion_engine.roster import evaluate_roster
-from backend.services.cohesion_engine.types import RosterEvaluation
+from backend.services.cohesion_engine.roster import _star_breakdown, evaluate_roster
+from backend.services.cohesion_engine.types import LineupCohesion, RosterEvaluation
 
 
 def make_player(name: str, slot: int, height: str = "6-7", skills: dict[str, str] | None = None) -> dict:
@@ -34,6 +34,16 @@ def balanced_player(name: str, slot: int) -> dict:
     heights = ["6-3", "6-5", "6-7", "7-0", "6-8", "6-11", "6-4", "6-10", "6-6"]
     index = slot - 1
     return make_player(name, slot, heights[index], skill_sets[index])
+
+
+def balanced_player_for_slot(name: str, slot: int) -> dict:
+    template = balanced_player(name, ((slot - 1) % 9) + 1)
+    return {
+        **template,
+        "id": name,
+        "name": name,
+        "slot": slot,
+    }
 
 
 def test_package_reexports_real_evaluate_roster():
@@ -82,6 +92,20 @@ def test_evaluate_roster_with_five_players_scores_one_lineup():
     assert result.star_breakdown["depth"] == 0.0
 
 
+def test_lineup_only_archetype_diversity_normalizes_against_lineup_max():
+    lineup = LineupCohesion(
+        score=5.0,
+        subscores={},
+        synergies_applied=[],
+        accentuation_strength=0.0,
+        accentuation_weakness=0.0,
+    )
+
+    breakdown = _star_breakdown(lineup, [lineup], {"offensive", "defensive", "transition"})
+
+    assert breakdown["archetype_diversity"] == 1.0
+
+
 def test_evaluate_roster_with_nine_players_evaluates_all_126_lineups():
     players = [balanced_player(f"P{i}", i) for i in range(1, 10)]
 
@@ -92,6 +116,15 @@ def test_evaluate_roster_with_nine_players_evaluates_all_126_lineups():
     assert 0.0 <= result.lineup_summary["median_score"] <= 5.0
     assert result.star_breakdown["depth"] < 1.0
     assert all(label in {"offensive", "defensive", "transition", "balanced", "paint", "shooting"} for label in result.lineup_summary["archetype_labels"])
+
+
+def test_evaluate_roster_with_twelve_players_evaluates_all_792_lineups():
+    players = [balanced_player_for_slot(f"P{i}", i) for i in range(1, 13)]
+
+    result = evaluate_roster(players)
+
+    assert result.lineup_summary["total_lineups"] == 792
+    assert 0 <= result.lineup_summary["viable_lineups"] <= 792
 
 
 def test_evaluate_roster_uses_slot_order_for_starting_lineup():

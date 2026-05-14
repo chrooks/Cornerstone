@@ -187,6 +187,7 @@ def _normalize_rules_json(rules_json: dict[str, Any]) -> tuple[dict[str, Any] | 
     return normalized, None
 
 
+
 @rulesets_bp.route("/rulesets", methods=["POST"])
 @require_admin
 def create_ruleset():

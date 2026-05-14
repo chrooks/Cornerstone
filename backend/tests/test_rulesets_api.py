@@ -390,6 +390,7 @@ def test_create_version_rejects_team_size_outside_allowed_team_sizes(admin_clien
     assert "team_size" in data["error"]
 
 
+
 def test_create_version_rejects_invalid_team_size(admin_client):
     resp = admin_client.post(
         "/api/rulesets/standard/versions",

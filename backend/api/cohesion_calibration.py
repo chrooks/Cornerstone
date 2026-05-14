@@ -35,7 +35,7 @@ from services.cohesion_engine.composites import ensure_distributions
 from services.cohesion_engine import evaluate_roster
 from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
 from services.cohesion_engine.types import LineupCohesion, PlayerComposites
-from services.cohesion_engine.weights import ROSTER_ROLLUP_WEIGHTS, STAR_RATING_MAX
+from services.cohesion_engine.weights import LINEUP_ONLY_ROLLUP_WEIGHTS, ROSTER_ROLLUP_WEIGHTS, STAR_RATING_MAX
 from services.rotation_config import MAX_ROTATION_SLOTS
 from services.cohesion_engine import weights as weights_module
 from services.players_service import CURRENT_SEASON
@@ -461,10 +461,8 @@ def _theoretical_best_starting_rating(
         **actual_breakdown,
         "starting_5": round(min(1.0, best_score / STAR_RATING_MAX), 3),
     }
-    weighted = sum(
-        ROSTER_ROLLUP_WEIGHTS[key] * breakdown.get(key, 0.0)
-        for key in ROSTER_ROLLUP_WEIGHTS
-    )
+    weights = LINEUP_ONLY_ROLLUP_WEIGHTS if len(lineup_combinations) == 1 else ROSTER_ROLLUP_WEIGHTS
+    weighted = sum(weights[key] * breakdown.get(key, 0.0) for key in weights)
     return round(STAR_RATING_MAX * weighted, 2), breakdown
 
 

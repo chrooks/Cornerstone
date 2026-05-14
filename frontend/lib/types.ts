@@ -682,6 +682,8 @@ export interface SaveTeamPlayerPayload {
   team_snapshot: string | null;
   position_snapshot: string | null;
   skill_profile_snapshot: Record<string, string>;
+  /** NBA.com Player id used for portrait URLs when the Saved Team endpoint resolves it. */
+  nba_api_id?: number | null;
   /** True when the player is on a rookie scale contract. */
   is_rookie_deal?: boolean;
 }

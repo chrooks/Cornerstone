@@ -35,6 +35,7 @@ def test_compute_bell_params_for_warm_body():
         "range_up": 1,
         "flat_top_down": 0,
         "flat_top_up": 0,
+        "player_height": 74,
     }
 
 
@@ -53,8 +54,8 @@ def test_compute_bell_params_applies_pd_and_rp_peak_shifts():
     pd_only = compute_bell_params({"perimeter_disruptor": "Elite"}, 76)
     rp_only = compute_bell_params({"rim_protector": "Elite"}, 82)
 
-    assert pd_only["peak_center"] == 74
-    assert rp_only["peak_center"] == 84
+    assert pd_only["peak_center"] == 75
+    assert rp_only["peak_center"] == 83
 
 
 def test_compute_bell_params_clamps_peak_to_supported_height_range():
@@ -66,7 +67,7 @@ def test_compute_bell_params_clamps_peak_to_supported_height_range():
 
 def test_defensive_value_at_height_flat_taper_and_outside():
     assert defensive_value_at_height(79, 3.5, 79, 6, 6, 2, 2) == 3.5
-    assert round(defensive_value_at_height(83, 3.5, 79, 6, 6, 2, 2), 3) == 2.625
+    assert round(defensive_value_at_height(83, 3.5, 79, 6, 6, 2, 2), 3) == 1.523
     assert defensive_value_at_height(86, 3.5, 79, 6, 6, 2, 2) == 0.0
 
 

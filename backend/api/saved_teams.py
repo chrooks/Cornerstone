@@ -112,6 +112,7 @@ def _validate_saved_team(
     else:
         allowed_team_sizes = [configured_team_size]
 
+
     salary_cap = rules_json.get("salary_cap")  # None when no cap (e.g. Free For All)
     cornerstone_source = rules_json.get("cornerstone_source", "legend")
 
@@ -269,7 +270,55 @@ def _player_insert_rows(saved_team_id: str, players: list[dict[str, Any]]) -> li
     return rows
 
 
-def _players_for_saved_team(supabase, saved_team_id: str) -> list[dict[str, Any]]:
+def _enrich_players_with_nba_api_ids(supabase, players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    enriched = [dict(player) for player in players]
+    canonical_player_ids = list({
+        player["canonical_player_id"]
+        for player in enriched
+        if player.get("canonical_player_id")
+    })
+    player_ids = list({player["player_id"] for player in enriched if player.get("player_id")})
+    legend_ids = list({player["legend_id"] for player in enriched if player.get("legend_id")})
+
+    canonical_nba_ids: dict[str, int | None] = {}
+    if canonical_player_ids:
+        res = (
+            supabase.table("canonical_players")
+            .select("id, nba_api_id")
+            .in_("id", canonical_player_ids)
+            .execute()
+        )
+        canonical_nba_ids = {row["id"]: row.get("nba_api_id") for row in res.data or []}
+
+    player_nba_ids: dict[str, int | None] = {}
+    if player_ids:
+        res = supabase.table("players").select("id, nba_api_id").in_("id", player_ids).execute()
+        player_nba_ids = {row["id"]: row.get("nba_api_id") for row in res.data or []}
+
+    legend_nba_ids: dict[str, int | None] = {}
+    if legend_ids:
+        res = supabase.table("legends").select("id, nba_api_id").in_("id", legend_ids).execute()
+        legend_nba_ids = {row["id"]: row.get("nba_api_id") for row in res.data or []}
+
+    for player in enriched:
+        nba_api_id = None
+        if player.get("canonical_player_id"):
+            nba_api_id = canonical_nba_ids.get(player["canonical_player_id"])
+        if nba_api_id is None and player.get("player_id"):
+            nba_api_id = player_nba_ids.get(player["player_id"])
+        if nba_api_id is None and player.get("legend_id"):
+            nba_api_id = legend_nba_ids.get(player["legend_id"])
+        player["nba_api_id"] = nba_api_id
+
+    return enriched
+
+
+def _players_for_saved_team(
+    supabase,
+    saved_team_id: str,
+    *,
+    include_nba_api_ids: bool = False,
+) -> list[dict[str, Any]]:
     res = (
         supabase.table("saved_team_players")
         .select("*")
@@ -277,7 +326,10 @@ def _players_for_saved_team(supabase, saved_team_id: str) -> list[dict[str, Any]
         .order("slot")
         .execute()
     )
-    return res.data or []
+    players = res.data or []
+    if include_nba_api_ids:
+        return _enrich_players_with_nba_api_ids(supabase, players)
+    return players
 
 
 def _latest_evaluation_for_saved_team(supabase, saved_team_id: str) -> dict[str, Any] | None:
@@ -912,7 +964,7 @@ def get_shared_saved_team(saved_team_id: str):
 
         return _ok(_serialize_saved_team(
             saved_team,
-            _players_for_saved_team(supabase, saved_team["id"]),
+            _players_for_saved_team(supabase, saved_team["id"], include_nba_api_ids=True),
             _latest_evaluation_for_saved_team(supabase, saved_team["id"]),
             include_evaluation_payload=True,
         ))

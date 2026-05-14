@@ -280,13 +280,15 @@ def apply_stabilization(
             stabilized_val = stabilized_season_pct
 
         elif stat_key.endswith("_ppp") and stat_section == "play_type":
-            # PPP stat: attempt stat is the corresponding _poss stat (season total)
+            # PPP stat: attempt stat is the corresponding per-game _poss stat.
             poss_key = stat_key[: -len("_ppp")] + "_poss"
             poss_path = f"{stat_section}.{poss_key}"
 
-            season_poss = resolve_stat(stats_map, poss_path)
-            if season_poss is None or season_poss <= 0:
+            per_game_poss = resolve_stat(stats_map, poss_path)
+            if per_game_poss is None or per_game_poss <= 0:
                 continue  # Can't stabilize without possession count
+
+            season_poss = per_game_poss * games_played
 
             # For PPP: "makes" = ppp * poss (points earned equivalent)
             ppp_numerator = raw_val * season_poss  # total points from this play type
