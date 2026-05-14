@@ -254,7 +254,7 @@ export default function FAQPage() {
 
               {/* Atmospheric callout — barbershop framing */}
               <Callout label="The argument, made explicit">
-                Every claim about a team — &quot;they have no rim protection,&quot; &quot;the spacing is broken,&quot; &quot;they cannot get a shot in the half court&quot; — lives somewhere in this chain. The job of the engine is to turn those gut reads into something you can point at.
+                Every claim about a team (&quot;they have no rim protection,&quot; &quot;the spacing is broken,&quot; &quot;they cannot get a shot in the half court&quot;) lives somewhere in this chain. The job of the engine is to turn those gut reads into something you can point at.
               </Callout>
             </section>
 
@@ -290,7 +290,7 @@ export default function FAQPage() {
 
               <Prose>
                 <p className="mt-6">
-                  Skills cover the obvious categories — Isolation Scorer, Rim Protector, Defensive Rebounding — and the less obvious ones a single box-score column cannot capture, like PnR Ball Handler, Off-Ball Mover, and Versatile Defender. Together the 21 Skills form a Player&apos;s Skill Profile.
+                  Skills cover the obvious categories (Isolation Scorer, Rim Protector, Defensive Rebounding) and the less obvious ones a single box-score column cannot capture, like PnR Ball Handler, Off-Ball Mover, and Versatile Defender. Together the 21 Skills form a Player&apos;s Skill Profile.
                 </p>
               </Prose>
             </section>
@@ -344,7 +344,7 @@ export default function FAQPage() {
               </h2>
               <Prose>
                 <p>
-                  An Impact Trait sits between a Player&apos;s Skill Profile and the Lineup math. It is a derived, normalized signal that captures a specific way a Player affects what is happening on the floor — for example, PnR Ball Handler, Rim Pressure, or Versatility.
+                  An Impact Trait sits between a Player&apos;s Skill Profile and the Lineup math. It is a derived, normalized signal that captures a specific way a Player affects what is happening on the floor: for example, PnR Ball Handler, Rim Pressure, or Versatility.
                 </p>
                 <p>
                   Impact Traits exist because raw Skill Tiers do not slot directly into Lineup-level questions. A Lineup needs to know &quot;how much shot creation does this group have,&quot; not &quot;what tier is each individual&apos;s Scorer Skill.&quot; Traits do that translation.
@@ -370,7 +370,7 @@ export default function FAQPage() {
                   A Lineup Subscore measures one component of how a five-Player Lineup is likely to perform. Cornerstone tracks subscores for offensive concepts like spacing and rim pressure, defensive concepts like perimeter disruption and rim protection, and transition concepts like rebounding and pace.
                 </p>
                 <p>
-                  Each subscore is computed from the Lineup&apos;s combined Impact Traits, with weights tuned by Evaluation Version. Subscores are the unit at which a result becomes interpretable — they are what feeds the GM Note and the visual score breakdown after evaluation.
+                  Each subscore is computed from the Lineup&apos;s combined Impact Traits, with weights tuned by Evaluation Version. Subscores are the unit at which a result becomes interpretable: they are what feeds the GM Note and the visual score breakdown after evaluation.
                 </p>
               </Prose>
             </section>

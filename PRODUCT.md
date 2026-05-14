@@ -50,7 +50,7 @@ The landing page exists to hook visitors in 5 seconds: show them the system is s
 
 ## References
 
-- **JJ Redick — "Old Man and the Three" Build Perfect Team Around X Legend series** (origin inspiration): The original spark for Cornerstone. Redick and guests pick a Legend, then build the ideal supporting cast around their specific skill set, weaknesses, era, and identity. This is the actual barbershop argument made into a recurring format. The Cornerstone Player ($54M anchor) and the supporting cap mechanic are direct descendants of this concept.
+- **JJ Redick, "Old Man and the Three" Build Perfect Team Around X Legend series** (origin inspiration): The original spark for Cornerstone. Redick and guests pick a Legend, then build the ideal supporting cast around their specific skill set, weaknesses, era, and identity. This is the actual barbershop argument made into a recurring format. The Cornerstone Player ($54M anchor) and the supporting cap mechanic are direct descendants of this concept.
   - https://youtu.be/BSoMNDk3_xw
   - https://youtu.be/uq8Fplg813k
 - **Pokemon Showdown** (play.pokemonshowdown.com): Inspiration for the product structure. Metagames/tiers = RuleSets. Each format defines a different game with different constraints. Team builder under format rules → battle → compare. The RuleSet selection screen should feel like picking a Showdown tier.
