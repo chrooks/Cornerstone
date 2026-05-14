@@ -821,3 +821,37 @@ export interface EvaluatePayload {
   mode: "live" | "final";
   debug: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Community leaderboard
+// ---------------------------------------------------------------------------
+
+/** Per-RuleSet aggregate stats for the Community tab. */
+export interface CommunityRuleSetStats {
+  team_count: number;
+  avg_score: number | null;
+  top_cornerstone: string;
+}
+
+/** Keyed by ruleset_slug. */
+export type CommunityStatsMap = Record<string, CommunityRuleSetStats>;
+
+/** Single entry in the community teams leaderboard. */
+export interface CommunityTeamEntry {
+  id: string;
+  name: string;
+  ruleset_slug: string;
+  team_size: number | null;
+  cornerstone_name: string;
+  star_rating: number | null;
+  starting_lineup_score: number | null;
+  created_at: string | null;
+}
+
+/** Paginated response from GET /api/community/teams. */
+export interface CommunityTeamsResponse {
+  teams: CommunityTeamEntry[];
+  total: number;
+  page: number;
+  per_page: number;
+}

@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useState, useCallback, useEffect, type KeyboardEvent } from "react";
-import { listRuleSets } from "@/lib/api";
+import { listRuleSets, getCommunityStats } from "@/lib/api";
 import { teamLabelForSize } from "@/lib/builder-config";
 import { resolveRuleSetRules } from "@/lib/rulesets";
-import type { RuleSetSummary } from "@/lib/types";
+import type { RuleSetSummary, CommunityStatsMap } from "@/lib/types";
 
 /* ── Tab type for the notebook-style RuleSet cards ── */
 type TabId = "rules" | "community";
@@ -31,7 +31,7 @@ interface RuleSetDef {
   community: {
     teamsBuilt: number;
     topCornerstone: string;
-    avgScore: number;
+    avgScore: number | null;
   };
 }
 
@@ -48,10 +48,14 @@ function formatSalaryCap(value: unknown): string {
   return `$${Math.round(value / 1_000_000)}M`;
 }
 
-function mapRuleSetSummary(ruleSet: RuleSetSummary): RuleSetDef {
+function mapRuleSetSummary(
+  ruleSet: RuleSetSummary,
+  communityStats?: CommunityStatsMap,
+): RuleSetDef {
   const rules = ruleSet.rules ?? {};
   const resolvedRules = resolveRuleSetRules(rules);
   const isStandard = ruleSet.slug === "standard";
+  const stats = communityStats?.[ruleSet.slug];
   return {
     slug: ruleSet.slug,
     name: ruleSet.name,
@@ -68,9 +72,9 @@ function mapRuleSetSummary(ruleSet: RuleSetSummary): RuleSetDef {
       rookieDealLimit: asNumber(rules.rookie_deal_limit, 0),
     },
     community: {
-      teamsBuilt: 0,
-      topCornerstone: "-",
-      avgScore: 0,
+      teamsBuilt: stats?.team_count ?? 0,
+      topCornerstone: stats?.top_cornerstone ?? "-",
+      avgScore: stats?.avg_score ?? null,
     },
   };
 }
@@ -145,7 +149,7 @@ function CommunityPanel({ rs }: { rs: RuleSetDef }) {
             Avg Score
           </span>
           <span className="font-mono text-xl tabular-nums text-[#0e0907]">
-            {rs.community.avgScore}
+            {rs.community.avgScore != null ? rs.community.avgScore.toFixed(1) : "—"}
           </span>
         </div>
       </div>
@@ -387,11 +391,16 @@ export default function LabPage() {
 
   useEffect(() => {
     let alive = true;
-    listRuleSets()
-      .then((res) => {
+
+    const safeStats = getCommunityStats().catch(
+      () => ({ success: false, data: null, error: null }) as const,
+    );
+    Promise.all([listRuleSets(), safeStats])
+      .then(([rulesetsRes, statsRes]) => {
         if (!alive) return;
-        if (res.success && res.data) {
-          setRulesets(res.data.map(mapRuleSetSummary));
+        if (rulesetsRes.success && rulesetsRes.data) {
+          const communityStats = statsRes.success ? statsRes.data ?? undefined : undefined;
+          setRulesets(rulesetsRes.data.map((rs) => mapRuleSetSummary(rs, communityStats)));
           setLoadState("ready");
           return;
         }
