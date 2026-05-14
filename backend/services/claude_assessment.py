@@ -51,7 +51,7 @@ _SKILL_DISPLAY_NAMES: dict[str, str] = {
     "cutter":             "Cutter",
     "movement_shooter":   "Movement Shooter",
     "passer":             "Passer",
-    "crafty_finisher":    "Crafty Finisher",
+    "crafty_finisher":    "Below the Rim Finishing",
     "driver":             "Driver",
     "mid_post_player":    "Mid Post Player",
     "low_post_player":    "Low Post Player",
@@ -62,7 +62,7 @@ _SKILL_DISPLAY_NAMES: dict[str, str] = {
     "pnr_finisher":       "PnR Finisher",
     "versatile_defender": "Versatile Defender",
     "perimeter_disruptor": "Perimeter Disruptor",
-    "high_flyer":         "High Flyer",
+    "high_flyer":         "Above the Rim Finishing",
 }
 
 # Definitions scoped to the skills Claude actually evaluates (moderate + low)
@@ -270,7 +270,7 @@ def _build_informed_section(stat_skills_result: dict) -> str:
     hf_driving = hf.get("driving_stats", {})
     hf_stats_str = _format_driving_stats_inline(hf_driving)
     lines += [
-        "### high_flyer (High Flyer)",
+        "### high_flyer (Above the Rim Finishing)",
         "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, "
         "and transition finishes.",
         f"The stats show: {hf_stats_str}",

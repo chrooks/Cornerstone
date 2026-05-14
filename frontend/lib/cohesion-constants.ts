@@ -146,7 +146,7 @@ export const SYNERGY_DESCRIPTIONS: Record<string, string> = {
   "OFF-15": "Vertical spacers are penalized without passers or drivers to activate them.",
   "OFF-16": "Passers or drivers boost vertical spacers as lob and rim-pressure targets.",
   "OFF-31": "Passers boost transition threats in the open court.",
-  "OFF-32": "Transition threats and passers boost high flyers.",
+  "OFF-32": "Transition threats and passers boost Above the Rim Finishers.",
   "OFF-37": "Only one passer is present, making playmaking fragile.",
 };
 

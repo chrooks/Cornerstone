@@ -76,7 +76,7 @@ SKILL_DEFINITIONS: dict[str, str] = {
     "passer":              "Creates quality shot opportunities for teammates through vision and passing skill.",
     "offensive_rebounder": "Consistently crashes offensive boards and converts second-chance opportunities.",
     "vertical_spacer":     "Threatens vertically as a lob target and above-the-rim finisher, creating driving lanes for teammates.",
-    "rebounder":           "Consistently grabs defensive and offensive boards through positioning and effort.",
+    "rebounder":           "Consistently secures defensive boards through positioning, boxing out, and effort.",
     "rim_protector":       "Deters and blocks shots at the rim, altering opponent finishing attempts.",
     "screen_setter":       "Sets quality screens that free teammates for open shots.",
     "mid_post_player":     "Scores effectively from the mid-post/elbow area using face-up moves and mid-range shooting.",

@@ -12,7 +12,7 @@ const SAMPLE_SKILLS = [
   { name: "Passer", tier: "Proficient" as const },
   { name: "Versatile Defender", tier: "Capable" as const },
   { name: "Perimeter Disruptor", tier: "Elite" as const },
-  { name: "Rebounder", tier: "Capable" as const },
+  { name: "Defensive Rebounding", tier: "Capable" as const },
 ];
 
 const TIER_STYLES: Record<string, string> = {
