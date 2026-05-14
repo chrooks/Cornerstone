@@ -1,6 +1,6 @@
 # Project Index
 
-Last updated: 2026-05-12 by /handoff
+Last updated: 2026-05-13 by /handoff (decouple team size from RuleSet)
 
 ## Source-of-truth documents
 
@@ -14,6 +14,10 @@ Last updated: 2026-05-12 by /handoff
 
 ## Handoffs
 
+- [decouple-team-size-from-ruleset](handoffs/2026-05-13-decouple-team-size-from-ruleset.md) — Decouple team size from RuleSet; allow one RuleSet with multiple size options
+- [ffa-roster-verification](handoffs/2026-05-13-ffa-roster-verification.md) — Verify 12-man FFA Roster works end-to-end; fix bugs as found
+- [create-free-for-all-ruleset](handoffs/2026-05-12-create-free-for-all-ruleset.md) — Publish Free For All RuleSet; handle cap-less and cornerstone-optional builder flow
+- [ruleset-admin-and-rules-wiring](handoffs/2026-05-12-ruleset-admin-and-rules-wiring.md) — Admin RuleSet CRUD complete; builder reads live rules_json; RookieDeal enforcement next
 - [admin-ruleset-creator](handoffs/2026-05-12-admin-ruleset-creator.md) — Build the admin RuleSet creator/publisher page
 - [rules-implementation-audit](handoffs/2026-05-12-rules-implementation-audit.md) — Audit real RuleSet implementation before the next rules/domain slice
 - [builder-responsive-plan](handoffs/2026-05-11-builder-responsive-plan.md) — Builder Feedback read committed; next scope is the responsive layout pass for `/lab/[ruleset]/build`
