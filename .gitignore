@@ -26,8 +26,10 @@ TODO.md
 .impeccable/
 .mcp.json
 prompts/
-
+.cowork/
+.pytest_cache/
 feature_requests/
+
 2025-26.NBA.Roster.json
 backend/salary_unmatched.txt
 backend/.next/trace*
