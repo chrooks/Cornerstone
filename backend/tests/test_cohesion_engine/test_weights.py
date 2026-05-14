@@ -135,6 +135,7 @@ def test_ratio_accentuation_note_and_layer_2_constants_exist():
         "archetype_diversity": 0.10,
         "floor": 0.0,
     }
+    assert weights.LINEUP_ARCHETYPE_MAX == 3
     assert weights.VIABLE_LINEUP_THRESHOLD == 2.75
     assert weights.DEPTH_VIABLE_RATIO_WEIGHT == 0.60
     assert weights.DEPTH_QUALITY_WEIGHT == 0.40

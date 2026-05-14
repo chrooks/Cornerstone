@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -21,6 +20,7 @@ import {
 } from "lucide-react";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
 import { CohesionScoreDisplay } from "@/components/builder/CohesionScoreDisplay";
+import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { getSharedTeam, getSharedRebuildCheck } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { RebuildCheckResponse, RebuildPlayerReport, RosterEvaluation, SavedTeamSummary, SaveTeamPlayerPayload } from "@/lib/types";
@@ -104,16 +104,11 @@ function PlayerSnapshotRow({
         aria-hidden="true"
       >
         {player.nba_api_id ? (
-          <Image
-            id={`shared-team-player-slot-${player.slot}-portrait-image`}
-            src={`https://ak-static.cms.nba.com/wp-content/uploads/headshots/nba/latest/260x190/${player.nba_api_id}.png`}
-            alt=""
-            width={260}
-            height={190}
-            sizes="48px"
-            quality={100}
-            unoptimized
-            className="h-full w-full object-cover"
+          <PlayerHeadshot
+            nba_api_id={player.nba_api_id}
+            name={player.player_name_snapshot}
+            size={48}
+            className="h-full w-full rounded-none"
           />
         ) : (
           formatPlayerInitials(player.player_name_snapshot)

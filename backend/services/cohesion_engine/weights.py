@@ -392,6 +392,7 @@ LINEUP_ONLY_ROLLUP_WEIGHTS: dict[str, float] = {
     "floor": 0.0,
 }
 
+LINEUP_ARCHETYPE_MAX: int = 3
 STAR_RATING_MAX: float = 5.0             # final roster score mapped to 0-5 stars
 VIABLE_LINEUP_THRESHOLD: float = 2.75    # lineup cohesion ≥ this = "viable" (playable)
 DEPTH_VIABLE_RATIO_WEIGHT: float = 0.60  # depth subscore: 60% = % of lineups that are viable

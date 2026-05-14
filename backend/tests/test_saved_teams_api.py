@@ -1119,10 +1119,17 @@ def test_shared_get_returns_public_team_without_auth(client, fake_supabase):
 def test_shared_get_returns_player_portrait_ids(client, fake_supabase):
     saved_team_id = _seed_shared_team(fake_supabase, visibility="public")
     active_player_id = valid_player(2)["player_id"]
+    canonical_player_id = "77777777-7777-7777-7777-777777777777"
     fake_supabase.rows["legends"][0]["nba_api_id"] = 165
+    fake_supabase.rows["saved_team_players"][1]["canonical_player_id"] = canonical_player_id
     fake_supabase.rows.setdefault("players", []).append({
         "id": active_player_id,
+        "nba_api_id": 9999999,
+    })
+    fake_supabase.rows.setdefault("canonical_players", []).append({
+        "id": canonical_player_id,
         "nba_api_id": 1630162,
+        "display_name": "Player 2",
     })
 
     resp, data = get_shared_team(client, saved_team_id)

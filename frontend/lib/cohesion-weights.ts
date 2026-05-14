@@ -45,7 +45,7 @@ export const DEFAULT_COHESION_WEIGHTS: CohesionExplanationWeights = {
   COMPOSITE_COEFFICIENTS: {
     pnr_screener_secondary_scale: 0.15,
     perimeter_defense_versatile_defender: 0.7,
-    interior_defense_versatile_defender: 0.5,
+    interior_defense_versatile_defender: 0.25,
     interior_defense_rebounder: 0.3,
     paint_touch_finishing_scale: 0.08,
     off_ball_finishing_scale: 0.08,

@@ -272,8 +272,23 @@ def _player_insert_rows(saved_team_id: str, players: list[dict[str, Any]]) -> li
 
 def _enrich_players_with_nba_api_ids(supabase, players: list[dict[str, Any]]) -> list[dict[str, Any]]:
     enriched = [dict(player) for player in players]
+    canonical_player_ids = list({
+        player["canonical_player_id"]
+        for player in enriched
+        if player.get("canonical_player_id")
+    })
     player_ids = list({player["player_id"] for player in enriched if player.get("player_id")})
     legend_ids = list({player["legend_id"] for player in enriched if player.get("legend_id")})
+
+    canonical_nba_ids: dict[str, int | None] = {}
+    if canonical_player_ids:
+        res = (
+            supabase.table("canonical_players")
+            .select("id, nba_api_id")
+            .in_("id", canonical_player_ids)
+            .execute()
+        )
+        canonical_nba_ids = {row["id"]: row.get("nba_api_id") for row in res.data or []}
 
     player_nba_ids: dict[str, int | None] = {}
     if player_ids:
@@ -287,7 +302,9 @@ def _enrich_players_with_nba_api_ids(supabase, players: list[dict[str, Any]]) ->
 
     for player in enriched:
         nba_api_id = None
-        if player.get("player_id"):
+        if player.get("canonical_player_id"):
+            nba_api_id = canonical_nba_ids.get(player["canonical_player_id"])
+        if nba_api_id is None and player.get("player_id"):
             nba_api_id = player_nba_ids.get(player["player_id"])
         if nba_api_id is None and player.get("legend_id"):
             nba_api_id = legend_nba_ids.get(player["legend_id"])
