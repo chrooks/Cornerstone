@@ -58,7 +58,7 @@ export const SKILL_LABELS: Record<string, string> = {
   spot_up_shooter:          "Spot Up Shooter",
   off_dribble_shooter:      "Off-Dribble Shooter",
   offensive_rebounder:      "Offensive Rebounder",
-  rebounder:                "Rebounder",
+  rebounder:                "Defensive Rebounding",
   rim_protector:            "Rim Protector",
   isolation_scorer:         "Isolation Scorer",
   movement_shooter:         "Movement Shooter",
@@ -66,7 +66,7 @@ export const SKILL_LABELS: Record<string, string> = {
   transition_threat:        "Transition Threat",
   pnr_ball_handler:         "PnR Ball Handler",
   pnr_finisher:             "PnR Finisher",
-  crafty_finisher:          "Crafty Finisher",
+  crafty_finisher:          "Below the Rim Finishing",
   driver:                   "Driver",
   vertical_spacer:          "Vertical Spacer",
   screen_setter:            "Screen Setter",
@@ -75,7 +75,7 @@ export const SKILL_LABELS: Record<string, string> = {
   low_post_player:          "Low-Post Player",
   versatile_defender:       "Versatile Defender",
   perimeter_disruptor:      "Perimeter Disruptor",
-  high_flyer:               "High Flyer",
+  high_flyer:               "Above the Rim Finishing",
 };
 
 /** Human-readable skill definitions. Mirrors backend/services/skills.py. */
@@ -83,7 +83,7 @@ export const SKILL_DESCRIPTIONS: Record<string, string> = {
   spot_up_shooter:          "Hits catch-and-shoot three-pointers and mid-range shots from set positions.",
   off_dribble_shooter:      "Creates and converts shots off the dribble, including pull-ups and step-backs.",
   offensive_rebounder:      "Consistently crashes offensive boards and converts second-chance opportunities.",
-  rebounder:                "Consistently grabs defensive and offensive boards through positioning and effort.",
+  rebounder:                "Consistently secures defensive boards through positioning, boxing out, and effort.",
   rim_protector:            "Deters and blocks shots at the rim, altering opponent finishing attempts.",
   isolation_scorer:         "Beats defenders one-on-one in isolation situations through dribble moves and athleticism.",
   movement_shooter:         "Hits shots while relocating off screens and handoffs, not just standing still.",
@@ -119,7 +119,7 @@ export const SKILL_ABBREV: Record<string, string> = {
   spot_up_shooter:          "Spot Up",
   off_dribble_shooter:      "Off Drib",
   offensive_rebounder:      "Off Reb",
-  rebounder:                "Reb",
+  rebounder:                "Def Reb",
   rim_protector:            "Rim Prot",
   isolation_scorer:         "Iso",
   movement_shooter:         "Move Shoot",
@@ -127,7 +127,7 @@ export const SKILL_ABBREV: Record<string, string> = {
   transition_threat:        "Trans",
   pnr_ball_handler:         "PnR BH",
   pnr_finisher:             "PnR Fin",
-  crafty_finisher:          "Crafty",
+  crafty_finisher:          "Below Rim",
   driver:                   "Driver",
   vertical_spacer:          "V-Space",
   screen_setter:            "Screener",
@@ -136,7 +136,7 @@ export const SKILL_ABBREV: Record<string, string> = {
   low_post_player:          "Lo Post",
   versatile_defender:       "Versa Def",
   perimeter_disruptor:      "Perim Disr",
-  high_flyer:               "Hi Fly",
+  high_flyer:               "Above Rim",
 };
 
 // ---------------------------------------------------------------------------
