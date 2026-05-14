@@ -50,9 +50,13 @@ The landing page exists to hook visitors in 5 seconds: show them the system is s
 
 ## References
 
-- **Pokemon Showdown** (play.pokemonshowdown.com): Premier inspiration for the product structure. Metagames/tiers = RuleSets. Each format defines a different game with different constraints. Team builder under format rules → battle → compare. Cornerstone is this, but for NBA rosters. The RuleSet selection screen should feel like picking a Showdown tier.
-- **Baseball Savant** (baseballsavant.mlb.com): Visual design inspiration. Sharp rectangles, clean data presentation, statistical confidence. Less density, more air.
+- **JJ Redick — "Old Man and the Three" Build Perfect Team Around X Legend series** (origin inspiration): The original spark for Cornerstone. Redick and guests pick a Legend, then build the ideal supporting cast around their specific skill set, weaknesses, era, and identity. This is the actual barbershop argument made into a recurring format. The Cornerstone Player ($54M anchor) and the supporting cap mechanic are direct descendants of this concept.
+  - https://youtu.be/BSoMNDk3_xw
+  - https://youtu.be/uq8Fplg813k
+- **Pokemon Showdown** (play.pokemonshowdown.com): Inspiration for the product structure. Metagames/tiers = RuleSets. Each format defines a different game with different constraints. Team builder under format rules → battle → compare. The RuleSet selection screen should feel like picking a Showdown tier.
 - **NBA 2K MyBuilder/MyLab**: UX nomenclature inspiration. "Build" as a configuration in progress. "Lab" as the space where you experiment. Large audience overlap expected.
+- **Basketball GM** (basketball-gm.com): Inspiration for tone, product depth, and the "real engine running underneath, no fluff" feel. BBGM's changelog cadence, format-first defaults, and willingness to expose simulation/evaluation internals to a knowledgeable audience are direct touchstones. The Cornerstone changelog (issue #18) calls out BBGM by name.
+- **Baseball Savant** (baseballsavant.mlb.com): Visual design inspiration. Sharp rectangles, clean data presentation, statistical confidence. Less density, more air.
 
 ## Accessibility & Inclusion
 

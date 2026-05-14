@@ -55,6 +55,7 @@ export function NavBar() {
     { href: "/players", label: "Players" },
     { href: "/players?f=Legend|Yes|AND|0", label: "Legends" },
     { href: "/community", label: "Community" },
+    { href: "/faq", label: "FAQ" },
   ];
 
   const adminActive = pathname.startsWith("/admin");
