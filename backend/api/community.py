@@ -65,6 +65,28 @@ def _resolve_legend_names(supabase: Any, teams: list[dict]) -> dict[str, str]:
     return result
 
 
+def _resolve_legends(supabase: Any, legend_ids: list[str]) -> tuple[dict[str, str], dict[str, int | None]]:
+    """Fetch legend names and nba_api_ids in a single query.
+
+    Returns (names_map, nba_api_map).
+    """
+    if not legend_ids:
+        return {}, {}
+
+    leg_res = (
+        supabase.table("legends")
+        .select("id, name, nba_api_id")
+        .in_("id", legend_ids)
+        .execute()
+    )
+    names: dict[str, str] = {}
+    nba_ids: dict[str, int | None] = {}
+    for leg in leg_res.data or []:
+        names[leg["id"]] = leg["name"]
+        nba_ids[leg["id"]] = leg.get("nba_api_id")
+    return names, nba_ids
+
+
 @community_bp.route("/community/stats", methods=["GET"])
 def community_stats() -> tuple:
     """Return per-RuleSet aggregate stats for public/unlisted Saved Teams."""
@@ -209,37 +231,67 @@ def community_teams() -> tuple:
                 if tid not in evals_by_team:
                     evals_by_team[tid] = ev
 
-        legend_names = _resolve_legend_names(supabase, visible_teams)
+        # Build lightweight entries for sorting (no child data yet)
+        pre_entries = []
+        for team in visible_teams:
+            ev = evals_by_team.get(team["id"], {})
+            pre_entries.append({
+                "id": team["id"],
+                "name": team.get("name", "Untitled"),
+                "ruleset_slug": team.get("ruleset_slug", ""),
+                "team_size": team.get("team_size"),
+                "cornerstone_legend_id": team.get("cornerstone_legend_id"),
+                "star_rating": ev.get("star_rating"),
+                "starting_lineup_score": ev.get("starting_lineup_score"),
+                "created_at": team.get("created_at"),
+            })
 
-        # Fetch players for all visible teams (compact snapshot)
+        # Sort and paginate BEFORE fetching child data
+        if sort == "date":
+            pre_entries.sort(key=lambda e: e.get("created_at") or "", reverse=True)
+        else:
+            pre_entries.sort(key=lambda e: e.get("star_rating") or 0, reverse=True)
+
+        total = len(pre_entries)
+        start = (page - 1) * per_page
+        page_entries = pre_entries[start : start + per_page]
+        page_team_ids = [e["id"] for e in page_entries]
+
+        # Resolve legend names for cornerstone display (page-scoped)
+        all_legend_ids = list({
+            e["cornerstone_legend_id"]
+            for e in page_entries
+            if e.get("cornerstone_legend_id")
+        })
+
+        # Fetch players for page teams only
         players_by_team: dict[str, list[dict]] = {}
-        if team_ids:
+        if page_team_ids:
             players_res = (
                 supabase.table("saved_team_players")
                 .select("saved_team_id, slot, is_cornerstone, player_name_snapshot, position_snapshot, player_id, legend_id")
-                .in_("saved_team_id", team_ids)
+                .in_("saved_team_id", page_team_ids)
                 .order("slot")
                 .execute()
             )
             all_stp = players_res.data or []
 
+            # Collect legend IDs from roster players for merged resolution
+            roster_legend_ids = [p["legend_id"] for p in all_stp if p.get("legend_id")]
+            all_legend_ids = list(set(all_legend_ids) | set(roster_legend_ids))
+
             # Resolve nba_api_id for portrait URLs
             player_ids = list({p["player_id"] for p in all_stp if p.get("player_id")})
-            legend_ids_for_portraits = list({p["legend_id"] for p in all_stp if p.get("legend_id")})
 
             nba_api_map: dict[str, int | None] = {}
             if player_ids:
                 p_res = supabase.table("players").select("id, nba_api_id").in_("id", player_ids).execute()
                 for row in p_res.data or []:
                     nba_api_map[row["id"]] = row.get("nba_api_id")
-            if legend_ids_for_portraits:
-                l_res = supabase.table("legends").select("id, nba_api_id").in_("id", legend_ids_for_portraits).execute()
-                for row in l_res.data or []:
-                    nba_api_map[row["id"]] = row.get("nba_api_id")
 
             for p in all_stp:
                 tid = p["saved_team_id"]
-                pid = p.get("player_id") or p.get("legend_id")
+                pid = p["player_id"] if p.get("player_id") is not None else p.get("legend_id")
                 players_by_team.setdefault(tid, []).append({
                     "name": p.get("player_name_snapshot", "Unknown"),
                     "position": p.get("position_snapshot"),
@@ -250,36 +302,34 @@ def community_teams() -> tuple:
                     "nba_api_id": nba_api_map.get(pid) if pid else None,
                 })
 
-        # Build team entries with evaluation data
+        # Single merged legends query for names + nba_api_ids
+        legend_names, legend_nba_ids = _resolve_legends(supabase, all_legend_ids)
+
+        # Backfill nba_api_id for legend-sourced players
+        for team_players in players_by_team.values():
+            for p in team_players:
+                if p["nba_api_id"] is None and p.get("legend_id"):
+                    p["nba_api_id"] = legend_nba_ids.get(p["legend_id"])
+
+        # Build final entries with child data
         entries = []
-        for team in visible_teams:
-            ev = evals_by_team.get(team["id"], {})
+        for e in page_entries:
             entries.append({
-                "id": team["id"],
-                "name": team.get("name", "Untitled"),
-                "ruleset_slug": team.get("ruleset_slug", ""),
-                "team_size": team.get("team_size"),
+                "id": e["id"],
+                "name": e["name"],
+                "ruleset_slug": e["ruleset_slug"],
+                "team_size": e["team_size"],
                 "cornerstone_name": legend_names.get(
-                    team.get("cornerstone_legend_id", ""), "-"
+                    e.get("cornerstone_legend_id", ""), "-"
                 ),
-                "star_rating": ev.get("star_rating"),
-                "starting_lineup_score": ev.get("starting_lineup_score"),
-                "created_at": team.get("created_at"),
-                "players": players_by_team.get(team["id"], []),
+                "star_rating": e["star_rating"],
+                "starting_lineup_score": e["starting_lineup_score"],
+                "created_at": e["created_at"],
+                "players": players_by_team.get(e["id"], []),
             })
 
-        # Sort
-        if sort == "date":
-            entries.sort(key=lambda e: e.get("created_at") or "", reverse=True)
-        else:
-            entries.sort(key=lambda e: e.get("star_rating") or 0, reverse=True)
-
-        total = len(entries)
-        start = (page - 1) * per_page
-        page_entries = entries[start : start + per_page]
-
         return _ok({
-            "teams": page_entries,
+            "teams": entries,
             "total": total,
             "page": page,
             "per_page": per_page,

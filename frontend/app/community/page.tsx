@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, Loader2, Trophy } from "lucide-react";
 import { getCommunityTeams, listRuleSets } from "@/lib/api";
 import { teamLabelForSize } from "@/lib/builder-config";
@@ -62,7 +62,7 @@ function PlayerNameStrip({
   return (
     <p id={id} className="mt-1.5 truncate text-[0.75rem] text-[oklch(0.49_0.02_45)]">
       {players.map((p, i) => (
-        <span key={`${p.slot}-${p.name}`}>
+        <span key={p.player_id ?? p.legend_id ?? `${p.slot}-${p.name}`}>
           {i > 0 && <span className="mx-1 text-[oklch(0.72_0.015_62)]">·</span>}
           <span className={p.is_cornerstone ? "font-semibold text-[oklch(0.35_0.05_50)]" : ""}>
             {getShortName(p.name)}
@@ -122,9 +122,11 @@ function PlayerHeadshot({
 function LeaderboardRow({
   entry,
   rank,
+  rulesetNameMap,
 }: {
   entry: CommunityTeamEntry;
   rank: number;
+  rulesetNameMap: Record<string, string>;
 }) {
   const teamLabel = entry.team_size ? teamLabelForSize(entry.team_size) : null;
 
@@ -180,7 +182,7 @@ function LeaderboardRow({
 
         {/* Rule Set — hidden on mobile */}
         <span className="mt-0.5 hidden truncate text-[0.8125rem] text-[oklch(0.42_0.02_45)] sm:block">
-          {formatRuleSetName(entry.ruleset_slug)}
+          {rulesetNameMap[entry.ruleset_slug] ?? formatRuleSetName(entry.ruleset_slug)}
         </span>
 
         {/* Score */}
@@ -208,9 +210,11 @@ function LeaderboardRow({
 function LeaderboardPanel({
   entry,
   rank,
+  rulesetNameMap,
 }: {
   entry: CommunityTeamEntry;
   rank: number;
+  rulesetNameMap: Record<string, string>;
 }) {
   const teamLabel = entry.team_size ? teamLabelForSize(entry.team_size) : null;
 
@@ -252,7 +256,7 @@ function LeaderboardPanel({
           <span className="mx-2 text-[oklch(0.67_0.02_62)]">/</span>
           {teamLabel ?? "Team"}
           <span className="mx-2 text-[oklch(0.67_0.02_62)]">/</span>
-          {formatRuleSetName(entry.ruleset_slug)}
+          {rulesetNameMap[entry.ruleset_slug] ?? formatRuleSetName(entry.ruleset_slug)}
           <span className="mx-2 text-[oklch(0.67_0.02_62)]">/</span>
           {formatDate(entry.created_at)}
         </p>
@@ -277,7 +281,7 @@ function LeaderboardPanel({
             )}
           >
             {entry.players.map((p) => (
-              <PlayerHeadshot key={`${p.slot}-${p.name}`} player={p} />
+              <PlayerHeadshot key={p.player_id ?? p.legend_id ?? `${p.slot}-${p.name}`} player={p} />
             ))}
           </div>
         )}
@@ -443,6 +447,7 @@ export default function CommunityPage() {
   const [viewSize, setViewSize] = useState<LeaderboardViewSize>("panel");
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const fetchIdRef = useRef(0);
 
   const fetchTeams = useCallback(async (
     rulesetSlug: string,
@@ -450,19 +455,25 @@ export default function CommunityPage() {
     sortValue: SortValue,
     pageNum: number,
   ) => {
-    const res = await getCommunityTeams({
-      ruleset_slug: rulesetSlug || undefined,
-      team_size: teamSize ? Number(teamSize) : undefined,
-      sort: sortValue,
-      page: pageNum,
-      per_page: PER_PAGE,
-    });
-    if (res.success && res.data) {
-      setTeams(res.data.teams);
-      setTotal(res.data.total);
-      setPageState("ready");
-    } else {
-      setPageState("error");
+    const id = ++fetchIdRef.current;
+    try {
+      const res = await getCommunityTeams({
+        ruleset_slug: rulesetSlug || undefined,
+        team_size: teamSize ? Number(teamSize) : undefined,
+        sort: sortValue,
+        page: pageNum,
+        per_page: PER_PAGE,
+      });
+      if (id !== fetchIdRef.current) return;
+      if (res.success && res.data) {
+        setTeams(res.data.teams);
+        setTotal(res.data.total);
+        setPageState("ready");
+      } else {
+        setPageState("error");
+      }
+    } catch {
+      if (id === fetchIdRef.current) setPageState("error");
     }
   }, []);
 
@@ -512,7 +523,12 @@ export default function CommunityPage() {
 
   const baseRank = (page - 1) * PER_PAGE;
 
-  /* ── Filter options ── */
+  /* ── Derived data ── */
+
+  const rulesetNameMap: Record<string, string> = {};
+  for (const rs of rulesets) {
+    rulesetNameMap[rs.slug] = rs.name;
+  }
 
   const rulesetOptions = [
     { value: "", label: "All Rule Sets" },
@@ -580,7 +596,9 @@ export default function CommunityPage() {
               id="community-view-toggle"
               viewSize={viewSize}
               viewSizes={VIEW_SIZES}
-              onViewSizeChange={(s) => setViewSize(s as LeaderboardViewSize)}
+              onViewSizeChange={(s) => {
+                if ((VIEW_SIZES as readonly string[]).includes(s)) setViewSize(s as LeaderboardViewSize);
+              }}
               borderClassName="border-[oklch(0.83_0.02_62)]"
               activeClassName="bg-[oklch(0.18_0.02_45)] text-[oklch(0.92_0.08_64)]"
               inactiveClassName="text-[oklch(0.49_0.02_45)] hover:text-[oklch(0.22_0.02_45)] hover:bg-[oklch(0.94_0.006_62)]"
@@ -618,6 +636,7 @@ export default function CommunityPage() {
                     key={entry.id}
                     entry={entry}
                     rank={baseRank + i + 1}
+                    rulesetNameMap={rulesetNameMap}
                   />
                 ))}
               </div>
@@ -631,6 +650,7 @@ export default function CommunityPage() {
                     key={entry.id}
                     entry={entry}
                     rank={baseRank + i + 1}
+                    rulesetNameMap={rulesetNameMap}
                   />
                 ))}
               </div>

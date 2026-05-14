@@ -72,11 +72,16 @@ class _FakeSupabase:
                 {"id": FFA_RULESET_ID, "slug": "ffa", "name": "Free For All"},
             ],
             "legends": [
-                {"id": LEGEND_ID_HAKEEM, "name": "Hakeem Olajuwon"},
-                {"id": LEGEND_ID_JORDAN, "name": "Michael Jordan"},
+                {"id": LEGEND_ID_HAKEEM, "name": "Hakeem Olajuwon", "nba_api_id": 165},
+                {"id": LEGEND_ID_JORDAN, "name": "Michael Jordan", "nba_api_id": 893},
+            ],
+            "players": [
+                {"id": "player-1", "nba_api_id": 201935},
+                {"id": "player-2", "nba_api_id": 203932},
             ],
             "saved_teams": [],
             "saved_team_evaluations": [],
+            "saved_team_players": [],
         }
 
     def table(self, name: str):
@@ -110,6 +115,27 @@ def _make_saved_team(
         "team_size": team_size,
         "name": name,
         "created_at": "2026-05-13T12:00:00Z",
+    }
+
+
+def _make_saved_team_player(
+    *,
+    saved_team_id: str = "team-1",
+    slot: int = 1,
+    is_cornerstone: bool = False,
+    player_name_snapshot: str = "Player",
+    position_snapshot: str | None = "G",
+    player_id: str | None = None,
+    legend_id: str | None = None,
+) -> dict:
+    return {
+        "saved_team_id": saved_team_id,
+        "slot": slot,
+        "is_cornerstone": is_cornerstone,
+        "player_name_snapshot": player_name_snapshot,
+        "position_snapshot": position_snapshot,
+        "player_id": player_id,
+        "legend_id": legend_id,
     }
 
 
@@ -485,3 +511,89 @@ class TestCommunityTeams:
         team = body["data"]["teams"][0]
         # Fake now sorts by created_at desc, so the newer eval (4.5) wins
         assert team["star_rating"] == 4.5
+
+    def test_includes_player_snapshots(self, client, fake_supabase):
+        """Teams include player snapshot data with names and positions."""
+        fake_supabase.rows["saved_teams"] = [
+            _make_saved_team(team_id="t1"),
+        ]
+        fake_supabase.rows["saved_team_evaluations"] = [
+            _make_evaluation(saved_team_id="t1"),
+        ]
+        fake_supabase.rows["saved_team_players"] = [
+            _make_saved_team_player(
+                saved_team_id="t1", slot=1, is_cornerstone=True,
+                player_name_snapshot="Hakeem Olajuwon", position_snapshot="C",
+                legend_id=LEGEND_ID_HAKEEM,
+            ),
+            _make_saved_team_player(
+                saved_team_id="t1", slot=2,
+                player_name_snapshot="Aaron Gordon", position_snapshot="F",
+                player_id="player-2",
+            ),
+        ]
+
+        resp = client.get("/api/community/teams")
+        body = resp.get_json()
+        players = body["data"]["teams"][0]["players"]
+        assert len(players) == 2
+        assert players[0]["name"] == "Hakeem Olajuwon"
+        assert players[0]["is_cornerstone"] is True
+        assert players[0]["position"] == "C"
+        assert players[1]["name"] == "Aaron Gordon"
+        assert players[1]["is_cornerstone"] is False
+
+    def test_resolves_nba_api_id_from_players_table(self, client, fake_supabase):
+        """nba_api_id is resolved from the players table for non-legend players."""
+        fake_supabase.rows["saved_teams"] = [
+            _make_saved_team(team_id="t1"),
+        ]
+        fake_supabase.rows["saved_team_evaluations"] = [
+            _make_evaluation(saved_team_id="t1"),
+        ]
+        fake_supabase.rows["saved_team_players"] = [
+            _make_saved_team_player(
+                saved_team_id="t1", slot=1,
+                player_name_snapshot="Test Player",
+                player_id="player-1",
+            ),
+        ]
+
+        resp = client.get("/api/community/teams")
+        body = resp.get_json()
+        player = body["data"]["teams"][0]["players"][0]
+        assert player["nba_api_id"] == 201935
+
+    def test_resolves_nba_api_id_from_legends_table(self, client, fake_supabase):
+        """nba_api_id is resolved from the legends table for legend players."""
+        fake_supabase.rows["saved_teams"] = [
+            _make_saved_team(team_id="t1"),
+        ]
+        fake_supabase.rows["saved_team_evaluations"] = [
+            _make_evaluation(saved_team_id="t1"),
+        ]
+        fake_supabase.rows["saved_team_players"] = [
+            _make_saved_team_player(
+                saved_team_id="t1", slot=1, is_cornerstone=True,
+                player_name_snapshot="Hakeem Olajuwon",
+                legend_id=LEGEND_ID_HAKEEM,
+            ),
+        ]
+
+        resp = client.get("/api/community/teams")
+        body = resp.get_json()
+        player = body["data"]["teams"][0]["players"][0]
+        assert player["nba_api_id"] == 165
+
+    def test_empty_players_when_no_slots(self, client, fake_supabase):
+        """Teams with no saved_team_players return empty players array."""
+        fake_supabase.rows["saved_teams"] = [
+            _make_saved_team(team_id="t1"),
+        ]
+        fake_supabase.rows["saved_team_evaluations"] = [
+            _make_evaluation(saved_team_id="t1"),
+        ]
+
+        resp = client.get("/api/community/teams")
+        body = resp.get_json()
+        assert body["data"]["teams"][0]["players"] == []
