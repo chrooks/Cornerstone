@@ -17,7 +17,7 @@ python -m pytest tests/test_skill_mapping_service.py  # Single test file
 ```bash
 cd frontend
 npm run dev     # Dev server at http://localhost:3000
-npm run build   # Production build
+# npm run build   # Production build Update: Dont do this, it breaks the dev server
 npm run lint    # ESLint
 ```
 

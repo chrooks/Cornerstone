@@ -20,8 +20,15 @@ function sanitizeRedirect(raw: string | null): string {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Validate the redirectTo param before trusting it — prevents open-redirect attacks
-  const redirectTo = sanitizeRedirect(searchParams.get("redirectTo"));
+  // Check URL param first, fall back to localStorage (set during signup flow)
+  const paramRedirect = sanitizeRedirect(searchParams.get("redirectTo"));
+  const redirectTo = paramRedirect !== "/"
+    ? paramRedirect
+    : sanitizeRedirect(
+        typeof window !== "undefined"
+          ? localStorage.getItem("authRedirectTo")
+          : null
+      );
 
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
@@ -53,6 +60,8 @@ function LoginForm() {
       return;
     }
 
+    // Clean up stored redirect from signup flow
+    localStorage.removeItem("authRedirectTo");
     // router.refresh() re-runs all Server Components so the new session is reflected
     router.push(redirectTo);
     router.refresh();

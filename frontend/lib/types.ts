@@ -691,6 +691,7 @@ export interface SaveTeamPayload {
   ruleset_slug: string;
   ruleset_version_id: string;
   rules_hash: string;
+  team_size: number;
   snapshot_release_id?: string;
   name?: string;
   cornerstone_legend_id: string | null;
@@ -708,6 +709,7 @@ export interface SavedTeamSummary {
   ruleset_version_id: string | null;
   ruleset_version_label?: string | null;
   ruleset_version_hash: string | null;
+  team_size?: number | null;
   snapshot_release_id: string;
   visibility: "private" | "unlisted" | "public";
   cornerstone_legend_id?: string | null;
@@ -818,4 +820,50 @@ export interface EvaluatePayload {
   }>;
   mode: "live" | "final";
   debug: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Community leaderboard
+// ---------------------------------------------------------------------------
+
+/** Per-RuleSet aggregate stats for the Community tab. */
+export interface CommunityRuleSetStats {
+  team_count: number;
+  avg_score: number | null;
+  top_cornerstone: string;
+}
+
+/** Keyed by ruleset_slug. */
+export type CommunityStatsMap = Record<string, CommunityRuleSetStats>;
+
+/** Compact player snapshot in a community team entry. */
+export interface CommunityTeamPlayer {
+  name: string;
+  position: string | null;
+  is_cornerstone: boolean;
+  slot: number;
+  player_id: string | null;
+  legend_id: string | null;
+  nba_api_id: number | null;
+}
+
+/** Single entry in the community teams leaderboard. */
+export interface CommunityTeamEntry {
+  id: string;
+  name: string;
+  ruleset_slug: string;
+  team_size: number | null;
+  cornerstone_name: string;
+  star_rating: number | null;
+  starting_lineup_score: number | null;
+  created_at: string | null;
+  players: CommunityTeamPlayer[];
+}
+
+/** Paginated response from GET /api/community/teams. */
+export interface CommunityTeamsResponse {
+  teams: CommunityTeamEntry[];
+  total: number;
+  page: number;
+  per_page: number;
 }

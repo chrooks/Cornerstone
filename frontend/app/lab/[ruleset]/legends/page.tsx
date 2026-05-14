@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { listLegends, getLegend, listPlayersWithSkills, listRuleSets } from "@/lib/api";
+import { resolveRuleSetRules } from "@/lib/rulesets";
 import { PlayerPoolBrowser, type PlayerPoolBrowserCounts, type PlayerPoolViewMode } from "@/components/players/PlayerPoolBrowser";
 import { RandomPlayerButton } from "@/components/players/RandomPlayerButton";
 import { PlayerViewSizeToggle } from "@/components/players/PlayerView";
@@ -87,15 +88,17 @@ const LEGENDS_PANEL_PAGE_SIZE = 8;
 /* ── Main page component ── */
 export default function LegendsPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const ruleset = (params.ruleset as string) ?? "standard";
 
   /* ── RuleSet state — drives cornerstone_source and team_size ── */
   const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
-  const cornerstoneSource: "legend" | "all" =
-    resolvedRuleSet?.rules?.cornerstone_source === "all" ? "all" : "legend";
-  const maxSlots = typeof resolvedRuleSet?.rules?.team_size === "number"
-    ? (resolvedRuleSet.rules.team_size as number)
-    : 9;
+  const resolvedRules = useMemo(
+    () => resolveRuleSetRules(resolvedRuleSet?.rules, new URLSearchParams(searchParams.toString())),
+    [resolvedRuleSet?.rules, searchParams],
+  );
+  const cornerstoneSource = resolvedRules.cornerstoneSource;
+  const maxSlots = resolvedRules.teamSize;
 
   /* ── Data state ── */
   const [legends, setLegends] = useState<LegendSummary[]>([]);
@@ -172,10 +175,11 @@ export default function LegendsPage() {
   }, [resolvedRuleSet, cornerstoneSource]);
 
   /* ── Row click in table → navigate to build with this cornerstone ── */
-  const searchParams = useSearchParams();
   const handleRowClick = useCallback(
     (player: PlayerWithSkills) => {
       const params = new URLSearchParams();
+      const teamSize = searchParams.get("team_size");
+      if (teamSize) params.set("team_size", teamSize);
       params.set("cornerstone", player.id);
       // Forward supporting player params from rebuild redirect
       for (let slot = 2; slot <= maxSlots; slot++) {

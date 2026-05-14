@@ -330,6 +330,67 @@ def test_create_version_returns_201_with_server_computed_hash(admin_client):
     assert len(data["data"]["rules_hash"]) == 32
 
 
+def test_create_version_accepts_allowed_team_sizes(admin_client):
+    rules = {
+        "team_size": 9,
+        "allowed_team_sizes": [5, 9, 12],
+        "cornerstone_source": "all",
+    }
+
+    resp = admin_client.post(
+        "/api/rulesets/standard/versions",
+        json={"version_label": "multi-size", "rules_json": rules},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    data = resp.get_json()
+    assert resp.status_code == 201
+    assert data["success"] is True
+    assert data["data"]["rules_json"]["team_size"] == 9
+    assert data["data"]["rules_json"]["team_label"] == "Rotation"
+    assert data["data"]["rules_json"]["allowed_team_sizes"] == [5, 9, 12]
+
+
+def test_create_version_rejects_invalid_allowed_team_sizes(admin_client):
+    resp = admin_client.post(
+        "/api/rulesets/standard/versions",
+        json={"version_label": "multi-size", "rules_json": {"team_size": 9, "allowed_team_sizes": [5, 7, 12]}},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    data = resp.get_json()
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "allowed_team_sizes" in data["error"]
+
+
+def test_create_version_rejects_duplicate_allowed_team_sizes(admin_client):
+    resp = admin_client.post(
+        "/api/rulesets/standard/versions",
+        json={"version_label": "multi-size", "rules_json": {"team_size": 9, "allowed_team_sizes": [5, 9, 9]}},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    data = resp.get_json()
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "duplicates" in data["error"]
+
+
+def test_create_version_rejects_team_size_outside_allowed_team_sizes(admin_client):
+    resp = admin_client.post(
+        "/api/rulesets/standard/versions",
+        json={"version_label": "multi-size", "rules_json": {"team_size": 9, "allowed_team_sizes": [5, 12]}},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    data = resp.get_json()
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "team_size" in data["error"]
+
+
+
 def test_create_version_rejects_invalid_team_size(admin_client):
     resp = admin_client.post(
         "/api/rulesets/standard/versions",

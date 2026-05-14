@@ -107,6 +107,7 @@ from api.cohesion_calibration import cohesion_calibration_bp
 from api.saved_teams import saved_teams_bp
 from api.rulesets import rulesets_bp
 from api.profile import profile_bp
+from api.community import community_bp
 
 
 def _warm_cohesion_distributions() -> None:
@@ -170,6 +171,7 @@ def create_app() -> Flask:
     app.register_blueprint(saved_teams_bp)  # Saved Team persistence
     app.register_blueprint(rulesets_bp)  # RuleSet read API
     app.register_blueprint(profile_bp)  # User Profile API
+    app.register_blueprint(community_bp)  # Community leaderboard
 
     _warm_cohesion_distributions()
 

@@ -38,6 +38,8 @@ import type {
   CreateRuleSetVersionPayload,
   RebuildCheckResponse,
   UserProfile,
+  CommunityStatsMap,
+  CommunityTeamsResponse,
 } from "./types";
 
 // Points to the Flask dev server by default; override via env var in production.
@@ -731,6 +733,35 @@ export async function renameSavedTeam(
   );
 }
 
+/** Update a Saved Team's visibility (private, unlisted, or public). */
+export async function updateSavedTeamVisibility(
+  savedTeamId: string,
+  visibility: "private" | "unlisted" | "public",
+): Promise<ApiResponse<{ id: string; name: string; visibility: string }>> {
+  return apiFetch<{ id: string; name: string; visibility: string }>(
+    `/api/saved-teams/${encodeURIComponent(savedTeamId)}`,
+    { method: "PATCH", body: JSON.stringify({ visibility }) },
+  );
+}
+
+/** Get a public or unlisted Saved Team (no auth required). */
+export async function getSharedTeam(
+  savedTeamId: string,
+): Promise<ApiResponse<SavedTeamSummary>> {
+  return apiFetch<SavedTeamSummary>(
+    `/api/shared/${encodeURIComponent(savedTeamId)}`,
+  );
+}
+
+/** Fetch a rebuild compatibility report for a shared (public/unlisted) Saved Team. */
+export async function getSharedRebuildCheck(
+  savedTeamId: string,
+): Promise<ApiResponse<RebuildCheckResponse>> {
+  return apiFetch<RebuildCheckResponse>(
+    `/api/shared/${encodeURIComponent(savedTeamId)}/rebuild-check`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Cohesion Calibration (admin-only)
 // ---------------------------------------------------------------------------
@@ -819,4 +850,32 @@ export async function updateCohesionWeights(
     method: "PUT",
     body: JSON.stringify(overrides),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Community Leaderboard
+// ---------------------------------------------------------------------------
+
+/** Fetch per-RuleSet aggregate stats (team count, avg score, top cornerstone). */
+export async function getCommunityStats(): Promise<ApiResponse<CommunityStatsMap>> {
+  return apiFetch<CommunityStatsMap>("/api/community/stats");
+}
+
+/** Fetch paginated list of public Saved Teams for the leaderboard. */
+export async function getCommunityTeams(params?: {
+  ruleset_slug?: string;
+  team_size?: number;
+  sort?: "score" | "date";
+  page?: number;
+  per_page?: number;
+}): Promise<ApiResponse<CommunityTeamsResponse>> {
+  const searchParams = new URLSearchParams();
+  if (params?.ruleset_slug) searchParams.set("ruleset_slug", params.ruleset_slug);
+  if (params?.team_size != null) searchParams.set("team_size", String(params.team_size));
+  if (params?.sort) searchParams.set("sort", params.sort);
+  if (params?.page != null) searchParams.set("page", String(params.page));
+  if (params?.per_page != null) searchParams.set("per_page", String(params.per_page));
+
+  const qs = searchParams.toString();
+  return apiFetch<CommunityTeamsResponse>(`/api/community/teams${qs ? `?${qs}` : ""}`);
 }
