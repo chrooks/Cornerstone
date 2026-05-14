@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -433,10 +432,10 @@ export default function SharedTeamPage() {
     [savedTeam?.players],
   );
 
-  const fullEvaluation = savedTeam
-    ? (isFullRosterEvaluation(savedTeam.evaluation?.evaluation_payload) ? savedTeam.evaluation!.evaluation_payload as RosterEvaluation : null)
+  const fullEvaluation = savedTeam?.evaluation && isFullRosterEvaluation(savedTeam.evaluation.evaluation_payload)
+    ? (savedTeam.evaluation.evaluation_payload as RosterEvaluation)
     : null;
-  const score = fullEvaluation?.star_rating ?? (savedTeam?.evaluation?.star_rating ?? 0);
+  const score = fullEvaluation?.star_rating ?? savedTeam?.evaluation?.star_rating ?? null;
   const description = fullEvaluation?.team_description ?? (savedTeam?.evaluation?.team_description ?? "");
   const teamKind = getTeamKindFromSize(savedTeam?.team_size, orderedPlayers.length);
   const salaryTotal = savedTeam?.total_salary ?? orderedPlayers.reduce((sum, p) => sum + p.salary_snapshot, 0);
@@ -528,6 +527,7 @@ export default function SharedTeamPage() {
         )}
 
         <div id="shared-team-score-corner" className="mt-4 w-fit lg:absolute lg:right-5 lg:top-5 lg:mt-0">
+          {score != null ? (
           <CohesionScoreBadge
             id="shared-team-score"
             value={score}
@@ -540,6 +540,9 @@ export default function SharedTeamPage() {
               { label: "Floor", value: fullEvaluation.star_rating_breakdown.floor },
             ] : undefined}
           />
+          ) : (
+            <span className="font-mono text-lg text-[oklch(0.52_0.02_45)]">—</span>
+          )}
         </div>
       </section>
 
@@ -620,7 +623,7 @@ export default function SharedTeamPage() {
                 <div className="border border-[oklch(0.84_0.018_62)] bg-[oklch(0.96_0.006_62)] p-3">
                   <dt className="text-xs text-[oklch(0.45_0.02_45)]">Cohesion Score</dt>
                   <dd className="mt-1 font-mono text-xl tabular-nums text-[oklch(0.16_0.018_45)]">
-                    {score.toFixed(1)}
+                    {score != null ? score.toFixed(1) : "—"}
                   </dd>
                 </div>
                 <div className="border border-[oklch(0.84_0.018_62)] bg-[oklch(0.96_0.006_62)] p-3">

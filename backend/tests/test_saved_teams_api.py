@@ -36,6 +36,7 @@ class _FakeQuery:
         self._update_payload = None
         self._delete = False
         self._filters: dict[str, object] = {}
+        self._in_filters: dict[str, list] = {}
         self._limit = None
 
     def select(self, *_args, **_kwargs):
@@ -57,6 +58,10 @@ class _FakeQuery:
         self._filters[key] = value
         return self
 
+    def in_(self, key, values):
+        self._in_filters[key] = list(values)
+        return self
+
     def order(self, *_args, **_kwargs):
         return self
 
@@ -71,7 +76,7 @@ class _FakeQuery:
             return _FakeResult(self.db.update(self.table_name, self._update_payload, self._filters))
         if self._delete:
             return _FakeResult(self.db.delete(self.table_name, self._filters))
-        rows = self.db.select(self.table_name, self._filters)
+        rows = self.db.select(self.table_name, self._filters, self._in_filters)
         if self._limit is not None:
             rows = rows[: self._limit]
         return _FakeResult(rows)
@@ -126,12 +131,14 @@ class _FakeSupabase:
     def table(self, name: str):
         return _FakeQuery(self, name)
 
-    def select(self, table_name: str, filters: dict[str, object]):
+    def select(self, table_name: str, filters: dict[str, object], in_filters: dict | None = None):
         if table_name == "snapshot_releases" and self.missing_snapshot_releases:
             raise RuntimeError("Could not find the table 'public.snapshot_releases' in the schema cache")
         rows = list(self.rows.get(table_name, []))
         for key, value in filters.items():
             rows = [row for row in rows if row.get(key) == value]
+        for key, values in (in_filters or {}).items():
+            rows = [row for row in rows if row.get(key) in values]
         return rows
 
     def insert(self, table_name: str, payload):
@@ -1053,9 +1060,12 @@ def test_get_saved_team_detail_returns_full_historical_eval_payload(client, fake
 OTHER_USER_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
 
 
+SHARED_TEAM_ID = "99999999-9999-9999-9999-999999999999"
+
+
 def _seed_shared_team(fake_supabase, *, visibility: str = "public") -> str:
     """Seed a saved team owned by another user with configurable visibility."""
-    saved_team_id = "shared-team-1"
+    saved_team_id = SHARED_TEAM_ID
     fake_supabase.rows["saved_teams"].append({
         "id": saved_team_id,
         "user_id": OTHER_USER_ID,
@@ -1126,7 +1136,7 @@ def test_shared_get_returns_404_for_private_team(client, fake_supabase):
 
 
 def test_shared_get_returns_404_for_nonexistent_team(client, fake_supabase):
-    resp, data = get_shared_team(client, "nonexistent-id")
+    resp, data = get_shared_team(client, "00000000-0000-0000-0000-000000000000")
 
     assert resp.status_code == 404
     assert data["success"] is False

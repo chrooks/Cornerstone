@@ -221,9 +221,10 @@ def _auto_name(
     raw_name = body.get("name")
     if isinstance(raw_name, str) and raw_name.strip():
         return raw_name.strip()
-    cornerstone = next(player for player in players if player["is_cornerstone"])
+    cornerstone = next((player for player in players if player["is_cornerstone"]), None)
+    name_part = cornerstone["player_name_snapshot"].strip() if cornerstone else players[0]["player_name_snapshot"].strip()
     team_label = TEAM_SIZE_LABELS.get(team_size, (rules_json or {}).get("team_label", "Rotation"))
-    return f"{cornerstone['player_name_snapshot'].strip()} {team_label}"
+    return f"{name_part} {team_label}"
 
 
 def _resolve_snapshot_player(
@@ -883,16 +884,20 @@ VISIBLE_TO_ANYONE = ("public", "unlisted")
 def get_shared_saved_team(saved_team_id: str):
     """Return a Saved Team if its visibility is public or unlisted. No auth required."""
     try:
+        if not _validate_uuid(saved_team_id):
+            return _err("Saved Team not found", status=404)
+
         supabase = get_supabase()
         res = (
             supabase.table("saved_teams")
             .select("*")
             .eq("id", saved_team_id)
+            .in_("visibility", list(VISIBLE_TO_ANYONE))
             .limit(1)
             .execute()
         )
         rows = res.data or []
-        if not rows or rows[0].get("visibility") not in VISIBLE_TO_ANYONE:
+        if not rows:
             return _err("Saved Team not found", status=404)
 
         saved_team = rows[0]
@@ -920,17 +925,21 @@ def get_shared_saved_team(saved_team_id: str):
 def shared_rebuild_check(saved_team_id: str):
     """Return a rebuild compatibility report for a public/unlisted Saved Team. No auth required."""
     try:
+        if not _validate_uuid(saved_team_id):
+            return _err("Saved Team not found", status=404)
+
         supabase = get_supabase()
 
         res = (
             supabase.table("saved_teams")
             .select("*")
             .eq("id", saved_team_id)
+            .in_("visibility", list(VISIBLE_TO_ANYONE))
             .limit(1)
             .execute()
         )
         rows = res.data or []
-        if not rows or rows[0].get("visibility") not in VISIBLE_TO_ANYONE:
+        if not rows:
             return _err("Saved Team not found", status=404)
 
         report, error_msg, status = _build_rebuild_report(supabase, rows[0], saved_team_id)
