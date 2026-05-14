@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 saved_teams_bp = Blueprint("saved_teams", __name__, url_prefix="/api")
 
 EVALUATION_VERSION = "cohesion-v1"
+VALID_TEAM_SIZES = {5, 9, 12}
+TEAM_SIZE_LABELS = {5: "Lineup", 9: "Rotation", 12: "Roster"}
 
 
 def _ok(data: Any, status: int = 200) -> tuple:
@@ -96,20 +98,46 @@ def _is_missing_snapshot_release_table(exc: Exception) -> bool:
 def _validate_saved_team(
     body: dict[str, Any],
     rules_json: dict[str, Any],
-) -> tuple[list[dict[str, Any]] | None, str | None]:
-    team_size = rules_json.get("team_size", 9)
-    team_label = rules_json.get("team_label", "Rotation")
-    salary_cap = rules_json.get("salary_cap", 195_000_000)
+) -> tuple[list[dict[str, Any]] | None, int | None, str | None]:
+    configured_team_size = rules_json.get("team_size", 9)
+    if not isinstance(configured_team_size, int) or isinstance(configured_team_size, bool):
+        configured_team_size = 9
+
+    raw_allowed_team_sizes = rules_json.get("allowed_team_sizes")
+    if isinstance(raw_allowed_team_sizes, list) and raw_allowed_team_sizes:
+        allowed_team_sizes = [
+            size for size in raw_allowed_team_sizes
+            if isinstance(size, int) and not isinstance(size, bool)
+        ]
+    else:
+        allowed_team_sizes = [configured_team_size]
+
+    salary_cap = rules_json.get("salary_cap")  # None when no cap (e.g. Free For All)
+    cornerstone_source = rules_json.get("cornerstone_source", "legend")
 
     cornerstone_legend_id = body.get("cornerstone_legend_id")
-    if not _validate_uuid(cornerstone_legend_id):
-        return None, "cornerstone_legend_id must be a valid UUID"
+    if cornerstone_legend_id is not None and not _validate_uuid(cornerstone_legend_id):
+        return None, None, "cornerstone_legend_id must be a valid UUID when present"
 
     players = body.get("players")
     if not isinstance(players, list):
-        return None, "players must be an array"
+        return None, None, "players must be an array"
+
+    requested_team_size = body.get(
+        "team_size",
+        len(players) if len(allowed_team_sizes) > 1 else configured_team_size,
+    )
+    if not isinstance(requested_team_size, int) or isinstance(requested_team_size, bool):
+        return None, None, "team_size must be an integer"
+    if requested_team_size not in VALID_TEAM_SIZES:
+        return None, None, f"team_size must be one of: {sorted(VALID_TEAM_SIZES)}"
+    if requested_team_size not in allowed_team_sizes:
+        return None, None, f"team_size must be one of this RuleSet's allowed sizes: {sorted(allowed_team_sizes)}"
+
+    team_size = requested_team_size
+    team_label = TEAM_SIZE_LABELS.get(team_size, rules_json.get("team_label", "Team"))
     if len(players) != team_size:
-        return None, f"{team_label} must include exactly {team_size} players"
+        return None, None, f"{team_label} must include exactly {team_size} players"
 
     slots: list[int] = []
     cornerstone_rows: list[dict[str, Any]] = []
@@ -117,76 +145,86 @@ def _validate_saved_team(
 
     for player in players:
         if not isinstance(player, dict):
-            return None, "each saved Team player must be an object"
+            return None, None, "each saved Team player must be an object"
 
         slot = player.get("slot")
         if not isinstance(slot, int) or isinstance(slot, bool):
-            return None, "each saved Team player slot must be an integer"
+            return None, None, "each saved Team player slot must be an integer"
         slots.append(slot)
 
         is_cornerstone = player.get("is_cornerstone")
         if not isinstance(is_cornerstone, bool):
-            return None, "each saved Team player must include is_cornerstone"
+            return None, None, "each saved Team player must include is_cornerstone"
         if is_cornerstone:
             cornerstone_rows.append(player)
 
         salary_value = player.get("salary_snapshot", 0)
         if not isinstance(salary_value, int) or salary_value < 0:
-            return None, "salary_snapshot must be a non-negative integer"
+            return None, None, "salary_snapshot must be a non-negative integer"
         total_salary += salary_value
 
         name = player.get("player_name_snapshot")
         if not isinstance(name, str) or not name.strip():
-            return None, "player_name_snapshot is required"
+            return None, None, "player_name_snapshot is required"
 
         skills = player.get("skill_profile_snapshot")
         if not isinstance(skills, dict):
-            return None, "skill_profile_snapshot must be an object"
+            return None, None, "skill_profile_snapshot must be an object"
 
         player_id = player.get("player_id")
         legend_id = player.get("legend_id")
         if player_id is not None and not _validate_uuid(player_id):
-            return None, "player_id must be a valid UUID when present"
+            return None, None, "player_id must be a valid UUID when present"
         if legend_id is not None and not _validate_uuid(legend_id):
-            return None, "legend_id must be a valid UUID when present"
+            return None, None, "legend_id must be a valid UUID when present"
         if player_id is None and legend_id is None:
-            return None, "each saved Team player needs player_id or legend_id"
+            return None, None, "each saved Team player needs player_id or legend_id"
 
     if sorted(slots) != list(range(1, team_size + 1)):
-        return None, f"{team_label} slots must be exactly 1 through {team_size}"
+        return None, None, f"{team_label} slots must be exactly 1 through {team_size}"
 
     # Cornerstone validation (when rules_json declares a cornerstone rule)
     cornerstone_rule = rules_json.get("cornerstone_rule")
     if cornerstone_rule:
         if len(cornerstone_rows) != 1:
-            return None, f"{team_label} must include exactly one Cornerstone"
+            return None, None, f"{team_label} must include exactly one Cornerstone"
         cornerstone = cornerstone_rows[0]
         if cornerstone["slot"] != 1:
-            return None, "Cornerstone must be in slot 1"
-        if cornerstone.get("legend_id") != cornerstone_legend_id:
-            return None, "Cornerstone legend_id must match cornerstone_legend_id"
-        if cornerstone.get("player_id") is not None:
-            return None, "Cornerstone must use legend_id, not player_id"
+            return None, None, "Cornerstone must be in slot 1"
+        if cornerstone_source == "legend":
+            # Legend-only cornerstone: must use legend_id matching the top-level field
+            if cornerstone.get("legend_id") != cornerstone_legend_id:
+                return None, None, "Cornerstone legend_id must match cornerstone_legend_id"
+            if cornerstone.get("player_id") is not None:
+                return None, None, "Cornerstone must use legend_id, not player_id"
+        # cornerstone_source == "all": any player or legend is valid as cornerstone
 
-    if total_salary > salary_cap:
-        return None, f"Saved Team exceeds SalaryCap of ${salary_cap:,}"
+    if salary_cap is not None and total_salary > salary_cap:
+        return None, None, f"Saved Team exceeds SalaryCap of ${salary_cap:,}"
 
     # RookieDeal limit (M3)
     rookie_deal_limit = rules_json.get("rookie_deal_limit")
     if rookie_deal_limit is not None:
         rookie_count = sum(1 for p in players if p.get("is_rookie_deal"))
         if rookie_count > rookie_deal_limit:
-            return None, f"{team_label} allows at most {rookie_deal_limit} rookie-deal players"
+            return None, None, f"{team_label} allows at most {rookie_deal_limit} rookie-deal players"
 
-    return players, None
+    return players, team_size, None
 
 
-def _auto_name(body: dict[str, Any], players: list[dict[str, Any]]) -> str:
+def _auto_name(
+    body: dict[str, Any],
+    players: list[dict[str, Any]],
+    team_size: int,
+    rules_json: dict[str, Any] | None = None,
+) -> str:
     raw_name = body.get("name")
     if isinstance(raw_name, str) and raw_name.strip():
         return raw_name.strip()
-    cornerstone = next(player for player in players if player["is_cornerstone"])
-    return f"{cornerstone['player_name_snapshot'].strip()} Standard Rotation"
+    cornerstone = next((player for player in players if player["is_cornerstone"]), None)
+    name_part = cornerstone["player_name_snapshot"].strip() if cornerstone else players[0]["player_name_snapshot"].strip()
+    team_label = TEAM_SIZE_LABELS.get(team_size, (rules_json or {}).get("team_label", "Rotation"))
+    return f"{name_part} {team_label}"
 
 
 def _resolve_snapshot_player(
@@ -291,7 +329,9 @@ def _serialize_saved_team(
         "name": saved_team["name"],
         "ruleset_slug": saved_team["ruleset_slug"],
         "ruleset_version_id": saved_team.get("ruleset_version_id"),
+        "ruleset_version_label": saved_team.get("ruleset_version_label"),
         "ruleset_version_hash": saved_team.get("ruleset_version_hash"),
+        "team_size": saved_team.get("team_size"),
         "snapshot_release_id": saved_team["snapshot_release_id"],
         "visibility": saved_team["visibility"],
         "cornerstone_legend_id": saved_team.get("cornerstone_legend_id"),
@@ -318,6 +358,88 @@ def _check_legend_available(supabase, legend_id: str) -> tuple[bool, str | None]
     return True, rows[0]["name"]
 
 
+def _resolve_cornerstone_for_rebuild(
+    supabase,
+    cornerstone_legend_id: str | None,
+    saved_team_players: list[dict[str, Any]],
+    current_snapshot_release_id: str,
+) -> dict[str, Any]:
+    """Resolve the cornerstone for rebuild — Legend or active player."""
+    # Try Legend first
+    if cornerstone_legend_id:
+        available, name = _check_legend_available(supabase, cornerstone_legend_id)
+        if available:
+            return {
+                "id": cornerstone_legend_id,
+                "legend_id": cornerstone_legend_id,
+                "player_id": None,
+                "name": name,
+                "status": "legend",
+                "available": True,
+            }
+
+    # Fall back to cornerstone row from saved roster
+    cornerstone_row = next(
+        (p for p in saved_team_players if p.get("is_cornerstone")),
+        None,
+    )
+    if not cornerstone_row:
+        return {
+            "id": None,
+            "legend_id": cornerstone_legend_id,
+            "player_id": None,
+            "name": "Unknown",
+            "status": "missing",
+            "available": False,
+        }
+
+    # Cornerstone row may be a Legend (FFA saves with legend_id on the row)
+    row_legend_id = cornerstone_row.get("legend_id")
+    if row_legend_id:
+        available, name = _check_legend_available(supabase, row_legend_id)
+        if available:
+            return {
+                "id": row_legend_id,
+                "legend_id": row_legend_id,
+                "player_id": None,
+                "name": name,
+                "status": "legend",
+                "available": True,
+            }
+
+    # Active player cornerstone — resolve via source_player_id
+    source_id = cornerstone_row.get("source_player_id")
+    if source_id:
+        res = (
+            supabase.table("snapshot_players")
+            .select("source_player_id, name")
+            .eq("snapshot_release_id", current_snapshot_release_id)
+            .eq("source_player_id", source_id)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if rows:
+            return {
+                "id": rows[0]["source_player_id"],
+                "legend_id": None,
+                "player_id": rows[0]["source_player_id"],
+                "name": rows[0]["name"],
+                "status": "player",
+                "available": True,
+            }
+
+    # Player not found in current snapshot
+    return {
+        "id": source_id,
+        "legend_id": None,
+        "player_id": source_id,
+        "name": cornerstone_row.get("player_name_snapshot", "Unknown"),
+        "status": "missing",
+        "available": False,
+    }
+
+
 def _resolve_players_for_rebuild(
     supabase,
     saved_team_players: list[dict[str, Any]],
@@ -338,6 +460,33 @@ def _resolve_players_for_rebuild(
             "salary_snapshot": player.get("salary_snapshot", 0),
             "skill_profile_snapshot": player.get("skill_profile_snapshot", {}),
         }
+
+        # Legend supporting players (FFA) — resolve via legends table
+        legend_id = player.get("legend_id")
+        if legend_id and not player.get("source_player_id"):
+            available, name = _check_legend_available(supabase, legend_id)
+            if available:
+                reports.append({
+                    "slot": player["slot"],
+                    "status": "matched",
+                    "saved": saved_data,
+                    "current": {
+                        "source_player_id": legend_id,
+                        "name": name,
+                        "salary": player.get("salary_snapshot", 0),
+                        "team": player.get("team_snapshot"),
+                        "position": player.get("position_snapshot"),
+                        "skill_profile_snapshot": player.get("skill_profile_snapshot", {}),
+                    },
+                })
+            else:
+                reports.append({
+                    "slot": player["slot"],
+                    "status": "missing",
+                    "saved": saved_data,
+                    "current": None,
+                })
+            continue
 
         canonical_id = player.get("canonical_player_id")
         source_id = player.get("source_player_id")
@@ -402,6 +551,75 @@ def _version_summary(version_row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_rebuild_report(
+    supabase,
+    saved_team: dict[str, Any],
+    saved_team_id: str,
+) -> tuple[dict[str, Any] | None, str | None, int]:
+    """Build rebuild compatibility report. Returns (report, error_msg, status_code)."""
+    players = _players_for_saved_team(supabase, saved_team_id)
+
+    current_snapshot_id = _published_snapshot_release_id(supabase, None)
+    if not current_snapshot_id:
+        return None, "No published Snapshot Release available", 400
+
+    ruleset_slug = saved_team["ruleset_slug"]
+    current_version = _published_ruleset_version(supabase, ruleset_slug)
+    if not current_version:
+        return None, "No published RuleSet Version available", 400
+    _current_ruleset, current_ruleset_version = current_version
+
+    original_version_id = saved_team.get("ruleset_version_id")
+    orig_res = (
+        supabase.table("ruleset_versions")
+        .select("id, version_label, rules_hash, rules_json, status, published_at")
+        .eq("id", original_version_id)
+        .limit(1)
+        .execute()
+    )
+    orig_rows = orig_res.data or []
+    original_ruleset_version = orig_rows[0] if orig_rows else None
+
+    cornerstone_legend_id = saved_team.get("cornerstone_legend_id")
+    cornerstone_info = _resolve_cornerstone_for_rebuild(
+        supabase, cornerstone_legend_id, players, current_snapshot_id,
+    )
+
+    player_reports = _resolve_players_for_rebuild(supabase, players, current_snapshot_id)
+
+    version_changed = original_version_id != current_ruleset_version["id"]
+    version_drift = {
+        "original": _version_summary(original_ruleset_version) if original_ruleset_version else None,
+        "current": _version_summary(current_ruleset_version),
+        "changed": version_changed,
+    }
+
+    rules_json = current_ruleset_version.get("rules_json") or {}
+    cornerstone_source = rules_json.get("cornerstone_source", "legend")
+    builder_params: dict[str, str] = {}
+    saved_team_size = saved_team.get("team_size")
+    if saved_team_size is not None:
+        builder_params["team_size"] = str(saved_team_size)
+    if cornerstone_info["available"]:
+        if cornerstone_source == "all":
+            builder_params["s1"] = cornerstone_info["id"]
+        else:
+            builder_params["cornerstone"] = cornerstone_info["id"]
+    for report in player_reports:
+        if report["status"] == "matched" and report["current"]:
+            builder_params[f"s{report['slot']}"] = report["current"]["source_player_id"]
+
+    return {
+        "saved_team_id": saved_team_id,
+        "ruleset_slug": ruleset_slug,
+        "version_drift": version_drift,
+        "cornerstone": cornerstone_info,
+        "players": player_reports,
+        "rebuild_ready": True,
+        "builder_url_params": builder_params,
+    }, None, 200
+
+
 @saved_teams_bp.route("/saved-teams/<saved_team_id>/rebuild-check", methods=["GET"])
 @require_user
 def rebuild_check(saved_team_id: str):
@@ -409,7 +627,6 @@ def rebuild_check(saved_team_id: str):
     try:
         supabase = get_supabase()
 
-        # Load saved team (owner-scoped)
         res = (
             supabase.table("saved_teams")
             .select("*")
@@ -421,71 +638,11 @@ def rebuild_check(saved_team_id: str):
         rows = res.data or []
         if not rows:
             return _err("Saved Team not found", status=404)
-        saved_team = rows[0]
 
-        players = _players_for_saved_team(supabase, saved_team_id)
-
-        # Current published Snapshot Release
-        current_snapshot_id = _published_snapshot_release_id(supabase, None)
-        if not current_snapshot_id:
-            return _err("No published Snapshot Release available", status=400)
-
-        # Current published RuleSet Version
-        ruleset_slug = saved_team["ruleset_slug"]
-        current_version = _published_ruleset_version(supabase, ruleset_slug)
-        if not current_version:
-            return _err("No published RuleSet Version available", status=400)
-        _current_ruleset, current_ruleset_version = current_version
-
-        # Original RuleSet Version
-        original_version_id = saved_team.get("ruleset_version_id")
-        orig_res = (
-            supabase.table("ruleset_versions")
-            .select("id, version_label, rules_hash, rules_json, status, published_at")
-            .eq("id", original_version_id)
-            .limit(1)
-            .execute()
-        )
-        orig_rows = orig_res.data or []
-        original_ruleset_version = orig_rows[0] if orig_rows else None
-
-        # Cornerstone Legend availability
-        cornerstone_legend_id = saved_team.get("cornerstone_legend_id")
-        legend_available, legend_name = _check_legend_available(supabase, cornerstone_legend_id)
-
-        # Resolve supporting players
-        player_reports = _resolve_players_for_rebuild(supabase, players, current_snapshot_id)
-
-        # Version drift
-        version_changed = original_version_id != current_ruleset_version["id"]
-        version_drift = {
-            "original": _version_summary(original_ruleset_version) if original_ruleset_version else None,
-            "current": _version_summary(current_ruleset_version),
-            "changed": version_changed,
-        }
-
-        # Builder URL params
-        builder_params: dict[str, str] = {}
-        if legend_available:
-            builder_params["cornerstone"] = cornerstone_legend_id
-        for report in player_reports:
-            if report["status"] == "matched" and report["current"]:
-                builder_params[f"s{report['slot']}"] = report["current"]["source_player_id"]
-
-        return _ok({
-            "saved_team_id": saved_team_id,
-            "ruleset_slug": ruleset_slug,
-            "version_drift": version_drift,
-            "cornerstone": {
-                "legend_id": cornerstone_legend_id,
-                "name": legend_name or "Unknown",
-                "status": "legend",
-                "available": legend_available,
-            },
-            "players": player_reports,
-            "rebuild_ready": True,
-            "builder_url_params": builder_params,
-        })
+        report, error_msg, status = _build_rebuild_report(supabase, rows[0], saved_team_id)
+        if error_msg:
+            return _err(error_msg, status=status)
+        return _ok(report)
 
     except Exception:
         logger.exception("Error in GET /api/saved-teams/%s/rebuild-check", saved_team_id)
@@ -537,6 +694,15 @@ def get_saved_team(saved_team_id: str):
             return _err("Saved Team not found", status=404)
 
         saved_team = rows[0]
+
+        # Resolve version_label for display
+        version_id = saved_team.get("ruleset_version_id")
+        if version_id:
+            ver_res = supabase.table("ruleset_versions").select("version_label").eq("id", version_id).limit(1).execute()
+            ver_rows = ver_res.data or []
+            if ver_rows:
+                saved_team["ruleset_version_label"] = ver_rows[0].get("version_label")
+
         return _ok(_serialize_saved_team(
             saved_team,
             _players_for_saved_team(supabase, saved_team["id"]),
@@ -597,10 +763,12 @@ def create_saved_team():
             return _err("A published RuleSet Version is required", status=400)
         ruleset_row = ruleset_rows[0]
 
-        players, validation_error = _validate_saved_team(body, ruleset_version_row["rules_json"])
+        rules_json = ruleset_version_row["rules_json"]
+        players, team_size, validation_error = _validate_saved_team(body, rules_json)
         if validation_error:
             return _err(validation_error)
         assert players is not None
+        assert team_size is not None
 
         snapshot_release_id = body.get("snapshot_release_id")
         if snapshot_release_id is not None and not _validate_uuid(snapshot_release_id):
@@ -628,10 +796,11 @@ def create_saved_team():
             "ruleset_version_id": ruleset_version_row["id"],
             "ruleset_version_hash": client_rules_hash,
             "snapshot_release_id": published_snapshot_id,
-            "name": _auto_name(body, players),
+            "name": _auto_name(body, players, team_size, rules_json),
             "visibility": "private",
-            "cornerstone_legend_id": body["cornerstone_legend_id"],
+            "cornerstone_legend_id": body.get("cornerstone_legend_id"),
             "total_salary": total_salary,
+            "team_size": team_size,
         }
 
         team_res = supabase.table("saved_teams").insert(saved_team_insert).execute()
@@ -668,6 +837,7 @@ def create_saved_team():
             "ruleset_slug": saved_team["ruleset_slug"],
             "ruleset_version_id": saved_team["ruleset_version_id"],
             "ruleset_version_hash": saved_team["ruleset_version_hash"],
+            "team_size": saved_team.get("team_size"),
             "snapshot_release_id": saved_team["snapshot_release_id"],
             "visibility": saved_team["visibility"],
         }, status=201)
@@ -707,21 +877,112 @@ def delete_saved_team(saved_team_id: str):
         return _err("Internal server error", status=500)
 
 
+VISIBLE_TO_ANYONE = ("public", "unlisted")
+
+
+@saved_teams_bp.route("/shared/<saved_team_id>", methods=["GET"])
+def get_shared_saved_team(saved_team_id: str):
+    """Return a Saved Team if its visibility is public or unlisted. No auth required."""
+    try:
+        if not _validate_uuid(saved_team_id):
+            return _err("Saved Team not found", status=404)
+
+        supabase = get_supabase()
+        res = (
+            supabase.table("saved_teams")
+            .select("*")
+            .eq("id", saved_team_id)
+            .in_("visibility", list(VISIBLE_TO_ANYONE))
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if not rows:
+            return _err("Saved Team not found", status=404)
+
+        saved_team = rows[0]
+
+        # Resolve version_label for display
+        version_id = saved_team.get("ruleset_version_id")
+        if version_id:
+            ver_res = supabase.table("ruleset_versions").select("version_label").eq("id", version_id).limit(1).execute()
+            ver_rows = ver_res.data or []
+            if ver_rows:
+                saved_team["ruleset_version_label"] = ver_rows[0].get("version_label")
+
+        return _ok(_serialize_saved_team(
+            saved_team,
+            _players_for_saved_team(supabase, saved_team["id"]),
+            _latest_evaluation_for_saved_team(supabase, saved_team["id"]),
+            include_evaluation_payload=True,
+        ))
+    except Exception:
+        logger.exception("Error in GET /api/shared/%s", saved_team_id)
+        return _err("Internal server error", status=500)
+
+
+@saved_teams_bp.route("/shared/<saved_team_id>/rebuild-check", methods=["GET"])
+def shared_rebuild_check(saved_team_id: str):
+    """Return a rebuild compatibility report for a public/unlisted Saved Team. No auth required."""
+    try:
+        if not _validate_uuid(saved_team_id):
+            return _err("Saved Team not found", status=404)
+
+        supabase = get_supabase()
+
+        res = (
+            supabase.table("saved_teams")
+            .select("*")
+            .eq("id", saved_team_id)
+            .in_("visibility", list(VISIBLE_TO_ANYONE))
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if not rows:
+            return _err("Saved Team not found", status=404)
+
+        report, error_msg, status = _build_rebuild_report(supabase, rows[0], saved_team_id)
+        if error_msg:
+            return _err(error_msg, status=status)
+        return _ok(report)
+
+    except Exception:
+        logger.exception("Error in GET /api/shared/%s/rebuild-check", saved_team_id)
+        return _err("Internal server error", status=500)
+
+
+VALID_VISIBILITIES = ("private", "unlisted", "public")
+
+
 @saved_teams_bp.route("/saved-teams/<saved_team_id>", methods=["PATCH"])
 @require_user
 def update_saved_team(saved_team_id: str):
     body = request.get_json(silent=True) or {}
 
+    updates: dict[str, Any] = {}
+
     name = body.get("name")
-    if not isinstance(name, str) or not name.strip():
-        return _err("name is required and must be a non-empty string")
+    if name is not None:
+        if not isinstance(name, str) or not name.strip():
+            return _err("name must be a non-empty string")
+        updates["name"] = name.strip()
+
+    visibility = body.get("visibility")
+    if visibility is not None:
+        if visibility not in VALID_VISIBILITIES:
+            return _err(f"visibility must be one of: {', '.join(VALID_VISIBILITIES)}")
+        updates["visibility"] = visibility
+
+    if not updates:
+        return _err("At least one of name or visibility is required")
 
     try:
         supabase = get_supabase()
 
         res = (
             supabase.table("saved_teams")
-            .select("id, name")
+            .select("id, name, visibility")
             .eq("id", saved_team_id)
             .eq("user_id", g.user_id)
             .limit(1)
@@ -731,9 +992,15 @@ def update_saved_team(saved_team_id: str):
         if not rows:
             return _err("Saved Team not found", status=404)
 
-        supabase.table("saved_teams").update({"name": name.strip()}).eq("id", saved_team_id).execute()
+        supabase.table("saved_teams").update(updates).eq("id", saved_team_id).execute()
 
-        return _ok({"id": saved_team_id, "name": name.strip()})
+        current = rows[0]
+        current.update(updates)
+        return _ok({
+            "id": saved_team_id,
+            "name": current["name"],
+            "visibility": current["visibility"],
+        })
 
     except Exception:
         logger.exception("Error in PATCH /api/saved-teams/%s", saved_team_id)

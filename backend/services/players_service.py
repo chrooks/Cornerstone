@@ -62,13 +62,13 @@ def get_or_fetch_players(
         # Check if Supabase already has player rows for this season
         existing = (
             supabase.table("players")
-            .select("id, nba_api_id, name, team, position, height, weight, age, games_played, minutes_per_game, salary, season")
+            .select("id, nba_api_id, name, team, position, height, weight, age, games_played, minutes_per_game, salary, season, draft_round, season_exp")
             .eq("season", season)
             .gte("minutes_per_game", min_mpg)
             .execute()
         )
         if existing.data:
-            return existing.data
+            return enrich_with_rookie_deal(existing.data)
 
     # Fetch fresh bulk base stats and physical attributes from nba_api
     logger.info("Fetching fresh player list from nba_api for season %s", season)
@@ -94,6 +94,12 @@ def get_or_fetch_players(
             or str(row.get("PLAYER_POSITION") or row.get("POSITION") or "")
         )
 
+        # Derive season_exp from draft_year when available.
+        # season string is "2025-26" → start year 2025.
+        draft_year = physical.get("draft_year")
+        season_start = int(season.split("-")[0]) if "-" in season else None
+        season_exp = (season_start - draft_year) if (season_start and draft_year) else None
+
         upsert_rows.append({
             "nba_api_id":       pid_int,
             "name":             str(row.get("PLAYER_NAME", "")),
@@ -105,6 +111,8 @@ def get_or_fetch_players(
             "games_played":     _safe_int(row.get("GP")),
             "minutes_per_game": round(mpg, 2),
             "season":           season,
+            "draft_round":      physical.get("draft_round"),
+            "season_exp":       season_exp,
         })
 
     if upsert_rows:
@@ -115,12 +123,36 @@ def get_or_fetch_players(
     # Return from Supabase (now has fresh data) filtered by min_mpg
     result = (
         supabase.table("players")
-        .select("id, nba_api_id, name, team, position, height, weight, age, games_played, minutes_per_game, salary, season")
+        .select("id, nba_api_id, name, team, position, height, weight, age, games_played, minutes_per_game, salary, season, draft_round, season_exp")
         .eq("season", season)
         .gte("minutes_per_game", min_mpg)
         .execute()
     )
-    return result.data or []
+    return enrich_with_rookie_deal(result.data or [])
+
+
+# ---------------------------------------------------------------------------
+# Rookie deal derivation
+# ---------------------------------------------------------------------------
+
+def derive_is_rookie_deal(player: dict) -> bool:
+    """
+    Derive rookie deal status from draft_round and season_exp.
+
+    Per the CBA, rookie scale contracts are 4-year deals signed only by
+    first-round picks. SEASON_EXP <= 3 means they're still within that
+    window (years 0-3 = seasons 1-4).
+    """
+    draft_round = player.get("draft_round")
+    season_exp = player.get("season_exp")
+    if draft_round is None or season_exp is None:
+        return False
+    return draft_round == 1 and season_exp <= 3
+
+
+def enrich_with_rookie_deal(players: list[dict]) -> list[dict]:
+    """Add is_rookie_deal to each player dict (immutable — returns new list)."""
+    return [{**p, "is_rookie_deal": derive_is_rookie_deal(p)} for p in players]
 
 
 # ---------------------------------------------------------------------------

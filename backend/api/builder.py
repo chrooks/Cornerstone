@@ -310,14 +310,14 @@ def _validate_player(player: Any) -> str | None:
     if len(name) > _MAX_NAME_LENGTH:
         return f"player 'name' must be {_MAX_NAME_LENGTH} characters or fewer"
 
-    # slot — required, integer 0–9
+    # slot — required, integer 0–12 (max team_size across all RuleSets)
     if "slot" not in player:
         return "each player must have a 'slot' field"
     slot = player.get("slot")
     if not isinstance(slot, int) or isinstance(slot, bool):
         return "player 'slot' must be an integer"
-    if slot < 0 or slot > 9:
-        return "player 'slot' must be between 0 and 9"
+    if slot < 0 or slot > 12:
+        return "player 'slot' must be between 0 and 12"
 
     # is_cornerstone — required boolean
     if "is_cornerstone" not in player:

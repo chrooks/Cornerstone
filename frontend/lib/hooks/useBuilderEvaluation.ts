@@ -9,6 +9,7 @@ type BuilderEvaluationState = "idle" | "analyzing" | "ready" | "error";
 interface UseBuilderEvaluationArgs {
   allSlots: (PlayerWithSkills | null)[];
   legendDetail: LegendDetail | null;
+  cornerstoneId: string | null;
   isAdmin: boolean;
 }
 
@@ -20,9 +21,10 @@ interface UseBuilderEvaluationResult {
 
 const STARTER_BOUNDARY = 5;
 
-function buildPlayerPayload(
+function buildEvalPayload(
   allSlots: (PlayerWithSkills | null)[],
-  legendDetail: LegendDetail,
+  legendDetail: LegendDetail | null,
+  cornerstoneId: string | null,
 ) {
   const result: Array<{
     id?: string;
@@ -32,8 +34,11 @@ function buildPlayerPayload(
     is_cornerstone: boolean;
     height: string | null;
     skills: Record<string, string>;
-  }> = [
-    {
+  }> = [];
+
+  if (legendDetail) {
+    // Legend cornerstone — extract from legendDetail, skip legends in allSlots
+    result.push({
       id: legendDetail.id,
       name: legendDetail.name,
       slot: 0,
@@ -42,21 +47,39 @@ function buildPlayerPayload(
       skills: Object.fromEntries(
         Object.entries(legendDetail.profile).map(([key, value]) => [key, value ?? "None"]),
       ),
-    },
-  ];
-
-  allSlots.forEach((player, index) => {
-    if (!player || player.is_legend) return;
-    result.push({
-      id: player.id,
-      player_id: player.id,
-      name: player.name,
-      slot: index + 1,
-      is_cornerstone: false,
-      height: player.height,
-      skills: (player.skills ?? {}) as Record<string, string>,
     });
-  });
+
+    allSlots.forEach((player, index) => {
+      if (!player || player.is_legend) return;
+      result.push({
+        id: player.id,
+        player_id: player.id,
+        name: player.name,
+        slot: index + 1,
+        is_cornerstone: false,
+        height: player.height,
+        skills: (player.skills ?? {}) as Record<string, string>,
+      });
+    });
+  } else {
+    // No Legend cornerstone (FFA) — all players from allSlots
+    // Slot 1 is treated as cornerstone for eval purposes
+    allSlots.forEach((player, index) => {
+      if (!player) return;
+      const isCornerstone = cornerstoneId
+        ? player.id === cornerstoneId
+        : index === 0;
+      result.push({
+        id: player.id,
+        player_id: player.id,
+        name: player.name,
+        slot: isCornerstone ? 0 : index + 1,
+        is_cornerstone: isCornerstone,
+        height: player.height,
+        skills: (player.skills ?? {}) as Record<string, string>,
+      });
+    });
+  }
 
   return result;
 }
@@ -64,6 +87,7 @@ function buildPlayerPayload(
 export function useBuilderEvaluation({
   allSlots,
   legendDetail,
+  cornerstoneId,
   isAdmin,
 }: UseBuilderEvaluationArgs): UseBuilderEvaluationResult {
   const [state, setState] = useState<BuilderEvaluationState>("idle");
@@ -93,8 +117,11 @@ export function useBuilderEvaluation({
     return `${legendPart}|s:${starterIds}|b:${benchIds}`;
   }, [allSlots, legendDetail]);
 
+  // Need at least some filled slots to evaluate
+  const hasPlayers = allSlots.some((p) => p !== null);
+
   const runEval = useCallback(async () => {
-    if (!legendDetail) {
+    if (!hasPlayers) {
       setState("idle");
       setLatestEval(null);
       setError(null);
@@ -107,7 +134,7 @@ export function useBuilderEvaluation({
     setError(null);
 
     try {
-      const players = buildPlayerPayload(slotsRef.current, legendDetail);
+      const players = buildEvalPayload(slotsRef.current, legendDetail, cornerstoneId);
       const res = await evaluateRoster({ players, mode: "live", debug: isAdmin });
       if (requestIdRef.current !== requestId) return;
 
@@ -124,10 +151,10 @@ export function useBuilderEvaluation({
       setError("Failed to reach the server");
       setState("error");
     }
-  }, [isAdmin, legendDetail]);
+  }, [isAdmin, legendDetail, cornerstoneId, hasPlayers]);
 
   useEffect(() => {
-    if (!legendDetail) {
+    if (!hasPlayers) {
       requestIdRef.current += 1;
       setState("idle");
       setLatestEval(null);
@@ -140,7 +167,7 @@ export function useBuilderEvaluation({
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [legendDetail, rosterKey, runEval]);
+  }, [hasPlayers, rosterKey, runEval]);
 
   return { state, latestEval, error };
 }

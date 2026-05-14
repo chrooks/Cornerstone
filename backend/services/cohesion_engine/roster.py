@@ -193,11 +193,24 @@ def _star_breakdown(
     }
 
 
-def _rollup_star_rating(breakdown: dict[str, float]) -> float:
-    """Apply the four-factor roster rollup to produce a 0-5 star rating."""
+LINEUP_ONLY_ROLLUP_WEIGHTS: dict[str, float] = {
+    "starting_5": 0.90,
+    "depth": 0.0,
+    "archetype_diversity": 0.10,
+    "floor": 0.0,
+}
+
+
+def _rollup_star_rating(breakdown: dict[str, float], lineup_only: bool = False) -> float:
+    """Apply the roster rollup to produce a 0-5 star rating.
+
+    When lineup_only is True (5-man Lineup mode), depth and floor factors
+    are zeroed out and the starting lineup dominates the score.
+    """
+    weights = LINEUP_ONLY_ROLLUP_WEIGHTS if lineup_only else ROSTER_ROLLUP_WEIGHTS
     weighted = sum(
-        ROSTER_ROLLUP_WEIGHTS[key] * breakdown.get(key, 0.0)
-        for key in ROSTER_ROLLUP_WEIGHTS
+        weights[key] * breakdown.get(key, 0.0)
+        for key in weights
     )
     return round(STAR_RATING_MAX * weighted, 2)
 
@@ -250,6 +263,7 @@ def evaluate_roster(players: list[dict[str, Any]], mode: str = "live") -> Roster
         if lineup.score >= VIABLE_LINEUP_THRESHOLD:
             archetypes.update(_archetypes_for_lineup(lineup))
 
+    lineup_only = len(ordered_players) == 5
     lineup_summary = _lineup_summary(lineups, archetypes)
     breakdown = _star_breakdown(starting_lineup, lineups, archetypes)
     notes = generate_notes(
@@ -264,7 +278,7 @@ def evaluate_roster(players: list[dict[str, Any]], mode: str = "live") -> Roster
     )
 
     evaluation = RosterEvaluation(
-        star_rating=_rollup_star_rating(breakdown),
+        star_rating=_rollup_star_rating(breakdown, lineup_only=lineup_only),
         star_breakdown=breakdown,
         starting_lineup=starting_lineup,
         player_composites=base_composites,

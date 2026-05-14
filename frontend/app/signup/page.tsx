@@ -48,8 +48,18 @@ function SignUpForm() {
     setLoading(true);
     setError(null);
 
+    // Persist redirectTo so the email-confirmation callback can restore it
+    if (redirectTo !== "/") {
+      localStorage.setItem("authRedirectTo", redirectTo);
+    }
+
     const supabase = getBrowserSupabase();
-    const { error: authError } = await supabase.auth.signUp({ email, password });
+    const callbackUrl = `${window.location.origin}/auth/callback`;
+    const { error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: callbackUrl },
+    });
 
     if (authError) {
       setError(authError.message);

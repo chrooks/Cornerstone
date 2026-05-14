@@ -55,6 +55,13 @@ function getTeamKind(playerCount: number): string {
   return "Lineup";
 }
 
+function getTeamKindFromSize(teamSize: number | null | undefined, playerCount: number): string {
+  if (teamSize === 12) return "Roster";
+  if (teamSize === 9) return "Rotation";
+  if (teamSize === 5) return "Lineup";
+  return getTeamKind(playerCount);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -101,20 +108,27 @@ function resolvePlayerPortraitId(
 function PlayerSnapshotRow({
   player,
   nbaApiId,
+  showSalary = true,
+  showCornerstone = true,
 }: {
   player: SaveTeamPlayerPayload;
   nbaApiId: number | null;
+  showSalary?: boolean;
+  showCornerstone?: boolean;
 }) {
   return (
     <li
       id={`saved-team-detail-player-slot-${player.slot}`}
-      className="grid grid-cols-[4rem_minmax(0,1fr)_auto] items-center gap-3 border border-[oklch(0.84_0.018_62)] bg-[oklch(0.985_0.005_62)] p-3"
+      className={cn(
+        "grid items-center gap-3 border border-[oklch(0.84_0.018_62)] bg-[oklch(0.985_0.005_62)] p-3",
+        showSalary ? "grid-cols-[4rem_minmax(0,1fr)_auto]" : "grid-cols-[4rem_minmax(0,1fr)]",
+      )}
     >
       <div
         id={`saved-team-detail-player-slot-${player.slot}-badge`}
         className={cn(
           "relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-sm border font-mono text-sm font-semibold",
-          player.is_cornerstone
+          showCornerstone && player.is_cornerstone
             ? "border-[oklch(0.66_0.16_55)] bg-[oklch(0.92_0.055_64)] text-[oklch(0.24_0.04_45)]"
             : "border-[oklch(0.82_0.02_62)] bg-[oklch(0.94_0.018_62)] text-[oklch(0.29_0.025_45)]"
         )}
@@ -143,7 +157,7 @@ function PlayerSnapshotRow({
           >
             {player.player_name_snapshot}
           </p>
-          {player.is_cornerstone && (
+          {showCornerstone && player.is_cornerstone && (
             <span className="rounded-sm border border-[oklch(0.76_0.13_74)] bg-[oklch(0.94_0.035_74)] px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.39_0.11_55)]">
               Cornerstone
             </span>
@@ -156,12 +170,14 @@ function PlayerSnapshotRow({
           Slot {player.slot} / {player.position_snapshot ?? "Position unknown"} / {player.team_snapshot ?? "Team unknown"}
         </p>
       </div>
-      <p
-        id={`saved-team-detail-player-slot-${player.slot}-salary`}
-        className="font-mono text-sm tabular-nums text-[oklch(0.18_0.02_45)]"
-      >
-        {formatMoney(player.salary_snapshot)}
-      </p>
+      {showSalary && (
+        <p
+          id={`saved-team-detail-player-slot-${player.slot}-salary`}
+          className="font-mono text-sm tabular-nums text-[oklch(0.18_0.02_45)]"
+        >
+          {formatMoney(player.salary_snapshot)}
+        </p>
+      )}
     </li>
   );
 }
@@ -244,8 +260,10 @@ export default function SavedTeamDetailPage() {
   const fullEvaluation = savedTeam ? getSavedEvaluation(savedTeam) : null;
   const score = fullEvaluation?.star_rating ?? (savedTeam ? getFallbackScore(savedTeam) : 0);
   const description = fullEvaluation?.team_description ?? (savedTeam ? getFallbackDescription(savedTeam) : "");
-  const teamKind = getTeamKind(orderedPlayers.length);
+  const teamKind = getTeamKindFromSize(savedTeam?.team_size, orderedPlayers.length);
   const salaryTotal = savedTeam?.total_salary ?? orderedPlayers.reduce((sum, player) => sum + player.salary_snapshot, 0);
+  const hasSalaryCap = !savedTeam?.ruleset_slug?.startsWith("free-for-all");
+  const hasCornerstone = orderedPlayers.some((p) => p.is_cornerstone) && hasSalaryCap;
 
   if (state === "loading") return <SavedTeamDetailSkeleton />;
 
@@ -334,15 +352,15 @@ export default function SavedTeamDetailPage() {
 
       <dl
         id="saved-team-detail-context"
-        className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4"
+        className={cn("mt-5 grid gap-3 md:grid-cols-2", hasSalaryCap ? "xl:grid-cols-4" : "xl:grid-cols-4")}
       >
         <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">
           <dt className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
             <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
-            RuleSet Version ID
+            Rule Set
           </dt>
-          <dd id="saved-team-detail-ruleset-version" className="mt-2 break-all font-mono text-sm text-[oklch(0.18_0.02_45)]">
-            {savedTeam.ruleset_version_id ?? "Unknown"}
+          <dd id="saved-team-detail-ruleset-version" className="mt-2 font-mono text-sm text-[oklch(0.18_0.02_45)]">
+            {formatRulesetName(savedTeam.ruleset_slug)}{savedTeam.ruleset_version_label ? ` · ${savedTeam.ruleset_version_label}` : ""}
           </dd>
         </div>
         <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">
@@ -356,6 +374,15 @@ export default function SavedTeamDetailPage() {
         </div>
         <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">
           <dt className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
+            <UsersRound className="h-3.5 w-3.5" aria-hidden="true" />
+            Team Size
+          </dt>
+          <dd id="saved-team-detail-team-size" className="mt-2 font-mono text-sm text-[oklch(0.18_0.02_45)]">
+            {teamKind}
+          </dd>
+        </div>
+        <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">
+          <dt className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
             <Cog className="h-3.5 w-3.5" aria-hidden="true" />
             Evaluation Version
           </dt>
@@ -363,15 +390,17 @@ export default function SavedTeamDetailPage() {
             {savedTeam.evaluation?.evaluation_version ?? "Unknown"}
           </dd>
         </div>
-        <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">
-          <dt className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
-            <CircleDollarSign className="h-3.5 w-3.5" aria-hidden="true" />
-            SalaryCap
-          </dt>
-          <dd id="saved-team-detail-salary" className="mt-2 font-mono text-sm tabular-nums text-[oklch(0.18_0.02_45)]">
-            {formatMoney(salaryTotal)}
-          </dd>
-        </div>
+        {hasSalaryCap && (
+          <div className="rounded-md border border-[oklch(0.83_0.02_62)] bg-[oklch(0.985_0.005_62)] p-4">
+            <dt className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.49_0.02_45)]">
+              <CircleDollarSign className="h-3.5 w-3.5" aria-hidden="true" />
+              Salary Cap
+            </dt>
+            <dd id="saved-team-detail-salary" className="mt-2 font-mono text-sm tabular-nums text-[oklch(0.18_0.02_45)]">
+              {formatMoney(salaryTotal)}
+            </dd>
+          </div>
+        )}
       </dl>
 
       <section id="saved-team-detail-players-section" className="mt-5 grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
@@ -391,6 +420,8 @@ export default function SavedTeamDetailPage() {
                 key={`${player.slot}-${player.player_name_snapshot}`}
                 player={player}
                 nbaApiId={playerPortraitIds.get(player.slot) ?? null}
+                showSalary={hasSalaryCap}
+                showCornerstone={hasCornerstone}
               />
             ))}
           </ol>
@@ -398,7 +429,11 @@ export default function SavedTeamDetailPage() {
 
         <div id="saved-team-detail-eval-panel" className="min-w-0">
           {fullEvaluation ? (
-            <CohesionScoreDisplay evaluation={fullEvaluation} />
+            <CohesionScoreDisplay
+              evaluation={fullEvaluation}
+              isLineupOnly={orderedPlayers.length <= 5}
+              teamLabel={teamKind}
+            />
           ) : (
             <div
               id="saved-team-detail-limited-eval"

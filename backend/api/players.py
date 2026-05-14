@@ -548,7 +548,8 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
         supabase.table("players")
         .select(
             "id, name, team, position, age, height, weight, salary, "
-            "games_played, minutes_per_game, season, nba_api_id, manually_included"
+            "games_played, minutes_per_game, season, nba_api_id, manually_included, "
+            "draft_round, season_exp"
         )
         .eq("season", season)
         .or_(f"minutes_per_game.gte.{min_mpg},manually_included.eq.true")
@@ -638,6 +639,10 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
             **player,
             "skills": skills,
             "flag_summary": flag_summary,
+            "is_rookie_deal": (
+                player.get("draft_round") == 1
+                and (player.get("season_exp") or 99) <= 3
+            ),
         })
 
     return result

@@ -28,6 +28,15 @@ logger = logging.getLogger(__name__)
 _cffi_session = CffiSession(impersonate="chrome131")
 NBAHTTP.set_session(_cffi_session)
 
+
+def _safe_int(val) -> int | None:
+    """Safely convert a value to int, returning None on failure."""
+    try:
+        return int(val) if val is not None else None
+    except (ValueError, TypeError):
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Updated request headers — nba_api defaults use Firefox 72 (2020) which
 # NBA.com now blocks. Use a current Chrome UA + required NBA stats tokens.
@@ -192,10 +201,14 @@ def get_player_index(season: str = "2025-26") -> dict[int, dict]:
     for _, row in df.iterrows():
         pid = int(row["PERSON_ID"])
         weight_raw = row.get("WEIGHT")
+        draft_round_raw = row.get("DRAFT_ROUND")
+        draft_year_raw = row.get("DRAFT_YEAR")
         result[pid] = {
-            "height":   str(row.get("HEIGHT") or "").strip() or None,
-            "weight":   int(weight_raw) if weight_raw and str(weight_raw).strip().isdigit() else None,
-            "position": str(row.get("POSITION") or "").strip() or None,
+            "height":      str(row.get("HEIGHT") or "").strip() or None,
+            "weight":      int(weight_raw) if weight_raw and str(weight_raw).strip().isdigit() else None,
+            "position":    str(row.get("POSITION") or "").strip() or None,
+            "draft_round": _safe_int(draft_round_raw),
+            "draft_year":  _safe_int(draft_year_raw),
         }
 
     _bulk_cache[cache_key] = result
@@ -499,13 +512,17 @@ def get_player_info(nba_api_id: int) -> dict | None:
                 pass
 
         weight_raw = row.get("WEIGHT")
+        draft_round_raw = row.get("DRAFT_ROUND")
+        season_exp_raw = row.get("SEASON_EXP")
         return {
-            "name":     str(row.get("DISPLAY_FIRST_LAST") or "").strip() or None,
-            "team":     str(row.get("TEAM_ABBREVIATION") or "").strip() or None,
-            "position": str(row.get("POSITION") or "").strip() or None,
-            "height":   str(row.get("HEIGHT") or "").strip() or None,
-            "weight":   int(weight_raw) if weight_raw and str(weight_raw).strip().isdigit() else None,
-            "age":      age,
+            "name":        str(row.get("DISPLAY_FIRST_LAST") or "").strip() or None,
+            "team":        str(row.get("TEAM_ABBREVIATION") or "").strip() or None,
+            "position":    str(row.get("POSITION") or "").strip() or None,
+            "height":      str(row.get("HEIGHT") or "").strip() or None,
+            "weight":      int(weight_raw) if weight_raw and str(weight_raw).strip().isdigit() else None,
+            "age":         age,
+            "draft_round": _safe_int(draft_round_raw),
+            "season_exp":  _safe_int(season_exp_raw),
         }
 
     except Exception as exc:

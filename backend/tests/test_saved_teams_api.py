@@ -18,6 +18,9 @@ LEGEND_ID = "33333333-3333-3333-3333-333333333333"
 STANDARD_RULESET_ID = "55555555-5555-5555-5555-555555555555"
 STANDARD_RULESET_VERSION_ID = "66666666-6666-6666-6666-666666666666"
 STANDARD_RULES_HASH = "375b5966733c5d3dd5350098e70c55a0"
+FFA_RULESET_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+FFA_RULESET_VERSION_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+FFA_RULES_HASH = "ffa-multi-size-hash"
 
 
 class _FakeResult:
@@ -33,6 +36,7 @@ class _FakeQuery:
         self._update_payload = None
         self._delete = False
         self._filters: dict[str, object] = {}
+        self._in_filters: dict[str, list] = {}
         self._limit = None
 
     def select(self, *_args, **_kwargs):
@@ -54,6 +58,10 @@ class _FakeQuery:
         self._filters[key] = value
         return self
 
+    def in_(self, key, values):
+        self._in_filters[key] = list(values)
+        return self
+
     def order(self, *_args, **_kwargs):
         return self
 
@@ -68,7 +76,7 @@ class _FakeQuery:
             return _FakeResult(self.db.update(self.table_name, self._update_payload, self._filters))
         if self._delete:
             return _FakeResult(self.db.delete(self.table_name, self._filters))
-        rows = self.db.select(self.table_name, self._filters)
+        rows = self.db.select(self.table_name, self._filters, self._in_filters)
         if self._limit is not None:
             rows = rows[: self._limit]
         return _FakeResult(rows)
@@ -123,12 +131,14 @@ class _FakeSupabase:
     def table(self, name: str):
         return _FakeQuery(self, name)
 
-    def select(self, table_name: str, filters: dict[str, object]):
+    def select(self, table_name: str, filters: dict[str, object], in_filters: dict | None = None):
         if table_name == "snapshot_releases" and self.missing_snapshot_releases:
             raise RuntimeError("Could not find the table 'public.snapshot_releases' in the schema cache")
         rows = list(self.rows.get(table_name, []))
         for key, value in filters.items():
             rows = [row for row in rows if row.get(key) == value]
+        for key, values in (in_filters or {}).items():
+            rows = [row for row in rows if row.get(key) in values]
         return rows
 
     def insert(self, table_name: str, payload):
@@ -312,7 +322,7 @@ def test_save_team_persists_valid_standard_rotation(client, fake_supabase):
 
     assert resp.status_code == 201
     assert data["success"] is True
-    assert data["data"]["name"] == "Hakeem Olajuwon Standard Rotation"
+    assert data["data"]["name"] == "Hakeem Olajuwon Rotation"
     assert data["data"]["ruleset_slug"] == "standard"
     assert data["data"]["ruleset_version_id"] == STANDARD_RULESET_VERSION_ID
     assert data["data"]["snapshot_release_id"] == SNAPSHOT_RELEASE_ID
@@ -420,6 +430,60 @@ def test_save_team_reads_team_size_from_rules_json(client, fake_supabase):
     assert resp.status_code == 400
     assert data["success"] is False
     assert "5" in data["error"]
+
+
+def test_save_team_persists_selected_allowed_team_size(client, fake_supabase):
+    fake_supabase.rows["rulesets"].append({
+        "id": FFA_RULESET_ID,
+        "slug": "free-for-all",
+        "name": "Free For All",
+        "status": "active",
+    })
+    fake_supabase.rows["ruleset_versions"].append({
+        "id": FFA_RULESET_VERSION_ID,
+        "ruleset_id": FFA_RULESET_ID,
+        "version_label": "v1",
+        "rules_hash": FFA_RULES_HASH,
+        "rules_json": {
+            "team_size": 9,
+            "team_label": "Rotation",
+            "allowed_team_sizes": [5, 9, 12],
+            "cornerstone_source": "all",
+            "cornerstone_rule": "Any player",
+            "player_pool": "2025-26 Snapshot + Legends",
+        },
+        "status": "published",
+        "published_at": "2026-05-13T00:00:00Z",
+    })
+    body = valid_payload()
+    body["ruleset_slug"] = "free-for-all"
+    body["ruleset_version_id"] = FFA_RULESET_VERSION_ID
+    body["rules_hash"] = FFA_RULES_HASH
+    body["team_size"] = 5
+    body["players"] = body["players"][:5]
+
+    resp, data = post_saved_team(client, body)
+
+    assert resp.status_code == 201
+    assert data["success"] is True
+    assert data["data"]["name"] == "Hakeem Olajuwon Lineup"
+    assert data["data"]["ruleset_slug"] == "free-for-all"
+    assert data["data"]["team_size"] == 5
+    saved_team = fake_supabase.rows["saved_teams"][0]
+    assert saved_team["team_size"] == 5
+
+
+def test_save_team_rejects_disallowed_team_size_for_ruleset(client, fake_supabase):
+    fake_supabase.rows["ruleset_versions"][0]["rules_json"]["allowed_team_sizes"] = [9, 12]
+    body = valid_payload()
+    body["team_size"] = 5
+    body["players"] = body["players"][:5]
+
+    resp, data = post_saved_team(client, body)
+
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "allowed sizes" in data["error"]
 
 
 CANONICAL_PLAYER_IDS = {
@@ -547,6 +611,7 @@ def _seed_saved_team(fake_supabase, *, missing_slots: list[int] | None = None):
         "visibility": "private",
         "cornerstone_legend_id": LEGEND_ID,
         "total_salary": 134_000_000,
+        "team_size": 9,
         "created_at": "2026-05-11T00:00:00Z",
         "updated_at": "2026-05-11T00:00:00Z",
     })
@@ -892,6 +957,7 @@ def test_list_saved_teams_returns_current_user_summaries(client, fake_supabase):
         "visibility": "private",
         "cornerstone_legend_id": LEGEND_ID,
         "total_salary": 134_000_000,
+        "team_size": 9,
         "created_at": "2026-05-11T00:00:00Z",
         "updated_at": "2026-05-11T00:00:00Z",
     })
@@ -916,6 +982,7 @@ def test_list_saved_teams_returns_current_user_summaries(client, fake_supabase):
     assert saved_team["name"] == "Hakeem Standard Rotation"
     assert saved_team["ruleset_slug"] == "standard"
     assert saved_team["ruleset_version_id"] == STANDARD_RULESET_VERSION_ID
+    assert saved_team["team_size"] == 9
     assert saved_team["evaluation"]["star_rating"] == 4.2
     assert saved_team["players"][0]["legend_id"] == LEGEND_ID
     assert saved_team["players"][0]["player_name_snapshot"] == "Hakeem Olajuwon"
@@ -934,6 +1001,7 @@ def test_get_saved_team_detail_is_scoped_to_current_user(client, fake_supabase):
         "visibility": "private",
         "cornerstone_legend_id": LEGEND_ID,
         "total_salary": 134_000_000,
+        "team_size": 9,
         "created_at": "2026-05-11T00:00:00Z",
         "updated_at": "2026-05-11T00:00:00Z",
     })
@@ -944,6 +1012,7 @@ def test_get_saved_team_detail_is_scoped_to_current_user(client, fake_supabase):
     assert resp.status_code == 200
     assert data["success"] is True
     assert data["data"]["id"] == "saved-team-1"
+    assert data["data"]["team_size"] == 9
     assert len(data["data"]["players"]) == 9
 
 
@@ -982,3 +1051,229 @@ def test_get_saved_team_detail_returns_full_historical_eval_payload(client, fake
     assert data["success"] is True
     assert data["data"]["evaluation"]["evaluation_payload"] == full_eval_payload
     assert data["data"]["evaluation"]["evaluation_payload"]["lineup_summary"]["total_lineups"] == 126
+
+
+# ---------------------------------------------------------------------------
+# Shared (unauthenticated) endpoints: GET /api/shared/<id>
+# ---------------------------------------------------------------------------
+
+OTHER_USER_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+
+
+SHARED_TEAM_ID = "99999999-9999-9999-9999-999999999999"
+
+
+def _seed_shared_team(fake_supabase, *, visibility: str = "public") -> str:
+    """Seed a saved team owned by another user with configurable visibility."""
+    saved_team_id = SHARED_TEAM_ID
+    fake_supabase.rows["saved_teams"].append({
+        "id": saved_team_id,
+        "user_id": OTHER_USER_ID,
+        "ruleset_slug": "standard",
+        "ruleset_id": STANDARD_RULESET_ID,
+        "ruleset_version_id": STANDARD_RULESET_VERSION_ID,
+        "ruleset_version_hash": STANDARD_RULES_HASH,
+        "snapshot_release_id": SNAPSHOT_RELEASE_ID,
+        "name": "Public Hakeem Build",
+        "visibility": visibility,
+        "cornerstone_legend_id": LEGEND_ID,
+        "total_salary": 134_000_000,
+        "team_size": 9,
+        "created_at": "2026-05-11T00:00:00Z",
+        "updated_at": "2026-05-11T00:00:00Z",
+    })
+    fake_supabase.rows["saved_team_players"].extend(_player_insert_rows(saved_team_id))
+    fake_supabase.rows["saved_team_evaluations"].append({
+        "id": "shared-eval-1",
+        "saved_team_id": saved_team_id,
+        "evaluation_version": "cohesion-v1",
+        "star_rating": 4.0,
+        "starting_lineup_score": 4.3,
+        "team_description": "Shared evaluation narrative.",
+        "evaluation_payload": {"star_rating": 4.0},
+        "created_at": "2026-05-11T00:00:00Z",
+    })
+    return saved_team_id
+
+
+def get_shared_team(client, saved_team_id: str):
+    """GET /api/shared/<id> with NO auth header."""
+    resp = client.get(f"/api/shared/{saved_team_id}")
+    return resp, resp.get_json()
+
+
+def test_shared_get_returns_public_team_without_auth(client, fake_supabase):
+    saved_team_id = _seed_shared_team(fake_supabase, visibility="public")
+
+    resp, data = get_shared_team(client, saved_team_id)
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    assert data["data"]["id"] == saved_team_id
+    assert data["data"]["name"] == "Public Hakeem Build"
+    assert data["data"]["visibility"] == "public"
+    assert len(data["data"]["players"]) == 9
+    assert data["data"]["evaluation"]["evaluation_payload"] == {"star_rating": 4.0}
+
+
+def test_shared_get_returns_unlisted_team_without_auth(client, fake_supabase):
+    saved_team_id = _seed_shared_team(fake_supabase, visibility="unlisted")
+
+    resp, data = get_shared_team(client, saved_team_id)
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    assert data["data"]["visibility"] == "unlisted"
+
+
+def test_shared_get_returns_404_for_private_team(client, fake_supabase):
+    saved_team_id = _seed_shared_team(fake_supabase, visibility="private")
+
+    resp, data = get_shared_team(client, saved_team_id)
+
+    assert resp.status_code == 404
+    assert data["success"] is False
+
+
+def test_shared_get_returns_404_for_nonexistent_team(client, fake_supabase):
+    resp, data = get_shared_team(client, "00000000-0000-0000-0000-000000000000")
+
+    assert resp.status_code == 404
+    assert data["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/saved-teams/<id> — visibility changes
+# ---------------------------------------------------------------------------
+
+
+def test_patch_visibility_to_public(client, fake_supabase):
+    _seed_existing_saved_team(fake_supabase)
+
+    resp, data = patch_saved_team(client, "saved-team-1", {"visibility": "public"})
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    assert data["data"]["visibility"] == "public"
+    assert fake_supabase.rows["saved_teams"][0]["visibility"] == "public"
+
+
+def test_patch_visibility_to_private(client, fake_supabase):
+    _seed_existing_saved_team(fake_supabase)
+    fake_supabase.rows["saved_teams"][0]["visibility"] = "public"
+
+    resp, data = patch_saved_team(client, "saved-team-1", {"visibility": "private"})
+
+    assert resp.status_code == 200
+    assert data["data"]["visibility"] == "private"
+
+
+def test_patch_visibility_rejects_invalid_value(client, fake_supabase):
+    _seed_existing_saved_team(fake_supabase)
+
+    resp, data = patch_saved_team(client, "saved-team-1", {"visibility": "secret"})
+
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "visibility" in data["error"]
+
+
+def test_patch_visibility_only_no_name(client, fake_supabase):
+    """PATCH with visibility but no name should succeed."""
+    _seed_existing_saved_team(fake_supabase)
+
+    resp, data = patch_saved_team(client, "saved-team-1", {"visibility": "unlisted"})
+
+    assert resp.status_code == 200
+    assert data["data"]["visibility"] == "unlisted"
+    # Name unchanged
+    assert fake_supabase.rows["saved_teams"][0]["name"] == "Hakeem Standard Rotation"
+
+
+def test_patch_name_and_visibility_together(client, fake_supabase):
+    _seed_existing_saved_team(fake_supabase)
+
+    resp, data = patch_saved_team(client, "saved-team-1", {
+        "name": "Dream Build",
+        "visibility": "public",
+    })
+
+    assert resp.status_code == 200
+    assert data["data"]["name"] == "Dream Build"
+    assert data["data"]["visibility"] == "public"
+
+
+def test_patch_rejects_empty_body(client, fake_supabase):
+    """PATCH with neither name nor visibility should fail."""
+    _seed_existing_saved_team(fake_supabase)
+
+    resp, data = patch_saved_team(client, "saved-team-1", {})
+
+    assert resp.status_code == 400
+    assert data["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Shared rebuild-check: GET /api/shared/<id>/rebuild-check
+# ---------------------------------------------------------------------------
+
+
+def get_shared_rebuild_check(client, saved_team_id: str):
+    """GET /api/shared/<id>/rebuild-check with NO auth header."""
+    resp = client.get(f"/api/shared/{saved_team_id}/rebuild-check")
+    return resp, resp.get_json()
+
+
+def _seed_shared_team_for_rebuild(fake_supabase, *, visibility: str = "public") -> str:
+    """Seed a public team owned by another user, with a current snapshot release."""
+    saved_team_id = _seed_shared_team(fake_supabase, visibility=visibility)
+
+    # Add current snapshot release + snapshot players for rebuild resolution
+    fake_supabase.rows["snapshot_releases"].append({
+        "id": CURRENT_SNAPSHOT_RELEASE_ID,
+        "season": "2025-26",
+        "label": "2025-26 Current",
+        "status": "published",
+        "published_at": "2026-05-12T00:00:00Z",
+    })
+    # Mark original as superseded
+    for release in fake_supabase.rows["snapshot_releases"]:
+        if release["id"] == SNAPSHOT_RELEASE_ID:
+            release["status"] = "superseded"
+
+    for slot in range(2, 10):
+        source_player_id = f"44444444-4444-4444-4444-44444444444{slot}"
+        fake_supabase.rows.setdefault("snapshot_players", []).append({
+            "id": f"current-snap-{slot}",
+            "snapshot_release_id": CURRENT_SNAPSHOT_RELEASE_ID,
+            "canonical_player_id": CANONICAL_PLAYER_IDS.get(slot),
+            "source_player_id": source_player_id,
+            "name": f"Player {slot}",
+            "team": "OKC",
+            "position": "G",
+            "salary": 12_000_000,
+            "skill_profile_snapshot": {"spot_up_shooter": "Elite"},
+        })
+
+    return saved_team_id
+
+
+def test_shared_rebuild_check_works_for_public_team(client, fake_supabase):
+    saved_team_id = _seed_shared_team_for_rebuild(fake_supabase, visibility="public")
+
+    resp, data = get_shared_rebuild_check(client, saved_team_id)
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    assert data["data"]["saved_team_id"] == saved_team_id
+    assert data["data"]["rebuild_ready"] is True
+    assert data["data"]["cornerstone"]["available"] is True
+
+
+def test_shared_rebuild_check_404_for_private_team(client, fake_supabase):
+    saved_team_id = _seed_shared_team_for_rebuild(fake_supabase, visibility="private")
+
+    resp, data = get_shared_rebuild_check(client, saved_team_id)
+
+    assert resp.status_code == 404
+    assert data["success"] is False

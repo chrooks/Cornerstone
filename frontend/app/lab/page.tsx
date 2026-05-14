@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useState, useCallback, useEffect, type KeyboardEvent } from "react";
-import { listRuleSets } from "@/lib/api";
-import type { RuleSetSummary } from "@/lib/types";
+import { listRuleSets, getCommunityStats } from "@/lib/api";
+import { teamLabelForSize } from "@/lib/builder-config";
+import { resolveRuleSetRules } from "@/lib/rulesets";
+import type { RuleSetSummary, CommunityStatsMap } from "@/lib/types";
 
 /* ── Tab type for the notebook-style RuleSet cards ── */
-type TabId = "rules" | "players" | "community";
+type TabId = "rules" | "community";
 
 /* ── RuleSet data model ──
    Each RuleSet defines the constraints for a Lab session.
@@ -16,23 +18,20 @@ interface RuleSetDef {
   name: string;
   subtitle: string;
   status: "active" | "coming_soon" | "archived";
+  cornerstoneSource: "legend" | "all";
   rules: {
     teamSize: number;
+    allowedTeamSizes: number[];
     teamLabel: string;
     salaryCap: string;
     cornerstoneRule: string;
     playerPool: string;
     rookieDealLimit: number;
   };
-  players: {
-    legendCount: number;
-    activeCount: string;
-    sampleNames: string[];
-  };
   community: {
     teamsBuilt: number;
     topCornerstone: string;
-    avgScore: number;
+    avgScore: number | null;
   };
 }
 
@@ -49,33 +48,33 @@ function formatSalaryCap(value: unknown): string {
   return `$${Math.round(value / 1_000_000)}M`;
 }
 
-function mapRuleSetSummary(ruleSet: RuleSetSummary): RuleSetDef {
+function mapRuleSetSummary(
+  ruleSet: RuleSetSummary,
+  communityStats?: CommunityStatsMap,
+): RuleSetDef {
   const rules = ruleSet.rules ?? {};
+  const resolvedRules = resolveRuleSetRules(rules);
   const isStandard = ruleSet.slug === "standard";
+  const stats = communityStats?.[ruleSet.slug];
   return {
     slug: ruleSet.slug,
     name: ruleSet.name,
     subtitle: ruleSet.description ?? "RuleSet details are being prepared.",
     status: ruleSet.status,
+    cornerstoneSource: resolvedRules.cornerstoneSource,
     rules: {
-      teamSize: asNumber(rules.team_size, 9),
-      teamLabel: asString(rules.team_label, "Rotation"),
+      teamSize: resolvedRules.teamSize,
+      allowedTeamSizes: resolvedRules.allowedTeamSizes,
+      teamLabel: resolvedRules.teamLabel,
       salaryCap: asString(rules.salary_cap_display, formatSalaryCap(rules.salary_cap)),
       cornerstoneRule: asString(rules.cornerstone_rule, isStandard ? "1 Legend required ($54M)" : "Any Player, any slot"),
       playerPool: asString(rules.player_pool, isStandard ? "Current Snapshot + Legends" : "PlayerPool details pending"),
       rookieDealLimit: asNumber(rules.rookie_deal_limit, 0),
     },
-    players: {
-      legendCount: isStandard ? 36 : 0,
-      activeCount: isStandard ? "450+" : "-",
-      sampleNames: isStandard
-        ? ["M. Jordan", "L. James", "K. Bryant", "S. Curry", "T. Duncan", "H. Olajuwon"]
-        : [],
-    },
     community: {
-      teamsBuilt: 0,
-      topCornerstone: "-",
-      avgScore: 0,
+      teamsBuilt: stats?.team_count ?? 0,
+      topCornerstone: stats?.top_cornerstone ?? "-",
+      avgScore: stats?.avg_score ?? null,
     },
   };
 }
@@ -83,19 +82,21 @@ function mapRuleSetSummary(ruleSet: RuleSetSummary): RuleSetDef {
 /* ── Notebook tab labels ── */
 const TABS: { id: TabId; label: string }[] = [
   { id: "rules", label: "Rules" },
-  { id: "players", label: "Players" },
   { id: "community", label: "Community" },
 ];
 
 /* ── Rules tab content: displays RuleSet constraints as a structured list ── */
 function RulesPanel({ rs }: { rs: RuleSetDef }) {
+  const teamSizeValue = rs.rules.allowedTeamSizes.length > 1
+    ? rs.rules.allowedTeamSizes.map((size) => `${teamLabelForSize(size)} (${size})`).join(" / ")
+    : `${rs.rules.teamSize} players`;
   const items = [
-    { label: "Team Size", value: `${rs.rules.teamSize} players`, mono: `${rs.rules.teamSize}` },
+    { label: "Team Size", value: teamSizeValue, mono: `${rs.rules.teamSize}` },
     { label: "Format", value: rs.rules.teamLabel },
-    { label: "SalaryCap", value: rs.rules.salaryCap },
+    { label: "Salary Cap", value: rs.rules.salaryCap },
     { label: "Cornerstone", value: rs.rules.cornerstoneRule },
-    { label: "PlayerPool", value: rs.rules.playerPool },
-    { label: "RookieDeal Limit", value: rs.rules.rookieDealLimit === 0 ? "None" : `${rs.rules.rookieDealLimit} max` },
+    { label: "Player Pool", value: rs.rules.playerPool },
+    { label: "Rookie Deal Limit", value: rs.rules.rookieDealLimit === 0 ? "None" : `${rs.rules.rookieDealLimit} max` },
   ];
 
   return (
@@ -116,59 +117,6 @@ function RulesPanel({ rs }: { rs: RuleSetDef }) {
         </div>
       ))}
     </dl>
-  );
-}
-
-/* ── Players tab content: PlayerPool preview with legend count and sample names ── */
-function PlayersPanel({ rs }: { rs: RuleSetDef }) {
-  return (
-    <div id={`ruleset-${rs.slug}-players`} className="flex flex-col gap-4">
-      {/* Stat readouts in mono */}
-      <div className="flex gap-6">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[0.6875rem] font-medium tracking-[0.03em] uppercase text-[#0e0907]/45">
-            Legends
-          </span>
-          <span className="font-mono text-xl tabular-nums text-[#0e0907]">
-            {rs.players.legendCount}
-          </span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[0.6875rem] font-medium tracking-[0.03em] uppercase text-[#0e0907]/45">
-            Active
-          </span>
-          <span className="font-mono text-xl tabular-nums text-[#0e0907]">
-            {rs.players.activeCount}
-          </span>
-        </div>
-      </div>
-
-      {/* Sample legend names as compact chips */}
-      {rs.players.sampleNames.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <span className="text-[0.6875rem] font-medium tracking-[0.01em] text-[#0e0907]/45 uppercase">
-            Sample Legends
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {rs.players.sampleNames.map((name) => (
-              <span
-                key={name}
-                className="inline-flex px-2 py-0.5 text-[0.75rem] font-medium text-[#0e0907]/70 bg-[#0e0907]/[0.04] border border-[#d9d0c9]/80 rounded-sm"
-              >
-                {name}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Empty state for coming-soon RuleSets */}
-      {rs.players.sampleNames.length === 0 && (
-        <p className="text-[0.8125rem] text-[#0e0907]/40 italic">
-          PlayerPool details available at launch.
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -201,7 +149,7 @@ function CommunityPanel({ rs }: { rs: RuleSetDef }) {
             Avg Score
           </span>
           <span className="font-mono text-xl tabular-nums text-[#0e0907]">
-            {rs.community.avgScore}
+            {rs.community.avgScore != null ? rs.community.avgScore.toFixed(1) : "—"}
           </span>
         </div>
       </div>
@@ -222,7 +170,13 @@ function CommunityPanel({ rs }: { rs: RuleSetDef }) {
 /* ── Single RuleSet card with notebook bookmark tabs ── */
 function RuleSetCard({ rs }: { rs: RuleSetDef }) {
   const [activeTab, setActiveTab] = useState<TabId>("rules");
+  const [selectedTeamSize, setSelectedTeamSize] = useState(rs.rules.teamSize);
   const isComingSoon = rs.status === "coming_soon";
+  const hasTeamSizeChoices = rs.rules.allowedTeamSizes.length > 1;
+  const selectedTeamLabel = teamLabelForSize(selectedTeamSize);
+  const entryHref = `${rs.cornerstoneSource === "all" ? `/lab/${rs.slug}/build` : `/lab/${rs.slug}/legends`}${
+    hasTeamSizeChoices ? `?team_size=${selectedTeamSize}` : ""
+  }`;
 
   /* Arrow key navigation between tabs (roving tabindex pattern) */
   const handleTabKeyDown = useCallback(
@@ -347,18 +301,52 @@ function RuleSetCard({ rs }: { rs: RuleSetDef }) {
               hidden={activeTab !== tab.id}
             >
               {tab.id === "rules" && <RulesPanel rs={rs} />}
-              {tab.id === "players" && <PlayersPanel rs={rs} />}
               {tab.id === "community" && <CommunityPanel rs={rs} />}
             </div>
           ))}
         </div>
 
         {/* CTA footer */}
-        <div className="px-5 pb-5 pt-2 mt-auto">
+        <div className="px-5 pb-5 pt-2 mt-auto space-y-3">
+          {rs.status === "active" && hasTeamSizeChoices && (
+            <div id={`ruleset-${rs.slug}-team-size-picker`} className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-[#0e0907]/45">
+                  Team Size
+                </span>
+                <span className="font-mono text-[0.75rem] tabular-nums text-[#0e0907]/55">
+                  {selectedTeamSize}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 border border-[#d9d0c9] bg-[#ebe7e4]">
+                {rs.rules.allowedTeamSizes.map((size) => {
+                  const selected = selectedTeamSize === size;
+                  return (
+                    <button
+                      key={size}
+                      id={`ruleset-${rs.slug}-size-${size}`}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setSelectedTeamSize(size)}
+                      className={`
+                        px-2.5 py-2 text-[0.75rem] font-medium transition-colors duration-150
+                        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ffa05c]
+                        ${selected
+                          ? "bg-[#0e0907] text-[#f8f3f1]"
+                          : "border-l border-[#d9d0c9] first:border-l-0 text-[#0e0907]/55 hover:bg-[#f7f7f7] hover:text-[#0e0907]"}
+                      `}
+                    >
+                      {teamLabelForSize(size)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {rs.status === "active" ? (
             <Link
               id={`ruleset-${rs.slug}-cta`}
-              href={`/lab/${rs.slug}/legends`}
+              href={entryHref}
               className="
                 inline-flex items-center px-5 py-2.5 rounded-md
                 bg-[#ffa05c] text-[#0e0907] text-[0.8125rem] font-medium tracking-[0.01em]
@@ -367,7 +355,7 @@ function RuleSetCard({ rs }: { rs: RuleSetDef }) {
                 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffa05c]
               "
             >
-              Enter Lab &rarr;
+              Enter {selectedTeamLabel} &rarr;
             </Link>
           ) : (
             <span
@@ -403,11 +391,16 @@ export default function LabPage() {
 
   useEffect(() => {
     let alive = true;
-    listRuleSets()
-      .then((res) => {
+
+    const safeStats = getCommunityStats().catch(
+      () => ({ success: false, data: null, error: null }) as const,
+    );
+    Promise.all([listRuleSets(), safeStats])
+      .then(([rulesetsRes, statsRes]) => {
         if (!alive) return;
-        if (res.success && res.data) {
-          setRulesets(res.data.map(mapRuleSetSummary));
+        if (rulesetsRes.success && rulesetsRes.data) {
+          const communityStats = statsRes.success ? statsRes.data ?? undefined : undefined;
+          setRulesets(rulesetsRes.data.map((rs) => mapRuleSetSummary(rs, communityStats)));
           setLoadState("ready");
           return;
         }

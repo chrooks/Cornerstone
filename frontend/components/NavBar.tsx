@@ -13,6 +13,7 @@ const ADMIN_LINKS = [
   { href: "/admin/review",                label: "Review"      },
   { href: "/admin/calibration",           label: "Calibration" },
   { href: "/admin/cohesion-calibration",  label: "Cohesion"    },
+  { href: "/admin/rulesets",              label: "RuleSets"    },
   { href: "/admin/legends",               label: "Legends"     },
 ];
 
@@ -53,6 +54,7 @@ export function NavBar() {
     { href: "/lab", label: "Lab" },
     { href: "/players", label: "Players" },
     { href: "/players?f=Legend|Yes|AND|0", label: "Legends" },
+    { href: "/community", label: "Community" },
   ];
 
   const adminActive = pathname.startsWith("/admin");

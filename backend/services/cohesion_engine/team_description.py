@@ -150,11 +150,16 @@ def _player_lookup(players: list[dict[str, Any]] | None) -> dict[str, dict[str, 
     return lookup
 
 
-def _slot_label(player: dict[str, Any] | None) -> str:
-    """Describe roster role when raw player slot context is available."""
+def _slot_label(player: dict[str, Any] | None, total_players: int = 9) -> str:
+    """Describe roster role when raw player slot context is available.
+
+    When total_players <= 5, every player is a starter — the cornerstone
+    label only applies in rotation/roster formats where it distinguishes
+    a build-around pick from supporting cast.
+    """
     if not player:
-        return "rotation"
-    if player.get("is_cornerstone"):
+        return "team member"
+    if player.get("is_cornerstone") and total_players > 5:
         return "cornerstone"
     slot = player.get("slot")
     if isinstance(slot, int):
@@ -162,16 +167,18 @@ def _slot_label(player: dict[str, Any] | None) -> str:
             return "starter"
         if slot <= 9:
             return "bench"
-    return "rotation"
+        return "reserve"
+    return "starter" if total_players <= 5 else "team member"
 
 
 def _player_line(
     composite: PlayerComposites,
     raw_player: dict[str, Any] | None,
+    total_players: int = 9,
 ) -> str:
     traits = _top_player_traits(composite)
     trait_text = ", ".join(traits) if traits else "no standout composite traits"
-    return f"- {composite.name} ({_slot_label(raw_player)}): {trait_text}"
+    return f"- {composite.name} ({_slot_label(raw_player, total_players)}): {trait_text}"
 
 
 def _lineup_trait_lines(evaluation: RosterEvaluation) -> tuple[list[str], list[str]]:
@@ -200,6 +207,78 @@ def _note_lines(evaluation: RosterEvaluation) -> list[str]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Evaluation framing — keyed on team_size today, swappable to
+# rules_json.eval_context (e.g. "tournament") when that field ships.
+# ---------------------------------------------------------------------------
+
+_SHARED_VOICE = (
+    "Write in the voice of an experienced GM: direct, specific, basketball-literate. "
+    "Output plain prose paragraphs only, with no headers, no bullets, no markdown, "
+    "and no horizontal rules. Start directly with the summary sentence."
+)
+
+# TODO: When rules_json gains an `eval_context` field (e.g. "season", "playoff",
+# "tournament"), re-key this dict from int → str, thread eval_context into
+# generate_team_description(), and swap the lookup in _memo_instructions().
+# This lets a 12-man Olympic roster use a "tournament" framing instead of "season".
+_MEMO_FRAMINGS: dict[int, str] = {
+    5: (
+        "Write a 2-paragraph memo about this starting five. Start with exactly one "
+        "standalone summary sentence suitable for a Saved Team card. After that first "
+        "sentence, continue with the longer evaluation detail. The rest of the first "
+        "paragraph should establish the lineup's basketball identity: how these five "
+        "players fit together on the court, what style they impose, and what makes the "
+        "unit cohesive or dangerous when the pressure is highest — think closeout game, "
+        "backs against the wall. Second paragraph: analyze vulnerabilities and matchup "
+        "concerns that would be exposed in a high-stakes game, and what kind of player "
+        "or archetype would complement this five if the roster expanded. This is a pure "
+        "starting-five evaluation — do not mention bench depth, rotation, or reserves. "
+        + _SHARED_VOICE
+    ),
+    9: (
+        "Write a 2-3 paragraph memo about this rotation built for a playoff run. Start "
+        "with exactly one standalone summary sentence suitable for a Saved Team card. "
+        "After that first sentence, continue with the longer evaluation detail. The rest "
+        "of the first paragraph should establish the starting five's basketball identity: "
+        "how they fit together and what style they impose. Second paragraph: analyze the "
+        "bench and how it extends or changes the identity — can this rotation adapt to "
+        "different opponents across a seven-game series? Does the bench reinforce the "
+        "starters' strengths or cover their blind spots? Third paragraph, if warranted: "
+        "matchup vulnerabilities and the kind of addition that would make the group more "
+        "versatile in a playoff bracket. "
+        + _SHARED_VOICE
+    ),
+    12: (
+        "Write a 2-3 paragraph memo about this full roster built for a season-long "
+        "campaign. Start with exactly one standalone summary sentence suitable for a "
+        "Saved Team card. After that first sentence, continue with the longer evaluation "
+        "detail. The rest of the first paragraph should establish the starting five's "
+        "basketball identity: how they fit together and what style they impose. Second "
+        "paragraph: analyze the full depth chart — can this roster sustain its identity "
+        "across 82 games? Is there enough positional depth to absorb injuries, manage "
+        "minutes, and handle the grind of a long season without the starters wearing "
+        "down? Third paragraph, if warranted: where the roster is thin, what archetypes "
+        "are missing, and whether this team can still be standing in June. "
+        + _SHARED_VOICE
+    ),
+}
+
+# Fallback when team_size doesn't match a known framing — uses the rotation
+# framing as the most general middle ground.
+_DEFAULT_FRAMING_KEY = 9
+
+
+def _memo_instructions(evaluation: RosterEvaluation) -> str:
+    """Return closing paragraph instructions, adapted to team size.
+
+    Keyed on player count today. To key on rules_json.eval_context instead,
+    change the lookup key here — the framings dict and callers stay the same.
+    """
+    player_count = len(evaluation.player_composites)
+    return _MEMO_FRAMINGS.get(player_count, _MEMO_FRAMINGS[_DEFAULT_FRAMING_KEY])
+
+
 def _build_prompt(
     evaluation: RosterEvaluation,
     players: list[dict[str, Any]] | None = None,
@@ -212,11 +291,13 @@ def _build_prompt(
     provide roster roles; the function works with evaluation data alone.
     """
     raw_by_key = _player_lookup(players)
+    total_players = len(evaluation.player_composites)
 
     player_lines = [
         _player_line(
             composite,
             raw_by_key.get(composite.player_id) or raw_by_key.get(composite.name),
+            total_players,
         )
         for composite in evaluation.player_composites
     ]
@@ -268,16 +349,7 @@ def _build_prompt(
         f"{weakness_block}\n\n"
         "Structured roster notes:\n"
         f"{notes_block}\n\n"
-        "Write a 2-3 paragraph memo. Start with exactly one standalone summary sentence "
-        "suitable for a Saved Team card. After that first sentence, continue with the longer "
-        "evaluation detail. The rest of the first paragraph should establish the team's "
-        "basketball identity, how the best players fit together, and what style this roster "
-        "can impose. Second paragraph: analyze the rotation depth and whether the bench "
-        "reinforces or changes the identity. Third paragraph, if warranted: vulnerabilities "
-        "and the kind of addition that would make the roster more complete. Write in the "
-        "voice of an experienced GM: direct, specific, basketball-literate. Output plain "
-        "prose paragraphs only, with no headers, no bullets, no markdown, and no horizontal "
-        "rules. Start directly with the summary sentence."
+        + _memo_instructions(evaluation)
     )
 
 

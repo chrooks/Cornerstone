@@ -33,8 +33,8 @@ rosters_bp = Blueprint("rosters", __name__, url_prefix="/api")
 _CORNERSTONE_SLOT = 1
 _CORNERSTONE_SALARY = 54_000_000
 
-# Maximum total slots per roster (1 cornerstone + 7 supporting)
-_MAX_SLOTS = 8
+# Maximum total slots per roster (up to 12 for Roster-sized RuleSets)
+_MAX_SLOTS = 12
 
 
 # ---------------------------------------------------------------------------

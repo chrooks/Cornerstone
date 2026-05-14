@@ -14,11 +14,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { listPlayersWithSkills, getLegend } from "@/lib/api";
+import { listPlayersWithSkills, getLegend, listRuleSets } from "@/lib/api";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { useRosterSlots } from "@/lib/hooks/useRosterSlots";
 import { useBuilderSalary } from "@/lib/hooks/useBuilderSalary";
 import { useBuilderEvaluation } from "@/lib/hooks/useBuilderEvaluation";
+import { resolveRuleSetRules } from "@/lib/rulesets";
 import { BuilderHeader } from "./BuilderHeader";
 import { CourtStrip } from "./CourtStrip";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
@@ -26,7 +27,7 @@ import { BuilderFeedbackPanel, type BuilderInspectionSource } from "./BuilderFee
 import { BuilderPlayerFit } from "./BuilderPlayerFit";
 import { PlayerProfileModal, playerWithSkillsToProfile } from "@/components/players/PlayerView";
 import type { SuggestionFilter } from "@/lib/noteFilters";
-import type { LegendDetail, PlayerWithSkills } from "@/lib/types";
+import type { LegendDetail, PlayerWithSkills, RuleSetSummary } from "@/lib/types";
 
 /** Default workspace split: PlayerPool gets 65%, Feedback gets 35% */
 const DEFAULT_FEEDBACK_FRAC = 0.35;
@@ -64,19 +65,15 @@ export function BuilderPage() {
       .finally(() => setDataLoading(false));
   }, []);
 
-  // ── Cornerstone — derived from URL + legend rows ──────────────────────────
+  // ── Cornerstone — derived from URL + all player rows ───────────────────────
   const cornerstoneId = searchParams.get("cornerstone");
   const cornerstone = useMemo(
-    () => legendRows.find((l) => l.id === cornerstoneId) ?? null,
-    [legendRows, cornerstoneId],
+    () =>
+      legendRows.find((l) => l.id === cornerstoneId) ??
+      activeRows.find((p) => p.id === cornerstoneId) ??
+      null,
+    [legendRows, activeRows, cornerstoneId],
   );
-
-  // ── No cornerstone → redirect to Legends picker ──────────────────────────
-  useEffect(() => {
-    if (!dataLoading && !cornerstoneId) {
-      router.replace(`/lab/${ruleset}/legends`);
-    }
-  }, [dataLoading, cornerstoneId, ruleset, router]);
 
   // ── Full Legend profile for Skill Profile and Feedback ────────────────────
   const [legendDetail, setLegendDetail] = useState<LegendDetail | null>(null);
@@ -86,27 +83,74 @@ export function BuilderPage() {
       setLegendDetail(null);
       return;
     }
+    // Only fetch legend detail if cornerstone is a Legend
+    if (!cornerstone?.is_legend) {
+      setLegendDetail(null);
+      return;
+    }
     getLegend(cornerstoneId)
       .then((res) => {
         if (res.success && res.data) setLegendDetail(res.data);
       })
       .catch(() => {/* grid handles missing profile gracefully */});
-  }, [cornerstoneId]);
+  }, [cornerstoneId, cornerstone?.is_legend]);
+
+  // ── Fetch active RuleSet for live rules_json ─────────────────────────────
+  const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
+
+  useEffect(() => {
+    listRuleSets().then((res) => {
+      if (res.success && res.data) {
+        const match = res.data.find((rs) => rs.slug === ruleset);
+        if (match) setResolvedRuleSet(match);
+      }
+    });
+  }, [ruleset]);
+
+  // Extract rules from the published version's rules_json
+  const rulesJson = resolvedRuleSet?.rules ?? null;
+  const resolvedRules = useMemo(
+    () => resolveRuleSetRules(rulesJson, new URLSearchParams(searchParams.toString())),
+    [rulesJson, searchParams],
+  );
+  const maxRosterSlots = resolvedRules.teamSize;
+  const salaryCap = typeof rulesJson?.salary_cap === "number"
+    ? (rulesJson.salary_cap as number)
+    : undefined;
+  const legendSalary = typeof rulesJson?.cornerstone_salary === "number"
+    ? (rulesJson.cornerstone_salary as number)
+    : undefined;
+  const rookieDealLimit = typeof rulesJson?.rookie_deal_limit === "number"
+    ? (rulesJson.rookie_deal_limit as number)
+    : undefined;
+  const cornerstoneSource = resolvedRules.cornerstoneSource;
+  const teamLabel = resolvedRules.teamLabel;
+
+  // ── No cornerstone → redirect to cornerstone picker (legend-only RuleSets)
+  useEffect(() => {
+    if (!dataLoading && resolvedRuleSet && !cornerstoneId && cornerstoneSource === "legend") {
+      const teamSize = searchParams.get("team_size");
+      router.replace(`/lab/${ruleset}/legends${teamSize ? `?team_size=${teamSize}` : ""}`);
+    }
+  }, [dataLoading, resolvedRuleSet, cornerstoneId, cornerstoneSource, ruleset, router, searchParams]);
 
   // ── Domain hooks ──────────────────────────────────────────────────────────
-  const roster = useRosterSlots(cornerstoneId, legendRows, activeRows);
+  const roster = useRosterSlots(cornerstoneId, legendRows, activeRows, maxRosterSlots);
 
   // ── Hover state — bridges court strip ↔ salary gauge ↔ picker ────────────
   const [hoveredSlotIndex, setHoveredSlotIndex] = useState<number | null>(null);
   const [hoveredCourtPlayerId, setHoveredCourtPlayerId] = useState<string | null>(null);
 
-  const salary = useBuilderSalary(roster.allSlots, cornerstoneId, hoveredSlotIndex);
+  const salary = useBuilderSalary(roster.allSlots, cornerstoneId, hoveredSlotIndex, {
+    salaryCap,
+    legendSalary,
+  });
 
   // ── Feedback collapse state ───────────────────────────────────────────────
   const [feedbackCollapsed, setFeedbackCollapsed] = useState(false);
   const [hasUnreadFeedback, setHasUnreadFeedback] = useState(false);
   const [narrowWorkspaceView, setNarrowWorkspaceView] = useState<NarrowWorkspaceView>("players");
-  const { latestEval } = useBuilderEvaluation({ allSlots: roster.allSlots, legendDetail, isAdmin });
+  const { latestEval } = useBuilderEvaluation({ allSlots: roster.allSlots, legendDetail, cornerstoneId, isAdmin });
 
   useEffect(() => {
     if (latestEval && feedbackCollapsed) setHasUnreadFeedback(true);
@@ -171,6 +215,10 @@ export function BuilderPage() {
 
   const [buildProfilePlayer, setBuildProfilePlayer] = useState<PlayerWithSkills | null>(null);
   const hasAvailableBuildSlot = roster.rosterPlayerIds.size < roster.allSlots.length;
+  const rosterRookieDealCount = useMemo(
+    () => roster.allSlots.filter((p) => p?.is_rookie_deal).length,
+    [roster.allSlots],
+  );
   const buildProfile = useMemo(
     () => (buildProfilePlayer ? playerWithSkillsToProfile(buildProfilePlayer) : null),
     [buildProfilePlayer],
@@ -282,7 +330,31 @@ export function BuilderPage() {
     );
   }
 
-  if (!cornerstoneId || !cornerstone) {
+  if (resolvedRuleSet && !resolvedRules.isValidTeamSizeParam) {
+    return (
+      <main id="builder-invalid-team-size" className="mx-auto max-w-screen-md px-6 py-10">
+        <div className="border border-[#d9d0c9] bg-[#f7f7f7] p-5">
+          <h1 className="font-display text-[1.5rem] font-semibold leading-[1.15] tracking-[-0.01em] text-[#0e0907]">
+            Team size is not available
+          </h1>
+          <p className="mt-2 text-[0.9375rem] leading-relaxed text-[#0e0907]/60">
+            Pick an available size for this RuleSet before building.
+          </p>
+          <button
+            id="builder-invalid-team-size-back"
+            type="button"
+            onClick={() => router.replace("/lab")}
+            className="mt-4 inline-flex items-center rounded-md bg-[#ffa05c] px-5 py-2 text-[0.8125rem] font-medium text-[#0e0907] transition-colors hover:bg-[#fe6d34] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffa05c]"
+          >
+            Back to Lab
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  // Legend-only RuleSets need a cornerstone to render; FFA starts empty
+  if (cornerstoneSource === "legend" && (!cornerstoneId || !cornerstone)) {
     return null;
   }
 
@@ -291,8 +363,9 @@ export function BuilderPage() {
     <main id="builder-page" className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-screen-2xl flex-col px-3 pb-4 pt-3 sm:px-4 lg:h-[calc(100vh-3rem)] lg:px-6 lg:pb-2 lg:pt-4">
       {/* Row 1: Header — breadcrumb, title, SalaryCap gauge, Evaluate CTA */}
       <BuilderHeader
-        cornerstone={cornerstone}
+        cornerstone={cornerstone ?? null}
         ruleset={ruleset}
+        teamLabel={teamLabel}
         allSlotsFilled={roster.allSlots.every((p) => p !== null)}
       />
 
@@ -302,9 +375,13 @@ export function BuilderPage() {
         cornerstoneId={cornerstoneId}
         focusedPlayerName={focusedPlayerName}
         usedSalary={salary.usedSalary}
+        salaryCap={salary.salaryCap}
+        maxRosterSlots={maxRosterSlots}
         highlightRange={salary.highlightRange}
         pickerHoveredSalary={salary.pickerHoveredSalary}
         onSalaryCapFilterClick={(max) => salary.setSalaryCapFilter(max)}
+        rookieDealLimit={rookieDealLimit}
+        rosterRookieDealCount={rosterRookieDealCount}
         onSlotClick={handleSlotClick}
         onRemoveSlot={roster.handleRemoveSlot}
         onDropPlayer={handleDropPlayer}
@@ -381,10 +458,11 @@ export function BuilderPage() {
           style={!feedbackCollapsed ? { "--builder-playerpool-flex": `${1 - feedbackFrac} 1 0%` } as CSSProperties : undefined}
         >
           <PlayerPickerPanel
-            players={activeRows}
+            players={cornerstoneSource === "all" ? [...activeRows, ...legendRows] : activeRows}
             loading={false}
             error={null}
             remainingSalary={salary.remainingSalary}
+            maxRosterSlots={maxRosterSlots}
             salaryFilterTrigger={salary.salaryCapFilter}
             onSalaryFilterInjected={() => salary.setSalaryCapFilter(null)}
             skillFilterTrigger={suggestionFilterTrigger}
@@ -410,6 +488,8 @@ export function BuilderPage() {
             )}
             highlightedPlayerId={hoveredCourtPlayerId}
             isAdmin={isAdmin}
+            rookieDealLimit={rookieDealLimit}
+            rosterRookieDealCount={rosterRookieDealCount}
           />
         </div>
 
@@ -448,6 +528,7 @@ export function BuilderPage() {
             collapsed={feedbackCollapsed}
             hasUnreadFeedback={hasUnreadFeedback}
             latestEval={latestEval}
+            maxRosterSlots={maxRosterSlots}
             inspectedPlayer={inspection.player}
             inspectionSource={inspection.source}
             focusedPlayerName={focusedPlayerName}

@@ -19,7 +19,8 @@ import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam, listRuleSet
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { readSlotsFromParams, buildPlayerPayload } from "@/lib/roster-utils";
-import { LEGEND_SALARY, MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { resolveRuleSetRules } from "@/lib/rulesets";
+import { LEGEND_SALARY } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { NotesList } from "./NotesList";
@@ -118,13 +119,19 @@ function RotationSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSki
   const players = allSlots.filter(Boolean) as PlayerWithSkills[];
   const starterPlayers = players.slice(0, 5);
   const benchPlayers = players.slice(5);
+  // Scale portraits down for larger rosters so 12 fits without scrolling
+  const compact = players.length > 9;
+  const portraitSize = compact ? 48 : 64;
+  const sizeClass = compact ? "h-12 w-12" : "h-16 w-16";
+  const nameWidth = compact ? "w-[3.5rem]" : "w-[4.5rem]";
+  const gap = compact ? "gap-2" : "gap-3";
 
   function renderPlayer(p: PlayerWithSkills, index: number) {
     const isCornerstone = p.id === cornerstoneId;
     return (
       <div key={p.id} id={`eval-slot-${index + 1}`} className="flex-shrink-0 flex flex-col items-center gap-1">
-        <div className="relative h-16 w-16 overflow-hidden border-2 border-border">
-          <PlayerHeadshot nba_api_id={p.nba_api_id} size={64} name={p.name} />
+        <div className={`relative ${sizeClass} overflow-hidden border-2 border-border`}>
+          <PlayerHeadshot nba_api_id={p.nba_api_id} size={portraitSize} name={p.name} />
           {isCornerstone && (
             <span
               id={`eval-slot-${index + 1}-legend-badge`}
@@ -136,7 +143,7 @@ function RotationSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSki
         </div>
         <p
           id={`eval-slot-${index + 1}-name`}
-          className="w-[4.5rem] truncate text-center text-[10px] leading-tight text-muted-foreground"
+          className={`${nameWidth} truncate text-center text-[10px] leading-tight text-muted-foreground`}
           title={p.name}
         >
           {p.name.split(" ").pop()}
@@ -146,22 +153,22 @@ function RotationSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSki
   }
 
   return (
-    <div id="eval-rotation-summary" className="overflow-x-auto border border-[#d9d0c9] bg-[#f7f7f7] px-6 py-3">
-      <div id="eval-rotation-summary-list" className="mx-auto flex w-max items-start justify-center">
-        <div id="eval-rotation-starters" className="flex items-start gap-3">
+    <div id="eval-rotation-summary" className="border border-[#d9d0c9] bg-[#f7f7f7] px-6 py-3">
+      <div id="eval-rotation-summary-list" className={`mx-auto flex flex-wrap items-start justify-center ${gap}`}>
+        <div id="eval-rotation-starters" className={`flex items-start ${gap}`}>
           {starterPlayers.map((player, index) => renderPlayer(player, index))}
         </div>
 
         {benchPlayers.length > 0 && (
           <>
-            <div id="eval-rotation-boundary" className="mx-4 flex self-stretch flex-col items-center">
+            <div id="eval-rotation-boundary" className="mx-2 flex self-stretch flex-col items-center">
               <div className="w-px flex-1 bg-[#d9d0c9]" />
               <span className="py-1 text-[0.5rem] font-semibold uppercase tracking-[1px] text-[#9a938a]">
                 Bench
               </span>
               <div className="w-px flex-1 bg-[#d9d0c9]" />
             </div>
-            <div id="eval-rotation-bench" className="flex items-start gap-3">
+            <div id="eval-rotation-bench" className={`flex items-start ${gap}`}>
               {benchPlayers.map((player, index) => renderPlayer(player, index + 5))}
             </div>
           </>
@@ -180,7 +187,7 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 
 interface DataReady {
   slots: (PlayerWithSkills | null)[];
-  legend: LegendDetail;
+  legend: LegendDetail | null;
 }
 
 const TEAM_DESCRIPTION_CACHE_VERSION = "team-description-v1";
@@ -199,14 +206,14 @@ function hashString(value: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function teamDescriptionCacheKey(slots: (PlayerWithSkills | null)[], legend: LegendDetail): string {
+function teamDescriptionCacheKey(slots: (PlayerWithSkills | null)[], legend: LegendDetail | null): string {
+  const cornerstone = legend
+    ? { id: legend.id, height: legend.height, skills: sortedSkillEntries(legend.profile) }
+    : { id: slots[0]?.id ?? null, height: slots[0]?.height ?? null, skills: sortedSkillEntries((slots[0]?.skills ?? {}) as Record<string, string>) };
+
   const fingerprint = {
     version: TEAM_DESCRIPTION_CACHE_VERSION,
-    cornerstone: {
-      id: legend.id,
-      height: legend.height,
-      skills: sortedSkillEntries(legend.profile),
-    },
+    cornerstone,
     slots: slots.map((player, index) => (
       player
         ? {
@@ -260,14 +267,15 @@ export function EvaluatePage() {
   // Capture searchParams at mount — stable ref avoids closure staleness
   const paramsRef = useRef(searchParams.toString());
 
-  // Phase 1: load players + legend
+  // Phase 1: load players + legend (legend fetch conditional on cornerstone type)
   useEffect(() => {
-    if (!cornerstoneId) { router.replace(buildPath); return; }
+    // FFA RuleSets have no cornerstone param — slots are encoded as s1..sN
+    const hasSlotParams = new URLSearchParams(paramsRef.current).has("s1");
+    if (!cornerstoneId && !hasSlotParams) { router.replace(buildPath); return; }
 
-    Promise.all([listPlayersWithSkills(), getLegend(cornerstoneId), listRuleSets()])
-      .then(([playersRes, legendRes, rulesetsRes]) => {
+    Promise.all([listPlayersWithSkills(), listRuleSets()])
+      .then(async ([playersRes, rulesetsRes]) => {
         if (!playersRes.success || !playersRes.data) throw new Error(playersRes.error ?? "Failed to load players");
-        if (!legendRes.success || !legendRes.data) throw new Error(legendRes.error ?? "Failed to load legend");
 
         // Resolve RuleSet Version for the current Lab RuleSet slug
         const rulesetSlug = ruleset ?? "standard";
@@ -275,8 +283,23 @@ export function EvaluatePage() {
         if (matched) setResolvedRuleSet(matched);
 
         const playerMap = new Map(playersRes.data.map((p) => [p.id, p]));
-        const slots = readSlotsFromParams(new URLSearchParams(paramsRef.current), cornerstoneId, playerMap);
-        setDataReady({ slots, legend: legendRes.data });
+        const resolvedRules = resolveRuleSetRules(matched?.rules, new URLSearchParams(paramsRef.current));
+        const teamSize = resolvedRules.teamSize;
+        const slots = readSlotsFromParams(new URLSearchParams(paramsRef.current), cornerstoneId, playerMap, teamSize);
+
+        // Determine if cornerstone is a Legend — fetch detail only if so
+        let legend: LegendDetail | null = null;
+        if (cornerstoneId) {
+          const cornerstonePlayer = playerMap.get(cornerstoneId);
+          if (cornerstonePlayer?.is_legend) {
+            const legendRes = await getLegend(cornerstoneId);
+            if (legendRes.success && legendRes.data) {
+              legend = legendRes.data;
+            }
+          }
+        }
+
+        setDataReady({ slots, legend });
         setEvalState("evaluating");
       })
       .catch((err: unknown) => {
@@ -291,7 +314,7 @@ export function EvaluatePage() {
   useEffect(() => {
     if (!dataReady || adminLoading) return;
 
-    const players = buildPlayerPayload(dataReady.slots, dataReady.legend);
+    const players = buildPlayerPayload(dataReady.slots, dataReady.legend, cornerstoneId);
     const descriptionCacheKey = teamDescriptionCacheKey(dataReady.slots, dataReady.legend);
     const cachedDescription = readCachedTeamDescription(descriptionCacheKey);
     setEvalState("evaluating");
@@ -336,43 +359,53 @@ export function EvaluatePage() {
     if (!dataReady || !evaluation) return null;
     if (!resolvedRuleSet?.current_version) return null;
 
-    const filledSlots = dataReady.slots.slice(0, MAX_ROSTER_SLOTS);
+    const rulesJson = resolvedRuleSet.rules ?? {};
+    const resolvedRules = resolveRuleSetRules(rulesJson, new URLSearchParams(paramsRef.current));
+    const maxSlots = resolvedRules.teamSize;
+    const filledSlots = dataReady.slots.slice(0, maxSlots);
     if (filledSlots.some((player) => player === null)) return null;
+
+    const legend = dataReady.legend;
 
     return {
       ruleset_slug: ruleset ?? "standard",
       ruleset_version_id: resolvedRuleSet.current_version.id,
       rules_hash: resolvedRuleSet.current_version.rules_hash,
-      cornerstone_legend_id: dataReady.legend.id,
+      team_size: maxSlots,
+      cornerstone_legend_id: legend?.id ?? null,
       players: filledSlots.map((player, index) => {
         const slot = index + 1;
-        const isCornerstone = player!.id === dataReady.legend.id || player!.is_legend === true;
-        if (isCornerstone) {
+        const isCornerstone = legend
+          ? (player!.id === legend.id || player!.is_legend === true)
+          : cornerstoneId ? player!.id === cornerstoneId : index === 0;
+
+        if (isCornerstone && legend) {
           return {
             slot,
             is_cornerstone: true,
             player_id: null,
-            legend_id: dataReady.legend.id,
+            legend_id: legend.id,
             salary_snapshot: LEGEND_SALARY,
-            player_name_snapshot: dataReady.legend.name,
-            team_snapshot: dataReady.legend.team,
-            position_snapshot: dataReady.legend.position,
+            player_name_snapshot: legend.name,
+            team_snapshot: legend.team,
+            position_snapshot: legend.position,
             skill_profile_snapshot: Object.fromEntries(
-              Object.entries(dataReady.legend.profile).map(([skill, tier]) => [skill, tier ?? "None"]),
+              Object.entries(legend.profile).map(([skill, tier]) => [skill, tier ?? "None"]),
             ),
           };
         }
 
         return {
           slot,
-          is_cornerstone: false,
-          player_id: player!.id,
-          legend_id: null,
+          is_cornerstone: isCornerstone,
+          player_id: player!.is_legend ? null : player!.id,
+          legend_id: player!.is_legend ? player!.id : null,
           salary_snapshot: player!.salary ?? 0,
           player_name_snapshot: player!.name,
           team_snapshot: player!.team,
           position_snapshot: player!.position,
           skill_profile_snapshot: (player!.skills ?? {}) as Record<string, string>,
+          is_rookie_deal: player!.is_rookie_deal ?? false,
         };
       }),
       evaluation: {
@@ -399,7 +432,8 @@ export function EvaluatePage() {
     const payload = buildSavePayload();
     if (!payload) {
       setSaveState("error");
-      setSaveError("Complete this Rotation before saving.");
+      const label = (resolvedRuleSet?.rules?.team_label as string | undefined) ?? "Rotation";
+      setSaveError(`Complete this ${label} before saving.`);
       return;
     }
 
@@ -526,7 +560,11 @@ export function EvaluatePage() {
         <div id="eval-results" className="space-y-6">
 
           {/* Score display */}
-          <CohesionScoreDisplay evaluation={evaluation} />
+          <CohesionScoreDisplay
+            evaluation={evaluation}
+            isLineupOnly={evaluation.player_composites.length <= 5}
+            teamLabel={resolvedRuleSet?.rules?.team_label as string | undefined}
+          />
 
           {/* Team Identity — LLM GM-memo narrative (final mode only) */}
           <TeamDescriptionCard

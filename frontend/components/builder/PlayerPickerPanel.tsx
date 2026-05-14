@@ -19,7 +19,7 @@ import {
   type PlayerPoolViewMode,
 } from "@/components/players/PlayerPoolBrowser";
 import { PlayerViewSizeToggle, type PlayerViewSize } from "@/components/players/PlayerView";
-import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { DEFAULT_MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 
@@ -40,8 +40,8 @@ interface PlayerPickerPanelProps {
   error: string | null;
   /** IDs already in the roster — shown as "in roster" and not selectable. */
   rosterPlayerIds: Set<string>;
-  /** Remaining salary budget. Players whose salary exceeds this are disabled. */
-  remainingSalary: number;
+  /** Remaining salary budget. Players whose salary exceeds this are disabled. null = no cap. */
+  remainingSalary: number | null;
   /** Currently selected slot (1-based). null = no active selection. Used only for the hint banner. */
   selectedSlot: number | null;
   /** Called on left-click — parent fills the appropriate slot. */
@@ -77,8 +77,14 @@ interface PlayerPickerPanelProps {
    * the CourtLineup face hover into the picker list.
    */
   highlightedPlayerId?: string | null;
+  /** Max roster slots from rules_json. */
+  maxRosterSlots?: number;
   /** When true, profile links route to /admin/players/[id]. */
   isAdmin?: boolean;
+  /** Max rookie deal players allowed by the RuleSet. undefined = no limit. */
+  rookieDealLimit?: number;
+  /** Current count of rookie deal players in the roster. */
+  rosterRookieDealCount?: number;
 }
 
 export function PlayerPickerPanel({
@@ -96,12 +102,15 @@ export function PlayerPickerPanel({
   onPlayerHover,
   onPlayerHoverEnd,
   renderPlayerFit,
+  maxRosterSlots = DEFAULT_MAX_ROSTER_SLOTS,
   highlightedPlayerId,
   isAdmin,
+  rookieDealLimit,
+  rosterRookieDealCount = 0,
 }: PlayerPickerPanelProps) {
   const [filterRequest, setFilterRequest] = useState<PlayerPoolFilterRequest | null>(null);
   const [viewSize, setViewSize] = useState<PlayerViewSize>("row");
-  const hasAvailableBuildSlot = rosterPlayerIds.size < MAX_ROSTER_SLOTS;
+  const hasAvailableBuildSlot = rosterPlayerIds.size < maxRosterSlots;
 
   // ── Hint banner dismissal (persisted) ────────────────────────────────────
   const HINT_STORAGE_KEY = "cornerstone:picker-hint-dismissed";
@@ -136,13 +145,15 @@ export function PlayerPickerPanel({
     });
   }, [skillFilterTrigger]);
 
-  // ── Unavailability check — in roster OR would exceed salary cap ───────────
+  // ── Unavailability check — in roster, over budget, or rookie deal limit hit
+  const rookieDealLimitReached = rookieDealLimit != null && rosterRookieDealCount >= rookieDealLimit;
   const isUnavailable = useCallback((player: PlayerWithSkills): boolean => {
     if (rosterPlayerIds.has(player.id)) return true;
     if (!hasAvailableBuildSlot) return true;
-    if (player.salary != null && player.salary > remainingSalary) return true;
+    if (remainingSalary !== null && player.salary != null && player.salary > remainingSalary) return true;
+    if (player.is_rookie_deal && rookieDealLimitReached) return true;
     return false;
-  }, [hasAvailableBuildSlot, rosterPlayerIds, remainingSalary]);
+  }, [hasAvailableBuildSlot, rosterPlayerIds, remainingSalary, rookieDealLimitReached]);
 
   // ── Drag-and-drop ─────────────────────────────────────────────────────────
   const handleRowDragStart = useCallback((e: React.DragEvent, player: PlayerWithSkills) => {

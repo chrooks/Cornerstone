@@ -367,6 +367,8 @@ export interface PlayerWithSkills {
   peak_year?: number | null;
   /** NBA.com player ID — used to construct headshot URLs. */
   nba_api_id?: number | null;
+  /** True when the player is on a rookie scale contract (first round pick, ≤3 years experience). */
+  is_rookie_deal?: boolean;
   /** Composite skill profile condensed to final_tier per skill, or null if no profile exists yet. */
   skills: PlayerSkillMap | null;
   /** Aggregate flag status — used to surface review badges in the explorer. */
@@ -618,6 +620,45 @@ export interface RuleSetSummary {
   rules: Record<string, unknown> | null;
 }
 
+/** A single RuleSet Version (draft, published, or retired). */
+export interface RuleSetVersionSummary {
+  id: string;
+  version_label: string;
+  rules_hash: string;
+  rules_json: Record<string, unknown>;
+  status: "draft" | "published" | "retired";
+  published_at: string | null;
+  created_at: string;
+}
+
+/** RuleSet with all its versions — returned by admin detail endpoint. */
+export interface RuleSetDetail extends RuleSetSummary {
+  versions: RuleSetVersionSummary[];
+}
+
+/** Payload for POST /api/rulesets. */
+export interface CreateRuleSetPayload {
+  slug: string;
+  name: string;
+  description?: string;
+  status?: "active" | "coming_soon" | "archived";
+  display_order?: number;
+}
+
+/** Payload for PATCH /api/rulesets/<slug>. */
+export interface UpdateRuleSetPayload {
+  name?: string;
+  description?: string;
+  status?: "active" | "coming_soon" | "archived";
+  display_order?: number;
+}
+
+/** Payload for POST /api/rulesets/<slug>/versions. */
+export interface CreateRuleSetVersionPayload {
+  version_label: string;
+  rules_json: Record<string, unknown>;
+}
+
 /** Minimal user-owned profile data for the Profile page. */
 export interface UserProfile {
   id: string | null;
@@ -641,6 +682,8 @@ export interface SaveTeamPlayerPayload {
   team_snapshot: string | null;
   position_snapshot: string | null;
   skill_profile_snapshot: Record<string, string>;
+  /** True when the player is on a rookie scale contract. */
+  is_rookie_deal?: boolean;
 }
 
 /** Request payload for POST /api/saved-teams. */
@@ -648,9 +691,10 @@ export interface SaveTeamPayload {
   ruleset_slug: string;
   ruleset_version_id: string;
   rules_hash: string;
+  team_size: number;
   snapshot_release_id?: string;
   name?: string;
-  cornerstone_legend_id: string;
+  cornerstone_legend_id: string | null;
   players: SaveTeamPlayerPayload[];
   evaluation: RosterEvaluation & {
     starting_lineup_score?: number;
@@ -663,7 +707,9 @@ export interface SavedTeamSummary {
   name: string;
   ruleset_slug: string;
   ruleset_version_id: string | null;
+  ruleset_version_label?: string | null;
   ruleset_version_hash: string | null;
+  team_size?: number | null;
   snapshot_release_id: string;
   visibility: "private" | "unlisted" | "public";
   cornerstone_legend_id?: string | null;
@@ -774,4 +820,50 @@ export interface EvaluatePayload {
   }>;
   mode: "live" | "final";
   debug: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Community leaderboard
+// ---------------------------------------------------------------------------
+
+/** Per-RuleSet aggregate stats for the Community tab. */
+export interface CommunityRuleSetStats {
+  team_count: number;
+  avg_score: number | null;
+  top_cornerstone: string;
+}
+
+/** Keyed by ruleset_slug. */
+export type CommunityStatsMap = Record<string, CommunityRuleSetStats>;
+
+/** Compact player snapshot in a community team entry. */
+export interface CommunityTeamPlayer {
+  name: string;
+  position: string | null;
+  is_cornerstone: boolean;
+  slot: number;
+  player_id: string | null;
+  legend_id: string | null;
+  nba_api_id: number | null;
+}
+
+/** Single entry in the community teams leaderboard. */
+export interface CommunityTeamEntry {
+  id: string;
+  name: string;
+  ruleset_slug: string;
+  team_size: number | null;
+  cornerstone_name: string;
+  star_rating: number | null;
+  starting_lineup_score: number | null;
+  created_at: string | null;
+  players: CommunityTeamPlayer[];
+}
+
+/** Paginated response from GET /api/community/teams. */
+export interface CommunityTeamsResponse {
+  teams: CommunityTeamEntry[];
+  total: number;
+  page: number;
+  per_page: number;
 }

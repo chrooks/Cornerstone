@@ -16,7 +16,7 @@ import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SalaryGauge } from "./SalaryGauge";
-import { SALARY_CAP, MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { DEFAULT_SALARY_CAP, DEFAULT_MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import type { PlayerWithSkills } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -53,9 +53,15 @@ interface CourtStripProps {
   focusedPlayerName: string | null;
   /* Salary props for the integrated SalaryGauge */
   usedSalary: number;
+  salaryCap?: number | null;
+  maxRosterSlots?: number;
   highlightRange: { startFrac: number; endFrac: number } | null;
   pickerHoveredSalary: number | null;
   onSalaryCapFilterClick: (max: number) => void;
+  /** Max rookie deal players allowed by the RuleSet. undefined = no limit. */
+  rookieDealLimit?: number;
+  /** Current count of rookie deal players in the roster. */
+  rosterRookieDealCount?: number;
   /* Slot interaction handlers */
   onSlotClick: (slotIndex: number) => void;
   onRemoveSlot: (slotIndex: number) => void;
@@ -219,9 +225,13 @@ export function CourtStrip({
   cornerstoneId,
   focusedPlayerName,
   usedSalary,
+  salaryCap = DEFAULT_SALARY_CAP,
+  maxRosterSlots = DEFAULT_MAX_ROSTER_SLOTS,
   highlightRange,
   pickerHoveredSalary,
   onSalaryCapFilterClick,
+  rookieDealLimit,
+  rosterRookieDealCount = 0,
   onSlotClick,
   onRemoveSlot,
   onDropPlayer,
@@ -230,7 +240,7 @@ export function CourtStrip({
   onSlotHoverEnd,
   onSlotContextMenu,
 }: CourtStripProps) {
-  const slots = allSlots.slice(0, MAX_ROSTER_SLOTS);
+  const slots = allSlots.slice(0, maxRosterSlots);
   const filledCount = slots.filter(Boolean).length;
   const slotDragRef = useRef<{
     sourceSlot: number;
@@ -346,7 +356,7 @@ export function CourtStrip({
         key={slot}
         slotIndex={slot}
         occupant={occupant}
-        size={slot === 1 ? CORNERSTONE_SIZE : SLOT_SIZE}
+        size={slot === 1 && cornerstoneId ? CORNERSTONE_SIZE : SLOT_SIZE}
         isCornerstone={isCornerstone}
         isFocused={isFocused}
         isDragging={draggingSlot === slot}
@@ -373,16 +383,35 @@ export function CourtStrip({
       id="builder-court-strip"
       className="border border-[#d9d0c9] bg-[#f7f7f7] rounded-lg overflow-hidden"
     >
-      {/* Row 1: SalaryCap gauge — full width with hover preview */}
+      {/* Row 1: SalaryCap gauge + optional rookie deal counter (hidden when uncapped) */}
+      {(salaryCap != null || rookieDealLimit != null) && (
       <div className="border-b border-[#d9d0c9]/50 px-3 pb-2 pt-3 sm:px-5 sm:pb-1.5">
-        <SalaryGauge
-          usedSalary={usedSalary}
-          cap={SALARY_CAP}
-          highlightRange={highlightRange}
-          previewSalary={pickerHoveredSalary}
-          onRemainingClick={(max) => onSalaryCapFilterClick(max)}
-        />
+        {salaryCap != null && (
+          <SalaryGauge
+            usedSalary={usedSalary}
+            cap={salaryCap}
+            highlightRange={highlightRange}
+            previewSalary={pickerHoveredSalary}
+            onRemainingClick={(max) => onSalaryCapFilterClick(max)}
+          />
+        )}
+        {rookieDealLimit != null && (
+          <div
+            id="builder-rookie-deal-counter"
+            className="mt-1 flex items-center justify-end gap-1 text-[0.6875rem]"
+            title={`This Rule Set allows at most ${rookieDealLimit} rookie deal player${rookieDealLimit !== 1 ? "s" : ""}`}
+          >
+            <span className="text-[#0e0907]/35">Rookie Deal</span>
+            <span className={cn(
+              "font-mono tabular-nums font-medium",
+              rosterRookieDealCount >= rookieDealLimit ? "text-[#e53e3e]" : "text-[#f3a181]",
+            )}>
+              {rosterRookieDealCount} / {rookieDealLimit}
+            </span>
+          </div>
+        )}
       </div>
+      )}
 
       {/* Row 2: Centered slot row with starter/bench divider */}
       <div id="builder-court-strip-scroll" className="overflow-x-auto [scrollbar-color:rgba(14,9,7,0.18)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb]:bg-[#0e0907]/15">
@@ -390,31 +419,35 @@ export function CourtStrip({
           {/* Left label */}
           <div className="mr-3 flex shrink-0 flex-col items-start sm:mr-4">
             <span className="text-[0.5625rem] font-semibold uppercase tracking-[1.5px] text-[#9a938a]">
-              Rotation
+              {maxRosterSlots <= 5 ? "Lineup" : maxRosterSlots <= 9 ? "Rotation" : "Roster"}
             </span>
             <span className="font-mono text-[0.625rem] tabular-nums text-[#0e0907]/35">
-              {filledCount} / {MAX_ROSTER_SLOTS}
+              {filledCount} / {maxRosterSlots}
             </span>
           </div>
 
           {/* Starter slots (1-5) */}
           <div id="builder-court-strip-starters" className="flex items-start gap-2 sm:gap-3">
-            {[1, 2, 3, 4, 5].map(renderSlot)}
+            {Array.from({ length: Math.min(maxRosterSlots, 5) }, (_, i) => i + 1).map(renderSlot)}
           </div>
 
-          {/* Starter/bench divider */}
-          <div id="builder-court-strip-bench-divider" className="mx-3 flex self-stretch flex-col items-center sm:mx-4">
-            <div className="w-px flex-1 bg-[#d9d0c9]" />
-            <span className="py-1 text-[0.5rem] font-semibold uppercase tracking-[1px] text-[#9a938a]">
-              Bench
-            </span>
-            <div className="w-px flex-1 bg-[#d9d0c9]" />
-          </div>
+          {/* Bench slots (6+) — only when maxRosterSlots > 5 */}
+          {maxRosterSlots > 5 && (
+            <>
+              {/* Starter/bench divider */}
+              <div id="builder-court-strip-bench-divider" className="mx-3 flex self-stretch flex-col items-center sm:mx-4">
+                <div className="w-px flex-1 bg-[#d9d0c9]" />
+                <span className="py-1 text-[0.5rem] font-semibold uppercase tracking-[1px] text-[#9a938a]">
+                  Bench
+                </span>
+                <div className="w-px flex-1 bg-[#d9d0c9]" />
+              </div>
 
-          {/* Bench slots (6-9) */}
-          <div id="builder-court-strip-bench" className="flex items-start gap-2 sm:gap-3">
-            {[6, 7, 8, 9].map(renderSlot)}
-          </div>
+              <div id="builder-court-strip-bench" className="flex items-start gap-2 sm:gap-3">
+                {Array.from({ length: maxRosterSlots - 5 }, (_, i) => i + 6).map(renderSlot)}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
