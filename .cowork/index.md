@@ -1,6 +1,6 @@
 # Project Index
 
-Last updated: 2026-05-13 by /handoff (decouple team size from RuleSet)
+Last updated: 2026-05-13 by /handoff (community leaderboard kickoff)
 
 ## Source-of-truth documents
 
@@ -14,6 +14,7 @@ Last updated: 2026-05-13 by /handoff (decouple team size from RuleSet)
 
 ## Handoffs
 
+- [community-leaderboard-kickoff](handoffs/2026-05-13-community-leaderboard-kickoff.md) — Community leaderboard & RuleSet card stats (issue #4), unblocked by #3
 - [decouple-team-size-from-ruleset](handoffs/2026-05-13-decouple-team-size-from-ruleset.md) — Decouple team size from RuleSet; allow one RuleSet with multiple size options
 - [ffa-roster-verification](handoffs/2026-05-13-ffa-roster-verification.md) — Verify 12-man FFA Roster works end-to-end; fix bugs as found
 - [create-free-for-all-ruleset](handoffs/2026-05-12-create-free-for-all-ruleset.md) — Publish Free For All RuleSet; handle cap-less and cornerstone-optional builder flow
