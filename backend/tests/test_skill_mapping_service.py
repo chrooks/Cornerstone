@@ -111,28 +111,28 @@ def _make_stats_blob(**overrides) -> dict:
         "play_type": {
             "spotup_freq": 0.15,
             "spotup_ppp": 1.02,
-            "spotup_poss": 120,       # season total
+            "spotup_poss": 120,       # per-game value
             "offscreen_freq": 0.08,
             "offscreen_ppp": 0.96,
-            "offscreen_poss": 60,     # season total
+            "offscreen_poss": 60,     # per-game value
             "handoff_freq": 0.05,
             "handoff_ppp": 0.92,
-            "handoff_poss": 40,       # season total
+            "handoff_poss": 40,       # per-game value
             "cut_freq": 0.07,
             "cut_ppp": 1.15,
-            "cut_poss": 70,           # season total
+            "cut_poss": 70,           # per-game value
             "transition_freq": 0.04,
             "transition_ppp": 1.05,
-            "transition_poss": 80,    # season total
+            "transition_poss": 80,    # per-game value
             "pr_ball_handler_freq": 0.10,
             "pr_ball_handler_ppp": 0.88,
-            "pr_ball_handler_poss": 110,  # season total
+            "pr_ball_handler_poss": 110,  # per-game value
             "pr_roll_man_freq": 0.06,
             "pr_roll_man_ppp": 0.97,
-            "pr_roll_man_poss": 80,   # season total
+            "pr_roll_man_poss": 80,   # per-game value
             "postup_freq": 0.05,
             "postup_ppp": 0.92,
-            "postup_poss": 60,        # season total
+            "postup_poss": 60,        # per-game value
         },
         "hustle": {
             "screen_assists": 3.0,
@@ -278,14 +278,14 @@ class TestEvaluateCondition:
         cond = self._make_cond("shot_detail.alley_oop_fgm", ">=", 30, per="season")
         assert evaluate_condition(cond, blob, 65) is False
 
-    def test_per_season_play_type_poss_not_scaled(self):
-        """play_type._poss stats are already season totals — must NOT be multiplied."""
-        blob = _make_stats_blob(play_type__cut_poss=70)  # already season total
-        # Should compare 70 (raw) >= 50, not 70 * 65 >= 50
+    def test_per_season_play_type_poss_scaled_from_per_game(self):
+        """play_type._poss stats are per-game values and scale for season gates."""
+        blob = _make_stats_blob(play_type__cut_poss=1.0)
+        # 1.0 * 65 = 65, which is >= 50
         cond = self._make_cond("play_type.cut_poss", ">=", 50, per="season")
         assert evaluate_condition(cond, blob, 65) is True
 
-        # Would be obviously True either way for cut_poss=70, so test the tight case
+        # 1.0 * 65 = 65, which is < 80
         cond_fail = self._make_cond("play_type.cut_poss", ">=", 80, per="season")
         assert evaluate_condition(cond_fail, blob, 65) is False
 
@@ -544,19 +544,19 @@ class TestApplyStabilization:
         )
 
     def test_ppp_stat_uses_poss_as_attempts(self):
-        """PPP stats use the corresponding _poss stat as the attempt count."""
+        """PPP stats scale the corresponding per-game _poss stat to season attempts."""
         blob = _make_stats_blob(
             play_type__cut_ppp=1.30,
-            play_type__cut_poss=60,  # season total
+            play_type__cut_poss=1.0,  # 1.0/game x 65 games = 65 possessions
         )
         rule = _stab_rule("play_type.cut_ppp", K=30)
 
         result = apply_stabilization(rule, {"play_type": blob["play_type"]}, 65, _TEST_LEAGUE_AVGS)
         stab_val = result.get("stabilized.play_type.cut_ppp")
 
-        # Stabilized = (1.30*60 + 30*1.10) / (60 + 30) = (78 + 33) / 90 = 1.233
+        # Stabilized = (1.30*65 + 30*1.10) / (65 + 30) = 1.237
         assert stab_val is not None
-        assert 1.10 < stab_val < 1.30, f"PPP should be pulled toward 1.10, got {stab_val}"
+        assert stab_val == pytest.approx(1.2368, abs=0.0001)
 
     def test_missing_league_avg_skips_stabilization(self):
         """If no league average is available, the stat is not stabilized."""
@@ -988,7 +988,7 @@ class TestEvaluateSkill:
         assert "tracking_shooting.catch_shoot_fg3a" in result["driving_stats"]
 
     def test_cutter_below_volume_gate(self):
-        """AC: a player with 30 total cut possessions is None for Cutter (below 50 gate)."""
+        """AC: a player below 50 scaled cut possessions is None for Cutter."""
         cutter_rule = {
             "skill_name": "cutter",
             "stat_confidence": "moderate",
@@ -1018,7 +1018,7 @@ class TestEvaluateSkill:
                 },
             },
         }
-        blob = _make_stats_blob(play_type__cut_poss=30, play_type__cut_freq=0.12, play_type__cut_ppp=1.30)
+        blob = _make_stats_blob(play_type__cut_poss=0.3, play_type__cut_freq=0.12, play_type__cut_ppp=1.30)
         result = evaluate_skill("cutter", cutter_rule, blob, {})
         assert result["tier"] == "None"
         assert result["volume_gate_passed"] is False

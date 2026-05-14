@@ -523,15 +523,19 @@ function feedbackFragmentText(text: string): string {
 
 function ScoreFactorTooltip({
   factor,
+  isLineupOnly = false,
 }: {
   factor: { key: string; label: string; value: number };
+  isLineupOnly?: boolean;
 }) {
+  const factorWeights = isLineupOnly ? LINEUP_ONLY_SCORE_FACTOR_WEIGHTS : SCORE_FACTOR_WEIGHTS;
+
   return (
     <div className="space-y-2">
       <p className="font-semibold text-[#0e0907]">{factor.label}</p>
       <p>{scoreFactorExplainer(factor.key)}</p>
       <p>
-        Rollup weight: <span className="font-mono text-[#0e0907]">{SCORE_FACTOR_WEIGHTS[factor.key] ?? "n/a"}</span>.
+        Rollup weight: <span className="font-mono text-[#0e0907]">{factorWeights[factor.key] ?? "n/a"}</span>.
       </p>
       <p>
         Derived from {SCORE_FACTOR_DERIVATIONS[factor.key] ?? "the cohesion engine"}.
@@ -1073,7 +1077,7 @@ function NewFeedbackRead({
                   key={factor.key}
                   id={`builder-new-feedback-score-factor-${factor.key}-tooltip`}
                   as="div"
-                  content={<ScoreFactorTooltip factor={factor} />}
+                  content={<ScoreFactorTooltip factor={factor} isLineupOnly={isLineupOnly} />}
                   className="w-full"
                 >
                   <div id={`builder-new-feedback-score-factor-${factor.key}`} className="flex w-full items-center justify-between gap-3 border border-[#d9d0c9]/55 bg-[#f0f0f0]/45 px-2.5 py-1.5 transition-colors hover:border-[#ffa05c]/45">

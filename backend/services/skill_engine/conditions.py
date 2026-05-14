@@ -75,8 +75,8 @@ def evaluate_condition(
       False — condition fails
       None  — required stat is null (data missing, can't evaluate)
 
-    Note: play_type _poss stats are season totals already, so "per: season"
-    is a no-op for those (the spec exempts them; we detect them by suffix).
+    Note: play_type _poss stats are stored per-game, so "per: season"
+    scales them by games_played just like other per-game volume stats.
     """
     stat_path = condition.get("stat", "")
     op = condition.get("operator", ">=")
@@ -109,8 +109,7 @@ def evaluate_condition(
             return None  # Signal data is missing for this stat
 
     # Scale per-game stats to season totals when per="season".
-    # play_type._poss values are stored per-game (Synergy uses per_mode_simple="PerGame"),
-    # so they must also be multiplied by games_played when per="season".
+    # play_type._poss values are stored per-game, so they are multiplied too.
     val = raw_val
     if per == "season":
         val = raw_val * games_played

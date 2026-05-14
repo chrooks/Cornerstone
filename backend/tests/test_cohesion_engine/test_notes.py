@@ -110,7 +110,9 @@ def test_mode_b_uses_lineup_level_observations():
     assert any(note.type == "strength" and note.category == "spacing_creation_ratio" for note in notes)
     assert any(note.type == "strength" and note.category == "synergy" for note in notes)
     assert any(note.type == "weakness" and note.category == "anchor_total" for note in notes)
-    assert any(note.type == "suggestion" and note.category == "anchor" for note in notes)
+    assert any(note.type == "suggestion" and note.category == "paint_touch" for note in notes)
+    assert any(note.type == "suggestion" and note.category == "rebounding" for note in notes)
+    assert any(note.type == "suggestion" and note.category == "shot_creation" for note in notes)
 
 
 def test_notes_are_deduplicated_limited_and_sorted_by_severity_within_type():

@@ -51,14 +51,14 @@ def test_compute_raw_composites_matches_validated_formula_order():
     assert raw["finishing"] == pytest.approx(7.5)
     assert raw["rebounding"] == pytest.approx(4.5)
     assert raw["paint_touch"] == pytest.approx(21.6)
-    assert raw["anchor"] == pytest.approx(14.1)
+    assert raw["anchor"] == pytest.approx(13.725)
     assert raw["post_game"] == pytest.approx(5.7)
     assert raw["pnr_screener"] == pytest.approx(7.2)
     assert raw["transition"] == pytest.approx(21.45)
     assert raw["perimeter_defense"] == pytest.approx(4.05)
-    assert raw["interior_defense"] == pytest.approx(7.65)
+    assert raw["interior_defense"] == pytest.approx(7.275)
     assert raw["off_ball_impact"] == pytest.approx(17.55)
-    assert raw["shot_creation"] == pytest.approx(40.525)
+    assert raw["shot_creation"] == pytest.approx(29.725)
 
 
 def test_compute_raw_composites_accepts_numeric_synergy_values():
@@ -99,7 +99,7 @@ def test_normalize_composites_uses_theoretical_max_when_cache_empty():
         "post_game": 5.0,
         "pnr_screener": 5.0,
         "off_ball_impact": 5.0,
-        "shot_creation": 5.0,
+        "shot_creation": 6.0,
         "rebounding": 5.0,
         "transition": 5.0,
         "perimeter_defense": 5.0,
@@ -137,11 +137,11 @@ def test_compute_player_composites_returns_dataclass_with_bell_params():
     assert player.name == "Example"
     assert player.spacing == 3.9
     assert player.perimeter_defense == 2.4
-    assert player.interior_defense == 4.2
+    assert player.interior_defense == 4.0
     assert player.bell_amplitude == 3.5
     assert player.bell_peak == 80
-    assert player.bell_range_down == 5
-    assert player.bell_range_up == 6
+    assert player.bell_range_down == 7
+    assert player.bell_range_up == 8
 
 
 def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):

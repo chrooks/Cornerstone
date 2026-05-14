@@ -384,6 +384,14 @@ ROSTER_ROLLUP_WEIGHTS: dict[str, float] = {
     "floor": 0.10,                 # worst viable lineup's score (how bad is the floor?)
 }
 
+# A 5-player Team is a Lineup, so depth and floor are not meaningful factors.
+LINEUP_ONLY_ROLLUP_WEIGHTS: dict[str, float] = {
+    "starting_5": 0.90,
+    "depth": 0.0,
+    "archetype_diversity": 0.10,
+    "floor": 0.0,
+}
+
 STAR_RATING_MAX: float = 5.0             # final roster score mapped to 0-5 stars
 VIABLE_LINEUP_THRESHOLD: float = 2.75    # lineup cohesion ≥ this = "viable" (playable)
 DEPTH_VIABLE_RATIO_WEIGHT: float = 0.60  # depth subscore: 60% = % of lineups that are viable
