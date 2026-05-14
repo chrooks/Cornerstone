@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -93,6 +94,7 @@ function PlayerSnapshotRow({
       )}
     >
       <div
+        id={`shared-team-player-slot-${player.slot}-portrait`}
         className={cn(
           "flex h-12 w-12 items-center justify-center overflow-hidden rounded-sm border font-mono text-xs font-semibold",
           showCornerstone && player.is_cornerstone
@@ -101,7 +103,21 @@ function PlayerSnapshotRow({
         )}
         aria-hidden="true"
       >
-        {formatPlayerInitials(player.player_name_snapshot)}
+        {player.nba_api_id ? (
+          <Image
+            id={`shared-team-player-slot-${player.slot}-portrait-image`}
+            src={`https://ak-static.cms.nba.com/wp-content/uploads/headshots/nba/latest/260x190/${player.nba_api_id}.png`}
+            alt=""
+            width={260}
+            height={190}
+            sizes="48px"
+            quality={100}
+            unoptimized
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          formatPlayerInitials(player.player_name_snapshot)
+        )}
       </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">

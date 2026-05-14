@@ -1116,6 +1116,25 @@ def test_shared_get_returns_public_team_without_auth(client, fake_supabase):
     assert data["data"]["evaluation"]["evaluation_payload"] == {"star_rating": 4.0}
 
 
+def test_shared_get_returns_player_portrait_ids(client, fake_supabase):
+    saved_team_id = _seed_shared_team(fake_supabase, visibility="public")
+    active_player_id = valid_player(2)["player_id"]
+    fake_supabase.rows["legends"][0]["nba_api_id"] = 165
+    fake_supabase.rows.setdefault("players", []).append({
+        "id": active_player_id,
+        "nba_api_id": 1630162,
+    })
+
+    resp, data = get_shared_team(client, saved_team_id)
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+
+    players_by_slot = {player["slot"]: player for player in data["data"]["players"]}
+    assert players_by_slot[1]["nba_api_id"] == 165
+    assert players_by_slot[2]["nba_api_id"] == 1630162
+
+
 def test_shared_get_returns_unlisted_team_without_auth(client, fake_supabase):
     saved_team_id = _seed_shared_team(fake_supabase, visibility="unlisted")
 
