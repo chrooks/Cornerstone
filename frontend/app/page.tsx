@@ -1,28 +1,6 @@
 import Link from "next/link";
 import { HeroSlideshow } from "@/components/landing/HeroSlideshow";
-
-/* ── Sample data for the proof section ──
-   Hardcoded realistic skill profiles to demonstrate the system visually.
-   These are not fetched; they exist purely to "show, don't tell." */
-
-const SAMPLE_SKILLS = [
-  { name: "Isolation Scorer", tier: "Elite" as const },
-  { name: "Off-Dribble Shooter", tier: "Proficient" as const },
-  { name: "PnR Ball Handler", tier: "Elite" as const },
-  { name: "Driver", tier: "All-Time Great" as const },
-  { name: "Passer", tier: "Proficient" as const },
-  { name: "Versatile Defender", tier: "Capable" as const },
-  { name: "Perimeter Disruptor", tier: "Elite" as const },
-  { name: "Defensive Rebounding", tier: "Capable" as const },
-];
-
-const TIER_STYLES: Record<string, string> = {
-  "All-Time Great": "bg-violet-100 text-violet-800 border-violet-300",
-  Elite: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  Proficient: "bg-sky-100 text-sky-800 border-sky-200",
-  Capable: "bg-amber-100 text-amber-800 border-amber-200",
-  None: "bg-slate-100 text-slate-500 border-slate-200",
-};
+import { ProofCardRotator } from "@/components/landing/ProofCardRotator";
 
 const STEPS = [
   {
@@ -208,58 +186,10 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Right column — sample skill profile card */}
-          <div
-            id="landing-proof-card"
-            className="border border-border rounded-lg bg-card p-6"
-          >
-            {/* Card header — player identity */}
-            <div className="flex items-baseline justify-between mb-5">
-              <div>
-                <h3 className="text-base font-semibold text-foreground">
-                  Sample Player Profile
-                </h3>
-                <span className="text-xs text-muted-foreground">
-                  Guard &middot; 27.4 PPG &middot; 6.2 APG
-                </span>
-              </div>
-              <span className="font-mono text-xs text-muted-foreground tracking-wider">
-                2024-25
-              </span>
-            </div>
-
-            {/* Skill badge grid — the real visual proof */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {SAMPLE_SKILLS.map((skill) => (
-                <div
-                  key={skill.name}
-                  className="flex flex-col gap-1 p-2.5 rounded-md border border-border bg-background"
-                >
-                  <span className="text-[0.6875rem] font-medium text-muted-foreground leading-tight">
-                    {skill.name}
-                  </span>
-                  <span
-                    className={`inline-flex self-start px-2 py-0.5 text-[0.6875rem] font-medium rounded-sm border ${TIER_STYLES[skill.tier]}`}
-                  >
-                    {skill.tier}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Card footer — subtle link */}
-            <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                8 of 21 skills shown
-              </span>
-              <Link
-                href="/players"
-                className="text-xs font-medium text-[#fe6d34] hover:text-[#fe6d34]/80 transition-colors"
-              >
-                Explore all profiles →
-              </Link>
-            </div>
-          </div>
+          {/* Right column — rotating Skill Profile proof Surface.
+              Sources real Players from the current Snapshot Release pool plus
+              Legends; falls back to a static Sample Player Profile on error. */}
+          <ProofCardRotator />
         </div>
       </section>
 
