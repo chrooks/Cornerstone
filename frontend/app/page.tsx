@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HeroSlideshow } from "@/components/landing/HeroSlideshow";
 
 /* ── Sample data for the proof section ──
    Hardcoded realistic skill profiles to demonstrate the system visually.
@@ -69,53 +70,82 @@ export default function LandingPage() {
           }}
         />
 
-        <div className="relative max-w-screen-xl mx-auto px-6 py-24 md:py-32 lg:py-40">
-          {/* Left-aligned layout — not a centered stack */}
-          <div className="max-w-2xl">
-            {/* Eyebrow label */}
-            <span
-              id="landing-eyebrow"
-              className="inline-block font-mono text-xs tracking-[0.08em] uppercase text-[#0e0907]/60 mb-4"
-            >
-              Build a team &middot; Test the hypothetical &middot; Settle the debate
-            </span>
-
-            {/* Hero headline — Space Grotesk display */}
-            <h1
-              id="landing-title"
-              className="font-display text-[clamp(2.5rem,5vw+1rem,4.5rem)] font-bold leading-[1.05] tracking-[-0.02em] text-[#0e0907]"
-              style={{ textWrap: "balance" }}
-            >
-              What if you could
-              <br />
-              prove it?
-            </h1>
-
-            {/* Supporting line — Geist body */}
-            <p
-              id="landing-subtitle"
-              className="mt-5 text-[0.9375rem] leading-relaxed text-[#0e0907]/75 max-w-lg"
-            >
-              Turn any hypothetical team into something you can actually
-              test. Pick the rules. Build it. See how it scores.
-            </p>
-
-            {/* CTAs */}
-            <div id="landing-cta" className="flex items-center gap-3 mt-8">
-              <Link
-                id="landing-cta-lab"
-                href="/lab"
-                className="inline-flex items-center px-5 py-2.5 rounded-md bg-[#0e0907] text-[#ffa05c] text-sm font-medium tracking-[0.01em] transition-all duration-150 hover:bg-[#0e0907]/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e0907]"
+        <div className="relative max-w-screen-xl mx-auto px-6 py-20 md:py-24 lg:py-28">
+          {/* Two-column editorial layout: copy left, community slideshow right.
+              On mobile the slideshow stacks beneath the headline so the page
+              still reads as a clear value-prop first. */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_minmax(0,1fr)] gap-10 lg:gap-14 items-center">
+            {/* Left column — pitch */}
+            <div className="max-w-2xl">
+              {/* Eyebrow label */}
+              <span
+                id="landing-eyebrow"
+                className="inline-block font-mono text-xs tracking-[0.08em] uppercase text-[#0e0907]/60 mb-4"
               >
-                Enter the Lab
-              </Link>
-              <Link
-                id="landing-cta-players"
-                href="/players"
-                className="inline-flex items-center px-5 py-2.5 rounded-md border border-[#0e0907]/25 text-[#0e0907] text-sm font-medium tracking-[0.01em] transition-all duration-150 hover:bg-[#0e0907]/10 hover:border-[#0e0907]/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e0907]"
+                Build a team &middot; Test the hypothetical &middot; Settle the debate
+              </span>
+
+              {/* Hero headline — Space Grotesk display */}
+              <h1
+                id="landing-title"
+                className="font-display text-[clamp(2.5rem,5vw+1rem,4.5rem)] font-bold leading-[1.05] tracking-[-0.02em] text-[#0e0907]"
+                style={{ textWrap: "balance" }}
               >
-                Browse Players
-              </Link>
+                What if you could
+                <br />
+                prove it?
+              </h1>
+
+              {/* Supporting line — Geist body */}
+              <p
+                id="landing-subtitle"
+                className="mt-5 text-[0.9375rem] leading-relaxed text-[#0e0907]/75 max-w-lg"
+              >
+                Turn any hypothetical team into something you can actually
+                test. Pick the rules. Build it. See how it scores.
+              </p>
+
+              {/* CTAs */}
+              <div id="landing-cta" className="flex flex-wrap items-center gap-3 mt-8">
+                <Link
+                  id="landing-cta-lab"
+                  href="/lab"
+                  className="inline-flex items-center px-5 py-2.5 rounded-md bg-[#0e0907] text-[#ffa05c] text-sm font-medium tracking-[0.01em] transition-all duration-150 hover:bg-[#0e0907]/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e0907]"
+                >
+                  Enter the Lab
+                </Link>
+                <Link
+                  id="landing-cta-players"
+                  href="/players"
+                  className="inline-flex items-center px-5 py-2.5 rounded-md border border-[#0e0907]/25 text-[#0e0907] text-sm font-medium tracking-[0.01em] transition-all duration-150 hover:bg-[#0e0907]/10 hover:border-[#0e0907]/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e0907]"
+                >
+                  Browse Players
+                </Link>
+                <Link
+                  id="landing-cta-faq"
+                  href="/faq"
+                  className="inline-flex items-center text-sm font-medium text-[#0e0907]/75 underline-offset-4 hover:text-[#0e0907] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e0907]"
+                >
+                  How does it work? →
+                </Link>
+              </div>
+            </div>
+
+            {/* Right column — community Teams slideshow */}
+            <div id="landing-hero-slideshow-region" className="w-full">
+              <div className="mb-3 flex items-baseline justify-between">
+                <span className="font-mono text-[0.6875rem] tracking-[0.08em] uppercase text-[#0e0907]/55">
+                  Top community Teams
+                </span>
+                <Link
+                  id="landing-hero-leaderboard-link"
+                  href="/community"
+                  className="font-mono text-[0.6875rem] tracking-[0.04em] text-[#0e0907]/70 underline-offset-4 hover:text-[#0e0907] hover:underline"
+                >
+                  See all →
+                </Link>
+              </div>
+              <HeroSlideshow />
             </div>
           </div>
         </div>
