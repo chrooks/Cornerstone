@@ -16,10 +16,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { listPlayersWithSkills } from "@/lib/api";
 import { SKILL_LABELS } from "@/lib/skills";
 import { TIER_BADGE_CLASSES, tierToNum } from "@/lib/tiers";
 import type { PlayerWithSkills, SkillTier } from "@/lib/types";
+
+/** Portrait size in px — matches the Saved Team detail Surface (h-12 w-12). */
+const PORTRAIT_SIZE = 48;
 
 /* ── Tunables ── */
 const ROTATE_MS = 5000;
@@ -122,17 +126,24 @@ const FALLBACK_SKILLS: Array<{ label: string; tier: SkillTier }> = [
 function FallbackCard() {
   return (
     <>
-      <div className="flex items-baseline justify-between mb-5">
-        <div>
-          <h3
-            id="landing-proof-card-name"
-            className="text-base font-semibold text-foreground"
-          >
-            Sample Player Profile
-          </h3>
-          <span className="text-xs text-muted-foreground">
-            Guard &middot; 27.4 PPG &middot; 6.2 APG
-          </span>
+      <div className="flex items-center justify-between mb-5 gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <PlayerHeadshot
+            nba_api_id={null}
+            name="Sample Player"
+            size={PORTRAIT_SIZE}
+          />
+          <div className="min-w-0">
+            <h3
+              id="landing-proof-card-name"
+              className="text-base font-semibold text-foreground"
+            >
+              Sample Player Profile
+            </h3>
+            <span className="text-xs text-muted-foreground">
+              Guard &middot; 27.4 PPG &middot; 6.2 APG
+            </span>
+          </div>
         </div>
         <span className="font-mono text-xs text-muted-foreground tracking-wider">
           2024-25
@@ -206,18 +217,25 @@ function LiveCard({ player, fading }: LiveCardProps) {
         transitionDuration: `${FADE_MS}ms`,
       }}
     >
-      <div className="flex items-baseline justify-between mb-5 gap-3">
-        <div className="min-w-0">
-          <h3
-            id="landing-proof-card-name"
-            className="text-base font-semibold text-foreground truncate"
-          >
-            {player.name}
-          </h3>
-          <span className="text-xs text-muted-foreground">{eraChip}</span>
+      <div className="flex items-center justify-between mb-5 gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <PlayerHeadshot
+            nba_api_id={player.nba_api_id ?? null}
+            name={player.name}
+            size={PORTRAIT_SIZE}
+          />
+          <div className="min-w-0">
+            <h3
+              id="landing-proof-card-name"
+              className="text-base font-semibold text-foreground truncate"
+            >
+              {player.name}
+            </h3>
+            <span className="text-xs text-muted-foreground">{eraChip}</span>
+          </div>
         </div>
         <span
-          className={`font-mono text-[0.6875rem] tracking-[0.04em] uppercase px-2 py-0.5 rounded-sm border ${subjectChipClass}`}
+          className={`font-mono text-[0.6875rem] tracking-[0.04em] uppercase px-2 py-0.5 rounded-sm border shrink-0 ${subjectChipClass}`}
         >
           {subjectChip}
         </span>
@@ -344,7 +362,7 @@ export function ProofCardRotator() {
 
   const containerProps = {
     id: "landing-proof-card",
-    className: "border border-border rounded-lg bg-card p-6",
+    className: "relative border border-border rounded-lg bg-card p-6",
     onMouseEnter: () => setPaused(true),
     onMouseLeave: () => setPaused(false),
     onFocusCapture: () => setPaused(true),
@@ -369,9 +387,29 @@ export function ProofCardRotator() {
   }
 
   const player = pool[index];
+  // Preload the next subject's portrait so the cross-fade swap never flashes.
+  const nextPlayer = pool.length > 1 ? pool[(index + 1) % pool.length] : null;
+  const nextHeadshotUrl = nextPlayer?.nba_api_id
+    ? `https://ak-static.cms.nba.com/wp-content/uploads/headshots/nba/latest/260x190/${nextPlayer.nba_api_id}.png`
+    : null;
+
   return (
     <div {...containerProps} aria-live="polite">
       <LiveCard player={player} fading={fading} />
+      {nextHeadshotUrl && (
+        // Warm the browser cache for the upcoming portrait. Hidden from a11y + layout.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={nextHeadshotUrl}
+          alt=""
+          aria-hidden="true"
+          width={1}
+          height={1}
+          loading="eager"
+          decoding="async"
+          className="pointer-events-none absolute h-px w-px opacity-0"
+        />
+      )}
     </div>
   );
 }
