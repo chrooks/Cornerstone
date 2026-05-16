@@ -1,9 +1,13 @@
 """
-cohesion_engine/weights.py — Tunable constants for the cohesion engine.
+cohesion_engine/weights.py — HISTORICAL REFERENCE / BOOTSTRAP ONLY.
 
-The production modules should import values from here instead of embedding
-formula numbers locally. Keeping these constants centralized makes calibration
-possible without hunting through the evaluation logic.
+Runtime values come from the active Evaluation Version row in the database.
+This file is read at bootstrap (see services/evaluation_versions/bootstrap.py
+and backend/scripts/dump_v1_blob.py) to seed the initial cohesion-v1 Version,
+and NOT at runtime once the Evaluation Version system is active.
+
+These constants remain intact for the bootstrap path and for test fixtures
+that need known default values.
 """
 
 from __future__ import annotations

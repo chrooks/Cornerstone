@@ -50,10 +50,10 @@ cohesion_calibration_bp = Blueprint(
 )
 
 # ---------------------------------------------------------------------------
-# In-memory weight overrides (reset on server restart — safe default)
+# Weight overrides retired — runtime values now come from the active
+# Evaluation Version row in the database.  See
+# services/evaluation_versions/repo.py and the v1 ExecPlan.
 # ---------------------------------------------------------------------------
-
-_WEIGHT_OVERRIDES: dict[str, dict[str, Any]] = {}
 
 # Height range for bell curve pre-computation (6'0" to 7'4")
 _BELL_MIN_IN = 72
@@ -165,10 +165,12 @@ def _serialize_raw_composites(skills: dict[str, str]) -> dict[str, float]:
 
 def _get_all_weights() -> dict[str, Any]:
     """
-    Build a merged view of all weight constants: defaults from weights.py
-    overlaid with any runtime overrides from _WEIGHT_OVERRIDES.
+    Build a view of all weight constants from weights.py.
+
+    Runtime values now come from the active Evaluation Version row in the
+    database, but this helper continues to serve the GET /weights endpoint
+    for the calibration UI until the Editor fully binds to the Version blob.
     """
-    # Collect all uppercase dict/tuple/float/int constants from the weights module
     result: dict[str, Any] = {}
     for name in dir(weights_module):
         if name.startswith("_") or not name.isupper():
@@ -176,15 +178,6 @@ def _get_all_weights() -> dict[str, Any]:
         value = getattr(weights_module, name)
         if isinstance(value, (dict, tuple, list, float, int)):
             result[name] = value
-
-    # Apply overrides on top
-    for section, overrides in _WEIGHT_OVERRIDES.items():
-        if section in result and isinstance(result[section], dict):
-            # Merge partial overrides into the dict copy
-            result[section] = {**result[section], **overrides}
-        else:
-            result[section] = overrides
-
     return result
 
 
@@ -750,31 +743,13 @@ def update_weights() -> tuple:
     if not isinstance(body, dict):
         return jsonify({"success": False, "data": None, "error": "Request body must be a JSON object"}), 400
 
-    # Merge each section's overrides into the in-memory store (immutable replace)
-    for section, overrides in body.items():
-        if not isinstance(section, str):
-            continue
-        if not isinstance(overrides, dict):
-            return jsonify({
-                "success": False,
-                "data": None,
-                "error": f"Override for '{section}' must be an object",
-            }), 400
-        # Validate all override values are numeric
-        for key, val in overrides.items():
-            if not isinstance(val, (int, float)):
-                return jsonify({
-                    "success": False,
-                    "data": None,
-                    "error": f"Override value for '{section}.{key}' must be a number",
-                }), 400
-        # Immutable merge — create new dict rather than mutating in-place
-        _WEIGHT_OVERRIDES[section] = {**_WEIGHT_OVERRIDES.get(section, {}), **overrides}
-
-    logger.info("Weight overrides updated: %s", list(body.keys()))
+    # Weight overrides retired — callers should use the Evaluation Version
+    # draft API (/api/evaluation-versions/drafts) instead.  This endpoint
+    # now returns a 410 Gone with guidance.
+    logger.warning("PUT /weights called but _WEIGHT_OVERRIDES retired — use Evaluation Version draft API")
 
     return jsonify({
-        "success": True,
-        "data": _get_all_weights(),
-        "error": None,
-    }), 200
+        "success": False,
+        "data": None,
+        "error": "Weight overrides are retired. Use the Evaluation Version draft API at /api/evaluation-versions/drafts instead.",
+    }), 410

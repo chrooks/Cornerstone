@@ -148,7 +148,7 @@ def _make_evaluation(
     return {
         "id": f"eval-{saved_team_id}",
         "saved_team_id": saved_team_id,
-        "evaluation_version": "cohesion-v1",
+        "evaluation_version_id": "v1-eval-version-id",
         "star_rating": star_rating,
         "starting_lineup_score": starting_lineup_score,
         "created_at": "2026-05-13T12:00:00Z",

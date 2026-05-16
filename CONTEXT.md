@@ -131,8 +131,20 @@ A persisted Team owned by a user, tied to the RuleSet and Snapshot Release it wa
 _Avoid_: saved roster, saved build
 
 **Evaluation Version**:
-The version of the scoring engine, weights, and evaluation rules used to evaluate a Team. Evaluation Version is separate from Snapshot Release: the Snapshot Release says which Player data was used, while the Evaluation Version says how the engine interpreted that data.
-_Avoid_: algorithm version, model version unless specifically referring to an AI model
+A versioned snapshot of how the engine interprets Player data when scoring a Team. Each Evaluation Version freezes both the **taxonomy** (Skill list, Impact Trait list, Subscore tree, scoring rules) and the **values** (Tier numeric values, composite coefficients, amplitude maps, normalization maxes, boost factors), along with **formula handler references** that name which registered code implementation each Subscore/Impact Trait uses. Evaluation Version is separate from Snapshot Release: the Snapshot Release says which Player data was used; the Evaluation Version says how the engine interpreted that data. Saved Teams are bound to the Evaluation Version they were scored under and never silently re-score when a newer Version publishes; instead they are reopened as a Build in the Lab after a compat check.
+_Avoid_: algorithm version, model version unless specifically referring to an AI model; weights table (Evaluation Version is more than weights)
+
+**Formula Handler**:
+A named, code-resident implementation of a scoring formula (e.g., `spacing_v1`, `pnr_screener_v1`). The evaluator dispatches by handler name, which is recorded in each Evaluation Version's formula_refs. Adding a new formula primitive requires a code release that registers a new handler; reusing an existing handler across Versions is pure data.
+_Avoid_: function, formula, formula module (when referring to the registered named binding)
+
+**Subscore**:
+A composite scoring dimension produced by a Formula Handler from Player Skill Profiles within a Lineup. Subscores roll up into the Lineup score. Examples: spacing, paint_touch, anchor, shot_creation, perimeter_defense.
+_Avoid_: composite (in user-facing language), score component, dimension
+
+**Subscore Tree**:
+The hierarchical grouping of Subscores into categories (e.g., offense, defense) used for display and rollup. Restructuring the Subscore Tree is a taxonomy mutation that lands as a new Evaluation Version.
+_Avoid_: subscore categories (when referring to the data structure)
 
 ## Relationships
 

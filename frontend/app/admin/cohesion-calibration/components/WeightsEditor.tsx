@@ -1,21 +1,25 @@
 "use client";
 
 /**
- * WeightsEditor — Monaco JSON editor for cohesion engine weight overrides.
+ * WeightsEditor — Monaco JSON editor for cohesion engine weights.
  *
- * Self-contained: fetches current weights on mount, provides save/reset actions.
+ * Displays the active (or draft) Evaluation Version's values payload.
+ * Save writes to the draft via the Evaluation Version draft API.
  */
 
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { fetchCohesionWeights, updateCohesionWeights } from "@/lib/api";
+import { fetchCohesionWeights } from "@/lib/api";
+import type { EvaluationVersion, JsonPatchOp } from "@/lib/types/evaluation-version";
 
 interface WeightsEditorProps {
   onWeightsUpdated: () => void;
+  draft?: EvaluationVersion | null;
+  onPatchDraft?: (ops: JsonPatchOp[]) => Promise<void>;
 }
 
-/** Monaco JSON editor for weight overrides with test/save/reset. */
-export function WeightsEditor({ onWeightsUpdated }: WeightsEditorProps) {
+/** Monaco JSON editor for weight values with save to draft. */
+export function WeightsEditor({ onWeightsUpdated, draft, onPatchDraft }: WeightsEditorProps) {
   const [editorContent, setEditorContent] = useState<string>("{}");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -27,45 +31,49 @@ export function WeightsEditor({ onWeightsUpdated }: WeightsEditorProps) {
     import("@monaco-editor/react").then((mod) => setMonacoEditor(() => mod.default));
   }, []);
 
-  // Fetch current weights on mount
+  // Show draft values if available, otherwise fetch from GET /weights
   useEffect(() => {
-    fetchCohesionWeights().then((res) => {
-      if (res.success && res.data) {
-        setEditorContent(JSON.stringify(res.data, null, 2));
-      }
+    if (draft) {
+      setEditorContent(JSON.stringify(draft.payload.values, null, 2));
       setLoading(false);
-    });
-  }, []);
+    } else {
+      fetchCohesionWeights().then((res) => {
+        if (res.success && res.data) {
+          setEditorContent(JSON.stringify(res.data, null, 2));
+        }
+        setLoading(false);
+      });
+    }
+  }, [draft]);
 
   const handleSave = useCallback(async () => {
+    if (!draft || !onPatchDraft) {
+      toast.error("Create a draft before saving weight changes");
+      return;
+    }
     setSaving(true);
     try {
       const parsed = JSON.parse(editorContent);
-      const res = await updateCohesionWeights(parsed);
-      if (res.success) {
-        toast.success("Weight overrides applied");
-        onWeightsUpdated();
-      } else {
-        toast.error(res.error ?? "Failed to save weights");
-      }
+      await onPatchDraft([{ op: "replace", path: "/values", value: parsed }]);
+      toast.success("Draft values updated");
+      onWeightsUpdated();
     } catch {
       toast.error("Invalid JSON");
     } finally {
       setSaving(false);
     }
-  }, [editorContent, onWeightsUpdated]);
+  }, [editorContent, onWeightsUpdated, draft, onPatchDraft]);
 
   const handleReset = useCallback(async () => {
-    // Reset by sending empty overrides, then refetch
-    const res = await updateCohesionWeights({});
+    // Reload from GET /weights (defaults)
+    const res = await fetchCohesionWeights();
     if (res.success && res.data) {
       setEditorContent(JSON.stringify(res.data, null, 2));
-      toast.success("Weights reset to defaults");
-      onWeightsUpdated();
+      toast.success("Editor reset to published defaults");
     } else {
-      toast.error(res.error ?? "Failed to reset weights");
+      toast.error(res.error ?? "Failed to fetch weights");
     }
-  }, [onWeightsUpdated]);
+  }, []);
 
   if (loading) {
     return <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">Loading weights…</div>;

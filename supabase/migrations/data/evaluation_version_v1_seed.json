@@ -1,0 +1,602 @@
+{
+  "payload": {
+    "taxonomy": {
+      "skills": [
+        {
+          "key": "crafty_finisher",
+          "label": "Scores at the rim using touch, body control, and foul-drawing ability rather than pure athleticism.",
+          "order": 0
+        },
+        {
+          "key": "cutter",
+          "label": "Scores effectively by cutting to the basket off-ball.",
+          "order": 1
+        },
+        {
+          "key": "driver",
+          "label": "Consistently attacks the paint from the perimeter off the dribble, generating driving lane pressure and paint touches.",
+          "order": 2
+        },
+        {
+          "key": "high_flyer",
+          "label": "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, and transition finishes.",
+          "order": 3
+        },
+        {
+          "key": "isolation_scorer",
+          "label": "Beats defenders one-on-one in isolation situations through dribble moves and athleticism.",
+          "order": 4
+        },
+        {
+          "key": "low_post_player",
+          "label": "Scores effectively with back-to-basket moves in the low post.",
+          "order": 5
+        },
+        {
+          "key": "mid_post_player",
+          "label": "Scores effectively from the mid-post/elbow area using face-up moves and mid-range shooting.",
+          "order": 6
+        },
+        {
+          "key": "movement_shooter",
+          "label": "Hits shots while relocating off screens and handoffs (not just standing still).",
+          "order": 7
+        },
+        {
+          "key": "off_dribble_shooter",
+          "label": "Creates and converts shots off the dribble, including pull-ups and step-backs.",
+          "order": 8
+        },
+        {
+          "key": "offensive_rebounder",
+          "label": "Consistently crashes offensive boards and converts second-chance opportunities.",
+          "order": 9
+        },
+        {
+          "key": "passer",
+          "label": "Creates quality shot opportunities for teammates through vision and passing skill.",
+          "order": 10
+        },
+        {
+          "key": "perimeter_disruptor",
+          "label": "Disrupts ball handlers through active hands, pressure, and contest at the point of attack.",
+          "order": 11
+        },
+        {
+          "key": "pnr_ball_handler",
+          "label": "Initiates and scores/creates effectively as the ball handler in pick-and-roll actions.",
+          "order": 12
+        },
+        {
+          "key": "pnr_finisher",
+          "label": "Scores effectively as the screener in pick-and-roll actions, whether rolling, popping, or slipping.",
+          "order": 13
+        },
+        {
+          "key": "rebounder",
+          "label": "Consistently secures defensive boards through positioning, boxing out, and effort.",
+          "order": 14
+        },
+        {
+          "key": "rim_protector",
+          "label": "Deters and blocks shots at the rim, altering opponent finishing attempts.",
+          "order": 15
+        },
+        {
+          "key": "screen_setter",
+          "label": "Sets quality screens that free teammates for open shots.",
+          "order": 16
+        },
+        {
+          "key": "spot_up_shooter",
+          "label": "Hits catch-and-shoot three-pointers and mid-range shots from set positions.",
+          "order": 17
+        },
+        {
+          "key": "transition_threat",
+          "label": "Scores effectively in the open court on fast breaks.",
+          "order": 18
+        },
+        {
+          "key": "versatile_defender",
+          "label": "Can guard multiple positional groups effectively when switched.",
+          "order": 19
+        },
+        {
+          "key": "vertical_spacer",
+          "label": "Threatens vertically as a lob target and above-the-rim finisher, creating driving lanes for teammates.",
+          "order": 20
+        }
+      ],
+      "impact_traits": [
+        {
+          "key": "spacing",
+          "label": "Spacing",
+          "order": 0
+        },
+        {
+          "key": "finishing",
+          "label": "Finishing",
+          "order": 1
+        },
+        {
+          "key": "paint_touch",
+          "label": "Paint Touch",
+          "order": 2
+        },
+        {
+          "key": "anchor",
+          "label": "Anchor",
+          "order": 3
+        },
+        {
+          "key": "post_game",
+          "label": "Post Game",
+          "order": 4
+        },
+        {
+          "key": "pnr_screener",
+          "label": "Pnr Screener",
+          "order": 5
+        },
+        {
+          "key": "off_ball_impact",
+          "label": "Off Ball Impact",
+          "order": 6
+        },
+        {
+          "key": "shot_creation",
+          "label": "Shot Creation",
+          "order": 7
+        },
+        {
+          "key": "rebounding",
+          "label": "Rebounding",
+          "order": 8
+        },
+        {
+          "key": "transition",
+          "label": "Transition",
+          "order": 9
+        },
+        {
+          "key": "perimeter_defense",
+          "label": "Perimeter Defense",
+          "order": 10
+        },
+        {
+          "key": "interior_defense",
+          "label": "Interior Defense",
+          "order": 11
+        }
+      ],
+      "subscore_tree": [
+        {
+          "category_key": "offense",
+          "category_label": "Offense",
+          "subscores": [
+            {
+              "key": "spacing_creation_ratio",
+              "label": "Spacing / Creation Balance",
+              "order": 0
+            },
+            {
+              "key": "creation_offball_ratio",
+              "label": "Creation / Off-Ball Balance",
+              "order": 1
+            },
+            {
+              "key": "spacing_paint_touch_ratio",
+              "label": "Spacing / Paint Touch Balance",
+              "order": 2
+            },
+            {
+              "key": "paint_touch_total",
+              "label": "Paint Touch",
+              "order": 3
+            },
+            {
+              "key": "post_game_total",
+              "label": "Post Game",
+              "order": 4
+            },
+            {
+              "key": "pnr_pairing",
+              "label": "PnR Pairing",
+              "order": 5
+            },
+            {
+              "key": "collective_passing",
+              "label": "Collective Passing",
+              "order": 6
+            }
+          ]
+        },
+        {
+          "category_key": "defense",
+          "category_label": "Defense",
+          "subscores": [
+            {
+              "key": "anchor_total",
+              "label": "Anchor",
+              "order": 0
+            },
+            {
+              "key": "defensive_coverage",
+              "label": "Defensive Coverage",
+              "order": 1
+            },
+            {
+              "key": "defensive_gaps",
+              "label": "Defensive Gaps",
+              "order": 2
+            },
+            {
+              "key": "perimeter_defense_total",
+              "label": "Perimeter Defense",
+              "order": 3
+            },
+            {
+              "key": "interior_defense_total",
+              "label": "Interior Defense",
+              "order": 4
+            }
+          ]
+        },
+        {
+          "category_key": "versatility",
+          "category_label": "Versatility",
+          "subscores": [
+            {
+              "key": "rebounding",
+              "label": "Rebounding",
+              "order": 0
+            },
+            {
+              "key": "transition",
+              "label": "Transition",
+              "order": 1
+            },
+            {
+              "key": "rebound_transition_ratio",
+              "label": "Rebound / Transition Connection",
+              "order": 2
+            },
+            {
+              "key": "rebounding_spacing_deficit",
+              "label": "Rebounding Spacing Deficit",
+              "order": 3
+            },
+            {
+              "key": "accentuation_strength",
+              "label": "Accentuation Strength",
+              "order": 4
+            },
+            {
+              "key": "accentuation_weakness",
+              "label": "Accentuation Weakness",
+              "order": 5
+            }
+          ]
+        }
+      ]
+    },
+    "values": {
+      "tier_values": {
+        "None": 0.0,
+        "Capable": 1.5,
+        "Proficient": 3.0,
+        "Elite": 6.0,
+        "All-Time Great": 10.0
+      },
+      "composite_coefficients": {
+        "spacing_off_dribble": 0.5,
+        "paint_touch_finishing_scale": 0.08,
+        "paint_touch_vertical_spacer": 0.6,
+        "paint_touch_mid_post": 0.7,
+        "anchor_screen_setter": 0.3,
+        "post_game_mid_post": 0.7,
+        "pnr_screener_secondary_scale": 0.15,
+        "off_ball_finishing_scale": 0.08,
+        "off_ball_passer": 0.3,
+        "shot_creation_spacing": 0.3,
+        "shot_creation_paint_touch": 0.5,
+        "transition_passer_scale": 0.2,
+        "transition_high_flyer": 0.7,
+        "transition_driver": 0.3,
+        "transition_spot_up": 0.2,
+        "perimeter_defense_versatile_defender": 0.7,
+        "interior_defense_versatile_defender": 0.25,
+        "interior_defense_rebounder": 0.3
+      },
+      "composite_names": [
+        "spacing",
+        "finishing",
+        "paint_touch",
+        "anchor",
+        "post_game",
+        "pnr_screener",
+        "off_ball_impact",
+        "shot_creation",
+        "rebounding",
+        "transition",
+        "perimeter_defense",
+        "interior_defense"
+      ],
+      "theoretical_max": {
+        "spacing": 25.0,
+        "finishing": 20.0,
+        "paint_touch": 85.8,
+        "anchor": 41.0,
+        "post_game": 17.0,
+        "pnr_screener": 50.0,
+        "off_ball_impact": 61.0,
+        "shot_creation": 50.0,
+        "rebounding": 20.0,
+        "transition": 42.0,
+        "perimeter_defense": 17.0,
+        "interior_defense": 18.0
+      },
+      "normalization_breakpoint_percentile": 0.6,
+      "normalization_breakpoint_score": 6.0,
+      "min_distribution_size": 20,
+      "amplitude_map": {
+        "None": 0.0,
+        "Capable": 1.0,
+        "Proficient": 2.0,
+        "Elite": 3.0,
+        "All-Time Great": 4.0
+      },
+      "warm_body": 0.5,
+      "vd_ext": {
+        "None": 0,
+        "Capable": 2,
+        "Proficient": 3,
+        "Elite": 5,
+        "All-Time Great": 9
+      },
+      "pd_down": {
+        "None": 0,
+        "Capable": 2,
+        "Proficient": 4,
+        "Elite": 6,
+        "All-Time Great": 8
+      },
+      "rp_up": {
+        "None": 0,
+        "Capable": 2,
+        "Proficient": 3,
+        "Elite": 5,
+        "All-Time Great": 6
+      },
+      "rp_pd_boost": {
+        "None": 0.0,
+        "Capable": 0.0,
+        "Proficient": 0.0,
+        "Elite": 0.5,
+        "All-Time Great": 1.0
+      },
+      "peak_shift_pd_only": -1,
+      "peak_shift_rp_only": 1,
+      "height_min_inches": 72,
+      "height_max_inches": 88,
+      "bell": {
+        "steepness_midpoint": 80,
+        "down_steepness_base": 0.8,
+        "down_steepness_scale": 0.05,
+        "up_steepness_base": 1.0,
+        "up_steepness_scale": 0.1,
+        "base_range": 1,
+        "flat_top_divisor": 3
+      },
+      "rp_cross": {
+        "height_min": 80,
+        "scale": 0.7,
+        "height_window": 6
+      },
+      "pd_cross": {
+        "height_max": 75,
+        "scale": 0.5,
+        "height_window": 4
+      },
+      "defensive_gap_threshold": 1.5,
+      "defensive_gap_penalty_scale": -1.5,
+      "defensive_coverage_saturation_raw": 2.7,
+      "defensive_rebounding_minimum": 3.0,
+      "defensive_rebounding_penalty_scale": 2.0,
+      "defensive_guard_density_height_range": [
+        72,
+        79
+      ],
+      "defensive_transition_boost_divisor": 15.0,
+      "defensive_transition_boost_cap": 2.0,
+      "stacking_returns": [
+        1.0,
+        0.5,
+        0.25,
+        0.1
+      ],
+      "passing_primary_creator_weight": 0.6,
+      "passing_depth_weight": 0.4,
+      "rebounding_primary_weight": 0.45,
+      "rebounding_secondary_weight": 0.35,
+      "rebounding_depth_weight": 0.2,
+      "anchor_primary_weight": 0.6,
+      "anchor_secondary_weight": 0.3,
+      "anchor_depth_weight": 0.1,
+      "post_game_primary_weight": 0.5,
+      "post_game_secondary_weight": 0.35,
+      "post_game_depth_weight": 0.15,
+      "pnr_handler_support_scale": 0.35,
+      "pnr_handler_primary_weight": 0.65,
+      "pnr_handler_secondary_weight": 0.25,
+      "pnr_handler_depth_weight": 0.1,
+      "pnr_screener_primary_weight": 0.55,
+      "pnr_screener_secondary_weight": 0.3,
+      "pnr_screener_depth_weight": 0.15,
+      "pnr_pairing_quality_gate_floor": 0.7,
+      "pnr_pairing_quality_gate_scale": 0.3,
+      "synergy_scale_factors": {
+        "OFF-02": 0.05,
+        "OFF-03": 0.03,
+        "OFF-04": 0.04,
+        "OFF-12": 0.05,
+        "OFF-13": 0.03,
+        "OFF-14": 0.04,
+        "OFF-15": 0.05,
+        "OFF-16": 0.05,
+        "OFF-31": 0.04,
+        "OFF-32": 0.03
+      },
+      "synergy_boosted_skills": {
+        "OFF-02": [
+          "movement_shooter"
+        ],
+        "OFF-03": [
+          "movement_shooter"
+        ],
+        "OFF-04": [
+          "cutter"
+        ],
+        "OFF-12": [
+          "cutter"
+        ],
+        "OFF-13": [
+          "cutter"
+        ],
+        "OFF-14": [
+          "cutter"
+        ],
+        "OFF-15": [
+          "vertical_spacer"
+        ],
+        "OFF-16": [
+          "vertical_spacer"
+        ],
+        "OFF-31": [
+          "transition_threat"
+        ],
+        "OFF-32": [
+          "high_flyer"
+        ]
+      },
+      "synergy_penalty_severity": 5.0,
+      "off_13_raw_spacing_threshold": 15.0,
+      "synergy_creator_threshold": 6.0,
+      "cohesion_rollup_weights": {
+        "spacing_creation_ratio": 0.1,
+        "creation_offball_ratio": 0.05,
+        "spacing_paint_touch_ratio": 0.05,
+        "paint_touch_total": 0.07,
+        "post_game_total": 0.03,
+        "pnr_pairing": 0.03,
+        "anchor_total": 0.07,
+        "collective_passing": 0.05,
+        "rebounding": 0.05,
+        "transition": 0.05,
+        "rebound_transition_ratio": 0.04,
+        "rebounding_spacing_deficit": 0.03,
+        "defensive_coverage": 0.12,
+        "defensive_gaps": 0.12,
+        "perimeter_defense_total": 0.03,
+        "interior_defense_total": 0.03,
+        "accentuation_strength": 0.04,
+        "accentuation_weakness": 0.04
+      },
+      "ratio_dead_zone": 0.2,
+      "ratio_asymmetric_full_penalty": 1.0,
+      "ratio_default_penalty": 0.5,
+      "ratio_min_denominator": 0.1,
+      "rebounding_spacing_deficit_threshold": 5.0,
+      "accentuation_strength_threshold": 7.5,
+      "accentuation_weakness_threshold": 2.5,
+      "accentuation_fallback_strength_threshold": 6.0,
+      "accentuation_fallback_weakness_threshold": 2.0,
+      "accentuation_top_n": 3,
+      "accentuation_min_strengths": 1,
+      "accentuation_complementary_pairs": [
+        [
+          "spacing",
+          "paint_touch"
+        ],
+        [
+          "spacing",
+          "post_game"
+        ],
+        [
+          "shot_creation",
+          "off_ball_impact"
+        ],
+        [
+          "shot_creation",
+          "pnr_screener"
+        ],
+        [
+          "perimeter_defense",
+          "interior_defense"
+        ],
+        [
+          "perimeter_defense",
+          "transition"
+        ]
+      ],
+      "note_limit_per_type": 3,
+      "note_elite_composite_threshold": 8.0,
+      "note_stacked_composite_threshold": 6.0,
+      "note_stacked_player_count": 2,
+      "note_missing_composite_threshold": 2.0,
+      "note_weak_composite_avg_threshold": 4.0,
+      "note_covered_composite_threshold": 6.0,
+      "note_min_roster_size": 5,
+      "note_capable_passer_threshold": 3.0,
+      "note_elite_bell_amplitude_threshold": 3.5,
+      "note_severity_min": 0.0,
+      "note_severity_max": 1.0,
+      "roster_rollup_weights": {
+        "starting_5": 0.45,
+        "depth": 0.25,
+        "archetype_diversity": 0.2,
+        "floor": 0.1
+      },
+      "lineup_only_rollup_weights": {
+        "starting_5": 0.9,
+        "depth": 0.0,
+        "archetype_diversity": 0.1,
+        "floor": 0.0
+      },
+      "lineup_archetype_max": 3,
+      "star_rating_max": 5.0,
+      "viable_lineup_threshold": 2.75,
+      "depth_viable_ratio_weight": 0.6,
+      "depth_quality_weight": 0.4,
+      "total_lineups_full_roster": 126,
+      "archetype_labels": [
+        "offensive",
+        "defensive",
+        "transition",
+        "balanced",
+        "paint",
+        "shooting"
+      ]
+    },
+    "formula_refs": {
+      "spacing": "spacing_v1",
+      "finishing": "finishing_v1",
+      "paint_touch": "paint_touch_v1",
+      "anchor": "anchor_v1",
+      "post_game": "post_game_v1",
+      "pnr_screener": "pnr_screener_v1",
+      "off_ball_impact": "off_ball_impact_v1",
+      "shot_creation": "shot_creation_v1",
+      "rebounding": "rebounding_v1",
+      "transition": "transition_v1",
+      "perimeter_defense": "perimeter_defense_v1",
+      "interior_defense": "interior_defense_v1"
+    },
+    "meta": {
+      "version_schema": 1,
+      "bootstrap_source": "weights.py + skills.py"
+    }
+  },
+  "payload_hash": "aa52bc87131c72fd11a1308a492d3c39ed68da5711780b8d9da644389ec93cf3"
+}
