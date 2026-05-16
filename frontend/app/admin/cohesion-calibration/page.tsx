@@ -33,6 +33,11 @@ import { useLineupSlots } from "./hooks/useLineupSlots";
 import { useTestHistory } from "./hooks/useTestHistory";
 import { useTeamFill } from "./hooks/useTeamFill";
 import { useCohesionWeights } from "./hooks/useCohesionWeights";
+import { useEvaluationVersion } from "./hooks/useEvaluationVersion";
+import { EvaluationVersionHeader } from "./components/EvaluationVersionHeader";
+import { DraftBanner } from "./components/DraftBanner";
+import { DiffDrawer } from "./components/DiffDrawer";
+import { PublishDialog } from "./components/PublishDialog";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -79,6 +84,22 @@ export default function CohesionCalibrationPage() {
   } = useTeamFill();
 
   const { cohesionWeights, reloadWeights } = useCohesionWeights();
+
+  const {
+    active: activeVersion,
+    draft: draftVersion,
+    diff: versionDiff,
+    loading: versionLoading,
+    createDraft: handleCreateDraft,
+    patch: handlePatchDraft,
+    validate: handleValidateDraft,
+    publish: handlePublishDraft,
+    discardDraft: handleDiscardDraft,
+  } = useEvaluationVersion();
+
+  // --- Diff drawer + publish dialog state ---
+  const [diffDrawerOpen, setDiffDrawerOpen] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
   // --- Left panel state ---
   const [selectedComposites, setSelectedComposites] = useState<PlayerCompositeData | null>(null);
@@ -348,7 +369,23 @@ export default function CohesionCalibrationPage() {
               Cohesion Calibration
             </h1>
           </div>
+          <EvaluationVersionHeader
+            active={activeVersion}
+            draft={draftVersion}
+            loading={versionLoading}
+            onCreateDraft={handleCreateDraft}
+            onDiscardDraft={handleDiscardDraft}
+          />
         </header>
+
+        {/* Draft banner */}
+        {draftVersion && (
+          <DraftBanner
+            changeCount={versionDiff.length}
+            onViewDiff={() => setDiffDrawerOpen(true)}
+            onPublish={() => setPublishDialogOpen(true)}
+          />
+        )}
 
         {/* Three-panel layout */}
         <div id="cohesion-cal-panels" className="flex-1 overflow-hidden flex">
@@ -492,7 +529,7 @@ export default function CohesionCalibrationPage() {
                 />
               )}
               {centerTab === "weights" && (
-                <WeightsEditor onWeightsUpdated={handleWeightsUpdated} />
+                <WeightsEditor onWeightsUpdated={handleWeightsUpdated} draft={draftVersion} onPatchDraft={handlePatchDraft} />
               )}
             </div>
           </div>
@@ -513,6 +550,27 @@ export default function CohesionCalibrationPage() {
           </div>
         </div>
       </div>
+
+      {/* Diff drawer */}
+      <DiffDrawer
+        open={diffDrawerOpen}
+        entries={versionDiff}
+        onRevert={handlePatchDraft}
+        onClose={() => setDiffDrawerOpen(false)}
+      />
+
+      {/* Publish dialog */}
+      <PublishDialog
+        open={publishDialogOpen}
+        suggestedSlug={
+          activeVersion
+            ? `cohesion-v${(activeVersion.slug.match(/\d+/) ?? ["1"])[0] ? Number((activeVersion.slug.match(/\d+/) ?? ["1"])[0]) + 1 : 2}`
+            : "cohesion-v2"
+        }
+        onValidate={handleValidateDraft}
+        onPublish={handlePublishDraft}
+        onClose={() => setPublishDialogOpen(false)}
+      />
     </>
   );
 }
