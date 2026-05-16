@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import re
+from uuid import UUID
 
 from flask import Blueprint, jsonify, request
 
@@ -25,6 +26,7 @@ evaluation_versions_bp = Blueprint(
 )
 
 SLUG_PATTERN = re.compile(r"^cohesion-[a-z0-9-]+$")
+MAX_CHANGELOG_LENGTH = 2000
 
 
 def _version_dict(v) -> dict:
@@ -35,6 +37,15 @@ def _version_dict(v) -> dict:
         "status": v.status,
         "payload": v.payload,
     }
+
+
+def _validate_uuid(value: str, label: str = "id") -> str | None:
+    """Return None if valid UUID, or error message."""
+    try:
+        UUID(value)
+        return None
+    except (ValueError, AttributeError):
+        return f"Invalid {label}: {value}"
 
 
 # ---------------------------------------------------------------------------
@@ -63,12 +74,12 @@ def get_active():
             "data": _version_dict(version),
             "error": None,
         })
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to fetch active Evaluation Version")
         return jsonify({
             "success": False,
             "data": None,
-            "error": str(exc),
+            "error": "Failed to fetch active Evaluation Version",
         }), 500
 
 
@@ -84,8 +95,13 @@ def get_draft():
 
 
 @evaluation_versions_bp.route("/<version_id>", methods=["GET"])
+@require_admin
 def get_version(version_id: str):
-    """Return a single Evaluation Version by ID."""
+    """Return a single Evaluation Version by ID (admin only)."""
+    uuid_err = _validate_uuid(version_id, "version_id")
+    if uuid_err:
+        return jsonify({"success": False, "data": None, "error": uuid_err}), 400
+
     try:
         version = repo.get_version(version_id)
         return jsonify({
@@ -93,11 +109,12 @@ def get_version(version_id: str):
             "data": _version_dict(version),
             "error": None,
         })
-    except Exception as exc:
+    except Exception:
+        logger.exception("Failed to fetch Evaluation Version %s", version_id)
         return jsonify({
             "success": False,
             "data": None,
-            "error": str(exc),
+            "error": "Evaluation Version not found",
         }), 404
 
 
@@ -112,6 +129,12 @@ def create_draft():
     """Create a new draft from the active published Version."""
     body = request.get_json(silent=True) or {}
     parent_id = body.get("parent_id")
+
+    if parent_id:
+        uuid_err = _validate_uuid(parent_id, "parent_id")
+        if uuid_err:
+            return jsonify({"success": False, "data": None, "error": uuid_err}), 400
+
     try:
         draft = repo.create_draft_from_published(parent_id)
         return jsonify({
@@ -120,19 +143,23 @@ def create_draft():
             "error": None,
         }), 201
     except ValueError as exc:
-        if str(exc) == "draft_already_exists":
-            return jsonify({
-                "success": False,
-                "data": None,
-                "error": "draft_already_exists",
-            }), 409
-        raise
+        code = str(exc)
+        status = 409 if code == "draft_already_exists" else 400
+        return jsonify({
+            "success": False,
+            "data": None,
+            "error": code,
+        }), status
 
 
 @evaluation_versions_bp.route("/drafts/<draft_id>", methods=["PATCH"])
 @require_admin
 def patch_draft(draft_id: str):
     """Apply JSON-Patch operations to a draft's payload."""
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return jsonify({"success": False, "data": None, "error": uuid_err}), 400
+
     body = request.get_json(silent=True) or {}
     patch = body.get("patch", [])
     if not patch:
@@ -160,11 +187,22 @@ def patch_draft(draft_id: str):
 @evaluation_versions_bp.route("/drafts/<draft_id>/validate", methods=["POST"])
 @require_admin
 def validate_draft(draft_id: str):
-    """Run the publish gate. Does not mutate."""
+    """Run the publish gate on a draft. Does not mutate."""
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return jsonify({"success": False, "data": None, "error": uuid_err}), 400
+
     body = request.get_json(silent=True) or {}
     changelog_note = body.get("changelog_note")
 
     version = repo.get_version(draft_id)
+    if version.status != "draft":
+        return jsonify({
+            "success": False,
+            "data": None,
+            "error": "can_only_validate_draft",
+        }), 400
+
     violations = validator.validate(version.payload, changelog_note)
 
     return jsonify({
@@ -181,6 +219,10 @@ def validate_draft(draft_id: str):
 @require_admin
 def publish_draft(draft_id: str):
     """Validate and atomically publish a draft."""
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return jsonify({"success": False, "data": None, "error": uuid_err}), 400
+
     body = request.get_json(silent=True) or {}
     slug = body.get("slug", "")
     changelog_note = body.get("changelog_note", "")
@@ -191,6 +233,14 @@ def publish_draft(draft_id: str):
             "success": False,
             "data": None,
             "error": f"slug must match ^cohesion-[a-z0-9-]+$, got '{slug}'",
+        }), 400
+
+    # Changelog length cap
+    if len(changelog_note) > MAX_CHANGELOG_LENGTH:
+        return jsonify({
+            "success": False,
+            "data": None,
+            "error": f"changelog_note exceeds {MAX_CHANGELOG_LENGTH} characters",
         }), 400
 
     # Run publish gate
@@ -213,12 +263,12 @@ def publish_draft(draft_id: str):
             "data": _version_dict(published),
             "error": None,
         })
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to publish draft")
         return jsonify({
             "success": False,
             "data": None,
-            "error": str(exc),
+            "error": "Failed to publish draft",
         }), 500
 
 
@@ -226,9 +276,20 @@ def publish_draft(draft_id: str):
 @require_admin
 def discard_draft(draft_id: str):
     """Hard-delete a draft Version."""
-    repo.discard_draft(draft_id)
-    return jsonify({
-        "success": True,
-        "data": None,
-        "error": None,
-    })
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return jsonify({"success": False, "data": None, "error": uuid_err}), 400
+
+    try:
+        repo.discard_draft(draft_id)
+        return jsonify({
+            "success": True,
+            "data": None,
+            "error": None,
+        })
+    except ValueError:
+        return jsonify({
+            "success": False,
+            "data": None,
+            "error": "draft_not_found",
+        }), 404

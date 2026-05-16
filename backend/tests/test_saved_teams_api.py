@@ -194,6 +194,11 @@ def fake_supabase(monkeypatch):
     # Patch evaluation_versions repo to use the same fake DB
     monkeypatch.setattr(eval_versions_repo, "get_supabase", lambda: db)
     monkeypatch.setattr(eval_versions_repo, "run_query", lambda fn: fn())
+    # Patch the module-level import in saved_teams
+    from services.cohesion_engine.engine import EvaluationVersion as _EV
+    monkeypatch.setattr(saved_teams, "get_active_eval_version", lambda: _EV(
+        id="v1-eval-version-id", slug="cohesion-v1", status="published", payload={},
+    ))
     return db
 
 

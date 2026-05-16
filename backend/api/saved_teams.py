@@ -11,6 +11,7 @@ from typing import Any
 from flask import Blueprint, g, jsonify, request
 
 from api.auth import require_user
+from services.evaluation_versions.repo import get_active as get_active_eval_version
 from services.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -878,8 +879,7 @@ def create_saved_team():
                 _player_insert_rows(saved_team_id, players)
             ).execute()
             # Resolve active Evaluation Version FK for score-time binding
-            from services.evaluation_versions.repo import get_active as _get_active_eval_version
-            active_eval_version = _get_active_eval_version()
+            active_eval_version = get_active_eval_version()
 
             supabase.table("saved_team_evaluations").insert({
                 "saved_team_id": saved_team_id,

@@ -7,12 +7,17 @@ is responsible for verifying admin auth before calling write methods.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from typing import Any
 
 from services.cohesion_engine.engine import EvaluationVersion
 from services.supabase_client import get_supabase, run_query
+
+# Allowed JSON Pointer prefixes for patch operations
+_WRITABLE_PREFIXES = ("/values/", "/taxonomy/", "/formula_refs/", "/meta/")
+_MAX_PATCH_DEPTH = 5
 
 
 def _row_to_version(row: dict[str, Any]) -> EvaluationVersion:
@@ -86,7 +91,7 @@ def get_version(version_id: str) -> EvaluationVersion:
 def create_draft_from_published(parent_id: str | None = None) -> EvaluationVersion:
     """Clone the active (or specified) published Version into a new draft.
 
-    Raises ValueError if a draft already exists.
+    Raises ValueError if a draft already exists or parent is not published.
     """
     existing_draft = get_draft()
     if existing_draft is not None:
@@ -94,6 +99,8 @@ def create_draft_from_published(parent_id: str | None = None) -> EvaluationVersi
 
     if parent_id:
         parent = get_version(parent_id)
+        if parent.status != "published":
+            raise ValueError("parent_must_be_published")
     else:
         parent = get_active()
 
@@ -115,14 +122,13 @@ def create_draft_from_published(parent_id: str | None = None) -> EvaluationVersi
 def patch_draft(draft_id: str, patch: list[dict]) -> EvaluationVersion:
     """Apply JSON-Patch-style operations to a draft's payload.
 
-    Only supports 'replace' and 'add' ops on payload paths.
-    Raises ValueError if the Version is not a draft.
+    Only supports 'replace', 'add', and 'remove' ops on allowed payload paths.
+    Raises ValueError if the Version is not a draft or path is invalid.
     """
     version = get_version(draft_id)
     if version.status != "draft":
         raise ValueError("can_only_patch_draft")
 
-    import copy
     payload = copy.deepcopy(version.payload)
 
     for op in patch:
@@ -130,19 +136,26 @@ def patch_draft(draft_id: str, patch: list[dict]) -> EvaluationVersion:
         path = op.get("path", "")
         value = op.get("value")
 
+        # Validate path against allowlist
+        if not any(path.startswith(prefix) for prefix in _WRITABLE_PREFIXES):
+            raise ValueError(f"patch_path_not_allowed: {path}")
+
         # Parse JSON pointer path like "/values/tier_values/Elite"
         parts = [p for p in path.split("/") if p]
-        if not parts:
-            continue
+        if not parts or len(parts) > _MAX_PATCH_DEPTH:
+            raise ValueError(f"invalid_patch_path: {path}")
 
-        target = payload
-        for part in parts[:-1]:
-            target = target[part]
+        try:
+            target = payload
+            for part in parts[:-1]:
+                target = target[part]
 
-        if operation in ("replace", "add"):
-            target[parts[-1]] = value
-        elif operation == "remove":
-            del target[parts[-1]]
+            if operation in ("replace", "add"):
+                target[parts[-1]] = value
+            elif operation == "remove":
+                del target[parts[-1]]
+        except (KeyError, TypeError) as exc:
+            raise ValueError(f"invalid_patch_path: {path} ({exc})") from exc
 
     client = get_supabase()
     result = run_query(
@@ -166,51 +179,37 @@ def publish_draft(
     changelog_note: str,
     user_id: str | None = None,
 ) -> EvaluationVersion:
-    """Atomically publish a draft: deactivate current, activate new.
+    """Atomically publish a draft via Postgres RPC.
 
-    The caller must validate before calling this. Raises ValueError on
-    constraint violations.
+    The caller must validate before calling this. The RPC function
+    deactivates the current active Version and promotes the draft
+    in a single transaction.
     """
     client = get_supabase()
-
-    # Step 1: deactivate current active version
-    run_query(
-        lambda: client.table("evaluation_versions")
-        .update({"is_active": False})
-        .eq("is_active", True)
-        .execute()
-    )
-
-    # Step 2: promote draft to published + active
-    update_data: dict[str, Any] = {
-        "slug": slug,
-        "status": "published",
-        "changelog_note": changelog_note,
-        "is_active": True,
-        "published_at": "now()",
+    params: dict[str, Any] = {
+        "p_draft_id": draft_id,
+        "p_slug": slug,
+        "p_changelog_note": changelog_note,
     }
     if user_id:
-        update_data["published_by"] = user_id
+        params["p_published_by"] = user_id
 
-    result = run_query(
-        lambda: client.table("evaluation_versions")
-        .update(update_data)
-        .eq("id", draft_id)
-        .execute()
+    run_query(
+        lambda: client.rpc("publish_evaluation_version", params).execute()
     )
 
-    if not result.data:
-        raise ValueError("draft_not_found")
-    return _row_to_version(result.data[0])
+    return get_version(draft_id)
 
 
 def discard_draft(draft_id: str) -> None:
-    """Hard-delete a draft Version."""
+    """Hard-delete a draft Version. Raises ValueError if not found."""
     client = get_supabase()
-    run_query(
+    result = run_query(
         lambda: client.table("evaluation_versions")
         .delete()
         .eq("id", draft_id)
         .eq("status", "draft")
         .execute()
     )
+    if not result.data:
+        raise ValueError("draft_not_found_or_not_draft")

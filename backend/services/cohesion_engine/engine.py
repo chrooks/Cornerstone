@@ -68,11 +68,6 @@ class CohesionEngine:
         """Return a copy of the handler registry (for publish gate validation)."""
         return dict(cls._registry)
 
-    @classmethod
-    def _clear_registry(cls) -> None:
-        """Reset the registry. Test-only — never call in production."""
-        cls._registry.clear()
-
     def __init__(self, version: EvaluationVersion) -> None:
         self.version = version
 
