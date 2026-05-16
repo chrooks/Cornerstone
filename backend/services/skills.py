@@ -1,10 +1,13 @@
 """
-skills.py — Single source of truth for the skill taxonomy.
+skills.py — HISTORICAL REFERENCE / BOOTSTRAP ONLY for the skill taxonomy.
 
-To add a skill:
-  1. Add it to the appropriate frozenset below (HIGH / MODERATE / LOW confidence)
-  2. Add its definition to SKILL_DEFINITIONS
-  3. Mirror the change in frontend/lib/skills.ts
+Runtime taxonomy now comes from the active Evaluation Version row in the
+database (payload.taxonomy.skills). This file seeds the initial cohesion-v1
+Version via backend/scripts/dump_v1_blob.py.
+
+The pipeline (stat evaluation, Claude assessment, compositing) still reads
+these constants for Skill Profile creation. The Evaluation Version controls
+only cohesion scoring math, not the pipeline.
 
 Confidence tiers determine how skills are rated:
   HIGH      — stat pipeline is reliable; Claude is NOT called

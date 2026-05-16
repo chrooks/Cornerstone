@@ -37,20 +37,19 @@ The Engine v2 thesis lands here: **what is scored** (Skill list, Impact Trait li
 
 ## Progress
 
-- [ ] M1: Schema for `evaluation_versions` + bootstrap migration writes `cohesion-v1` from current Python constants.
-- [ ] M2: `CohesionEngine` class with handler registry decorator. All existing modules import-time-register their handlers. No functional change yet.
-- [ ] M3: Refactor formula modules (`composites.py`, `cohesion.py`, `roster.py`, `synergies.py`, `accentuation.py`, `bell_curve.py`, `ratios.py`) to read values from `engine.version.values` instead of importing `weights.py` constants directly. `evaluate_roster()` becomes a thin wrapper that instantiates `CohesionEngine(version=active_version())` and dispatches.
-- [ ] M4: Backend API for Evaluation Versions (`/api/evaluation-versions/*`) — list, get active, get draft, create draft from published, patch draft, validate, publish, discard draft.
-- [ ] M5: Editor grafted onto `/admin/cohesion-calibration/page.tsx` — `EvaluationVersionHeader`, `DraftBanner`, `DiffDrawer`, `PublishDialog`. Existing `WeightsEditor`, `LineupTester`, etc. continue to work but now bind to the draft Version when one exists.
-- [ ] M6: Saved Team FK conversion — add `evaluation_version_id uuid` FK on `saved_team_evaluations`, backfill from existing `evaluation_version` text, drop text column. Update read/write paths.
-- [ ] M7: Cleanup — header comments on `weights.py` and `services/skills.py` marking them historical reference, dead-code audit of `_WEIGHT_OVERRIDES`, manual end-to-end check, commit + PR.
+- [x] M1: Schema for `evaluation_versions` + bootstrap migration writes `cohesion-v1` from current Python constants.
+- [x] M2: `CohesionEngine` class with handler registry decorator. All existing modules import-time-register their handlers. No functional change yet.
+- [x] M3: Refactor formula modules (`composites.py`, `cohesion.py`, `roster.py`, `synergies.py`, `accentuation.py`, `bell_curve.py`, `ratios.py`) to read values from `engine.version.values` instead of importing `weights.py` constants directly. `evaluate_roster()` becomes a thin wrapper that instantiates `CohesionEngine(version=active_version())` and dispatches.
+- [x] M4: Backend API for Evaluation Versions (`/api/evaluation-versions/*`) — list, get active, get draft, create draft from published, patch draft, validate, publish, discard draft.
+- [x] M5: Editor grafted onto `/admin/cohesion-calibration/page.tsx` — `EvaluationVersionHeader`, `DraftBanner`, `DiffDrawer`, `PublishDialog`. Existing `WeightsEditor`, `LineupTester`, etc. continue to work but now bind to the draft Version when one exists.
+- [x] M6: Saved Team FK conversion — add `evaluation_version_id uuid` FK on `saved_team_evaluations`, backfill from existing `evaluation_version` text, drop text column. Update read/write paths.
+- [x] M7: Cleanup — header comments on `weights.py` and `services/skills.py` marking them historical reference, dead-code audit of `_WEIGHT_OVERRIDES`, manual end-to-end check, commit + PR.
 
 ## Surprises & Discoveries
 
-Empty at start. Populate as work proceeds. Each entry:
-
-- Observation: …
-  Evidence: …
+- Observation: Dual-path imports (`backend.services.cohesion_engine` vs `services.cohesion_engine`) cause handler registry collisions at test collection time.
+  Evidence: `conftest.py` adds both REPO_ROOT and BACKEND_DIR to `sys.path`, creating two distinct Python module trees for the same source files.
+  Resolution: Made handler registration idempotent — first registration wins, subsequent registrations of the same name are no-ops.
 
 ## Decision Log
 
