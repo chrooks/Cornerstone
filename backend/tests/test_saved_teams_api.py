@@ -10,6 +10,7 @@ import pytest
 
 from app import create_app
 from api import auth, saved_teams
+from services.evaluation_versions import repo as eval_versions_repo
 
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
@@ -69,6 +70,11 @@ class _FakeQuery:
         self._limit = value
         return self
 
+    def single(self):
+        self._limit = 1
+        self._single = True
+        return self
+
     def execute(self):
         if self._insert_payload is not None:
             return _FakeResult(self.db.insert(self.table_name, self._insert_payload))
@@ -77,6 +83,8 @@ class _FakeQuery:
         if self._delete:
             return _FakeResult(self.db.delete(self.table_name, self._filters))
         rows = self.db.select(self.table_name, self._filters, self._in_filters)
+        if getattr(self, "_single", False) and rows:
+            return _FakeResult(rows[0])
         if self._limit is not None:
             rows = rows[: self._limit]
         return _FakeResult(rows)
@@ -126,6 +134,15 @@ class _FakeSupabase:
             "saved_teams": [],
             "saved_team_players": [],
             "saved_team_evaluations": [],
+            "evaluation_versions": [
+                {
+                    "id": "v1-eval-version-id",
+                    "slug": "cohesion-v1",
+                    "status": "published",
+                    "is_active": True,
+                    "payload": {},
+                }
+            ],
         }
 
     def table(self, name: str):
@@ -174,6 +191,9 @@ def fake_supabase(monkeypatch):
     db = _FakeSupabase()
     monkeypatch.setattr(auth, "_verify_jwt", lambda _token: {"sub": USER_ID})
     monkeypatch.setattr(saved_teams, "get_supabase", lambda: db)
+    # Patch evaluation_versions repo to use the same fake DB
+    monkeypatch.setattr(eval_versions_repo, "get_supabase", lambda: db)
+    monkeypatch.setattr(eval_versions_repo, "run_query", lambda fn: fn())
     return db
 
 
@@ -338,7 +358,7 @@ def test_save_team_persists_valid_standard_rotation(client, fake_supabase):
     assert [row["slot"] for row in fake_supabase.rows["saved_team_players"]] == list(range(1, 10))
     saved_evaluation = fake_supabase.rows["saved_team_evaluations"][0]
     assert saved_evaluation["saved_team_id"] == saved_team["id"]
-    assert saved_evaluation["evaluation_version"] == "cohesion-v1"
+    assert saved_evaluation["evaluation_version_id"] is not None
     assert saved_evaluation["star_rating"] == 3.9
     assert saved_evaluation["starting_lineup_score"] == 4.1
     assert saved_evaluation["team_description"] == "A sharp Hakeem build with real defensive bite."
@@ -835,7 +855,7 @@ def _seed_existing_saved_team(fake_supabase):
     fake_supabase.rows["saved_team_evaluations"].append({
         "id": "saved-eval-1",
         "saved_team_id": "saved-team-1",
-        "evaluation_version": "cohesion-v1",
+        "evaluation_version_id": "v1-eval-version-id",
         "star_rating": 4.2,
         "starting_lineup_score": 4.5,
         "team_description": "A real saved evaluation.",
@@ -965,7 +985,7 @@ def test_list_saved_teams_returns_current_user_summaries(client, fake_supabase):
     fake_supabase.rows["saved_team_evaluations"].append({
         "id": "saved-eval-1",
         "saved_team_id": "saved-team-1",
-        "evaluation_version": "cohesion-v1",
+        "evaluation_version_id": "v1-eval-version-id",
         "star_rating": 4.2,
         "starting_lineup_score": 4.5,
         "team_description": "A real saved evaluation.",
@@ -1037,7 +1057,7 @@ def test_get_saved_team_detail_returns_full_historical_eval_payload(client, fake
     fake_supabase.rows["saved_team_evaluations"].append({
         "id": "saved-eval-1",
         "saved_team_id": "saved-team-1",
-        "evaluation_version": "cohesion-v1",
+        "evaluation_version_id": "v1-eval-version-id",
         "star_rating": 3.9,
         "starting_lineup_score": 4.1,
         "team_description": "A sharp Hakeem build with real defensive bite.",
@@ -1086,7 +1106,7 @@ def _seed_shared_team(fake_supabase, *, visibility: str = "public") -> str:
     fake_supabase.rows["saved_team_evaluations"].append({
         "id": "shared-eval-1",
         "saved_team_id": saved_team_id,
-        "evaluation_version": "cohesion-v1",
+        "evaluation_version_id": "v1-eval-version-id",
         "star_rating": 4.0,
         "starting_lineup_score": 4.3,
         "team_description": "Shared evaluation narrative.",

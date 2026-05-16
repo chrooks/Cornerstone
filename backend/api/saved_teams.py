@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 saved_teams_bp = Blueprint("saved_teams", __name__, url_prefix="/api")
 
-EVALUATION_VERSION = "cohesion-v1"
+EVALUATION_VERSION = "cohesion-v1"  # HISTORICAL — FK uses evaluation_version_id now
 VALID_TEAM_SIZES = {5, 9, 12}
 TEAM_SIZE_LABELS = {5: "Lineup", 9: "Rotation", 12: "Roster"}
 
@@ -335,14 +335,20 @@ def _players_for_saved_team(
 def _latest_evaluation_for_saved_team(supabase, saved_team_id: str) -> dict[str, Any] | None:
     res = (
         supabase.table("saved_team_evaluations")
-        .select("*")
+        .select("*, evaluation_versions(slug)")
         .eq("saved_team_id", saved_team_id)
         .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
     rows = res.data or []
-    return rows[0] if rows else None
+    if not rows:
+        return None
+    row = rows[0]
+    # Flatten the joined slug into `evaluation_version` for frontend compat
+    ev = row.pop("evaluation_versions", None)
+    row["evaluation_version"] = ev["slug"] if ev and isinstance(ev, dict) else None
+    return row
 
 
 def _extract_starting_lineup_score(evaluation: dict[str, Any]) -> Any:
@@ -871,9 +877,13 @@ def create_saved_team():
             supabase.table("saved_team_players").insert(
                 _player_insert_rows(saved_team_id, players)
             ).execute()
+            # Resolve active Evaluation Version FK for score-time binding
+            from services.evaluation_versions.repo import get_active as _get_active_eval_version
+            active_eval_version = _get_active_eval_version()
+
             supabase.table("saved_team_evaluations").insert({
                 "saved_team_id": saved_team_id,
-                "evaluation_version": EVALUATION_VERSION,
+                "evaluation_version_id": active_eval_version.id,
                 "star_rating": evaluation.get("star_rating"),
                 "starting_lineup_score": _extract_starting_lineup_score(evaluation),
                 "team_description": evaluation.get("team_description"),
