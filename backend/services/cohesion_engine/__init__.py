@@ -1,14 +1,24 @@
 """
 Public entry point for the cohesion engine.
 
-The real roster evaluator lands in a later phase. This stub gives callers a
-stable import target while Phase 1 establishes the package, types, and weights.
+Re-exports the core evaluation functions and the CohesionEngine class.
+Eagerly imports handler modules so @CohesionEngine.handler decorators
+run at import time.
 """
 
 from __future__ import annotations
 
+from .engine import CohesionEngine, EvaluationVersion
 from .roster import evaluate_roster
 from .types import RosterEvaluation
 
+# Eager-load handler modules so decorators populate the registry
+from . import handlers  # noqa: F401
 
-__all__ = ["evaluate_roster", "RosterEvaluation"]
+
+__all__ = [
+    "CohesionEngine",
+    "EvaluationVersion",
+    "evaluate_roster",
+    "RosterEvaluation",
+]
