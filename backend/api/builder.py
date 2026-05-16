@@ -32,6 +32,7 @@ from services.cohesion_engine.cohesion import evaluate_lineup
 from services.cohesion_engine.composites import ensure_distributions
 from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
 from services.cohesion_engine.types import RosterEvaluation
+from services.evaluation_versions.repo import get_active as get_active_eval_version
 from services.players_service import CURRENT_SEASON
 
 logger = logging.getLogger(__name__)
@@ -128,16 +129,16 @@ def _rp_pd_boost_details(
     return details
 
 
-def _boosted_bell_curve_payload(starting_players: list[dict[str, Any]]) -> tuple[list[dict[str, Any] | None], list[dict[str, Any]]]:
+def _boosted_bell_curve_payload(starting_players: list[dict[str, Any]], values: dict[str, Any]) -> tuple[list[dict[str, Any] | None], list[dict[str, Any]]]:
     """Compute the boosted defensive curves used by the cohesion engine."""
-    boosted_lineup = apply_rp_pd_boost(starting_players)
+    boosted_lineup = apply_rp_pd_boost(starting_players, values)
     boosted_bell_curves: list[dict[str, Any] | None] = []
     for player in boosted_lineup:
         height_inches = parse_height_inches(player.get("height"))
         if height_inches is None:
             boosted_bell_curves.append(None)
             continue
-        params = compute_bell_params(player.get("skills", {}), height_inches)
+        params = compute_bell_params(player.get("skills", {}), height_inches, values)
         boosted_bell_curves.append({
             "amplitude": params["amplitude"],
             "peak": params["peak_center"],
@@ -149,12 +150,12 @@ def _boosted_bell_curve_payload(starting_players: list[dict[str, Any]]) -> tuple
     return boosted_bell_curves, _rp_pd_boost_details(starting_players, boosted_lineup)
 
 
-def _serialize_lineup(lineup, starting_players: list[dict[str, Any]] | None = None) -> dict:
+def _serialize_lineup(lineup, starting_players: list[dict[str, Any]] | None = None, values: dict[str, Any] | None = None) -> dict:
     """Serialize a cohesion LineupCohesion dataclass."""
     boosted_bell_curves: list[dict[str, Any] | None] = []
     rp_pd_boosts: list[dict[str, Any]] = []
-    if starting_players:
-        boosted_bell_curves, rp_pd_boosts = _boosted_bell_curve_payload(starting_players)
+    if starting_players and values:
+        boosted_bell_curves, rp_pd_boosts = _boosted_bell_curve_payload(starting_players, values)
 
     return {
         "cohesion_score": lineup.score,
@@ -194,17 +195,17 @@ def _lineup_archetype_details(lineup) -> list[dict[str, Any]]:
     }] if lineup.subscores else [])
 
 
-def _serialize_lineup_combination(lineup, lineup_players: list[dict[str, Any]]) -> dict[str, Any]:
+def _serialize_lineup_combination(lineup, lineup_players: list[dict[str, Any]], values: dict[str, Any]) -> dict[str, Any]:
     """Serialize one five-player Lineup Combination for builder Feedback."""
     archetype_details = _lineup_archetype_details(lineup)
     return {
-        **_serialize_lineup(lineup, lineup_players),
+        **_serialize_lineup(lineup, lineup_players, values),
         "archetype_labels": [detail["archetype"] for detail in archetype_details],
         "archetype_details": archetype_details,
     }
 
 
-def _ranked_lineup_combinations(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _ranked_lineup_combinations(players: list[dict[str, Any]], values: dict[str, Any]) -> list[dict[str, Any]]:
     """Evaluate, sort, and serialize every current five-player combination."""
     if len(players) < _MAX_LINEUP_SIZE:
         return []
@@ -216,10 +217,10 @@ def _ranked_lineup_combinations(players: list[dict[str, Any]]) -> list[dict[str,
     evaluated: list[dict[str, Any]] = []
     for combo_index, lineup_players_tuple in enumerate(combinations(players, _MAX_LINEUP_SIZE)):
         lineup_players = list(lineup_players_tuple)
-        lineup = evaluate_lineup(lineup_players)
+        lineup = evaluate_lineup(lineup_players, values)
         lineup_keys = tuple(_player_key(player, index) for index, player in enumerate(lineup_players))
         evaluated.append({
-            **_serialize_lineup_combination(lineup, lineup_players),
+            **_serialize_lineup_combination(lineup, lineup_players, values),
             "combination_index": combo_index,
             "is_viable": lineup.score >= cohesion_weights.VIABLE_LINEUP_THRESHOLD,
             "player_ids": [
@@ -269,20 +270,20 @@ def _serialize_player_composites(player) -> dict:
     }
 
 
-def _serialize_evaluation(evaluation: RosterEvaluation, players: list[dict[str, Any]]) -> dict:
+def _serialize_evaluation(evaluation: RosterEvaluation, players: list[dict[str, Any]], values: dict[str, Any]) -> dict:
     """Serialize a RosterEvaluation to the API response shape."""
     ordered_players = _cohesion_players_in_slot_order(players)
     starting_players = ordered_players[:5]
     return {
         "star_rating": evaluation.star_rating,
         "star_rating_breakdown": evaluation.star_breakdown,
-        "starting_lineup": _serialize_lineup(evaluation.starting_lineup, starting_players),
+        "starting_lineup": _serialize_lineup(evaluation.starting_lineup, starting_players, values),
         "player_composites": [
             _serialize_player_composites(player)
             for player in evaluation.player_composites
         ],
         "lineup_summary": evaluation.lineup_summary,
-        "lineup_combinations": _ranked_lineup_combinations(ordered_players),
+        "lineup_combinations": _ranked_lineup_combinations(ordered_players, values),
         "notes": [dataclasses.asdict(note) for note in evaluation.notes],
         "team_description": evaluation.team_description,
     }
@@ -407,9 +408,11 @@ def evaluate():
         return _err("'debug' must be a boolean")
 
     try:
-        ensure_distributions(CURRENT_SEASON)
-        result = evaluate_roster(body["players"], mode=mode)
-        return _ok(_serialize_evaluation(result, body["players"]))
+        version = get_active_eval_version()
+        values = version.values
+        ensure_distributions(CURRENT_SEASON, values)
+        result = evaluate_roster(body["players"], values, mode=mode)
+        return _ok(_serialize_evaluation(result, body["players"], values))
     except Exception:
         logger.exception("Error in POST /api/builder/evaluate")
         return _err("Internal server error", status=500)

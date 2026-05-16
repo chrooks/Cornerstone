@@ -8,7 +8,9 @@ runtime.
 
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +18,16 @@ from backend.services.cohesion_engine.bell_curve import compute_bell_params
 from backend.services.cohesion_engine.composites import compute_raw_composites
 from backend.services.cohesion_engine.roster import evaluate_roster
 from backend.services.cohesion_engine.synergies import apply_synergies
+
+
+def _bootstrap_values() -> dict:
+    seed_path = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
+    with open(seed_path) as f:
+        data = json.load(f)
+    return data["payload"]["values"]
+
+
+VALUES = _bootstrap_values()
 
 
 REFERENCE_PROFILES = {
@@ -185,13 +197,13 @@ def player(name: str, slot: int, height: str, skills: dict[str, str]) -> dict:
 
 @pytest.mark.parametrize("name", sorted(REFERENCE_PROFILES))
 def test_reference_player_raw_composites_match_locked_formula_outputs(name):
-    raw = compute_raw_composites(REFERENCE_PROFILES[name])
+    raw = compute_raw_composites(REFERENCE_PROFILES[name], VALUES)
 
     assert raw == pytest.approx(EXPECTED_RAW_COMPOSITES[name])
 
 
 def test_named_defensive_bell_archetypes_match_expected_shapes():
-    assert compute_bell_params({"perimeter_disruptor": "None"}, 73) == {
+    assert compute_bell_params({"perimeter_disruptor": "None"}, 73, VALUES) == {
         "amplitude": 0.5,
         "peak_center": 73,
         "range_down": 1,
@@ -200,7 +212,7 @@ def test_named_defensive_bell_archetypes_match_expected_shapes():
         "flat_top_up": 0,
         "player_height": 73,
     }
-    assert compute_bell_params({"versatile_defender": "Elite"}, 80) == {
+    assert compute_bell_params({"versatile_defender": "Elite"}, 80, VALUES) == {
         "amplitude": 3.5,
         "peak_center": 80,
         "range_down": 6,
@@ -209,7 +221,7 @@ def test_named_defensive_bell_archetypes_match_expected_shapes():
         "flat_top_up": 2,
         "player_height": 80,
     }
-    assert compute_bell_params({"rim_protector": "Elite"}, 85) == {
+    assert compute_bell_params({"rim_protector": "Elite"}, 85, VALUES) == {
         "amplitude": 3.5,
         "peak_center": 86,
         "range_down": 4,
@@ -218,7 +230,7 @@ def test_named_defensive_bell_archetypes_match_expected_shapes():
         "flat_top_up": 2,
         "player_height": 85,
     }
-    assert compute_bell_params({"rim_protector": "All-Time Great"}, 89) == {
+    assert compute_bell_params({"rim_protector": "All-Time Great"}, 89, VALUES) == {
         "amplitude": 4.0,
         "peak_center": 88,
         "range_down": 5,
@@ -234,13 +246,15 @@ def test_synergy_contracts_cover_threshold_and_flag_only_cases():
         [
             player("Cutter", 1, "6-7", {"cutter": "Elite"}),
             player("NonShooter", 2, "6-6", {}),
-        ]
+        ],
+        VALUES,
     )
     high_spacing, high_spacing_ids = apply_synergies(
         [
             player("Cutter", 1, "6-7", {"cutter": "Elite"}),
             player("Shooter", 2, "6-5", {"movement_shooter": "All-Time Great", "spot_up_shooter": "Elite"}),
-        ]
+        ],
+        VALUES,
     )
 
     assert "OFF-13" in low_spacing_ids
@@ -251,7 +265,8 @@ def test_synergy_contracts_cover_threshold_and_flag_only_cases():
         [
             player("Only Passer", 1, "6-6", {"passer": "Elite"}),
             player("Target", 2, "6-7", {}),
-        ]
+        ],
+        VALUES,
     )
 
     assert "OFF-37" in fired
@@ -275,7 +290,7 @@ def test_full_nine_player_roster_evaluates_126_lineups_under_100ms():
     ]
 
     start = time.perf_counter()
-    result = evaluate_roster(roster)
+    result = evaluate_roster(roster, VALUES)
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     assert result.lineup_summary["total_lineups"] == 126

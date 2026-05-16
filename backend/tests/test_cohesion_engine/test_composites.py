@@ -4,10 +4,23 @@ Unit tests for Phase 2 player composite computation.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from backend.services.cohesion_engine import composites
 from backend.services.cohesion_engine.types import PlayerComposites
+
+
+def _bootstrap_values() -> dict:
+    seed_path = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
+    with open(seed_path) as f:
+        data = json.load(f)
+    return data["payload"]["values"]
+
+
+VALUES = _bootstrap_values()
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +58,7 @@ def sample_skills() -> dict[str, str]:
 
 
 def test_compute_raw_composites_matches_validated_formula_order():
-    raw = composites.compute_raw_composites(sample_skills())
+    raw = composites.compute_raw_composites(sample_skills(), VALUES)
 
     assert raw["spacing"] == pytest.approx(9.75)
     assert raw["finishing"] == pytest.approx(7.5)
@@ -67,7 +80,8 @@ def test_compute_raw_composites_accepts_numeric_synergy_values():
             "movement_shooter": 7.0,
             "spot_up_shooter": "Proficient",
             "off_dribble_shooter": "None",
-        }
+        },
+        VALUES,
     )
 
     assert raw["spacing"] == pytest.approx(10.0)
@@ -88,7 +102,8 @@ def test_normalize_composites_uses_theoretical_max_when_cache_empty():
             "transition": 21.0,
             "perimeter_defense": 8.5,
             "interior_defense": 9.0,
-        }
+        },
+        VALUES,
     )
 
     assert normalized == {
@@ -110,16 +125,16 @@ def test_normalize_composites_uses_theoretical_max_when_cache_empty():
 def test_percentile_normalize_uses_sixtieth_percentile_breakpoint():
     distribution = [float(value) for value in range(20)]
 
-    assert composites._percentile_normalize(6.0, distribution) == 3.3
-    assert composites._percentile_normalize(12.0, distribution) == 6.0
-    assert composites._percentile_normalize(19.0, distribution) == 10.0
+    assert composites._percentile_normalize(6.0, distribution, 0.6, 6.0) == 3.3
+    assert composites._percentile_normalize(12.0, distribution, 0.6, 6.0) == 6.0
+    assert composites._percentile_normalize(19.0, distribution, 0.6, 6.0) == 10.0
 
 
 def test_normalize_composites_uses_cached_distribution_when_large_enough():
     distributions = {name: [float(value) for value in range(20)] for name in composites.COMPOSITE_NAMES}
     composites.set_distributions(distributions)
 
-    normalized = composites.normalize_composites({name: 12.0 for name in composites.COMPOSITE_NAMES})
+    normalized = composites.normalize_composites({name: 12.0 for name in composites.COMPOSITE_NAMES}, VALUES)
 
     assert all(value == 6.0 for value in normalized.values())
 
@@ -129,6 +144,7 @@ def test_compute_player_composites_returns_dataclass_with_bell_params():
         sample_skills(),
         player_id="p1",
         name="Example",
+        values=VALUES,
         height_inches=80,
     )
 
@@ -176,7 +192,7 @@ def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
     monkeypatch.setattr(composites, "_get_supabase_client", lambda: FakeClient())
     monkeypatch.setattr(composites, "_run_query", lambda query: query())
 
-    distributions = composites.build_distributions("2025-26")
+    distributions = composites.build_distributions("2025-26", VALUES)
 
     assert distributions["spacing"] == [1.5, 6.0]
     assert distributions["finishing"] == [0.0, 0.0]

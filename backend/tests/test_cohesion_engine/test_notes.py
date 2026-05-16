@@ -4,8 +4,21 @@ Tests for Phase 5 cohesion-engine notes.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from backend.services.cohesion_engine.notes import generate_notes
 from backend.services.cohesion_engine.types import LineupCohesion, Note, PlayerComposites
+
+
+def _bootstrap_values() -> dict:
+    seed_path = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
+    with open(seed_path) as f:
+        data = json.load(f)
+    return data["payload"]["values"]
+
+
+VALUES = _bootstrap_values()
 
 
 def make_composite(
@@ -63,7 +76,7 @@ def test_mode_a_generates_strengths_weaknesses_and_suggestions():
     ]
     composites = [make_composite("Shooter", spacing=8.5)]
 
-    notes = generate_notes(players, composites)
+    notes = generate_notes(players, composites, VALUES)
 
     assert any(note.type == "strength" and note.category == "spacing" for note in notes)
     assert any(note.type == "weakness" and note.category == "anchor" for note in notes)
@@ -81,7 +94,7 @@ def test_mode_a_detects_stacked_spacing_and_playmaking():
         make_composite("B", spacing=6.5, shot_creation=3.0, paint_touch=2.5),
     ]
 
-    notes = generate_notes(players, composites)
+    notes = generate_notes(players, composites, VALUES)
     strengths = notes_of_type(notes, "strength")
 
     assert any(note.category == "spacing" and "Multiple shooters" in note.text for note in strengths)
@@ -105,7 +118,7 @@ def test_mode_b_uses_lineup_level_observations():
         accentuation_weakness=2.0,
     )
 
-    notes = generate_notes(players, composites, {"starting_lineup": lineup})
+    notes = generate_notes(players, composites, VALUES, {"starting_lineup": lineup})
 
     assert any(note.type == "strength" and note.category == "spacing_creation_ratio" for note in notes)
     assert any(note.type == "strength" and note.category == "synergy" for note in notes)
@@ -135,7 +148,7 @@ def test_notes_are_deduplicated_limited_and_sorted_by_severity_within_type():
         accentuation_weakness=0.5,
     )
 
-    notes = generate_notes(players, composites, {"starting_lineup": lineup})
+    notes = generate_notes(players, composites, VALUES, {"starting_lineup": lineup})
 
     for note_type in ("strength", "weakness", "suggestion"):
         typed_notes = notes_of_type(notes, note_type)

@@ -4,8 +4,21 @@ Unit tests for Phase 3 accentuation scoring.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from backend.services.cohesion_engine.accentuation import compute_accentuation
 from backend.services.cohesion_engine.types import PlayerComposites
+
+
+def _bootstrap_values() -> dict:
+    seed_path = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
+    with open(seed_path) as f:
+        data = json.load(f)
+    return data["payload"]["values"]
+
+
+VALUES = _bootstrap_values()
 
 
 def make_composites(name: str, **overrides: float) -> PlayerComposites:
@@ -65,7 +78,7 @@ def test_strength_amplification_rewards_complementary_pair():
         transition=4.0,
     )
 
-    strength, weakness = compute_accentuation([spacer, interior])
+    strength, weakness = compute_accentuation([spacer, interior], VALUES)
 
     assert strength > 0
     assert weakness == 0.0
@@ -75,7 +88,7 @@ def test_weakness_coverage_rewards_teammate_same_composite_strength():
     weak_spacer = make_composites("Weak Spacer", spacing=1.0, paint_touch=8.0)
     strong_spacer = make_composites("Strong Spacer", spacing=9.0, anchor=8.0)
 
-    _strength, weakness = compute_accentuation([weak_spacer, strong_spacer])
+    _strength, weakness = compute_accentuation([weak_spacer, strong_spacer], VALUES)
 
     assert weakness > 0
 
@@ -84,7 +97,7 @@ def test_strength_amplification_rewards_perimeter_and_interior_defense_pair():
     point_of_attack = make_composites("Point of Attack", perimeter_defense=9.0)
     rim_protector = make_composites("Rim Protector", interior_defense=8.0)
 
-    strength, _weakness = compute_accentuation([point_of_attack, rim_protector])
+    strength, _weakness = compute_accentuation([point_of_attack, rim_protector], VALUES)
 
     assert strength > 0
 
@@ -93,10 +106,10 @@ def test_strength_amplification_rewards_perimeter_defense_and_transition_pair():
     pressure_guard = make_composites("Pressure Guard", perimeter_defense=9.0)
     runner = make_composites("Runner", transition=8.0)
 
-    strength, _weakness = compute_accentuation([pressure_guard, runner])
+    strength, _weakness = compute_accentuation([pressure_guard, runner], VALUES)
 
     assert strength > 0
 
 
 def test_accentuation_returns_zero_for_single_player():
-    assert compute_accentuation([make_composites("Solo", spacing=9.0)]) == (0.0, 0.0)
+    assert compute_accentuation([make_composites("Solo", spacing=9.0)], VALUES) == (0.0, 0.0)

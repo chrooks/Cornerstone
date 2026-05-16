@@ -36,10 +36,16 @@ from services.cohesion_engine import evaluate_roster
 from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
 from services.cohesion_engine.types import LineupCohesion, PlayerComposites
 from services.cohesion_engine.weights import LINEUP_ONLY_ROLLUP_WEIGHTS, ROSTER_ROLLUP_WEIGHTS, STAR_RATING_MAX
+from services.evaluation_versions.repo import get_active as get_active_eval_version
 from services.rotation_config import MAX_ROTATION_SLOTS
 from services.cohesion_engine import weights as weights_module
 from services.players_service import CURRENT_SEASON
 from services.supabase_client import get_supabase
+
+
+def _active_values() -> dict[str, Any]:
+    """Get the active Evaluation Version's values dict for runtime use."""
+    return get_active_eval_version().values
 
 logger = logging.getLogger(__name__)
 
@@ -158,9 +164,9 @@ def _serialize_composites(pc: PlayerComposites) -> dict[str, float]:
     }
 
 
-def _serialize_raw_composites(skills: dict[str, str]) -> dict[str, float]:
+def _serialize_raw_composites(skills: dict[str, str], values: dict[str, Any]) -> dict[str, float]:
     """Return raw composite formula outputs before percentile normalization."""
-    return {key: round(value, 3) for key, value in compute_raw_composites(skills).items()}
+    return {key: round(value, 3) for key, value in compute_raw_composites(skills, values).items()}
 
 
 def _get_all_weights() -> dict[str, Any]:
@@ -321,16 +327,16 @@ def _resolve_player_skills(players: list[dict[str, Any]]) -> list[dict[str, Any]
     return resolved_players
 
 
-def _boosted_bell_curves_payload(lineup_players: list[dict[str, Any]]) -> tuple[list[dict[str, Any] | None], list[dict[str, Any]]]:
+def _boosted_bell_curves_payload(lineup_players: list[dict[str, Any]], values: dict[str, Any]) -> tuple[list[dict[str, Any] | None], list[dict[str, Any]]]:
     """Compute the boosted bell curves used by a specific lineup evaluation."""
-    boosted_lineup = apply_rp_pd_boost(lineup_players)
+    boosted_lineup = apply_rp_pd_boost(lineup_players, values)
     boosted_bell_curves: list[dict[str, Any] | None] = []
     for player in boosted_lineup:
         height_inches = parse_height_inches(player.get("height"))
         if height_inches is None:
             boosted_bell_curves.append(None)
             continue
-        params = compute_bell_params(player.get("skills", {}), height_inches)
+        params = compute_bell_params(player.get("skills", {}), height_inches, values)
         boosted_bell_curves.append({
             "amplitude": params["amplitude"],
             "peak": params["peak_center"],
@@ -342,9 +348,9 @@ def _boosted_bell_curves_payload(lineup_players: list[dict[str, Any]]) -> tuple[
     return boosted_bell_curves, _rp_pd_boost_details(lineup_players, boosted_lineup)
 
 
-def _serialize_lineup_result(lineup: LineupCohesion, lineup_players: list[dict[str, Any]]) -> dict[str, Any]:
+def _serialize_lineup_result(lineup: LineupCohesion, lineup_players: list[dict[str, Any]], values: dict[str, Any]) -> dict[str, Any]:
     """Serialize one five-player lineup result for calibration diagnostics."""
-    boosted_bell_curves, rp_pd_boosts = _boosted_bell_curves_payload(lineup_players)
+    boosted_bell_curves, rp_pd_boosts = _boosted_bell_curves_payload(lineup_players, values)
     archetype_details = _lineup_archetype_details(lineup)
     return {
         "cohesion_score": lineup.score,
@@ -421,16 +427,16 @@ def _serialize_player_composites(player: PlayerComposites) -> dict[str, Any]:
     }
 
 
-def _ranked_lineup_combinations(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _ranked_lineup_combinations(players: list[dict[str, Any]], values: dict[str, Any]) -> list[dict[str, Any]]:
     """Evaluate, sort, and serialize every five-player combination."""
     starting_keys = tuple(_player_key(player, index) for index, player in enumerate(players[:_MAX_LINEUP_SIZE]))
     evaluated: list[dict[str, Any]] = []
     for combo_index, lineup_players_tuple in enumerate(combinations(players, _MAX_LINEUP_SIZE)):
         lineup_players = list(lineup_players_tuple)
-        lineup = evaluate_lineup(lineup_players)
+        lineup = evaluate_lineup(lineup_players, values)
         lineup_keys = tuple(_player_key(player, index) for index, player in enumerate(lineup_players))
         evaluated.append({
-            **_serialize_lineup_result(lineup, lineup_players),
+            **_serialize_lineup_result(lineup, lineup_players, values),
             "combination_index": combo_index,
             "is_viable": lineup.score >= weights_module.VIABLE_LINEUP_THRESHOLD,
             "player_ids": [_player_key(player, index) for index, player in enumerate(lineup_players)],
@@ -467,7 +473,8 @@ def _theoretical_best_starting_rating(
 @require_admin
 def get_player_composites(player_id: str) -> tuple:
     """Return a single player's base composites (no lineup synergies)."""
-    ensure_distributions(CURRENT_SEASON)
+    values = _active_values()
+    ensure_distributions(CURRENT_SEASON, values)
     player = _fetch_player_with_skills(player_id)
     if not player:
         return jsonify({"success": False, "data": None, "error": "Player not found"}), 404
@@ -478,6 +485,7 @@ def get_player_composites(player_id: str) -> tuple:
             player["skills"],
             player_id=player["id"],
             name=player["name"],
+            values=values,
             height_inches=height_inches,
         )
     except Exception:
@@ -491,7 +499,7 @@ def get_player_composites(player_id: str) -> tuple:
             "name": player["name"],
             "height": player.get("height"),
             "skills": player["skills"],
-            "composites_raw": _serialize_raw_composites(player["skills"]),
+            "composites_raw": _serialize_raw_composites(player["skills"], values),
             "composites_normalized": _serialize_composites(pc),
             "bell_curve": {
                 "amplitude": pc.bell_amplitude,
@@ -524,9 +532,10 @@ def get_bell_curve(player_id: str) -> tuple:
     height_inches = parse_height_inches(player.get("height"))
     # Compute raw bell params from skills + height.
     # player["skills"] has already filtered None tiers in _fetch_player_with_skills.
+    values = _active_values()
     skills_str = {k: str(v) for k, v in player["skills"].items() if v is not None}
     try:
-        params = compute_bell_params(skills_str, height_inches or 78)
+        params = compute_bell_params(skills_str, height_inches or 78, values)
     except Exception:
         logger.exception("Error computing bell curve for player %s", player_id)
         return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500
@@ -544,6 +553,7 @@ def get_bell_curve(player_id: str) -> tuple:
             flat_top_down=int(params["flat_top_down"]),
             flat_top_up=int(params["flat_top_up"]),
             player_height=int(params["player_height"]),
+            values=values,
         )
         curve.append({
             "height": h,
@@ -588,7 +598,8 @@ def evaluate_rotation_endpoint() -> tuple:
       }
     """
     body = request.get_json(silent=True) or {}
-    ensure_distributions(CURRENT_SEASON)
+    values = _active_values()
+    ensure_distributions(CURRENT_SEASON, values)
 
     compacted_players, error = _validate_rotation_players(body.get("players"))
     if error:
@@ -598,8 +609,8 @@ def evaluate_rotation_endpoint() -> tuple:
     resolved_players = _resolve_player_skills(compacted_players)
 
     try:
-        rotation = evaluate_roster(resolved_players, mode="live")
-        lineup_combinations = _ranked_lineup_combinations(resolved_players)
+        rotation = evaluate_roster(resolved_players, values, mode="live")
+        lineup_combinations = _ranked_lineup_combinations(resolved_players, values)
     except Exception:
         logger.exception("Error evaluating rotation")
         return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500
@@ -649,7 +660,8 @@ def evaluate_lineup_endpoint() -> tuple:
       }
     """
     body = request.get_json(silent=True) or {}
-    ensure_distributions(CURRENT_SEASON)
+    values = _active_values()
+    ensure_distributions(CURRENT_SEASON, values)
     players = body.get("players")
 
     if not isinstance(players, list):
@@ -692,12 +704,12 @@ def evaluate_lineup_endpoint() -> tuple:
 
     # Run cohesion evaluation on the lineup
     try:
-        result = evaluate_lineup(resolved_players)
+        result = evaluate_lineup(resolved_players, values)
     except Exception:
         logger.exception("Error evaluating lineup")
         return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500
 
-    data = _serialize_lineup_result(result, resolved_players)
+    data = _serialize_lineup_result(result, resolved_players, values)
 
     return jsonify({
         "success": True,

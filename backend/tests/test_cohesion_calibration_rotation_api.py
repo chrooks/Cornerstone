@@ -36,7 +36,7 @@ class _FakeSupabase:
 def client(monkeypatch):
     monkeypatch.setattr(auth, "_verify_jwt", lambda _token: {"sub": "admin-user"})
     monkeypatch.setattr(auth, "get_supabase", lambda: _FakeSupabase())
-    monkeypatch.setattr(cohesion_calibration, "ensure_distributions", lambda _season: None)
+    monkeypatch.setattr(cohesion_calibration, "ensure_distributions", lambda _season, _values: None)
 
     app = create_app()
     app.config["TESTING"] = True

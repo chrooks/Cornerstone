@@ -8,14 +8,10 @@ covered by another player's strength in the same composite.
 
 from __future__ import annotations
 
+from typing import Any
+
 from .types import PlayerComposites
-from .weights import (
-    ACCENTUATION_COMPLEMENTARY_PAIRS,
-    ACCENTUATION_STRENGTH_THRESHOLD,
-    ACCENTUATION_TOP_N,
-    ACCENTUATION_WEAKNESS_THRESHOLD,
-    COMPOSITE_NAMES,
-)
+from .weights import COMPOSITE_NAMES
 
 
 def _composite_values(player: PlayerComposites) -> dict[str, float]:
@@ -23,27 +19,32 @@ def _composite_values(player: PlayerComposites) -> dict[str, float]:
     return {name: float(getattr(player, name)) for name in COMPOSITE_NAMES}
 
 
-def _strengths(player: PlayerComposites) -> dict[str, float]:
+def _strengths(player: PlayerComposites, values: dict[str, Any]) -> dict[str, float]:
     """Top qualifying composites, with at least the player's best composite."""
-    values = _composite_values(player)
-    ordered = sorted(values.items(), key=lambda item: item[1], reverse=True)
-    qualifying = [(name, value) for name, value in ordered if value >= ACCENTUATION_STRENGTH_THRESHOLD]
-    selected = qualifying[:ACCENTUATION_TOP_N] or ordered[:1]
+    threshold: float = values["accentuation_strength_threshold"]
+    top_n: int = values["accentuation_top_n"]
+    cv = _composite_values(player)
+    ordered = sorted(cv.items(), key=lambda item: item[1], reverse=True)
+    qualifying = [(name, value) for name, value in ordered if value >= threshold]
+    selected = qualifying[:top_n] or ordered[:1]
     return dict(selected)
 
 
-def _weaknesses(player: PlayerComposites) -> dict[str, float]:
+def _weaknesses(player: PlayerComposites, values: dict[str, Any]) -> dict[str, float]:
     """Bottom qualifying composites, using weakness depth as the stored value."""
-    values = _composite_values(player)
-    ordered = sorted(values.items(), key=lambda item: item[1])
-    qualifying = [(name, 10.0 - value) for name, value in ordered if value <= ACCENTUATION_WEAKNESS_THRESHOLD]
-    return dict(qualifying[:ACCENTUATION_TOP_N])
+    threshold: float = values["accentuation_weakness_threshold"]
+    top_n: int = values["accentuation_top_n"]
+    cv = _composite_values(player)
+    ordered = sorted(cv.items(), key=lambda item: item[1])
+    qualifying = [(name, 10.0 - value) for name, value in ordered if value <= threshold]
+    return dict(qualifying[:top_n])
 
 
-def _complements(composite: str) -> set[str]:
+def _complements(composite: str, values: dict[str, Any]) -> set[str]:
     """Return bidirectional complementary composites for one composite name."""
+    pairs = values["accentuation_complementary_pairs"]
     related: set[str] = set()
-    for left, right in ACCENTUATION_COMPLEMENTARY_PAIRS:
+    for left, right in pairs:
         if left == composite:
             related.add(right)
         if right == composite:
@@ -51,7 +52,9 @@ def _complements(composite: str) -> set[str]:
     return related
 
 
-def compute_accentuation_details(lineup_composites: list[PlayerComposites]) -> dict:
+def compute_accentuation_details(
+    lineup_composites: list[PlayerComposites], values: dict[str, Any]
+) -> dict:
     """Compute accentuation scores and return equation-friendly detail."""
     if len(lineup_composites) < 2:
         return {
@@ -59,15 +62,15 @@ def compute_accentuation_details(lineup_composites: list[PlayerComposites]) -> d
             "weakness": {"score": 0.0, "credit": 0.0, "checks": 0, "terms": []},
         }
 
-    strengths_by_player = [_strengths(player) for player in lineup_composites]
-    weaknesses_by_player = [_weaknesses(player) for player in lineup_composites]
+    strengths_by_player = [_strengths(player, values) for player in lineup_composites]
+    weaknesses_by_player = [_weaknesses(player, values) for player in lineup_composites]
 
     strength_credit = 0.0
     strength_checks = 0
     strength_terms: list[dict] = []
     for player_index, strengths in enumerate(strengths_by_player):
         for composite, value in strengths.items():
-            complements = _complements(composite)
+            complements = _complements(composite, values)
             if not complements:
                 continue
             best_teammate = 0.0
@@ -141,7 +144,9 @@ def compute_accentuation_details(lineup_composites: list[PlayerComposites]) -> d
     }
 
 
-def compute_accentuation(lineup_composites: list[PlayerComposites]) -> tuple[float, float]:
+def compute_accentuation(
+    lineup_composites: list[PlayerComposites], values: dict[str, Any]
+) -> tuple[float, float]:
     """Compute strength amplification and weakness coverage on 0-10 scales."""
-    details = compute_accentuation_details(lineup_composites)
+    details = compute_accentuation_details(lineup_composites, values)
     return details["strength"]["score"], details["weakness"]["score"]

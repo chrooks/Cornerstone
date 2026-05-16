@@ -4,8 +4,21 @@ Integration tests for Phase 3 lineup cohesion orchestration.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from backend.services.cohesion_engine.cohesion import evaluate_lineup
 from backend.services.cohesion_engine.types import LineupCohesion
+
+
+def _bootstrap_values() -> dict:
+    seed_path = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
+    with open(seed_path) as f:
+        data = json.load(f)
+    return data["payload"]["values"]
+
+
+VALUES = _bootstrap_values()
 
 
 def make_player(name: str, height: str, skills: dict[str, str]) -> dict:
@@ -21,7 +34,7 @@ def test_evaluate_lineup_returns_all_subscores_in_range():
         make_player("Wing", "6-8", {"versatile_defender": "Elite", "transition_threat": "Elite", "high_flyer": "Elite"}),
     ]
 
-    result = evaluate_lineup(lineup)
+    result = evaluate_lineup(lineup, VALUES)
 
     assert isinstance(result, LineupCohesion)
     assert 0.0 <= result.score <= 5.0
@@ -59,7 +72,7 @@ def test_evaluate_lineup_does_not_mutate_input_players():
         make_player("Finisher", "6-11", {"pnr_finisher": "Elite", "rim_protector": "Elite"}),
     ]
 
-    evaluate_lineup(lineup)
+    evaluate_lineup(lineup, VALUES)
 
     assert lineup[0]["skills"]["pnr_ball_handler"] == "Elite"
     assert lineup[1]["skills"]["pnr_finisher"] == "Elite"
@@ -75,8 +88,8 @@ def test_perimeter_defense_can_boost_transition_subscore():
         for index in range(5)
     ]
 
-    pressure_result = evaluate_lineup(pressure_lineup)
-    neutral_result = evaluate_lineup(neutral_lineup)
+    pressure_result = evaluate_lineup(pressure_lineup, VALUES)
+    neutral_result = evaluate_lineup(neutral_lineup, VALUES)
 
     assert pressure_result.subscores["perimeter_defense_total"] > neutral_result.subscores["perimeter_defense_total"]
     assert pressure_result.subscores["transition"] > neutral_result.subscores["transition"]

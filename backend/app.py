@@ -120,9 +120,11 @@ def _warm_cohesion_distributions() -> None:
     """
     try:
         from services.cohesion_engine.composites import ensure_distributions
+        from services.evaluation_versions.repo import get_active
         from services.players_service import CURRENT_SEASON
 
-        ready = ensure_distributions(CURRENT_SEASON)
+        version = get_active()
+        ready = ensure_distributions(CURRENT_SEASON, version.values)
         if ready:
             logging.getLogger(__name__).info("Cohesion composite distributions loaded")
     except Exception:
