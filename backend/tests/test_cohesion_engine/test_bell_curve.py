@@ -139,3 +139,20 @@ def test_compute_lineup_defense_empty_lineup_returns_all_gaps():
     assert coverage == 0.0
     assert gap_penalty == -38.25
     assert gaps == list(range(72, 89))
+
+
+def test_compute_bell_params_guards_zero_flat_top_divisor():
+    """A zero flat_top_divisor must not crash with ZeroDivisionError."""
+    import copy
+
+    broken_values = copy.deepcopy(VALUES)
+    broken_values["bell"]["flat_top_divisor"] = 0
+
+    params = compute_bell_params(
+        {"versatile_defender": "Elite", "perimeter_disruptor": "None", "rim_protector": "None"},
+        80,
+        broken_values,
+    )
+
+    assert params["flat_top_down"] == 0
+    assert params["flat_top_up"] == 0

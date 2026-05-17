@@ -150,11 +150,11 @@ def _boosted_bell_curve_payload(starting_players: list[dict[str, Any]], values: 
     return boosted_bell_curves, _rp_pd_boost_details(starting_players, boosted_lineup)
 
 
-def _serialize_lineup(lineup, starting_players: list[dict[str, Any]] | None = None, values: dict[str, Any] | None = None) -> dict:
+def _serialize_lineup(lineup, starting_players: list[dict[str, Any]], values: dict[str, Any]) -> dict:
     """Serialize a cohesion LineupCohesion dataclass."""
     boosted_bell_curves: list[dict[str, Any] | None] = []
     rp_pd_boosts: list[dict[str, Any]] = []
-    if starting_players and values:
+    if starting_players:
         boosted_bell_curves, rp_pd_boosts = _boosted_bell_curve_payload(starting_players, values)
 
     return {
@@ -222,7 +222,7 @@ def _ranked_lineup_combinations(players: list[dict[str, Any]], values: dict[str,
         evaluated.append({
             **_serialize_lineup_combination(lineup, lineup_players, values),
             "combination_index": combo_index,
-            "is_viable": lineup.score >= cohesion_weights.VIABLE_LINEUP_THRESHOLD,
+            "is_viable": lineup.score >= values["viable_lineup_threshold"],
             "player_ids": [
                 _player_key(player, index)
                 for index, player in enumerate(lineup_players)

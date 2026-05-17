@@ -261,10 +261,14 @@ def normalize_composites(raw: dict[str, float], values: dict[str, Any]) -> dict[
             for name, value in raw.items()
         }
 
-    return {
-        name: round(min(10.0, value / theoretical_max[name] * 10.0), 1)
-        for name, value in raw.items()
-    }
+    result: dict[str, float] = {}
+    for name, value in raw.items():
+        denom = theoretical_max.get(name, 0)
+        if denom <= 0:
+            result[name] = 0.0
+        else:
+            result[name] = round(min(10.0, value / denom * 10.0), 1)
+    return result
 
 
 def _extract_skills(profile: dict[str, Any]) -> dict[str, str]:

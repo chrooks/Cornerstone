@@ -58,7 +58,7 @@ def defensive_value_at_height(
     tall players drop off faster going short, short players drop off faster
     going tall. At the midpoint height, taper is linear (exponent=1.0).
     """
-    bell = values["bell"] if values else {}
+    bell = (values or {}).get("bell", {})
     steepness_midpoint = bell.get("steepness_midpoint", 80)
     up_steepness_base = bell.get("up_steepness_base", 1.0)
     up_steepness_scale = bell.get("up_steepness_scale", 0.10)
@@ -152,8 +152,8 @@ def compute_bell_params(
         "peak_center": peak_center,
         "range_down": range_down,
         "range_up": range_up_val,
-        "flat_top_down": max(0, range_down // bell["flat_top_divisor"]),
-        "flat_top_up": max(0, range_up_val // bell["flat_top_divisor"]),
+        "flat_top_down": max(0, range_down // bell["flat_top_divisor"]) if bell.get("flat_top_divisor", 0) > 0 else 0,
+        "flat_top_up": max(0, range_up_val // bell["flat_top_divisor"]) if bell.get("flat_top_divisor", 0) > 0 else 0,
         "player_height": height_inches,
     }
 

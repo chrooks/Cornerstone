@@ -160,6 +160,22 @@ def test_compute_player_composites_returns_dataclass_with_bell_params():
     assert player.bell_range_up == 8
 
 
+def test_normalize_composites_guards_zero_theoretical_max():
+    """A zero theoretical_max for a composite must not crash with ZeroDivisionError."""
+    import copy
+
+    broken_values = copy.deepcopy(VALUES)
+    broken_values["theoretical_max"]["spacing"] = 0
+
+    normalized = composites.normalize_composites(
+        {"spacing": 5.0, "finishing": 10.0, **{name: 1.0 for name in composites.COMPOSITE_NAMES if name not in ("spacing", "finishing")}},
+        broken_values,
+    )
+
+    assert normalized["spacing"] == 0.0  # graceful fallback, not crash
+    assert normalized["finishing"] > 0.0  # other composites still compute
+
+
 def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
     class FakeResult:
         def __init__(self, data):
