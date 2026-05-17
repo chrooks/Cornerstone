@@ -12,35 +12,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-from .weights import (
-    AMPLITUDE_MAP,
-    BELL_BASE_RANGE,
-    BELL_DOWN_STEEPNESS_BASE,
-    BELL_DOWN_STEEPNESS_SCALE,
-    BELL_FLAT_TOP_DIVISOR,
-    BELL_STEEPNESS_MIDPOINT,
-    BELL_UP_STEEPNESS_BASE,
-    BELL_UP_STEEPNESS_SCALE,
-    DEFENSIVE_GAP_PENALTY_SCALE,
-    DEFENSIVE_GAP_THRESHOLD,
-    HEIGHT_MAX_INCHES,
-    HEIGHT_MIN_INCHES,
-    PD_CROSS_HEIGHT_MAX,
-    PD_CROSS_HEIGHT_WINDOW,
-    PD_CROSS_SCALE,
-    PD_DOWN,
-    PEAK_SHIFT_PD_ONLY,
-    PEAK_SHIFT_RP_ONLY,
-    RP_CROSS_HEIGHT_MIN,
-    RP_CROSS_HEIGHT_WINDOW,
-    RP_CROSS_SCALE,
-    RP_PD_BOOST,
-    RP_UP,
-    STACKING_RETURNS,
-    VD_EXT,
-    WARM_BODY,
-)
-
 
 def parse_height_inches(height: str | int | None) -> int | None:
     """Parse common height formats like '6-7' or '6\\'7\"' into inches."""
@@ -60,9 +31,9 @@ def parse_height_inches(height: str | int | None) -> int | None:
         return None
 
 
-def _clamp_height(height_inches: int) -> int:
+def _clamp_height(height_inches: int, values: dict[str, Any]) -> int:
     """Keep the geometric model inside the supported 6'0\"-7'4\" range."""
-    return max(HEIGHT_MIN_INCHES, min(HEIGHT_MAX_INCHES, height_inches))
+    return max(values["height_min_inches"], min(values["height_max_inches"], height_inches))
 
 
 def defensive_value_at_height(
@@ -74,6 +45,7 @@ def defensive_value_at_height(
     flat_top_down: int,
     flat_top_up: int,
     player_height: int = 78,
+    values: dict[str, Any] | None = None,
 ) -> float:
     """
     Return one defender's value against a target height.
@@ -86,20 +58,27 @@ def defensive_value_at_height(
     tall players drop off faster going short, short players drop off faster
     going tall. At the midpoint height, taper is linear (exponent=1.0).
     """
+    bell = (values or {}).get("bell", {})
+    steepness_midpoint = bell.get("steepness_midpoint", 80)
+    up_steepness_base = bell.get("up_steepness_base", 1.0)
+    up_steepness_scale = bell.get("up_steepness_scale", 0.10)
+    down_steepness_base = bell.get("down_steepness_base", 0.8)
+    down_steepness_scale = bell.get("down_steepness_scale", 0.05)
+
     if target_height > peak_center:
         distance = target_height - peak_center
         flat = flat_top_up
         total = range_up
         # Upward taper: shorter players get steeper exponent going up
-        inches_from_mid = max(0, BELL_STEEPNESS_MIDPOINT - player_height)
-        exponent = BELL_UP_STEEPNESS_BASE + inches_from_mid * BELL_UP_STEEPNESS_SCALE
+        inches_from_mid = max(0, steepness_midpoint - player_height)
+        exponent = up_steepness_base + inches_from_mid * up_steepness_scale
     else:
         distance = peak_center - target_height
         flat = flat_top_down
         total = range_down
         # Downward taper: taller players get steeper exponent going down
-        inches_from_mid = max(0, player_height - BELL_STEEPNESS_MIDPOINT)
-        exponent = BELL_DOWN_STEEPNESS_BASE + inches_from_mid * BELL_DOWN_STEEPNESS_SCALE
+        inches_from_mid = max(0, player_height - steepness_midpoint)
+        exponent = down_steepness_base + inches_from_mid * down_steepness_scale
 
     if distance <= flat:
         return amplitude
@@ -112,9 +91,23 @@ def defensive_value_at_height(
     return amplitude * max(0.0, (1.0 - t) ** exponent)
 
 
-def compute_bell_params(skills: dict[str, str], height_inches: int) -> dict[str, float | int]:
+def compute_bell_params(
+    skills: dict[str, str], height_inches: int, values: dict[str, Any]
+) -> dict[str, float | int]:
     """Compute a player's defensive bell curve parameters from skills + height."""
-    height_inches = _clamp_height(height_inches)
+    height_inches = _clamp_height(height_inches, values)
+
+    amplitude_map: dict[str, float] = values["amplitude_map"]
+    warm_body: float = values["warm_body"]
+    vd_ext: dict[str, int] = values["vd_ext"]
+    pd_down: dict[str, int] = values["pd_down"]
+    rp_up: dict[str, int] = values["rp_up"]
+    rp_pd_boost: dict[str, float] = values["rp_pd_boost"]
+    peak_shift_pd_only: int = values["peak_shift_pd_only"]
+    peak_shift_rp_only: int = values["peak_shift_rp_only"]
+    bell = values["bell"]
+    rp_cross = values["rp_cross"]
+    pd_cross = values["pd_cross"]
 
     vd = skills.get("versatile_defender", "None")
     pd = skills.get("perimeter_disruptor", "None")
@@ -122,71 +115,71 @@ def compute_bell_params(skills: dict[str, str], height_inches: int) -> dict[str,
 
     # Amplitude captures the best defensive tool plus the warm-body floor.
     best_tier = max(
-        AMPLITUDE_MAP.get(vd, 0.0),
-        AMPLITUDE_MAP.get(pd, 0.0),
-        AMPLITUDE_MAP.get(rp, 0.0),
+        amplitude_map.get(vd, 0.0),
+        amplitude_map.get(pd, 0.0),
+        amplitude_map.get(rp, 0.0),
     )
-    amplitude = min(4.0, best_tier + WARM_BODY)
+    amplitude = min(4.0, best_tier + warm_body)
 
     has_vd = vd != "None"
     has_pd = pd != "None"
     has_rp = rp != "None"
 
     if has_pd and not has_vd and not has_rp:
-        peak_center = height_inches + PEAK_SHIFT_PD_ONLY
+        peak_center = height_inches + peak_shift_pd_only
     elif has_rp and not has_vd and not has_pd:
-        peak_center = height_inches + PEAK_SHIFT_RP_ONLY
+        peak_center = height_inches + peak_shift_rp_only
     else:
         peak_center = height_inches
-    peak_center = _clamp_height(peak_center)
+    peak_center = _clamp_height(peak_center, values)
 
     # Cross-height bonuses: RP-only bigs extend downward, PD-only guards extend upward.
-    # Using round() instead of int() so small fractional values (e.g. 0.75) aren't
-    # truncated to zero — this was causing tall rim protectors to get no downward reach.
     rp_cross_down = 0
-    if height_inches >= RP_CROSS_HEIGHT_MIN and not has_vd and not has_pd:
-        scale = min(1.0, (height_inches - RP_CROSS_HEIGHT_MIN) / RP_CROSS_HEIGHT_WINDOW)
-        rp_cross_down = round(RP_UP.get(rp, 0) * RP_CROSS_SCALE * scale)
+    if height_inches >= rp_cross["height_min"] and not has_vd and not has_pd:
+        scale = min(1.0, (height_inches - rp_cross["height_min"]) / rp_cross["height_window"])
+        rp_cross_down = round(rp_up.get(rp, 0) * rp_cross["scale"] * scale)
 
     pd_cross_up = 0
-    if height_inches <= PD_CROSS_HEIGHT_MAX and not has_vd and not has_rp:
-        scale = min(1.0, (PD_CROSS_HEIGHT_MAX - height_inches) / PD_CROSS_HEIGHT_WINDOW)
-        pd_cross_up = round(PD_DOWN.get(pd, 0) * PD_CROSS_SCALE * scale)
+    if height_inches <= pd_cross["height_max"] and not has_vd and not has_rp:
+        scale = min(1.0, (pd_cross["height_max"] - height_inches) / pd_cross["height_window"])
+        pd_cross_up = round(pd_down.get(pd, 0) * pd_cross["scale"] * scale)
 
-    range_down = BELL_BASE_RANGE + VD_EXT.get(vd, 0) + PD_DOWN.get(pd, 0) + rp_cross_down
-    range_up = BELL_BASE_RANGE + VD_EXT.get(vd, 0) + RP_UP.get(rp, 0) + pd_cross_up
+    range_down = bell["base_range"] + vd_ext.get(vd, 0) + pd_down.get(pd, 0) + rp_cross_down
+    range_up_val = bell["base_range"] + vd_ext.get(vd, 0) + rp_up.get(rp, 0) + pd_cross_up
 
     return {
         "amplitude": amplitude,
         "peak_center": peak_center,
         "range_down": range_down,
-        "range_up": range_up,
-        "flat_top_down": max(0, range_down // BELL_FLAT_TOP_DIVISOR),
-        "flat_top_up": max(0, range_up // BELL_FLAT_TOP_DIVISOR),
+        "range_up": range_up_val,
+        "flat_top_down": max(0, range_down // bell["flat_top_divisor"]) if bell.get("flat_top_divisor", 0) > 0 else 0,
+        "flat_top_up": max(0, range_up_val // bell["flat_top_divisor"]) if bell.get("flat_top_divisor", 0) > 0 else 0,
         "player_height": height_inches,
     }
 
 
-def _closest_amplitude_tier(value: float) -> str:
+def _closest_amplitude_tier(value: float, amplitude_map: dict[str, float]) -> str:
     """
     Map a boosted defensive amplitude value back to the nearest tier string.
 
     Ties round upward so a half-tier RP boost has a visible effect on teammates.
     """
     return min(
-        AMPLITUDE_MAP,
-        key=lambda tier: (abs(AMPLITUDE_MAP[tier] - value), -AMPLITUDE_MAP[tier]),
+        amplitude_map,
+        key=lambda tier: (abs(amplitude_map[tier] - value), -amplitude_map[tier]),
     )
 
 
-def _best_rim_protector_provider(lineup: list[dict[str, Any]]) -> tuple[int | None, str, float]:
+def _best_rim_protector_provider(
+    lineup: list[dict[str, Any]], amplitude_map: dict[str, float]
+) -> tuple[int | None, str, float]:
     """Find the strongest rim protector so RP-to-PD boost excludes the provider."""
     best_index = None
     best_tier = "None"
     best_value = 0.0
     for index, player in enumerate(lineup):
         tier = player.get("skills", {}).get("rim_protector", "None")
-        value = AMPLITUDE_MAP.get(tier, 0.0)
+        value = amplitude_map.get(tier, 0.0)
         if value > best_value:
             best_index = index
             best_tier = tier
@@ -194,7 +187,7 @@ def _best_rim_protector_provider(lineup: list[dict[str, Any]]) -> tuple[int | No
     return best_index, best_tier, best_value
 
 
-def apply_rp_pd_boost(lineup: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def apply_rp_pd_boost(lineup: list[dict[str, Any]], values: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Boost teammates' perimeter disruption when an Elite+ rim protector is present.
 
@@ -202,8 +195,13 @@ def apply_rp_pd_boost(lineup: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Original lineup data remains untouched so later synergy stages can compose
     their own effective skill changes safely.
     """
-    provider_index, provider_tier, _provider_value = _best_rim_protector_provider(lineup)
-    boost = RP_PD_BOOST.get(provider_tier, 0.0)
+    amplitude_map: dict[str, float] = values["amplitude_map"]
+    rp_pd_boost: dict[str, float] = values["rp_pd_boost"]
+
+    provider_index, provider_tier, _provider_value = _best_rim_protector_provider(
+        lineup, amplitude_map
+    )
+    boost = rp_pd_boost.get(provider_tier, 0.0)
     if provider_index is None or boost <= 0:
         return lineup
 
@@ -215,20 +213,25 @@ def apply_rp_pd_boost(lineup: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
         copied = deepcopy(player)
         skills = copied.setdefault("skills", {})
-        current_value = AMPLITUDE_MAP.get(skills.get("perimeter_disruptor", "None"), 0.0)
-        skills["perimeter_disruptor"] = _closest_amplitude_tier(current_value + boost)
+        current_value = amplitude_map.get(skills.get("perimeter_disruptor", "None"), 0.0)
+        skills["perimeter_disruptor"] = _closest_amplitude_tier(
+            current_value + boost, amplitude_map
+        )
         boosted.append(copied)
 
     return boosted
 
 
-def _player_defensive_values(player: dict[str, Any]) -> list[float]:
+def _player_defensive_values(player: dict[str, Any], values: dict[str, Any]) -> list[float]:
     """Evaluate one player's bell curve at every supported target height."""
+    height_min = values["height_min_inches"]
+    height_max = values["height_max_inches"]
+
     height_inches = parse_height_inches(player.get("height"))
     if height_inches is None:
-        return [0.0 for _height in range(HEIGHT_MIN_INCHES, HEIGHT_MAX_INCHES + 1)]
+        return [0.0 for _height in range(height_min, height_max + 1)]
 
-    params = compute_bell_params(player.get("skills", {}), height_inches)
+    params = compute_bell_params(player.get("skills", {}), height_inches, values)
     return [
         defensive_value_at_height(
             target_height=height,
@@ -239,53 +242,67 @@ def _player_defensive_values(player: dict[str, Any]) -> list[float]:
             flat_top_down=int(params["flat_top_down"]),
             flat_top_up=int(params["flat_top_up"]),
             player_height=int(params["player_height"]),
+            values=values,
         )
-        for height in range(HEIGHT_MIN_INCHES, HEIGHT_MAX_INCHES + 1)
+        for height in range(height_min, height_max + 1)
     ]
 
 
-def compute_lineup_coverage_by_height(lineup: list[dict[str, Any]]) -> dict[int, float]:
+def compute_lineup_coverage_by_height(
+    lineup: list[dict[str, Any]], values: dict[str, Any]
+) -> dict[int, float]:
     """Return stacked defensive coverage for each supported target height."""
-    if not lineup:
-        return {height: 0.0 for height in range(HEIGHT_MIN_INCHES, HEIGHT_MAX_INCHES + 1)}
+    height_min = values["height_min_inches"]
+    height_max = values["height_max_inches"]
+    stacking_returns: tuple[float, ...] = tuple(values["stacking_returns"])
 
-    per_player_values = [_player_defensive_values(player) for player in lineup]
+    if not lineup:
+        return {height: 0.0 for height in range(height_min, height_max + 1)}
+
+    per_player_values = [_player_defensive_values(player, values) for player in lineup]
     coverage_by_height: dict[int, float] = {}
 
-    for height_index in range(HEIGHT_MAX_INCHES - HEIGHT_MIN_INCHES + 1):
-        values = sorted((values[height_index] for values in per_player_values), reverse=True)
+    for height_index in range(height_max - height_min + 1):
+        height_values = sorted(
+            (pv[height_index] for pv in per_player_values), reverse=True
+        )
         stacked = 0.0
-        for defender_index, value in enumerate(values):
+        for defender_index, value in enumerate(height_values):
             return_factor = (
-                STACKING_RETURNS[defender_index]
-                if defender_index < len(STACKING_RETURNS)
-                else STACKING_RETURNS[-1]
+                stacking_returns[defender_index]
+                if defender_index < len(stacking_returns)
+                else stacking_returns[-1]
             )
             stacked += value * return_factor
-        coverage_by_height[HEIGHT_MIN_INCHES + height_index] = stacked
+        coverage_by_height[height_min + height_index] = stacked
 
     return coverage_by_height
 
 
-def compute_lineup_defense(lineup: list[dict[str, Any]]) -> tuple[float, float, list[int]]:
+def compute_lineup_defense(
+    lineup: list[dict[str, Any]], values: dict[str, Any]
+) -> tuple[float, float, list[int]]:
     """
     Compute lineup defensive coverage, gap penalty, and uncovered height inches.
 
     At each target height, defenders stack with diminishing returns: strongest
     defender gets full credit, then 50%, 25%, and 10% for additional bodies.
     """
-    coverage_by_height = compute_lineup_coverage_by_height(lineup)
+    gap_threshold: float = values["defensive_gap_threshold"]
+    gap_penalty_scale: float = values["defensive_gap_penalty_scale"]
+
+    coverage_by_height = compute_lineup_coverage_by_height(lineup, values)
 
     gap_positions = [
         height
         for height, coverage in coverage_by_height.items()
-        if coverage < DEFENSIVE_GAP_THRESHOLD
+        if coverage < gap_threshold
     ]
 
     if gap_positions:
         min_coverage = min(coverage_by_height.values())
-        max_gap_depth = DEFENSIVE_GAP_THRESHOLD - min_coverage
-        gap_penalty = DEFENSIVE_GAP_PENALTY_SCALE * len(gap_positions) * max_gap_depth
+        max_gap_depth = gap_threshold - min_coverage
+        gap_penalty = gap_penalty_scale * len(gap_positions) * max_gap_depth
     else:
         gap_penalty = 0.0
 

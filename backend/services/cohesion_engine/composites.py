@@ -16,13 +16,8 @@ from services.skills import ALL_SKILLS
 from .bell_curve import compute_bell_params
 from .types import PlayerComposites
 from .weights import (
-    COMPOSITE_COEFFICIENTS,
     COMPOSITE_NAMES,
     MIN_DISTRIBUTION_SIZE,
-    NORMALIZATION_BREAKPOINT_PERCENTILE,
-    NORMALIZATION_BREAKPOINT_SCORE,
-    THEORETICAL_MAX,
-    TIER_VALUES,
 )
 
 COMPOSITE_DISTRIBUTIONS: dict[str, list[float]] = {}
@@ -45,7 +40,7 @@ def _run_query(query):
     return run_query(query)
 
 
-def tier_value(skills: dict[str, str | float], skill: str) -> float:
+def tier_value(skills: dict[str, str | float], skill: str, tier_values: dict[str, float]) -> float:
     """
     Return a skill's numeric value.
 
@@ -56,7 +51,7 @@ def tier_value(skills: dict[str, str | float], skill: str) -> float:
     value = skills.get(skill, "None")
     if isinstance(value, int | float):
         return float(value)
-    return TIER_VALUES.get(value, 0.0)
+    return tier_values.get(value, 0.0)
 
 
 def _with_default_skills(skills: dict[str, str | float]) -> dict[str, str | float]:
@@ -67,87 +62,90 @@ def _with_default_skills(skills: dict[str, str | float]) -> dict[str, str | floa
     return normalized
 
 
-def compute_raw_composites(skills: dict[str, str | float]) -> dict[str, float]:
-    """Compute all raw player composites in dependency order."""
+def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any]) -> dict[str, float]:
+    """Compute all raw player composites in dependency order.
+
+    Args:
+        skills: Player skill map (tier strings or pre-boosted floats).
+        values: The ``engine.version.values`` dict from the active Evaluation Version.
+    """
     skills = _with_default_skills(skills)
-    c = COMPOSITE_COEFFICIENTS
+    tv = values["tier_values"]
+    c = values["composite_coefficients"]
+
+    def _tv(skill: str) -> float:
+        return tier_value(skills, skill, tv)
 
     # Step 1: independent composites that do not depend on other composites.
     raw_spacing = (
-        tier_value(skills, "movement_shooter")
-        + tier_value(skills, "spot_up_shooter")
-        + c["spacing_off_dribble"] * tier_value(skills, "off_dribble_shooter")
+        _tv("movement_shooter")
+        + _tv("spot_up_shooter")
+        + c["spacing_off_dribble"] * _tv("off_dribble_shooter")
     )
-    raw_finishing = tier_value(skills, "high_flyer") + tier_value(skills, "crafty_finisher")
-    raw_rebounding = tier_value(skills, "rebounder") + tier_value(skills, "offensive_rebounder")
+    raw_finishing = _tv("high_flyer") + _tv("crafty_finisher")
+    raw_rebounding = _tv("rebounder") + _tv("offensive_rebounder")
     raw_perimeter_defense = (
-        tier_value(skills, "perimeter_disruptor")
-        + c["perimeter_defense_versatile_defender"] * tier_value(skills, "versatile_defender")
+        _tv("perimeter_disruptor")
+        + c["perimeter_defense_versatile_defender"] * _tv("versatile_defender")
     )
     raw_interior_defense = (
-        tier_value(skills, "rim_protector")
-        + c["interior_defense_versatile_defender"] * tier_value(skills, "versatile_defender")
-        + c["interior_defense_rebounder"] * tier_value(skills, "rebounder")
+        _tv("rim_protector")
+        + c["interior_defense_versatile_defender"] * _tv("versatile_defender")
+        + c["interior_defense_rebounder"] * _tv("rebounder")
     )
 
     # Step 2: rim pressure uses raw finishing as an amplifier.
     finishing_mult = max(1.0, 1.0 + c["paint_touch_finishing_scale"] * raw_finishing)
     raw_paint_touch = finishing_mult * (
-        tier_value(skills, "driver")
-        + c["paint_touch_vertical_spacer"] * tier_value(skills, "vertical_spacer")
-        + tier_value(skills, "low_post_player")
-        + c["paint_touch_mid_post"] * tier_value(skills, "mid_post_player")
+        _tv("driver")
+        + c["paint_touch_vertical_spacer"] * _tv("vertical_spacer")
+        + _tv("low_post_player")
+        + c["paint_touch_mid_post"] * _tv("mid_post_player")
     )
 
     # Step 3: independent big-man and transition composites.
     raw_anchor = (
-        tier_value(skills, "rebounder")
+        _tv("rebounder")
         + raw_interior_defense
-        + tier_value(skills, "vertical_spacer")
-        + c["anchor_screen_setter"] * tier_value(skills, "screen_setter")
+        + _tv("vertical_spacer")
+        + c["anchor_screen_setter"] * _tv("screen_setter")
     )
     raw_post_game = (
-        tier_value(skills, "low_post_player")
-        + c["post_game_mid_post"] * tier_value(skills, "mid_post_player")
+        _tv("low_post_player")
+        + c["post_game_mid_post"] * _tv("mid_post_player")
     )
     pnr_secondary_mult = max(
         1.0,
         1.0
         + c["pnr_screener_secondary_scale"]
-        * (tier_value(skills, "vertical_spacer") + tier_value(skills, "spot_up_shooter")),
+        * (_tv("vertical_spacer") + _tv("spot_up_shooter")),
     )
-    raw_pnr_screener = tier_value(skills, "pnr_finisher") * pnr_secondary_mult + tier_value(
-        skills,
-        "screen_setter",
-    )
+    raw_pnr_screener = _tv("pnr_finisher") * pnr_secondary_mult + _tv("screen_setter")
     passer_transition_mult = max(
         1.0,
-        1.0 + c["transition_passer_scale"] * tier_value(skills, "passer"),
+        1.0 + c["transition_passer_scale"] * _tv("passer"),
     )
     raw_transition = (
-        tier_value(skills, "transition_threat") * passer_transition_mult
-        + c["transition_high_flyer"] * tier_value(skills, "high_flyer")
-        + c["transition_driver"] * tier_value(skills, "driver")
-        + c["transition_spot_up"] * tier_value(skills, "spot_up_shooter")
+        _tv("transition_threat") * passer_transition_mult
+        + c["transition_high_flyer"] * _tv("high_flyer")
+        + c["transition_driver"] * _tv("driver")
+        + c["transition_spot_up"] * _tv("spot_up_shooter")
     )
 
     # Step 4: off-ball impact references raw spacing and raw finishing.
     cutting_finishing_mult = max(1.0, 1.0 + c["off_ball_finishing_scale"] * raw_finishing)
     raw_off_ball_impact = (
         raw_spacing
-        + tier_value(skills, "cutter") * cutting_finishing_mult
-        + tier_value(skills, "passer") * c["off_ball_passer"]
+        + _tv("cutter") * cutting_finishing_mult
+        + _tv("passer") * c["off_ball_passer"]
     )
 
     # Step 5: shot creation references raw spacing and raw rim pressure.
-    # Paint touch scaled to 0.5 — rim finishing contributes to creation but
-    # shouldn't dominate; a player's creation score should reflect actual
-    # shot-making ability, not just paint finishing.
     raw_shot_creation = (
-        tier_value(skills, "pnr_ball_handler")
-        + tier_value(skills, "passer")
-        + tier_value(skills, "off_dribble_shooter")
-        + tier_value(skills, "isolation_scorer")
+        _tv("pnr_ball_handler")
+        + _tv("passer")
+        + _tv("off_dribble_shooter")
+        + _tv("isolation_scorer")
         + c["shot_creation_spacing"] * raw_spacing
         + c["shot_creation_paint_touch"] * raw_paint_touch
     )
@@ -168,7 +166,12 @@ def compute_raw_composites(skills: dict[str, str | float]) -> dict[str, float]:
     }
 
 
-def _percentile_normalize(raw: float, distribution: list[float]) -> float:
+def _percentile_normalize(
+    raw: float,
+    distribution: list[float],
+    breakpoint_percentile: float,
+    breakpoint_score: float,
+) -> float:
     """Hybrid percentile normalization from the implementation spec."""
     if not distribution or raw <= 0:
         return 0.0
@@ -179,14 +182,12 @@ def _percentile_normalize(raw: float, distribution: list[float]) -> float:
     equal = sum(1 for value in sorted_distribution if value == raw)
     percentile = (below + equal / 2) / n
 
-    breakpoint = NORMALIZATION_BREAKPOINT_PERCENTILE
-    breakpoint_score = NORMALIZATION_BREAKPOINT_SCORE
-    p_break_index = int(n * breakpoint)
+    p_break_index = int(n * breakpoint_percentile)
     p_break_value = sorted_distribution[min(p_break_index, n - 1)]
     empirical_max = sorted_distribution[-1]
 
-    if percentile <= breakpoint:
-        result = percentile / breakpoint * breakpoint_score
+    if percentile <= breakpoint_percentile:
+        result = percentile / breakpoint_percentile * breakpoint_score
     elif empirical_max <= p_break_value:
         result = 10.0
     else:
@@ -202,7 +203,7 @@ def set_distributions(distributions: dict[str, list[float]] | None) -> None:
     COMPOSITE_DISTRIBUTIONS.clear()
     if distributions:
         COMPOSITE_DISTRIBUTIONS.update(
-            {name: sorted(values) for name, values in distributions.items()}
+            {name: sorted(vals) for name, vals in distributions.items()}
         )
 
 
@@ -221,7 +222,7 @@ def distributions_ready() -> bool:
     )
 
 
-def ensure_distributions(season: str, force: bool = False) -> bool:
+def ensure_distributions(season: str, values: dict[str, Any], force: bool = False) -> bool:
     """
     Build percentile normalization distributions when missing.
 
@@ -233,7 +234,7 @@ def ensure_distributions(season: str, force: bool = False) -> bool:
         return True
 
     try:
-        build_distributions(season)
+        build_distributions(season, values)
         _DISTRIBUTION_SEASON = season
     except Exception as exc:
         logger.warning(
@@ -245,18 +246,29 @@ def ensure_distributions(season: str, force: bool = False) -> bool:
     return distributions_ready()
 
 
-def normalize_composites(raw: dict[str, float]) -> dict[str, float]:
+def normalize_composites(raw: dict[str, float], values: dict[str, Any]) -> dict[str, float]:
     """Normalize raw composites to 0.0-10.0 using cache or theoretical fallback."""
+    theoretical_max = values["theoretical_max"]
+    breakpoint_percentile = values["normalization_breakpoint_percentile"]
+    breakpoint_score = values["normalization_breakpoint_score"]
+
     if distributions_ready():
         return {
-            name: _percentile_normalize(value, COMPOSITE_DISTRIBUTIONS.get(name, []))
+            name: _percentile_normalize(
+                value, COMPOSITE_DISTRIBUTIONS.get(name, []),
+                breakpoint_percentile, breakpoint_score,
+            )
             for name, value in raw.items()
         }
 
-    return {
-        name: round(min(10.0, value / THEORETICAL_MAX[name] * 10.0), 1)
-        for name, value in raw.items()
-    }
+    result: dict[str, float] = {}
+    for name, value in raw.items():
+        denom = theoretical_max.get(name, 0)
+        if denom <= 0:
+            result[name] = 0.0
+        else:
+            result[name] = round(min(10.0, value / denom * 10.0), 1)
+    return result
 
 
 def _extract_skills(profile: dict[str, Any]) -> dict[str, str]:
@@ -267,7 +279,7 @@ def _extract_skills(profile: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def build_distributions(season: str) -> dict[str, list[float]]:
+def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[float]]:
     """
     Build and cache raw composite distributions for current players + legends.
 
@@ -287,7 +299,7 @@ def build_distributions(season: str) -> dict[str, list[float]]:
     )
     for row in profiles.data:
         skills = _with_default_skills(_extract_skills(row["profile"]))
-        raw = compute_raw_composites(skills)
+        raw = compute_raw_composites(skills, values)
         for name, value in raw.items():
             all_raw[name].append(value)
 
@@ -300,11 +312,11 @@ def build_distributions(season: str) -> dict[str, list[float]]:
     )
     for row in legend_profiles.data:
         skills = _with_default_skills(_extract_skills(row["profile"]))
-        raw = compute_raw_composites(skills)
+        raw = compute_raw_composites(skills, values)
         for name, value in raw.items():
             all_raw[name].append(value)
 
-    distributions = {name: sorted(values) for name, values in all_raw.items()}
+    distributions = {name: sorted(vals) for name, vals in all_raw.items()}
     set_distributions(distributions)
     return distributions
 
@@ -313,17 +325,19 @@ def compute_player_composites(
     skills: dict[str, str | float],
     player_id: str,
     name: str,
+    values: dict[str, Any],
     height_inches: int | None = None,
 ) -> PlayerComposites:
     """Compute normalized composites and bell parameters for one player."""
-    raw = compute_raw_composites(skills)
-    normalized = normalize_composites(raw)
+    raw = compute_raw_composites(skills, values)
+    normalized = normalize_composites(raw, values)
 
     # A missing height should not break partial roster previews; the midpoint
     # keeps the dataclass complete until the API provides real player height.
     bell = compute_bell_params(
         {key: str(value) for key, value in skills.items() if not isinstance(value, int | float)},
         height_inches if height_inches is not None else 78,
+        values,
     )
 
     return PlayerComposites(

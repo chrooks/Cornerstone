@@ -4,9 +4,22 @@ Integration tests for Phase 4 roster-level scoring.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from backend.services.cohesion_engine import evaluate_roster as package_evaluate_roster
 from backend.services.cohesion_engine.roster import _star_breakdown, evaluate_roster
 from backend.services.cohesion_engine.types import LineupCohesion, RosterEvaluation
+
+
+def _bootstrap_values() -> dict:
+    seed_path = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
+    with open(seed_path) as f:
+        data = json.load(f)
+    return data["payload"]["values"]
+
+
+VALUES = _bootstrap_values()
 
 
 def make_player(name: str, slot: int, height: str = "6-7", skills: dict[str, str] | None = None) -> dict:
@@ -57,7 +70,7 @@ def test_evaluate_roster_partial_roster_returns_base_composites_without_lineups(
         make_player("C", 3, skills={"passer": "Elite"}),
     ]
 
-    result = evaluate_roster(players)
+    result = evaluate_roster(players, VALUES)
 
     assert isinstance(result, RosterEvaluation)
     assert result.star_rating == 0.0
@@ -76,7 +89,7 @@ def test_evaluate_roster_partial_roster_returns_base_composites_without_lineups(
 def test_evaluate_roster_with_five_players_scores_one_lineup():
     players = [balanced_player(f"P{i}", i) for i in range(1, 6)]
 
-    result = evaluate_roster(players)
+    result = evaluate_roster(players, VALUES)
 
     assert 0.0 <= result.star_rating <= 5.0
     assert result.starting_lineup.score > 0.0
@@ -101,7 +114,7 @@ def test_lineup_only_archetype_diversity_normalizes_against_lineup_max():
         accentuation_weakness=0.0,
     )
 
-    breakdown = _star_breakdown(lineup, [lineup], {"offensive", "defensive", "transition"})
+    breakdown = _star_breakdown(lineup, [lineup], {"offensive", "defensive", "transition"}, VALUES)
 
     assert breakdown["archetype_diversity"] == 1.0
 
@@ -109,7 +122,7 @@ def test_lineup_only_archetype_diversity_normalizes_against_lineup_max():
 def test_evaluate_roster_with_nine_players_evaluates_all_126_lineups():
     players = [balanced_player(f"P{i}", i) for i in range(1, 10)]
 
-    result = evaluate_roster(players)
+    result = evaluate_roster(players, VALUES)
 
     assert result.lineup_summary["total_lineups"] == 126
     assert 0 <= result.lineup_summary["viable_lineups"] <= 126
@@ -121,7 +134,7 @@ def test_evaluate_roster_with_nine_players_evaluates_all_126_lineups():
 def test_evaluate_roster_with_twelve_players_evaluates_all_792_lineups():
     players = [balanced_player_for_slot(f"P{i}", i) for i in range(1, 13)]
 
-    result = evaluate_roster(players)
+    result = evaluate_roster(players, VALUES)
 
     assert result.lineup_summary["total_lineups"] == 792
     assert 0 <= result.lineup_summary["viable_lineups"] <= 792
@@ -137,8 +150,8 @@ def test_evaluate_roster_uses_slot_order_for_starting_lineup():
         balanced_player("Starter 3", 3),
     ]
 
-    result = evaluate_roster(players)
-    expected = evaluate_roster(sorted(players, key=lambda player: player["slot"])[:5])
+    result = evaluate_roster(players, VALUES)
+    expected = evaluate_roster(sorted(players, key=lambda player: player["slot"])[:5], VALUES)
 
     assert result.starting_lineup.score == expected.starting_lineup.score
 
@@ -151,7 +164,7 @@ def test_evaluate_roster_final_mode_attaches_team_description(monkeypatch):
         lambda evaluation, raw_players: "A crisp GM memo.",
     )
 
-    result = evaluate_roster(players, mode="final")
+    result = evaluate_roster(players, VALUES, mode="final")
 
     assert result.notes
     assert result.team_description == "A crisp GM memo."

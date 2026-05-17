@@ -4,6 +4,9 @@ Unit tests for Phase 2 defensive bell curve logic.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from backend.services.cohesion_engine.bell_curve import (
     apply_rp_pd_boost,
     compute_bell_params,
@@ -12,6 +15,16 @@ from backend.services.cohesion_engine.bell_curve import (
     defensive_value_at_height,
     parse_height_inches,
 )
+
+
+def _bootstrap_values() -> dict:
+    seed_path = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
+    with open(seed_path) as f:
+        data = json.load(f)
+    return data["payload"]["values"]
+
+
+VALUES = _bootstrap_values()
 
 
 def player(name: str, height: str, skills: dict[str, str]) -> dict:
@@ -26,7 +39,7 @@ def test_parse_height_inches_accepts_common_formats():
 
 
 def test_compute_bell_params_for_warm_body():
-    params = compute_bell_params({}, 74)
+    params = compute_bell_params({}, 74, VALUES)
 
     assert params == {
         "amplitude": 0.5,
@@ -40,7 +53,7 @@ def test_compute_bell_params_for_warm_body():
 
 
 def test_compute_bell_params_for_elite_versatile_defender():
-    params = compute_bell_params({"versatile_defender": "Elite"}, 79)
+    params = compute_bell_params({"versatile_defender": "Elite"}, 79, VALUES)
 
     assert params["amplitude"] == 3.5
     assert params["peak_center"] == 79
@@ -51,15 +64,15 @@ def test_compute_bell_params_for_elite_versatile_defender():
 
 
 def test_compute_bell_params_applies_pd_and_rp_peak_shifts():
-    pd_only = compute_bell_params({"perimeter_disruptor": "Elite"}, 76)
-    rp_only = compute_bell_params({"rim_protector": "Elite"}, 82)
+    pd_only = compute_bell_params({"perimeter_disruptor": "Elite"}, 76, VALUES)
+    rp_only = compute_bell_params({"rim_protector": "Elite"}, 82, VALUES)
 
     assert pd_only["peak_center"] == 75
     assert rp_only["peak_center"] == 83
 
 
 def test_compute_bell_params_clamps_peak_to_supported_height_range():
-    params = compute_bell_params({"rim_protector": "All-Time Great"}, 90)
+    params = compute_bell_params({"rim_protector": "All-Time Great"}, 90, VALUES)
 
     assert params["amplitude"] == 4.0
     assert params["peak_center"] == 88
@@ -78,7 +91,7 @@ def test_apply_rp_pd_boost_returns_copied_teammates_without_mutating_originals()
         player("Wing", "6-7", {"perimeter_disruptor": "None"}),
     ]
 
-    boosted = apply_rp_pd_boost(lineup)
+    boosted = apply_rp_pd_boost(lineup, VALUES)
 
     assert lineup[1]["skills"]["perimeter_disruptor"] == "Proficient"
     assert lineup[2]["skills"]["perimeter_disruptor"] == "None"
@@ -94,7 +107,7 @@ def test_apply_rp_pd_boost_noops_without_elite_rim_protector():
         player("Guard", "6-3", {"perimeter_disruptor": "Capable"}),
     ]
 
-    assert apply_rp_pd_boost(lineup) is lineup
+    assert apply_rp_pd_boost(lineup, VALUES) is lineup
 
 
 def test_compute_lineup_defense_stacks_values_and_reports_gaps():
@@ -104,7 +117,7 @@ def test_compute_lineup_defense_stacks_values_and_reports_gaps():
         player("Big", "7-0", {"rim_protector": "Elite"}),
     ]
 
-    coverage, gap_penalty, gaps = compute_lineup_defense(lineup)
+    coverage, gap_penalty, gaps = compute_lineup_defense(lineup, VALUES)
 
     assert coverage > 1.0
     assert gap_penalty <= 0.0
@@ -113,7 +126,7 @@ def test_compute_lineup_defense_stacks_values_and_reports_gaps():
 
 def test_compute_lineup_coverage_by_height_returns_supported_range():
     coverage = compute_lineup_coverage_by_height(
-        [player("Wing", "6-7", {"versatile_defender": "Elite"})]
+        [player("Wing", "6-7", {"versatile_defender": "Elite"})], VALUES
     )
 
     assert set(coverage) == set(range(72, 89))
@@ -121,8 +134,25 @@ def test_compute_lineup_coverage_by_height_returns_supported_range():
 
 
 def test_compute_lineup_defense_empty_lineup_returns_all_gaps():
-    coverage, gap_penalty, gaps = compute_lineup_defense([])
+    coverage, gap_penalty, gaps = compute_lineup_defense([], VALUES)
 
     assert coverage == 0.0
     assert gap_penalty == -38.25
     assert gaps == list(range(72, 89))
+
+
+def test_compute_bell_params_guards_zero_flat_top_divisor():
+    """A zero flat_top_divisor must not crash with ZeroDivisionError."""
+    import copy
+
+    broken_values = copy.deepcopy(VALUES)
+    broken_values["bell"]["flat_top_divisor"] = 0
+
+    params = compute_bell_params(
+        {"versatile_defender": "Elite", "perimeter_disruptor": "None", "rim_protector": "None"},
+        80,
+        broken_values,
+    )
+
+    assert params["flat_top_down"] == 0
+    assert params["flat_top_up"] == 0

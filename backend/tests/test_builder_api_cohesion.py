@@ -16,7 +16,7 @@ from services.cohesion_engine.weights import VIABLE_LINEUP_THRESHOLD
 
 @pytest.fixture()
 def client(monkeypatch):
-    monkeypatch.setattr(builder, "ensure_distributions", lambda _season: None)
+    monkeypatch.setattr(builder, "ensure_distributions", lambda _season, _values: None)
     app = create_app()
     app.config["TESTING"] = True
     with app.test_client() as c:

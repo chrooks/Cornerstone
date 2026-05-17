@@ -42,6 +42,27 @@ class TestL2RequiredValueKeys:
         l2 = [v for v in violations if v.layer == "L2"]
         assert any(v.code == "value_key_missing" and "tier_values" in v.target for v in l2)
 
+    def test_missing_engine_required_key_caught(self):
+        """Every key the engine reads via values['key'] must be validated at publish time."""
+        payload = _load_v1_payload()
+        # Remove a key that the engine accesses but the old gate didn't check
+        del payload["values"]["amplitude_map"]
+        violations = validate(payload, "note")
+        l2 = [v for v in violations if v.layer == "L2"]
+        assert any(v.code == "value_key_missing" and "amplitude_map" in v.target for v in l2)
+
+    def test_all_seed_keys_are_required(self):
+        """The publish gate must require every key present in the v1 seed blob."""
+        payload = _load_v1_payload()
+        seed_keys = set(payload["values"].keys())
+        # Remove each key one at a time and verify the validator catches it
+        for key in seed_keys:
+            stripped = _load_v1_payload()
+            del stripped["values"][key]
+            violations = validate(stripped, "note")
+            l2 = [v for v in violations if v.layer == "L2" and key in v.target]
+            assert l2, f"Validator did not catch missing key: {key}"
+
 
 class TestL3SubscoreTreeConsistency:
     def test_orphan_impact_trait(self):

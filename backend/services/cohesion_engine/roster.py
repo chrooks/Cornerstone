@@ -19,16 +19,6 @@ from .composites import compute_player_composites
 from .notes import generate_notes
 from .team_description import generate_team_description
 from .types import LineupCohesion, PlayerComposites, RosterEvaluation
-from .weights import (
-    ARCHETYPE_LABELS,
-    DEPTH_QUALITY_WEIGHT,
-    DEPTH_VIABLE_RATIO_WEIGHT,
-    LINEUP_ARCHETYPE_MAX,
-    LINEUP_ONLY_ROLLUP_WEIGHTS,
-    ROSTER_ROLLUP_WEIGHTS,
-    STAR_RATING_MAX,
-    VIABLE_LINEUP_THRESHOLD,
-)
 
 SUBSCORE_ARCHETYPES: dict[str, str] = {
     "spacing_creation_ratio": "offensive",
@@ -51,12 +41,10 @@ SUBSCORE_ARCHETYPES: dict[str, str] = {
 
 
 def _player_id(player: dict[str, Any], index: int) -> str:
-    """Read a stable player ID from common API shapes."""
     return str(player.get("id") or player.get("player_id") or f"roster-player-{index}")
 
 
 def _sort_players_for_starting_lineup(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Use slot order when present; otherwise preserve input order."""
     indexed_players = list(enumerate(players))
     return [
         player
@@ -68,7 +56,6 @@ def _sort_players_for_starting_lineup(players: list[dict[str, Any]]) -> list[dic
 
 
 def _empty_lineup() -> LineupCohesion:
-    """Placeholder lineup result for rosters that cannot form five players yet."""
     return LineupCohesion(
         score=0.0,
         subscores={},
@@ -78,8 +65,9 @@ def _empty_lineup() -> LineupCohesion:
     )
 
 
-def _compute_base_composites(players: list[dict[str, Any]]) -> list[PlayerComposites]:
-    """Compute display composites without lineup synergies."""
+def _compute_base_composites(
+    players: list[dict[str, Any]], values: dict[str, Any]
+) -> list[PlayerComposites]:
     composites: list[PlayerComposites] = []
     for index, player in enumerate(players):
         composites.append(
@@ -87,6 +75,7 @@ def _compute_base_composites(players: list[dict[str, Any]]) -> list[PlayerCompos
                 player.get("skills", {}),
                 player_id=_player_id(player, index),
                 name=str(player.get("name") or _player_id(player, index)),
+                values=values,
                 height_inches=parse_height_inches(player.get("height")),
             )
         )
@@ -94,7 +83,6 @@ def _compute_base_composites(players: list[dict[str, Any]]) -> list[PlayerCompos
 
 
 def _archetypes_for_lineup(lineup: LineupCohesion) -> list[str]:
-    """Assign 2-3 archetype labels based on the lineup's strongest subscores."""
     if not lineup.subscores:
         return []
 
@@ -109,34 +97,36 @@ def _archetypes_for_lineup(lineup: LineupCohesion) -> list[str]:
     return labels or ["balanced"]
 
 
-def _rotation_median_subscores(lineups: list[LineupCohesion]) -> dict[str, float]:
-    """Compute the median of each subscore across viable lineups only."""
-    viable = [lu for lu in lineups if lu.score >= VIABLE_LINEUP_THRESHOLD]
+def _rotation_median_subscores(
+    lineups: list[LineupCohesion], values: dict[str, Any]
+) -> dict[str, float]:
+    viable_threshold: float = values["viable_lineup_threshold"]
+    viable = [lu for lu in lineups if lu.score >= viable_threshold]
     if not viable:
         return {}
 
-    # Collect all subscore keys present across viable lineups.
     all_keys: set[str] = set()
     for lu in viable:
         all_keys.update(lu.subscores.keys())
 
     medians: dict[str, float] = {}
     for key in sorted(all_keys):
-        values = [lu.subscores.get(key, 0.0) for lu in viable]
-        medians[key] = round(median(values), 2)
+        key_values = [lu.subscores.get(key, 0.0) for lu in viable]
+        medians[key] = round(median(key_values), 2)
 
-    # Include accentuation scores — stored as separate fields, not in subscores.
     medians["accentuation_strength"] = round(median([lu.accentuation_strength for lu in viable]), 2)
     medians["accentuation_weakness"] = round(median([lu.accentuation_weakness for lu in viable]), 2)
 
     return medians
 
 
-def _lineup_summary(lineups: list[LineupCohesion], archetypes: set[str]) -> dict[str, Any]:
-    """Build the compact lineup summary used by API serialization later."""
+def _lineup_summary(
+    lineups: list[LineupCohesion], archetypes: set[str], values: dict[str, Any]
+) -> dict[str, Any]:
+    viable_threshold: float = values["viable_lineup_threshold"]
     scores = [lineup.score for lineup in lineups]
-    viable_count = sum(1 for score in scores if score >= VIABLE_LINEUP_THRESHOLD)
-    depth = _depth_components(lineups)
+    viable_count = sum(1 for score in scores if score >= viable_threshold)
+    depth = _depth_components(lineups, values)
     return {
         "total_lineups": len(lineups),
         "viable_lineups": viable_count,
@@ -148,19 +138,23 @@ def _lineup_summary(lineups: list[LineupCohesion], archetypes: set[str]) -> dict
         "depth_viable_ratio": depth["viable_ratio"],
         "depth_quality": depth["quality"],
         "depth_score": depth["score"],
-        "rotation_median_subscores": _rotation_median_subscores(lineups),
+        "rotation_median_subscores": _rotation_median_subscores(lineups, values),
     }
 
 
-def _depth_components(lineups: list[LineupCohesion]) -> dict[str, float | int]:
-    """Calculate bench-depth ingredients shared by summary and star breakdown."""
+def _depth_components(lineups: list[LineupCohesion], values: dict[str, Any]) -> dict[str, float | int]:
+    viable_threshold: float = values["viable_lineup_threshold"]
+    star_rating_max: float = values["star_rating_max"]
+    depth_viable_ratio_weight: float = values["depth_viable_ratio_weight"]
+    depth_quality_weight: float = values["depth_quality_weight"]
+
     bench_scores = [lineup.score for lineup in lineups[1:]]
     bench_lineups = len(bench_scores)
-    bench_viable_lineups = sum(1 for score in bench_scores if score >= VIABLE_LINEUP_THRESHOLD)
+    bench_viable_lineups = sum(1 for score in bench_scores if score >= viable_threshold)
     viable_ratio = bench_viable_lineups / bench_lineups if bench_lineups else 0.0
     bench_median_score = median(bench_scores) if bench_scores else 0.0
-    quality = min(1.0, bench_median_score / STAR_RATING_MAX) if bench_scores else 0.0
-    score = DEPTH_VIABLE_RATIO_WEIGHT * viable_ratio + DEPTH_QUALITY_WEIGHT * quality
+    quality = min(1.0, bench_median_score / star_rating_max) if bench_scores else 0.0
+    score = depth_viable_ratio_weight * viable_ratio + depth_quality_weight * quality
     return {
         "bench_lineups": bench_lineups,
         "bench_viable_lineups": bench_viable_lineups,
@@ -175,95 +169,78 @@ def _star_breakdown(
     starting_lineup: LineupCohesion,
     lineups: list[LineupCohesion],
     archetypes: set[str],
+    values: dict[str, Any],
 ) -> dict[str, float]:
-    """Normalize the four roster factors to 0.0-1.0."""
+    star_rating_max: float = values["star_rating_max"]
+    archetype_labels: list[str] = values["archetype_labels"]
+    lineup_archetype_max: int = values["lineup_archetype_max"]
+
     if not lineups:
-        return {
-            "starting_5": 0.0,
-            "depth": 0.0,
-            "archetype_diversity": 0.0,
-            "floor": 0.0,
-        }
+        return {"starting_5": 0.0, "depth": 0.0, "archetype_diversity": 0.0, "floor": 0.0}
 
     scores = [lineup.score for lineup in lineups]
-    depth = _depth_components(lineups)
-    archetype_denominator = LINEUP_ARCHETYPE_MAX if len(lineups) == 1 else len(ARCHETYPE_LABELS)
+    depth = _depth_components(lineups, values)
+    archetype_denominator = lineup_archetype_max if len(lineups) == 1 else len(archetype_labels)
     return {
-        "starting_5": round(min(1.0, starting_lineup.score / STAR_RATING_MAX), 3),
+        "starting_5": round(min(1.0, starting_lineup.score / star_rating_max), 3),
         "depth": float(depth["score"]),
         "archetype_diversity": round(min(1.0, len(archetypes) / archetype_denominator), 3),
-        "floor": round(min(1.0, median(scores) / STAR_RATING_MAX), 3),
+        "floor": round(min(1.0, median(scores) / star_rating_max), 3),
     }
 
 
-def _rollup_star_rating(breakdown: dict[str, float], lineup_only: bool = False) -> float:
-    """Apply the roster rollup to produce a 0-5 star rating.
-
-    When lineup_only is True (5-man Lineup mode), depth and floor factors
-    are zeroed out and the starting lineup dominates the score.
-    """
-    weights = LINEUP_ONLY_ROLLUP_WEIGHTS if lineup_only else ROSTER_ROLLUP_WEIGHTS
-    weighted = sum(
-        weights[key] * breakdown.get(key, 0.0)
-        for key in weights
-    )
-    return round(STAR_RATING_MAX * weighted, 2)
+def _rollup_star_rating(breakdown: dict[str, float], values: dict[str, Any], lineup_only: bool = False) -> float:
+    star_rating_max: float = values["star_rating_max"]
+    weights = values["lineup_only_rollup_weights"] if lineup_only else values["roster_rollup_weights"]
+    weighted = sum(weights[key] * breakdown.get(key, 0.0) for key in weights)
+    return round(star_rating_max * weighted, 2)
 
 
-def evaluate_roster(players: list[dict[str, Any]], mode: str = "live") -> RosterEvaluation:
+def evaluate_roster(
+    players: list[dict[str, Any]], values: dict[str, Any], mode: str = "live"
+) -> RosterEvaluation:
     """
     Evaluate a Team with at least five Players as Lineup Combinations.
 
     Live mode returns structured notes. Final mode also attempts the optional
     Claude-generated team narrative and degrades to None if that call fails.
     """
+    viable_threshold: float = values["viable_lineup_threshold"]
     ordered_players = _sort_players_for_starting_lineup(list(players))
-    base_composites = _compute_base_composites(ordered_players)
+    base_composites = _compute_base_composites(ordered_players, values)
 
     if len(ordered_players) < 5:
         evaluation = RosterEvaluation(
             star_rating=0.0,
-            star_breakdown={
-                "starting_5": 0.0,
-                "depth": 0.0,
-                "archetype_diversity": 0.0,
-                "floor": 0.0,
-            },
+            star_breakdown={"starting_5": 0.0, "depth": 0.0, "archetype_diversity": 0.0, "floor": 0.0},
             starting_lineup=_empty_lineup(),
             player_composites=base_composites,
-            lineup_summary={
-                "total_lineups": 0,
-                "viable_lineups": 0,
-                "median_score": 0.0,
-                "archetype_labels": [],
-            },
-            notes=generate_notes(ordered_players, base_composites),
+            lineup_summary={"total_lineups": 0, "viable_lineups": 0, "median_score": 0.0, "archetype_labels": []},
+            notes=generate_notes(ordered_players, base_composites, values),
             team_description=None,
         )
         if mode == "final":
-            return replace(
-                evaluation,
-                team_description=generate_team_description(evaluation, ordered_players),
-            )
+            return replace(evaluation, team_description=generate_team_description(evaluation, ordered_players))
         return evaluation
 
     starting_players = ordered_players[:5]
-    starting_lineup = evaluate_lineup(starting_players)
+    starting_lineup = evaluate_lineup(starting_players, values)
 
     lineups: list[LineupCohesion] = []
     archetypes: set[str] = set()
     for lineup_players in combinations(ordered_players, 5):
-        lineup = evaluate_lineup(list(lineup_players))
+        lineup = evaluate_lineup(list(lineup_players), values)
         lineups.append(lineup)
-        if lineup.score >= VIABLE_LINEUP_THRESHOLD:
+        if lineup.score >= viable_threshold:
             archetypes.update(_archetypes_for_lineup(lineup))
 
     lineup_only = len(ordered_players) == 5
-    lineup_summary = _lineup_summary(lineups, archetypes)
-    breakdown = _star_breakdown(starting_lineup, lineups, archetypes)
+    lineup_summary = _lineup_summary(lineups, archetypes, values)
+    breakdown = _star_breakdown(starting_lineup, lineups, archetypes, values)
     notes = generate_notes(
         ordered_players,
         base_composites,
+        values,
         {
             "starting_lineup": starting_lineup,
             "lineup_summary": lineup_summary,
@@ -273,7 +250,7 @@ def evaluate_roster(players: list[dict[str, Any]], mode: str = "live") -> Roster
     )
 
     evaluation = RosterEvaluation(
-        star_rating=_rollup_star_rating(breakdown, lineup_only=lineup_only),
+        star_rating=_rollup_star_rating(breakdown, values, lineup_only=lineup_only),
         star_breakdown=breakdown,
         starting_lineup=starting_lineup,
         player_composites=base_composites,
@@ -282,8 +259,5 @@ def evaluate_roster(players: list[dict[str, Any]], mode: str = "live") -> Roster
         team_description=None,
     )
     if mode == "final":
-        return replace(
-            evaluation,
-            team_description=generate_team_description(evaluation, ordered_players),
-        )
+        return replace(evaluation, team_description=generate_team_description(evaluation, ordered_players))
     return evaluation
