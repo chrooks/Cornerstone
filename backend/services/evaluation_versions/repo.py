@@ -148,13 +148,33 @@ def patch_draft(draft_id: str, patch: list[dict]) -> EvaluationVersion:
         try:
             target = payload
             for part in parts[:-1]:
+                if isinstance(target, list):
+                    part = int(part)
                 target = target[part]
 
-            if operation in ("replace", "add"):
-                target[parts[-1]] = value
-            elif operation == "remove":
-                del target[parts[-1]]
-        except (KeyError, TypeError) as exc:
+            last = parts[-1]
+            if isinstance(target, list):
+                if last == "-":
+                    # JSON Patch "-" means append
+                    if operation in ("replace", "add"):
+                        target.append(value)
+                    else:
+                        raise ValueError(f"cannot remove at '-': {path}")
+                else:
+                    idx = int(last)
+                    if operation in ("replace", "add"):
+                        if operation == "add" and idx == len(target):
+                            target.append(value)
+                        else:
+                            target[idx] = value
+                    elif operation == "remove":
+                        del target[idx]
+            else:
+                if operation in ("replace", "add"):
+                    target[last] = value
+                elif operation == "remove":
+                    del target[last]
+        except (KeyError, TypeError, IndexError) as exc:
             raise ValueError(f"invalid_patch_path: {path} ({exc})") from exc
 
     client = get_supabase()

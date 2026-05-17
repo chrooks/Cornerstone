@@ -29,10 +29,17 @@ export interface EvaluationVersion {
 }
 
 export interface PublishGateViolation {
-  layer: "L1" | "L2" | "L3" | "L4" | "L7";
+  layer: "L1" | "L2" | "L3" | "L4" | "L5" | "L7";
   code: string;
   message: string;
   target?: string;
+  severity?: "error" | "warning";
+}
+
+/** Registered Formula Handler info from GET /api/evaluation-versions/handlers. */
+export interface HandlerInfo {
+  name: string;
+  description: string;
 }
 
 export interface PublishGateResult {

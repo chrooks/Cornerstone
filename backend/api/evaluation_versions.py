@@ -15,6 +15,7 @@ from uuid import UUID
 from flask import Blueprint, jsonify, request
 
 from api.auth import require_admin
+from services.cohesion_engine.engine import CohesionEngine
 from services.evaluation_versions import repo, validator
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,21 @@ def get_draft():
         "data": _version_dict(draft) if draft else None,
         "error": None,
     })
+
+
+@evaluation_versions_bp.route("/handlers", methods=["GET"])
+@require_admin
+def list_handlers():
+    """Return registered Formula Handler names and descriptions."""
+    handlers = CohesionEngine.registered_handlers()
+    data = [
+        {
+            "name": name,
+            "description": (fn.__doc__ or "").strip().split("\n")[0] or name,
+        }
+        for name, fn in sorted(handlers.items())
+    ]
+    return jsonify({"success": True, "data": data, "error": None})
 
 
 @evaluation_versions_bp.route("/<version_id>", methods=["GET"])
@@ -246,7 +262,8 @@ def publish_draft(draft_id: str):
     # Run publish gate
     version = repo.get_version(draft_id)
     violations = validator.validate(version.payload, changelog_note)
-    if violations:
+    blocking = [v for v in violations if v.severity == "error"]
+    if blocking:
         return jsonify({
             "success": False,
             "data": {

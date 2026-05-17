@@ -108,4 +108,4 @@ export interface LineupTestResult {
 }
 
 /** Active tab in the center panel. */
-export type CenterTab = "bell_curves" | "lineup" | "weights";
+export type CenterTab = "bell_curves" | "lineup" | "weights" | "handlers";

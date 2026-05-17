@@ -38,6 +38,7 @@ import { EvaluationVersionHeader } from "./components/EvaluationVersionHeader";
 import { DraftBanner } from "./components/DraftBanner";
 import { DiffDrawer } from "./components/DiffDrawer";
 import { PublishDialog } from "./components/PublishDialog";
+import { FormulaHandlerPicker } from "./components/FormulaHandlerPicker";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -47,6 +48,7 @@ const CENTER_TABS: { key: CenterTab; label: string }[] = [
   { key: "lineup", label: "Lineup Tester" },
   { key: "bell_curves", label: "Bell Curves" },
   { key: "weights", label: "Weights" },
+  { key: "handlers", label: "Handlers" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -530,6 +532,9 @@ export default function CohesionCalibrationPage() {
               )}
               {centerTab === "weights" && (
                 <WeightsEditor onWeightsUpdated={handleWeightsUpdated} draft={draftVersion} onPatchDraft={handlePatchDraft} />
+              )}
+              {centerTab === "handlers" && (
+                <FormulaHandlerPicker draft={draftVersion} onPatchDraft={handlePatchDraft} />
               )}
             </div>
           </div>

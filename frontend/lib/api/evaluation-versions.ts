@@ -9,6 +9,7 @@ import type {
   EvaluationVersion,
   PublishGateResult,
   JsonPatchOp,
+  HandlerInfo,
 } from "@/lib/types/evaluation-version";
 
 export async function listEvaluationVersions(): Promise<ApiResponse<EvaluationVersion[]>> {
@@ -71,4 +72,8 @@ export async function discardDraft(id: string): Promise<ApiResponse<null>> {
   return apiFetch<null>(`/api/evaluation-versions/drafts/${id}`, {
     method: "DELETE",
   });
+}
+
+export async function getRegisteredHandlers(): Promise<ApiResponse<HandlerInfo[]>> {
+  return apiFetch<HandlerInfo[]>("/api/evaluation-versions/handlers");
 }

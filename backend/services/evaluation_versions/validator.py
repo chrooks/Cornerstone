@@ -4,8 +4,9 @@ Publish gate validator for Evaluation Versions.
 Checks structural integrity before a draft can be published:
   L1 — every formula_ref points at a registered Formula Handler
   L2 — required value keys exist in payload.values
-  L3 — Subscore Tree ↔ formula_refs consistency
+  L3 — formula_refs ↔ Impact Trait consistency (orphan refs block publish)
   L4 — Skills referenced by handlers exist in taxonomy
+  L5 — orphan Impact Traits with no formula_ref (warning, does not block)
   L7 — changelog note is non-empty
 """
 
@@ -19,12 +20,13 @@ from services.cohesion_engine.engine import CohesionEngine
 
 @dataclass(frozen=True)
 class PublishGateViolation:
-    """One structural error blocking publish."""
+    """One structural issue found during publish gate validation."""
 
-    layer: str       # 'L1' | 'L2' | 'L3' | 'L4' | 'L7'
-    code: str        # machine-readable error code
-    message: str     # human-readable explanation
-    target: str = "" # optional path to the offending field
+    layer: str           # 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | 'L7'
+    code: str            # machine-readable error code
+    message: str         # human-readable explanation
+    target: str = ""     # optional path to the offending field
+    severity: str = "error"  # 'error' blocks publish, 'warning' does not
 
 
 def validate(
@@ -159,17 +161,7 @@ def validate(
     impact_trait_keys = {t["key"] for t in impact_traits}
     formula_ref_keys = set(formula_refs.keys())
 
-    # Every Impact Trait must have a formula_ref
-    for trait_key in impact_trait_keys:
-        if trait_key not in formula_ref_keys:
-            violations.append(PublishGateViolation(
-                layer="L3",
-                code="subscore_orphan",
-                message=f"Impact Trait '{trait_key}' has no entry in formula_refs.",
-                target=f"taxonomy.impact_traits.{trait_key}",
-            ))
-
-    # Every formula_ref must correspond to an Impact Trait
+    # Every formula_ref must correspond to an Impact Trait (error — blocks publish)
     for ref_key in formula_ref_keys:
         if ref_key not in impact_trait_keys:
             violations.append(PublishGateViolation(
@@ -177,6 +169,17 @@ def validate(
                 code="subscore_orphan",
                 message=f"formula_refs key '{ref_key}' has no matching Impact Trait.",
                 target=f"formula_refs.{ref_key}",
+            ))
+
+    # L5: orphan Impact Trait — trait exists but no formula_ref wired (warning only)
+    for trait_key in impact_trait_keys:
+        if trait_key not in formula_ref_keys:
+            violations.append(PublishGateViolation(
+                layer="L5",
+                code="orphan_impact_trait",
+                message=f"Impact Trait '{trait_key}' has no entry in formula_refs.",
+                target=f"taxonomy.impact_traits.{trait_key}",
+                severity="warning",
             ))
 
     # L4: Skills exist in taxonomy
