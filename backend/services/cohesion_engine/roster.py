@@ -16,6 +16,7 @@ from typing import Any
 from .bell_curve import parse_height_inches
 from .cohesion import evaluate_lineup
 from .composites import compute_player_composites
+from .engine import CohesionEngine
 from .notes import generate_notes
 from .team_description import generate_team_description
 from .types import LineupCohesion, PlayerComposites, RosterEvaluation
@@ -197,7 +198,7 @@ def _rollup_star_rating(breakdown: dict[str, float], values: dict[str, Any], lin
 
 
 def evaluate_roster(
-    players: list[dict[str, Any]], values: dict[str, Any], mode: str = "live"
+    players: list[dict[str, Any]], engine: CohesionEngine, mode: str = "live"
 ) -> RosterEvaluation:
     """
     Evaluate a Team with at least five Players as Lineup Combinations.
@@ -205,6 +206,7 @@ def evaluate_roster(
     Live mode returns structured notes. Final mode also attempts the optional
     Claude-generated team narrative and degrades to None if that call fails.
     """
+    values = engine.version.values
     viable_threshold: float = values["viable_lineup_threshold"]
     ordered_players = _sort_players_for_starting_lineup(list(players))
     base_composites = _compute_base_composites(ordered_players, values)
@@ -224,12 +226,12 @@ def evaluate_roster(
         return evaluation
 
     starting_players = ordered_players[:5]
-    starting_lineup = evaluate_lineup(starting_players, values)
+    starting_lineup = evaluate_lineup(starting_players, engine)
 
     lineups: list[LineupCohesion] = []
     archetypes: set[str] = set()
     for lineup_players in combinations(ordered_players, 5):
-        lineup = evaluate_lineup(list(lineup_players), values)
+        lineup = evaluate_lineup(list(lineup_players), engine)
         lineups.append(lineup)
         if lineup.score >= viable_threshold:
             archetypes.update(_archetypes_for_lineup(lineup))

@@ -33,6 +33,7 @@ from services.cohesion_engine.cohesion import evaluate_lineup
 from services.cohesion_engine.composites import compute_player_composites, compute_raw_composites
 from services.cohesion_engine.composites import ensure_distributions
 from services.cohesion_engine import evaluate_roster
+from services.cohesion_engine.engine import CohesionEngine
 from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
 from services.cohesion_engine.types import LineupCohesion, PlayerComposites
 from services.cohesion_engine.weights import LINEUP_ONLY_ROLLUP_WEIGHTS, ROSTER_ROLLUP_WEIGHTS, STAR_RATING_MAX
@@ -46,6 +47,11 @@ from services.supabase_client import get_supabase
 def _active_values() -> dict[str, Any]:
     """Get the active Evaluation Version's values dict for runtime use."""
     return get_active_eval_version().values
+
+
+def _active_engine() -> CohesionEngine:
+    """Construct a CohesionEngine from the active Evaluation Version."""
+    return CohesionEngine(get_active_eval_version())
 
 logger = logging.getLogger(__name__)
 
@@ -427,13 +433,13 @@ def _serialize_player_composites(player: PlayerComposites) -> dict[str, Any]:
     }
 
 
-def _ranked_lineup_combinations(players: list[dict[str, Any]], values: dict[str, Any]) -> list[dict[str, Any]]:
+def _ranked_lineup_combinations(players: list[dict[str, Any]], engine: CohesionEngine, values: dict[str, Any]) -> list[dict[str, Any]]:
     """Evaluate, sort, and serialize every five-player combination."""
     starting_keys = tuple(_player_key(player, index) for index, player in enumerate(players[:_MAX_LINEUP_SIZE]))
     evaluated: list[dict[str, Any]] = []
     for combo_index, lineup_players_tuple in enumerate(combinations(players, _MAX_LINEUP_SIZE)):
         lineup_players = list(lineup_players_tuple)
-        lineup = evaluate_lineup(lineup_players, values)
+        lineup = evaluate_lineup(lineup_players, engine)
         lineup_keys = tuple(_player_key(player, index) for index, player in enumerate(lineup_players))
         evaluated.append({
             **_serialize_lineup_result(lineup, lineup_players, values),
@@ -598,7 +604,8 @@ def evaluate_rotation_endpoint() -> tuple:
       }
     """
     body = request.get_json(silent=True) or {}
-    values = _active_values()
+    engine = _active_engine()
+    values = engine.version.values
     ensure_distributions(CURRENT_SEASON, values)
 
     compacted_players, error = _validate_rotation_players(body.get("players"))
@@ -609,8 +616,8 @@ def evaluate_rotation_endpoint() -> tuple:
     resolved_players = _resolve_player_skills(compacted_players)
 
     try:
-        rotation = evaluate_roster(resolved_players, values, mode="live")
-        lineup_combinations = _ranked_lineup_combinations(resolved_players, values)
+        rotation = evaluate_roster(resolved_players, engine, mode="live")
+        lineup_combinations = _ranked_lineup_combinations(resolved_players, engine, values)
     except Exception:
         logger.exception("Error evaluating rotation")
         return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500
@@ -660,7 +667,8 @@ def evaluate_lineup_endpoint() -> tuple:
       }
     """
     body = request.get_json(silent=True) or {}
-    values = _active_values()
+    engine = _active_engine()
+    values = engine.version.values
     ensure_distributions(CURRENT_SEASON, values)
     players = body.get("players")
 
@@ -704,7 +712,7 @@ def evaluate_lineup_endpoint() -> tuple:
 
     # Run cohesion evaluation on the lineup
     try:
-        result = evaluate_lineup(resolved_players, values)
+        result = evaluate_lineup(resolved_players, engine)
     except Exception:
         logger.exception("Error evaluating lineup")
         return jsonify({"success": False, "data": None, "error": "Internal server error"}), 500

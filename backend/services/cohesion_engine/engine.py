@@ -11,7 +11,18 @@ computation through the registry.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar
+from typing import Any, Callable, ClassVar, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .types import PlayerComposites
+
+
+@dataclass(frozen=True)
+class LineupContext:
+    """Data available to a Formula Handler during lineup evaluation."""
+
+    composites: list[PlayerComposites]
+    lineup: list[dict[str, Any]]
 
 
 @dataclass(frozen=True)

@@ -14,20 +14,28 @@ from pathlib import Path
 
 import pytest
 
-from backend.services.cohesion_engine.bell_curve import compute_bell_params
-from backend.services.cohesion_engine.composites import compute_raw_composites
-from backend.services.cohesion_engine.roster import evaluate_roster
-from backend.services.cohesion_engine.synergies import apply_synergies
+from services.cohesion_engine.bell_curve import compute_bell_params
+from services.cohesion_engine.composites import compute_raw_composites
+from services.cohesion_engine.engine import CohesionEngine, EvaluationVersion
+from services.cohesion_engine.roster import evaluate_roster
+from services.cohesion_engine.synergies import apply_synergies
+
+# Ensure handlers are registered before tests run
+import services.cohesion_engine.handlers.composites_v1  # noqa: F401
 
 
-def _bootstrap_values() -> dict:
+def _bootstrap_engine() -> CohesionEngine:
     seed_path = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
     with open(seed_path) as f:
         data = json.load(f)
-    return data["payload"]["values"]
+    version = EvaluationVersion(
+        id="test", slug="test", status="published", payload=data["payload"],
+    )
+    return CohesionEngine(version)
 
 
-VALUES = _bootstrap_values()
+ENGINE = _bootstrap_engine()
+VALUES = ENGINE.version.values
 
 
 REFERENCE_PROFILES = {
@@ -290,7 +298,7 @@ def test_full_nine_player_roster_evaluates_126_lineups_under_100ms():
     ]
 
     start = time.perf_counter()
-    result = evaluate_roster(roster, VALUES)
+    result = evaluate_roster(roster, ENGINE)
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     assert result.lineup_summary["total_lineups"] == 126

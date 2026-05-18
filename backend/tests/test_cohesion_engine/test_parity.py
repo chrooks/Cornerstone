@@ -1,9 +1,9 @@
 """
-Parity test: handler dispatch matches direct function calls.
+Parity test: handler dispatch matches legacy inline aggregation.
 
-Proves the M3 refactor is purely structural — CohesionEngine dispatching
-through registered handlers produces identical results to calling the
-existing composites.py functions directly.
+Proves the lineup-level handler refactor is purely structural — dispatching
+through registered handlers produces identical results to the legacy inline
+_average / _top_two_plus_depth calls.
 
 Also proves that modified values in the Evaluation Version blob produce
 measurably different scores (values are consumed at runtime, not ignored).
@@ -17,8 +17,13 @@ from pathlib import Path
 
 import pytest
 
-from services.cohesion_engine.composites import compute_raw_composites
-from services.cohesion_engine.engine import CohesionEngine, EvaluationVersion
+from services.cohesion_engine.composites import compute_player_composites
+from services.cohesion_engine.engine import CohesionEngine, EvaluationVersion, LineupContext
+from services.cohesion_engine.types import PlayerComposites
+
+# Ensure handlers are registered
+import services.cohesion_engine.handlers.composites_v1  # noqa: F401
+from services.cohesion_engine.handlers.composites_v1 import _average, _top_two_plus_depth
 
 
 def _load_bootstrap_version() -> EvaluationVersion:
@@ -48,73 +53,82 @@ def _load_modified_version() -> EvaluationVersion:
     )
 
 
-# Canned player skills for parity comparison
-CANNED_SKILLS: list[dict[str, str]] = [
-    {
-        "spot_up_shooter": "Elite",
-        "off_dribble_shooter": "Proficient",
-        "movement_shooter": "Capable",
-        "isolation_scorer": "None",
-        "driver": "Proficient",
-        "crafty_finisher": "Capable",
-        "passer": "Proficient",
-        "pnr_ball_handler": "Capable",
-        "pnr_finisher": "None",
-        "cutter": "None",
-        "vertical_spacer": "None",
-        "high_flyer": "None",
-        "rebounder": "Capable",
-        "offensive_rebounder": "None",
-        "screen_setter": "None",
-        "rim_protector": "None",
-        "versatile_defender": "Capable",
-        "perimeter_disruptor": "Proficient",
-        "low_post_player": "None",
-        "mid_post_player": "None",
-        "transition_threat": "Proficient",
-    },
-    {
-        "spot_up_shooter": "None",
-        "off_dribble_shooter": "None",
-        "movement_shooter": "None",
-        "isolation_scorer": "None",
-        "driver": "Capable",
-        "crafty_finisher": "Proficient",
-        "passer": "Capable",
-        "pnr_ball_handler": "None",
-        "pnr_finisher": "Elite",
-        "cutter": "Proficient",
-        "vertical_spacer": "All-Time Great",
-        "high_flyer": "Elite",
-        "rebounder": "Elite",
-        "offensive_rebounder": "Proficient",
-        "screen_setter": "Elite",
-        "rim_protector": "All-Time Great",
-        "versatile_defender": "Proficient",
-        "perimeter_disruptor": "None",
-        "low_post_player": "Proficient",
-        "mid_post_player": "Capable",
-        "transition_threat": "Proficient",
-    },
-]
+def _make_lineup() -> list[dict]:
+    """Five-player lineup with varied skills for parity testing."""
+    return [
+        {"id": "handler", "name": "Handler", "height": "6-3", "skills": {
+            "pnr_ball_handler": "Elite", "passer": "Elite", "perimeter_disruptor": "Elite",
+        }},
+        {"id": "shooter", "name": "Shooter", "height": "6-5", "skills": {
+            "spot_up_shooter": "Elite", "movement_shooter": "Elite", "off_dribble_shooter": "Proficient",
+        }},
+        {"id": "wing", "name": "Wing", "height": "6-8", "skills": {
+            "versatile_defender": "Elite", "transition_threat": "Elite", "driver": "Proficient",
+        }},
+        {"id": "big", "name": "Big", "height": "7-0", "skills": {
+            "rim_protector": "Elite", "rebounder": "Elite", "pnr_finisher": "Elite", "screen_setter": "Elite",
+        }},
+        {"id": "forward", "name": "Forward", "height": "6-9", "skills": {
+            "cutter": "Elite", "high_flyer": "Proficient", "offensive_rebounder": "Proficient",
+        }},
+    ]
+
+
+def _compute_composites(lineup: list[dict], values: dict) -> list[PlayerComposites]:
+    """Compute PlayerComposites for a lineup using the same path as evaluate_lineup."""
+    from services.cohesion_engine.bell_curve import parse_height_inches
+    computed = []
+    for i, player in enumerate(lineup):
+        height_inches = parse_height_inches(player.get("height"))
+        computed.append(compute_player_composites(
+            player.get("skills", {}),
+            player_id=str(player.get("id", f"p-{i}")),
+            name=str(player.get("name", f"p-{i}")),
+            values=values,
+            height_inches=height_inches,
+        ))
+    return computed
 
 
 class TestHandlerParity:
+    """Dispatched handlers produce same results as legacy inline aggregation."""
+
     @pytest.fixture()
     def engine(self) -> CohesionEngine:
         return CohesionEngine(_load_bootstrap_version())
 
-    @pytest.mark.parametrize("skill_set", CANNED_SKILLS, ids=["shooter", "big"])
-    def test_each_composite_matches(self, engine: CohesionEngine, skill_set: dict[str, str]):
-        values = engine.version.values
-        direct = compute_raw_composites(skill_set, values)
+    @pytest.fixture()
+    def ctx(self, engine: CohesionEngine) -> LineupContext:
+        lineup = _make_lineup()
+        composites = _compute_composites(lineup, engine.version.values)
+        return LineupContext(composites=composites, lineup=lineup)
 
-        for composite_name in direct:
-            handler_name = f"{composite_name}_v1"
-            dispatched = engine.dispatch(handler_name, skill_set)
-            assert dispatched == pytest.approx(direct[composite_name], abs=1e-9), (
-                f"Handler {handler_name} returned {dispatched}, "
-                f"direct returned {direct[composite_name]}"
+    def test_average_handlers_match(self, engine: CohesionEngine, ctx: LineupContext):
+        """Handlers using _average match direct computation."""
+        for field in ("spacing", "finishing", "paint_touch", "off_ball_impact", "shot_creation", "transition"):
+            handler_name = f"{field}_v1"
+            dispatched = engine.dispatch(handler_name, ctx)
+            expected = _average(ctx.composites, field)
+            assert dispatched == pytest.approx(expected, abs=1e-9), (
+                f"Handler {handler_name}: dispatched={dispatched}, expected={expected}"
+            )
+
+    def test_collective_handlers_match(self, engine: CohesionEngine, ctx: LineupContext):
+        """Handlers using _top_two_plus_depth match direct computation."""
+        v = engine.version.values
+        cases = [
+            ("anchor_v1", "anchor", v["anchor_primary_weight"], v["anchor_secondary_weight"], v["anchor_depth_weight"]),
+            ("post_game_v1", "post_game", v["post_game_primary_weight"], v["post_game_secondary_weight"], v["post_game_depth_weight"]),
+            ("rebounding_v1", "rebounding", v["rebounding_primary_weight"], v["rebounding_secondary_weight"], v["rebounding_depth_weight"]),
+            ("pnr_screener_v1", "pnr_screener", v["pnr_screener_primary_weight"], v["pnr_screener_secondary_weight"], v["pnr_screener_depth_weight"]),
+            ("perimeter_defense_v1", "perimeter_defense", v["anchor_primary_weight"], v["anchor_secondary_weight"], v["anchor_depth_weight"]),
+            ("interior_defense_v1", "interior_defense", v["anchor_primary_weight"], v["anchor_secondary_weight"], v["anchor_depth_weight"]),
+        ]
+        for handler_name, field, pw, sw, dw in cases:
+            dispatched = engine.dispatch(handler_name, ctx)
+            expected = _top_two_plus_depth(ctx.composites, field, pw, sw, dw)
+            assert dispatched == pytest.approx(expected, abs=1e-9), (
+                f"Handler {handler_name}: dispatched={dispatched}, expected={expected}"
             )
 
     def test_all_formula_refs_registered(self, engine: CohesionEngine):
@@ -137,33 +151,34 @@ class TestModifiedValuesProduceDifferentOutput:
     def modified_engine(self) -> CohesionEngine:
         return CohesionEngine(_load_modified_version())
 
-    @pytest.mark.parametrize("skill_set", CANNED_SKILLS, ids=["shooter", "big"])
     def test_modified_tier_values_change_output(
         self,
         bootstrap_engine: CohesionEngine,
         modified_engine: CohesionEngine,
-        skill_set: dict[str, str],
     ):
-        """Changing Elite from 6.0 to 8.0 must produce different composite scores
-        for any player with at least one Elite skill."""
-        bootstrap_results = {
-            name: bootstrap_engine.dispatch(f"{name}_v1", skill_set)
-            for name in [
-                "spacing", "finishing", "paint_touch", "anchor", "post_game",
-                "pnr_screener", "off_ball_impact", "shot_creation", "rebounding",
-                "transition", "perimeter_defense", "interior_defense",
-            ]
-        }
-        modified_results = {
-            name: modified_engine.dispatch(f"{name}_v1", skill_set)
-            for name in bootstrap_results
-        }
+        """Changing Elite from 6.0 to 8.0 must produce different lineup subscores."""
+        lineup = _make_lineup()
 
-        # At least one composite must differ (both skill sets have Elite skills)
-        differences = {
-            name for name in bootstrap_results
-            if bootstrap_results[name] != pytest.approx(modified_results[name], abs=1e-9)
-        }
+        bootstrap_composites = _compute_composites(lineup, bootstrap_engine.version.values)
+        modified_composites = _compute_composites(lineup, modified_engine.version.values)
+
+        bootstrap_ctx = LineupContext(composites=bootstrap_composites, lineup=lineup)
+        modified_ctx = LineupContext(composites=modified_composites, lineup=lineup)
+
+        handler_names = [
+            "spacing_v1", "finishing_v1", "paint_touch_v1", "anchor_v1",
+            "post_game_v1", "pnr_screener_v1", "off_ball_impact_v1",
+            "shot_creation_v1", "rebounding_v1", "transition_v1",
+            "perimeter_defense_v1", "interior_defense_v1",
+        ]
+
+        differences = set()
+        for name in handler_names:
+            b = bootstrap_engine.dispatch(name, bootstrap_ctx)
+            m = modified_engine.dispatch(name, modified_ctx)
+            if b != pytest.approx(m, abs=1e-9):
+                differences.add(name)
+
         assert differences, (
             "Modified tier values produced identical output — "
             "handlers are not reading from engine.version.values"

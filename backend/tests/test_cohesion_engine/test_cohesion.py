@@ -7,18 +7,26 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from backend.services.cohesion_engine.cohesion import evaluate_lineup
-from backend.services.cohesion_engine.types import LineupCohesion
+from services.cohesion_engine.cohesion import evaluate_lineup
+from services.cohesion_engine.engine import CohesionEngine, EvaluationVersion
+from services.cohesion_engine.types import LineupCohesion
+
+# Ensure handlers are registered before tests run
+import services.cohesion_engine.handlers.composites_v1  # noqa: F401
 
 
-def _bootstrap_values() -> dict:
+def _bootstrap_engine() -> CohesionEngine:
     seed_path = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
     with open(seed_path) as f:
         data = json.load(f)
-    return data["payload"]["values"]
+    version = EvaluationVersion(
+        id="test", slug="test", status="published", payload=data["payload"],
+    )
+    return CohesionEngine(version)
 
 
-VALUES = _bootstrap_values()
+ENGINE = _bootstrap_engine()
+VALUES = ENGINE.version.values
 
 
 def make_player(name: str, height: str, skills: dict[str, str]) -> dict:
@@ -34,7 +42,7 @@ def test_evaluate_lineup_returns_all_subscores_in_range():
         make_player("Wing", "6-8", {"versatile_defender": "Elite", "transition_threat": "Elite", "high_flyer": "Elite"}),
     ]
 
-    result = evaluate_lineup(lineup, VALUES)
+    result = evaluate_lineup(lineup, ENGINE)
 
     assert isinstance(result, LineupCohesion)
     assert 0.0 <= result.score <= 5.0
@@ -72,7 +80,7 @@ def test_evaluate_lineup_does_not_mutate_input_players():
         make_player("Finisher", "6-11", {"pnr_finisher": "Elite", "rim_protector": "Elite"}),
     ]
 
-    evaluate_lineup(lineup, VALUES)
+    evaluate_lineup(lineup, ENGINE)
 
     assert lineup[0]["skills"]["pnr_ball_handler"] == "Elite"
     assert lineup[1]["skills"]["pnr_finisher"] == "Elite"
@@ -88,8 +96,8 @@ def test_perimeter_defense_can_boost_transition_subscore():
         for index in range(5)
     ]
 
-    pressure_result = evaluate_lineup(pressure_lineup, VALUES)
-    neutral_result = evaluate_lineup(neutral_lineup, VALUES)
+    pressure_result = evaluate_lineup(pressure_lineup, ENGINE)
+    neutral_result = evaluate_lineup(neutral_lineup, ENGINE)
 
     assert pressure_result.subscores["perimeter_defense_total"] > neutral_result.subscores["perimeter_defense_total"]
     assert pressure_result.subscores["transition"] > neutral_result.subscores["transition"]

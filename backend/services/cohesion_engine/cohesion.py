@@ -19,6 +19,7 @@ from .bell_curve import (
     parse_height_inches,
 )
 from .composites import compute_player_composites, tier_value
+from .engine import CohesionEngine, LineupContext
 from .ratios import (
     creation_offball_ratio,
     rebound_transition_ratio,
@@ -36,13 +37,6 @@ def _player_id(player: dict[str, Any], index: int) -> str:
     return str(player.get("id") or player.get("player_id") or f"lineup-player-{index}")
 
 
-def _average(composites: list[PlayerComposites], field: str) -> float:
-    """Average a normalized composite across the lineup."""
-    if not composites:
-        return 0.0
-    return sum(float(getattr(player, field)) for player in composites) / len(composites)
-
-
 def _collective_passing(lineup: list[dict[str, Any]], values: dict[str, Any]) -> float:
     """Blend primary creator quality with lineup-wide passing depth."""
     if not lineup:
@@ -54,17 +48,6 @@ def _collective_passing(lineup: list[dict[str, Any]], values: dict[str, Any]) ->
     return (
         primary_creator * values["passing_primary_creator_weight"]
         + depth * values["passing_depth_weight"]
-    )
-
-
-def _collective_rebounding(composites: list[PlayerComposites], values: dict[str, Any]) -> float:
-    """Blend the top two rebounders with team rebounding depth."""
-    return _top_two_plus_depth(
-        composites,
-        "rebounding",
-        values["rebounding_primary_weight"],
-        values["rebounding_secondary_weight"],
-        values["rebounding_depth_weight"],
     )
 
 
@@ -99,50 +82,6 @@ def _top_two_plus_depth_values(
     secondary = sorted_values[1] if len(sorted_values) > 1 else 0.0
     depth = sum(sorted_values) / len(sorted_values)
     return primary * primary_weight + secondary * secondary_weight + depth * depth_weight
-
-
-def _collective_anchor(composites: list[PlayerComposites], values: dict[str, Any]) -> float:
-    """Blend primary interior anchor quality with secondary support and depth."""
-    return _top_two_plus_depth(
-        composites,
-        "anchor",
-        values["anchor_primary_weight"],
-        values["anchor_secondary_weight"],
-        values["anchor_depth_weight"],
-    )
-
-
-def _collective_perimeter_defense(composites: list[PlayerComposites], values: dict[str, Any]) -> float:
-    """Blend primary perimeter defender quality with secondary support and depth."""
-    return _top_two_plus_depth(
-        composites,
-        "perimeter_defense",
-        values["anchor_primary_weight"],
-        values["anchor_secondary_weight"],
-        values["anchor_depth_weight"],
-    )
-
-
-def _collective_interior_defense(composites: list[PlayerComposites], values: dict[str, Any]) -> float:
-    """Blend primary interior defender quality with secondary support and depth."""
-    return _top_two_plus_depth(
-        composites,
-        "interior_defense",
-        values["anchor_primary_weight"],
-        values["anchor_secondary_weight"],
-        values["anchor_depth_weight"],
-    )
-
-
-def _collective_post_game(composites: list[PlayerComposites], values: dict[str, Any]) -> float:
-    """Blend primary post player quality with secondary option and depth."""
-    return _top_two_plus_depth(
-        composites,
-        "post_game",
-        values["post_game_primary_weight"],
-        values["post_game_secondary_weight"],
-        values["post_game_depth_weight"],
-    )
 
 
 def _pnr_handler_value(player: dict[str, Any], values: dict[str, Any]) -> float:
@@ -268,23 +207,31 @@ def _rollup_score(
     return round(star_rating_max * weighted_sum, 2)
 
 
-def evaluate_lineup(players: list[dict[str, Any]], values: dict[str, Any]) -> LineupCohesion:
+def evaluate_lineup(players: list[dict[str, Any]], engine: CohesionEngine) -> LineupCohesion:
     """Evaluate one lineup and return its cohesion score plus explanations."""
+    values = engine.version.values
+    formula_refs = engine.version.formula_refs
+
     rp_boosted = apply_rp_pd_boost(players, values)
     synergy_players, synergies_applied = apply_synergies(rp_boosted, values)
     player_composites = _compute_player_composites(synergy_players, values)
 
-    spacing = _average(player_composites, "spacing")
-    shot_creation = _average(player_composites, "shot_creation")
-    off_ball_impact = _average(player_composites, "off_ball_impact")
-    paint_touch = _average(player_composites, "paint_touch")
-    post_game = _collective_post_game(player_composites, values)
+    ctx = LineupContext(composites=player_composites, lineup=synergy_players)
+
+    # Dispatch Impact Trait subscores through registered Formula Handlers
+    spacing = engine.dispatch(formula_refs["spacing"], ctx)
+    shot_creation = engine.dispatch(formula_refs["shot_creation"], ctx)
+    off_ball_impact = engine.dispatch(formula_refs["off_ball_impact"], ctx)
+    paint_touch = engine.dispatch(formula_refs["paint_touch"], ctx)
+    post_game = engine.dispatch(formula_refs["post_game"], ctx)
+    anchor = engine.dispatch(formula_refs["anchor"], ctx)
+    perimeter_defense = engine.dispatch(formula_refs["perimeter_defense"], ctx)
+    interior_defense = engine.dispatch(formula_refs["interior_defense"], ctx)
+    rebounding = engine.dispatch(formula_refs["rebounding"], ctx)
+    transition = engine.dispatch(formula_refs["transition"], ctx)
+
+    # Non-dispatched subscores (complex logic, raw skill access, or no handler)
     pnr_pairing = _pnr_pairing(synergy_players, player_composites, values)
-    anchor = _collective_anchor(player_composites, values)
-    perimeter_defense = _collective_perimeter_defense(player_composites, values)
-    interior_defense = _collective_interior_defense(player_composites, values)
-    rebounding = _collective_rebounding(player_composites, values)
-    transition = _average(player_composites, "transition")
     collective_passing = _collective_passing(synergy_players, values)
 
     raw_defensive_coverage, gap_penalty, _gap_positions = compute_lineup_defense(

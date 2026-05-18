@@ -30,6 +30,7 @@ from services.cohesion_engine import weights as cohesion_weights
 from services.cohesion_engine.bell_curve import apply_rp_pd_boost, compute_bell_params, parse_height_inches
 from services.cohesion_engine.cohesion import evaluate_lineup
 from services.cohesion_engine.composites import ensure_distributions
+from services.cohesion_engine.engine import CohesionEngine
 from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
 from services.cohesion_engine.types import RosterEvaluation
 from services.evaluation_versions.repo import get_active as get_active_eval_version
@@ -205,7 +206,7 @@ def _serialize_lineup_combination(lineup, lineup_players: list[dict[str, Any]], 
     }
 
 
-def _ranked_lineup_combinations(players: list[dict[str, Any]], values: dict[str, Any]) -> list[dict[str, Any]]:
+def _ranked_lineup_combinations(players: list[dict[str, Any]], engine: CohesionEngine, values: dict[str, Any]) -> list[dict[str, Any]]:
     """Evaluate, sort, and serialize every current five-player combination."""
     if len(players) < _MAX_LINEUP_SIZE:
         return []
@@ -217,7 +218,7 @@ def _ranked_lineup_combinations(players: list[dict[str, Any]], values: dict[str,
     evaluated: list[dict[str, Any]] = []
     for combo_index, lineup_players_tuple in enumerate(combinations(players, _MAX_LINEUP_SIZE)):
         lineup_players = list(lineup_players_tuple)
-        lineup = evaluate_lineup(lineup_players, values)
+        lineup = evaluate_lineup(lineup_players, engine)
         lineup_keys = tuple(_player_key(player, index) for index, player in enumerate(lineup_players))
         evaluated.append({
             **_serialize_lineup_combination(lineup, lineup_players, values),
@@ -270,7 +271,7 @@ def _serialize_player_composites(player) -> dict:
     }
 
 
-def _serialize_evaluation(evaluation: RosterEvaluation, players: list[dict[str, Any]], values: dict[str, Any]) -> dict:
+def _serialize_evaluation(evaluation: RosterEvaluation, players: list[dict[str, Any]], engine: CohesionEngine, values: dict[str, Any]) -> dict:
     """Serialize a RosterEvaluation to the API response shape."""
     ordered_players = _cohesion_players_in_slot_order(players)
     starting_players = ordered_players[:5]
@@ -283,7 +284,7 @@ def _serialize_evaluation(evaluation: RosterEvaluation, players: list[dict[str, 
             for player in evaluation.player_composites
         ],
         "lineup_summary": evaluation.lineup_summary,
-        "lineup_combinations": _ranked_lineup_combinations(ordered_players, values),
+        "lineup_combinations": _ranked_lineup_combinations(ordered_players, engine, values),
         "notes": [dataclasses.asdict(note) for note in evaluation.notes],
         "team_description": evaluation.team_description,
     }
@@ -410,9 +411,10 @@ def evaluate():
     try:
         version = get_active_eval_version()
         values = version.values
+        engine = CohesionEngine(version)
         ensure_distributions(CURRENT_SEASON, values)
-        result = evaluate_roster(body["players"], values, mode=mode)
-        return _ok(_serialize_evaluation(result, body["players"], values))
+        result = evaluate_roster(body["players"], engine, mode=mode)
+        return _ok(_serialize_evaluation(result, body["players"], engine, values))
     except Exception:
         logger.exception("Error in POST /api/builder/evaluate")
         return _err("Internal server error", status=500)
