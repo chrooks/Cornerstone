@@ -80,6 +80,8 @@ export const SUBSCORE_LABELS: Record<string, string> = {
   offensive_rebounding: "Off Rebounding",
   transition: "Transition",
   rebound_transition_ratio: "Rebound / Transition",
+  accentuation_strength: "Strength",
+  accentuation_weakness: "Weakness",
 };
 
 /** Human-readable explanations of Lineup Subscores. */
