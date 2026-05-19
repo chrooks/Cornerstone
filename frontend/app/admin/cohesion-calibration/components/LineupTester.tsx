@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
 import { CohesionCompositesTable } from "@/components/cohesion/CohesionResultDetails";
 import {
-  SUBSCORE_GROUPS,
   SUBSCORE_LABELS,
 } from "@/lib/cohesion-constants";
 import { subscoreColor, synergyChipClass } from "@/lib/cohesion-colors";
@@ -23,6 +22,7 @@ import type { LineupTestResult, LineupSlot } from "../types";
 import { PlayerEquationPanel } from "./PlayerInspection";
 import { LineupBellCurveChart } from "./BellCurveCharts";
 import { CohesionSubscoreEquation, synergyCalculationLines, synergyDescription } from "./SubscoreEquations";
+import { GroupedSubscoreLayout } from "./GroupedSubscoreLayout";
 
 // ---------------------------------------------------------------------------
 // Lineup slot helpers (exported for use by page orchestrator)
@@ -482,48 +482,32 @@ export function LineupTester({
           />
 
           {/* Subscores grouped by category */}
-          <div className="space-y-3">
-            {SUBSCORE_GROUPS.map((group) => (
-              <div key={group.heading}>
-                <p id={`cohesion-cal-subscore-group-${group.heading.toLowerCase().replace(/[^a-z]/g, "-")}`} className="text-[7px] uppercase tracking-wider text-muted-foreground/50 mb-1">
-                  {group.heading}
-                </p>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                  {group.entries.map(({ key }) => {
-                    const val = displayResult.subscores[key];
-                    if (val === undefined) return null;
-                    return (
-                      <CohesionSubscoreEquation
-                        key={key}
-                        subscoreKey={key}
-                        value={val}
-                        lineupSlots={displaySlots}
-                        weights={weights}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            {/* Accentuation */}
-            <div>
-              <p className="text-[7px] uppercase tracking-wider text-muted-foreground/50 mb-1">Accentuation</p>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                <CohesionSubscoreEquation
-                  subscoreKey="accentuation_strength"
-                  value={displayResult.accentuation.strength_amplification}
-                  lineupSlots={displaySlots}
-                  weights={weights}
-                />
-                <CohesionSubscoreEquation
-                  subscoreKey="accentuation_weakness"
-                  value={displayResult.accentuation.weakness_coverage}
-                  lineupSlots={displaySlots}
-                  weights={weights}
-                />
-              </div>
-            </div>
-          </div>
+          <GroupedSubscoreLayout
+            id="cohesion-cal-lineup-subscores"
+            subscores={displayResult.subscores}
+            accentuation={displayResult.accentuation}
+            groupGap="space-y-3"
+            headerGap="mb-1"
+            gridClassName="grid grid-cols-2 gap-x-3 gap-y-1"
+            renderEntry={(key, val) => (
+              <CohesionSubscoreEquation
+                key={key}
+                subscoreKey={key}
+                value={val}
+                lineupSlots={displaySlots}
+                weights={weights}
+              />
+            )}
+            renderAccentuation={(key, val) => (
+              <CohesionSubscoreEquation
+                key={key}
+                subscoreKey={key}
+                value={val}
+                lineupSlots={displaySlots}
+                weights={weights}
+              />
+            )}
+          />
 
           {/* Synergies chips */}
           {displayResult.synergies_applied.length > 0 && (
