@@ -35,7 +35,7 @@ def test_off_02_boosts_movement_shooter_from_distinct_screener():
     boosted, fired = apply_synergies(lineup, VALUES)
 
     assert "OFF-02" in fired
-    assert boosted[0]["skills"]["movement_shooter"] == pytest.approx(7.8)
+    assert boosted[0]["skills"]["movement_shooter"] == pytest.approx(11.2)
     assert lineup[0]["skills"]["movement_shooter"] == "Elite"
 
 
@@ -43,7 +43,7 @@ def test_off_03_penalizes_movement_shooter_without_screen():
     boosted, fired = apply_synergies([make_player("Shooter", {"movement_shooter": "Elite"})], VALUES)
 
     assert "OFF-03" in fired
-    assert boosted[0]["skills"]["movement_shooter"] == pytest.approx(5.2173913043)
+    assert boosted[0]["skills"]["movement_shooter"] == pytest.approx(6.9565217391304355)
 
 
 def test_cutter_synergies_can_boost_and_penalize_same_effective_skill():
@@ -56,14 +56,14 @@ def test_cutter_synergies_can_boost_and_penalize_same_effective_skill():
     boosted, fired = apply_synergies(lineup, VALUES)
 
     assert {"OFF-04", "OFF-13", "OFF-14"}.issubset(set(fired))
-    assert boosted[0]["skills"]["cutter"] > 3.0
+    assert boosted[0]["skills"]["cutter"] > 4.0
 
 
 def test_off_12_fires_when_cutter_has_no_passer():
     boosted, fired = apply_synergies([make_player("Cutter", {"cutter": "Elite"})], VALUES)
 
     assert "OFF-12" in fired
-    assert boosted[0]["skills"]["cutter"] < 6.0
+    assert boosted[0]["skills"]["cutter"] < 8.0
 
 
 def test_vertical_spacer_penalty_and_boost_conditions():
@@ -78,8 +78,8 @@ def test_vertical_spacer_penalty_and_boost_conditions():
 
     assert "OFF-15" in penalty_ids
     assert "OFF-16" in boost_ids
-    assert penalized[0]["skills"]["vertical_spacer"] < 6.0
-    assert boosted[0]["skills"]["vertical_spacer"] > 6.0
+    assert penalized[0]["skills"]["vertical_spacer"] < 8.0
+    assert boosted[0]["skills"]["vertical_spacer"] > 8.0
 
 
 def test_off_28_is_retired_in_favor_of_pnr_pairing_subscore():
@@ -104,5 +104,5 @@ def test_transition_synergies_and_single_passer_flag_fire():
     boosted, fired = apply_synergies(lineup, VALUES)
 
     assert {"OFF-31", "OFF-32", "OFF-37"}.issubset(set(fired))
-    assert boosted[0]["skills"]["transition_threat"] > 6.0
-    assert boosted[0]["skills"]["high_flyer"] > 6.0
+    assert boosted[0]["skills"]["transition_threat"] > 8.0
+    assert boosted[0]["skills"]["high_flyer"] > 8.0

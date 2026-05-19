@@ -12,10 +12,10 @@ from backend.services.cohesion_engine import weights
 def test_tier_values_match_design_mapping():
     assert weights.TIER_VALUES == {
         "None": 0.0,
-        "Capable": 1.5,
-        "Proficient": 3.0,
-        "Elite": 6.0,
-        "All-Time Great": 10.0,
+        "Capable": 1.0,
+        "Proficient": 4.0,
+        "Elite": 8.0,
+        "All-Time Great": 16.0,
     }
 
 
@@ -34,19 +34,19 @@ def test_composite_coefficients_match_resolved_formulas():
 
 def test_theoretical_maxima_match_impl_spec_fallback_table():
     assert weights.THEORETICAL_MAX == {
-        "spacing": 25.0,
-        "finishing": 20.0,
-        "paint_touch": 85.8,
-        "post_game": 17.0,
-        "pnr_screener": 50.0,
-        "off_ball_impact": 61.0,
-        "shot_creation": 50.0,
-        "ball_security": 10.0,
-        "defensive_rebounding": 10.0,
-        "offensive_rebounding": 10.0,
-        "transition": 42.0,
-        "perimeter_defense": 17.0,
-        "interior_defense": 18.0,
+        "spacing": 40.0,
+        "finishing": 32.0,
+        "paint_touch": 187.968,
+        "post_game": 27.2,
+        "pnr_screener": 108.8,
+        "off_ball_impact": 101.76,
+        "shot_creation": 169.984,
+        "ball_security": 16.0,
+        "defensive_rebounding": 16.0,
+        "offensive_rebounding": 16.0,
+        "transition": 86.4,
+        "perimeter_defense": 27.2,
+        "interior_defense": 24.8,
     }
 
 

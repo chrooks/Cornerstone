@@ -39,12 +39,12 @@ def _load_bootstrap_version() -> EvaluationVersion:
 
 
 def _load_modified_version() -> EvaluationVersion:
-    """Load bootstrap blob but change Elite tier value from 6.0 to 8.0."""
+    """Load bootstrap blob but change Elite tier value from 8.0 to 10.0."""
     seed_path = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
     with open(seed_path) as f:
         data = json.load(f)
     payload = copy.deepcopy(data["payload"])
-    payload["values"]["tier_values"]["Elite"] = 8.0
+    payload["values"]["tier_values"]["Elite"] = 10.0
     return EvaluationVersion(
         id="modified-test",
         slug="cohesion-v1",
@@ -156,7 +156,7 @@ class TestModifiedValuesProduceDifferentOutput:
         bootstrap_engine: CohesionEngine,
         modified_engine: CohesionEngine,
     ):
-        """Changing Elite from 6.0 to 8.0 must produce different lineup subscores."""
+        """Changing Elite from 8.0 to 10.0 must produce different lineup subscores."""
         lineup = _make_lineup()
 
         bootstrap_composites = _compute_composites(lineup, bootstrap_engine.version.values)

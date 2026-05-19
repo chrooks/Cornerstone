@@ -60,19 +60,19 @@ def sample_skills() -> dict[str, str]:
 def test_compute_raw_composites_matches_validated_formula_order():
     raw = composites.compute_raw_composites(sample_skills(), VALUES)
 
-    assert raw["spacing"] == pytest.approx(9.75)
-    assert raw["finishing"] == pytest.approx(7.5)
-    assert raw["defensive_rebounding"] == pytest.approx(3.0)
-    assert raw["offensive_rebounding"] == pytest.approx(1.5)
-    assert raw["paint_touch"] == pytest.approx(21.6)
-    assert raw["post_game"] == pytest.approx(5.7)
-    assert raw["pnr_screener"] == pytest.approx(7.2)
-    assert raw["transition"] == pytest.approx(21.45)
-    assert raw["perimeter_defense"] == pytest.approx(4.05)
-    assert raw["interior_defense"] == pytest.approx(7.275)
-    assert raw["off_ball_impact"] == pytest.approx(17.55)
-    assert raw["shot_creation"] == pytest.approx(29.725)
-    assert raw["ball_security"] == pytest.approx(10.0)
+    assert raw["spacing"] == pytest.approx(12.5)
+    assert raw["finishing"] == pytest.approx(9.0)
+    assert raw["defensive_rebounding"] == pytest.approx(4.0)
+    assert raw["offensive_rebounding"] == pytest.approx(1.0)
+    assert raw["paint_touch"] == pytest.approx(29.24)
+    assert raw["post_game"] == pytest.approx(6.6)
+    assert raw["pnr_screener"] == pytest.approx(9.8)
+    assert raw["transition"] == pytest.approx(37.5)
+    assert raw["perimeter_defense"] == pytest.approx(4.7)
+    assert raw["interior_defense"] == pytest.approx(9.45)
+    assert raw["off_ball_impact"] == pytest.approx(24.18)
+    assert raw["shot_creation"] == pytest.approx(40.37)
+    assert raw["ball_security"] == pytest.approx(16.0)
 
 
 def test_compute_raw_composites_accepts_numeric_synergy_values():
@@ -85,7 +85,7 @@ def test_compute_raw_composites_accepts_numeric_synergy_values():
         VALUES,
     )
 
-    assert raw["spacing"] == pytest.approx(10.0)
+    assert raw["spacing"] == pytest.approx(11.0)
 
 
 def test_normalize_composites_uses_theoretical_max_when_cache_empty():
@@ -109,19 +109,19 @@ def test_normalize_composites_uses_theoretical_max_when_cache_empty():
     )
 
     assert normalized == {
-        "spacing": 5.0,
-        "finishing": 5.0,
-        "paint_touch": 5.0,
-        "post_game": 5.0,
-        "pnr_screener": 5.0,
-        "off_ball_impact": 5.0,
-        "shot_creation": 6.0,
-        "ball_security": 5.0,
-        "defensive_rebounding": 5.0,
-        "offensive_rebounding": 5.0,
-        "transition": 5.0,
-        "perimeter_defense": 5.0,
-        "interior_defense": 5.0,
+        "spacing": 3.1,
+        "finishing": 3.1,
+        "paint_touch": 2.3,
+        "post_game": 3.1,
+        "pnr_screener": 2.3,
+        "off_ball_impact": 3.0,
+        "shot_creation": 1.8,
+        "ball_security": 3.1,
+        "defensive_rebounding": 3.1,
+        "offensive_rebounding": 3.1,
+        "transition": 2.4,
+        "perimeter_defense": 3.1,
+        "interior_defense": 3.6,
     }
 
 
@@ -154,12 +154,12 @@ def test_compute_player_composites_returns_dataclass_with_bell_params():
     assert isinstance(player, PlayerComposites)
     assert player.player_id == "p1"
     assert player.name == "Example"
-    assert player.spacing == 3.9
-    assert player.perimeter_defense == 2.4
-    assert player.interior_defense == 4.0
+    assert player.spacing == 3.1
+    assert player.perimeter_defense == 1.7
+    assert player.interior_defense == 3.8
     assert player.ball_security == 10.0
-    assert player.defensive_rebounding == 3.0
-    assert player.offensive_rebounding == 1.5
+    assert player.defensive_rebounding == 2.5
+    assert player.offensive_rebounding == 0.6
     assert player.bell_amplitude == 3.5
     assert player.bell_peak == 80
     assert player.bell_range_down == 7
@@ -216,8 +216,8 @@ def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
 
     distributions = composites.build_distributions("2025-26", VALUES)
 
-    assert distributions["spacing"] == [1.5, 6.0]
+    assert distributions["spacing"] == [1.0, 8.0]
     assert distributions["finishing"] == [0.0, 0.0]
     assert distributions["perimeter_defense"] == [0.0, 0.0]
     assert distributions["interior_defense"] == [0.0, 0.0]
-    assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [1.5, 6.0]
+    assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [1.0, 8.0]

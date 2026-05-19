@@ -51,10 +51,10 @@ type CompositeKey = keyof CohesionCompositeScores;
 
 const TIER_VALUES: Record<string, number> = {
   None: 0,
-  Capable: 1.5,
-  Proficient: 3,
-  Elite: 6,
-  "All-Time Great": 10,
+  Capable: 1,
+  Proficient: 4,
+  Elite: 8,
+  "All-Time Great": 16,
 };
 
 const COMPOSITE_COEFFICIENTS = {

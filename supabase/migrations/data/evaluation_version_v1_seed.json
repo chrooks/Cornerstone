@@ -316,10 +316,10 @@
     "values": {
       "tier_values": {
         "None": 0.0,
-        "Capable": 1.5,
-        "Proficient": 3.0,
-        "Elite": 6.0,
-        "All-Time Great": 10.0
+        "Capable": 1.0,
+        "Proficient": 4.0,
+        "Elite": 8.0,
+        "All-Time Great": 16.0
       },
       "composite_coefficients": {
         "spacing_off_dribble": 0.5,
@@ -356,19 +356,19 @@
         "interior_defense"
       ],
       "theoretical_max": {
-        "spacing": 25.0,
-        "finishing": 20.0,
-        "paint_touch": 85.8,
-        "post_game": 17.0,
-        "pnr_screener": 50.0,
-        "off_ball_impact": 61.0,
-        "shot_creation": 50.0,
-        "ball_security": 10.0,
-        "defensive_rebounding": 10.0,
-        "offensive_rebounding": 10.0,
-        "transition": 42.0,
-        "perimeter_defense": 17.0,
-        "interior_defense": 18.0
+        "spacing": 40.0,
+        "finishing": 32.0,
+        "paint_touch": 187.968,
+        "post_game": 27.2,
+        "pnr_screener": 108.8,
+        "off_ball_impact": 101.76,
+        "shot_creation": 169.984,
+        "ball_security": 16.0,
+        "defensive_rebounding": 16.0,
+        "offensive_rebounding": 16.0,
+        "transition": 86.4,
+        "perimeter_defense": 27.2,
+        "interior_defense": 24.8
       },
       "normalization_breakpoint_percentile": 0.6,
       "normalization_breakpoint_score": 6.0,
@@ -656,5 +656,5 @@
       "bootstrap_source": "weights.py + skills.py"
     }
   },
-  "payload_hash": "a8a8fe4e953ac9aa0848b7b433f3269339cbd48fedd27f8cd91755435718d37e"
+  "payload_hash": "729db5d00383542a22363e49a5e58db17be81898f19b2417e75ff1cf10226f5f"
 }

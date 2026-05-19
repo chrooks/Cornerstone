@@ -21,10 +21,10 @@ from __future__ import annotations
 # ~1.67x Elite, so higher tiers carry disproportionate weight in sums.
 TIER_VALUES: dict[str, float] = {
     "None": 0.0,
-    "Capable": 1.5,
-    "Proficient": 3.0,
-    "Elite": 6.0,
-    "All-Time Great": 10.0,
+    "Capable": 1.0,
+    "Proficient": 4.0,
+    "Elite": 8.0,
+    "All-Time Great": 16.0,
 }
 
 
@@ -80,19 +80,19 @@ COMPOSITE_NAMES: tuple[str, ...] = (
 # Used as the denominator when normalizing raw composites to 0-10 scale.
 # These are hand-calculated from the composite formulas in composites.py.
 THEORETICAL_MAX: dict[str, float] = {
-    "spacing": 25.0,
-    "finishing": 20.0,
-    "paint_touch": 85.8,
-    "post_game": 17.0,
-    "pnr_screener": 50.0,
-    "off_ball_impact": 61.0,
-    "shot_creation": 50.0,
-    "ball_security": 10.0,
-    "defensive_rebounding": 10.0,
-    "offensive_rebounding": 10.0,
-    "transition": 42.0,
-    "perimeter_defense": 17.0,
-    "interior_defense": 18.0,
+    "spacing": 40.0,
+    "finishing": 32.0,
+    "paint_touch": 187.968,
+    "post_game": 27.2,
+    "pnr_screener": 108.8,
+    "off_ball_impact": 101.76,
+    "shot_creation": 169.984,
+    "ball_security": 16.0,
+    "defensive_rebounding": 16.0,
+    "offensive_rebounding": 16.0,
+    "transition": 86.4,
+    "perimeter_defense": 27.2,
+    "interior_defense": 24.8,
 }
 
 # Bell curve normalization uses a two-segment piecewise-linear mapping:
