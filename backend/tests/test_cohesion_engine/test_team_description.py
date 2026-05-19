@@ -31,6 +31,7 @@ def make_composite(
         pnr_screener=0.0,
         off_ball_impact=0.0,
         shot_creation=shot_creation,
+        pnr_ball_handler=0.0,
         ball_security=0.0,
         defensive_rebounding=0.0,
         offensive_rebounding=0.0,

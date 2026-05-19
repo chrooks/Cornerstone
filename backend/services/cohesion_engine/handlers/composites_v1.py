@@ -132,6 +132,20 @@ def offensive_rebounding(engine: CohesionEngine, ctx: LineupContext) -> float:
     )
 
 
+@CohesionEngine.handler("pnr_ball_handler_v1")
+def pnr_ball_handler(engine: CohesionEngine, ctx: LineupContext) -> float:
+    """Blend primary PnR ball handler with secondary support and depth.
+    Research: PnR initiation is role-specific — typically 1-2 players per lineup
+    handle pick-and-roll actions, distinct from broader shot creation."""
+    v = engine.version.values
+    return _top_two_plus_depth(
+        ctx.composites, "pnr_ball_handler",
+        v["pnr_handler_primary_weight"],
+        v["pnr_handler_secondary_weight"],
+        v["pnr_handler_depth_weight"],
+    )
+
+
 @CohesionEngine.handler("ball_security_v1")
 def ball_security(engine: CohesionEngine, ctx: LineupContext) -> float:
     """Average ball security. Research: turnovers account for 25-35% of ORtg variance

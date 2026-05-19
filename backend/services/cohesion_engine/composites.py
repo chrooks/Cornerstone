@@ -146,6 +146,14 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         + c["shot_creation_paint_touch"] * raw_paint_touch
     )
 
+    # Step 6: PnR ball handler — focused PnR initiation distinct from broad shot creation.
+    raw_pnr_ball_handler = (
+        _tv("pnr_ball_handler")
+        + c["pnr_ball_handler_passer"] * _tv("passer")
+        + c["pnr_ball_handler_driver"] * _tv("driver")
+        + c["pnr_ball_handler_off_dribble"] * _tv("off_dribble_shooter")
+    )
+
     return {
         "spacing": raw_spacing,
         "finishing": raw_finishing,
@@ -154,6 +162,7 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         "pnr_screener": raw_pnr_screener,
         "off_ball_impact": raw_off_ball_impact,
         "shot_creation": raw_shot_creation,
+        "pnr_ball_handler": raw_pnr_ball_handler,
         "ball_security": raw_ball_security,
         "defensive_rebounding": raw_defensive_rebounding,
         "offensive_rebounding": raw_offensive_rebounding,
@@ -347,6 +356,7 @@ def compute_player_composites(
         pnr_screener=normalized["pnr_screener"],
         off_ball_impact=normalized["off_ball_impact"],
         shot_creation=normalized["shot_creation"],
+        pnr_ball_handler=normalized["pnr_ball_handler"],
         ball_security=normalized["ball_security"],
         defensive_rebounding=normalized["defensive_rebounding"],
         offensive_rebounding=normalized["offensive_rebounding"],

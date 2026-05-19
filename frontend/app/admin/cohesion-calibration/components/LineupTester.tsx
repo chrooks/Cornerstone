@@ -56,6 +56,7 @@ export function lineupSlotsToCompositeRows(lineupSlots: LineupSlot[]): CohesionP
         pnr_screener: slot.normalizedComposites.pnr_screener ?? 0,
         off_ball_impact: slot.normalizedComposites.off_ball_impact ?? 0,
         shot_creation: slot.normalizedComposites.shot_creation ?? 0,
+        pnr_ball_handler: slot.normalizedComposites.pnr_ball_handler ?? 0,
         ball_security: slot.normalizedComposites.ball_security ?? 0,
         defensive_rebounding: slot.normalizedComposites.defensive_rebounding ?? 0,
         offensive_rebounding: slot.normalizedComposites.offensive_rebounding ?? 0,

@@ -30,6 +30,7 @@ def make_composites(name: str, **overrides: float) -> PlayerComposites:
         "pnr_screener": 1.0,
         "off_ball_impact": 1.0,
         "shot_creation": 1.0,
+        "pnr_ball_handler": 1.0,
         "ball_security": 1.0,
         "defensive_rebounding": 1.0,
         "offensive_rebounding": 1.0,

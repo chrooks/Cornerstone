@@ -49,6 +49,9 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "off_ball_passer": 0.3,                   # passing adds secondary off-ball value
     "shot_creation_spacing": 0.3,             # spacing bonus layered into shot creation
     "shot_creation_paint_touch": 0.5,         # rim pressure scaled down — finishing ≠ creation
+    "pnr_ball_handler_passer": 0.3,           # passing amplifies PnR handling (reading the defense)
+    "pnr_ball_handler_driver": 0.3,           # driving ability to turn the corner off screens
+    "pnr_ball_handler_off_dribble": 0.2,      # pull-up shooting off PnR creates dual threat
     "transition_passer_scale": 0.2,           # transition passing as fraction of transition composite
     "transition_high_flyer": 0.7,             # athleticism dominates transition scoring
     "transition_driver": 0.3,                 # driving adds secondary transition value
@@ -68,6 +71,7 @@ COMPOSITE_NAMES: tuple[str, ...] = (
     "pnr_screener",          # pick-and-roll screening + roll/pop ability
     "off_ball_impact",       # cutting, off-ball movement, and secondary playmaking
     "shot_creation",         # ability to generate shots for self and others
+    "pnr_ball_handler",      # pick-and-roll initiation and creation
     "ball_security",         # turnover avoidance and ball-handling safety
     "defensive_rebounding",  # securing defensive boards
     "offensive_rebounding",  # crashing the offensive glass
@@ -87,6 +91,7 @@ THEORETICAL_MAX: dict[str, float] = {
     "pnr_screener": 108.8,
     "off_ball_impact": 101.76,
     "shot_creation": 169.984,
+    "pnr_ball_handler": 28.8,
     "ball_security": 16.0,
     "defensive_rebounding": 16.0,
     "offensive_rebounding": 16.0,

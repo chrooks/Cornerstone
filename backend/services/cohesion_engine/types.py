@@ -30,6 +30,7 @@ class PlayerComposites:
     pnr_screener: float
     off_ball_impact: float
     shot_creation: float
+    pnr_ball_handler: float
     ball_security: float
     defensive_rebounding: float
     offensive_rebounding: float

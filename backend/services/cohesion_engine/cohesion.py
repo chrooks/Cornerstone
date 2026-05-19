@@ -107,8 +107,8 @@ def _pnr_pairing(
     lineup: list[dict[str, Any]], composites: list[PlayerComposites], values: dict[str, Any]
 ) -> float:
     """Score whether PnR handlers and screeners are both good and balanced."""
-    handler_quality = _top_two_plus_depth_values(
-        [_pnr_handler_value(player, values) for player in lineup],
+    handler_quality = _top_two_plus_depth(
+        composites, "pnr_ball_handler",
         values["pnr_handler_primary_weight"],
         values["pnr_handler_secondary_weight"],
         values["pnr_handler_depth_weight"],

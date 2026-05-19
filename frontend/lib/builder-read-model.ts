@@ -86,10 +86,10 @@ const VIABLE_LINEUP_THRESHOLD = 2.75;
 export const SKILL_TO_IMPACT_TRAITS: Record<string, ImpactTraitKey[]> = {
   movement_shooter: ["spacing", "off_ball_impact", "shot_creation"],
   spot_up_shooter: ["spacing", "pnr_screener", "off_ball_impact", "shot_creation", "transition"],
-  off_dribble_shooter: ["spacing", "shot_creation"],
+  off_dribble_shooter: ["spacing", "shot_creation", "pnr_ball_handler"],
   high_flyer: ["finishing", "paint_touch", "off_ball_impact", "transition"],
   crafty_finisher: ["finishing", "paint_touch", "off_ball_impact"],
-  driver: ["paint_touch", "shot_creation", "transition"],
+  driver: ["paint_touch", "shot_creation", "pnr_ball_handler", "transition"],
   vertical_spacer: ["paint_touch", "pnr_screener"],
   low_post_player: ["paint_touch", "post_game"],
   mid_post_player: ["paint_touch", "post_game"],
@@ -102,8 +102,8 @@ export const SKILL_TO_IMPACT_TRAITS: Record<string, ImpactTraitKey[]> = {
   pnr_finisher: ["pnr_screener"],
   transition_threat: ["transition"],
   cutter: ["off_ball_impact"],
-  passer: ["off_ball_impact", "shot_creation", "transition", "ball_security"],
-  pnr_ball_handler: ["shot_creation"],
+  passer: ["off_ball_impact", "shot_creation", "pnr_ball_handler", "transition", "ball_security"],
+  pnr_ball_handler: ["shot_creation", "pnr_ball_handler"],
   isolation_scorer: ["shot_creation"],
 };
 

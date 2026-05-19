@@ -145,39 +145,44 @@
           "order": 6
         },
         {
+          "key": "pnr_ball_handler",
+          "label": "PnR Ball Handler",
+          "order": 7
+        },
+        {
           "key": "ball_security",
           "label": "Ball Security",
-          "order": 7
+          "order": 8
         },
         {
           "key": "defensive_rebounding",
           "label": "Defensive Rebounding",
-          "order": 8
+          "order": 9
         },
         {
           "key": "offensive_rebounding",
           "label": "Offensive Rebounding",
-          "order": 9
+          "order": 10
         },
         {
           "key": "transition",
           "label": "Transition",
-          "order": 10
+          "order": 11
         },
         {
           "key": "perimeter_defense",
           "label": "Perimeter Defense",
-          "order": 11
+          "order": 12
         },
         {
           "key": "interior_defense",
           "label": "Interior Defense",
-          "order": 12
+          "order": 13
         },
         {
           "key": "switchability",
           "label": "Switchability",
-          "order": 13
+          "order": 14
         }
       ],
       "subscore_tree": [
@@ -332,6 +337,9 @@
         "off_ball_passer": 0.3,
         "shot_creation_spacing": 0.3,
         "shot_creation_paint_touch": 0.5,
+        "pnr_ball_handler_passer": 0.3,
+        "pnr_ball_handler_driver": 0.3,
+        "pnr_ball_handler_off_dribble": 0.2,
         "transition_passer_scale": 0.2,
         "transition_high_flyer": 0.7,
         "transition_driver": 0.3,
@@ -348,6 +356,7 @@
         "pnr_screener",
         "off_ball_impact",
         "shot_creation",
+        "pnr_ball_handler",
         "ball_security",
         "defensive_rebounding",
         "offensive_rebounding",
@@ -363,6 +372,7 @@
         "pnr_screener": 108.8,
         "off_ball_impact": 101.76,
         "shot_creation": 169.984,
+        "pnr_ball_handler": 28.8,
         "ball_security": 16.0,
         "defensive_rebounding": 16.0,
         "offensive_rebounding": 16.0,
@@ -643,6 +653,7 @@
       "pnr_screener": "pnr_screener_v1",
       "off_ball_impact": "off_ball_impact_v1",
       "shot_creation": "shot_creation_v1",
+      "pnr_ball_handler": "pnr_ball_handler_v1",
       "ball_security": "ball_security_v1",
       "defensive_rebounding": "defensive_rebounding_v1",
       "offensive_rebounding": "offensive_rebounding_v1",
