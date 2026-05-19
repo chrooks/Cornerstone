@@ -9,7 +9,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { SUBSCORE_LABELS, SYNERGY_DESCRIPTIONS } from "@/lib/cohesion-constants";
+import { SUBSCORE_GROUPS, SUBSCORE_LABELS, SYNERGY_DESCRIPTIONS } from "@/lib/cohesion-constants";
 import { subscoreColor, synergyChipClass } from "@/lib/cohesion-colors";
 import type { LineupTestResult } from "../types";
 
@@ -87,14 +87,43 @@ export function ResultsPanel({ testHistory, onLoadLineup }: ResultsPanelProps) {
                 >
                   Load {result.mode === "rotation" ? "Rotation" : "Lineup"}
                 </button>
-                {/* Subscores */}
-                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                  {Object.entries(result.subscores).map(([key, val]) => (
-                    <div key={key} className="flex items-center justify-between">
-                      <span className="text-[8px] text-muted-foreground">{SUBSCORE_LABELS[key] ?? key}</span>
-                      <span className={cn("text-[8px] font-mono tabular-nums", subscoreColor(val))}>{val.toFixed(1)}</span>
+                {/* Subscores grouped by category */}
+                <div className="space-y-1.5">
+                  {SUBSCORE_GROUPS.map((group) => (
+                    <div key={group.heading}>
+                      <p className="text-[7px] uppercase tracking-wider text-muted-foreground/50 mb-0.5">{group.heading}</p>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                        {group.entries.map(({ key, label }) => {
+                          const val = result.subscores[key];
+                          if (val === undefined) return null;
+                          return (
+                            <div key={key} className="flex items-center justify-between">
+                              <span className="text-[8px] text-muted-foreground">{label}</span>
+                              <span className={cn("text-[8px] font-mono tabular-nums", subscoreColor(val))}>{val.toFixed(1)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   ))}
+                  {/* Accentuation */}
+                  <div>
+                    <p className="text-[7px] uppercase tracking-wider text-muted-foreground/50 mb-0.5">Accentuation</p>
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[8px] text-muted-foreground">Strength</span>
+                        <span className={cn("text-[8px] font-mono tabular-nums", subscoreColor(result.accentuation.strength_amplification))}>
+                          {result.accentuation.strength_amplification.toFixed(1)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[8px] text-muted-foreground">Weakness</span>
+                        <span className={cn("text-[8px] font-mono tabular-nums", subscoreColor(result.accentuation.weakness_coverage))}>
+                          {result.accentuation.weakness_coverage.toFixed(1)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 {/* Synergies */}
                 {result.synergies_applied.length > 0 && (
