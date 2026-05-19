@@ -184,41 +184,73 @@
         {
           "category_key": "offense",
           "category_label": "Offense",
-          "subscores": [
+          "subcategories": [
             {
-              "key": "spacing_creation_ratio",
-              "label": "Spacing / Creation Balance",
-              "order": 0
+              "key": "quality",
+              "label": "Quality",
+              "subscores": [
+                {
+                  "key": "spacing",
+                  "label": "Spacing",
+                  "order": 0
+                },
+                {
+                  "key": "shot_creation",
+                  "label": "Shot Creation",
+                  "order": 1
+                },
+                {
+                  "key": "paint_touch",
+                  "label": "Paint Touch",
+                  "order": 2
+                },
+                {
+                  "key": "collective_passing",
+                  "label": "Collective Passing",
+                  "order": 3
+                },
+                {
+                  "key": "off_ball_impact",
+                  "label": "Off-Ball Impact",
+                  "order": 4
+                },
+                {
+                  "key": "ball_security",
+                  "label": "Ball Security",
+                  "order": 5
+                },
+                {
+                  "key": "pnr_pairing",
+                  "label": "PnR Pairing",
+                  "order": 6
+                },
+                {
+                  "key": "post_game",
+                  "label": "Post Game",
+                  "order": 7
+                }
+              ]
             },
             {
-              "key": "creation_offball_ratio",
-              "label": "Creation / Off-Ball Balance",
-              "order": 1
-            },
-            {
-              "key": "spacing_paint_touch_ratio",
-              "label": "Spacing / Paint Touch Balance",
-              "order": 2
-            },
-            {
-              "key": "paint_touch_total",
-              "label": "Paint Touch",
-              "order": 3
-            },
-            {
-              "key": "post_game_total",
-              "label": "Post Game",
-              "order": 4
-            },
-            {
-              "key": "pnr_pairing",
-              "label": "PnR Pairing",
-              "order": 5
-            },
-            {
-              "key": "collective_passing",
-              "label": "Collective Passing",
-              "order": 6
+              "key": "balance",
+              "label": "Balance",
+              "subscores": [
+                {
+                  "key": "spacing_creation_ratio",
+                  "label": "Spacing / Creation Balance",
+                  "order": 0
+                },
+                {
+                  "key": "creation_offball_ratio",
+                  "label": "Creation / Off-Ball Balance",
+                  "order": 1
+                },
+                {
+                  "key": "spacing_paint_touch_ratio",
+                  "label": "Spacing / Paint Touch Balance",
+                  "order": 2
+                }
+              ]
             }
           ]
         },
@@ -227,8 +259,8 @@
           "category_label": "Defense",
           "subscores": [
             {
-              "key": "anchor_total",
-              "label": "Anchor",
+              "key": "interior_defense",
+              "label": "Interior Defense",
               "order": 0
             },
             {
@@ -242,50 +274,40 @@
               "order": 2
             },
             {
-              "key": "perimeter_defense_total",
+              "key": "perimeter_defense",
               "label": "Perimeter Defense",
               "order": 3
             },
             {
-              "key": "interior_defense_total",
-              "label": "Interior Defense",
+              "key": "switchability",
+              "label": "Switchability",
               "order": 4
             }
           ]
         },
         {
-          "category_key": "versatility",
-          "category_label": "Versatility",
+          "category_key": "rebounding_transition",
+          "category_label": "Rebounding / Transition",
           "subscores": [
             {
-              "key": "rebounding",
-              "label": "Rebounding",
+              "key": "defensive_rebounding",
+              "label": "Defensive Rebounding",
               "order": 0
+            },
+            {
+              "key": "offensive_rebounding",
+              "label": "Offensive Rebounding",
+              "order": 1
             },
             {
               "key": "transition",
               "label": "Transition",
-              "order": 1
+              "order": 2
             },
             {
               "key": "rebound_transition_ratio",
               "label": "Rebound / Transition Connection",
-              "order": 2
-            },
-            {
-              "key": "rebounding_spacing_deficit",
-              "label": "Rebounding Spacing Deficit",
               "order": 3
-            },
-            {
-              "key": "accentuation_strength",
-              "label": "Accentuation Strength",
-              "order": 4
-            },
-            {
-              "key": "accentuation_weakness",
-              "label": "Accentuation Weakness",
-              "order": 5
             }
           ]
         }
@@ -503,18 +525,18 @@
       "off_13_raw_spacing_threshold": 15.0,
       "synergy_creator_threshold": 6.0,
       "category_weights": {
-        "offense": 0.40,
+        "offense": 0.4,
         "defense": 0.37,
         "rebounding_transition": 0.23
       },
-      "offense_quality_ratio": 0.70,
+      "offense_quality_ratio": 0.7,
       "offense_quality_weights": {
         "spacing": 0.18,
         "shot_creation": 0.18,
         "paint_touch": 0.18,
         "collective_passing": 0.14,
         "off_ball_impact": 0.12,
-        "ball_security": 0.10,
+        "ball_security": 0.1,
         "pnr_pairing": 0.06,
         "post_game": 0.04
       },
@@ -524,20 +546,20 @@
         "spacing_paint_touch_ratio": 0.33
       },
       "defense_subscore_weights": {
-        "interior_defense": 0.30,
+        "interior_defense": 0.3,
         "defensive_coverage": 0.25,
         "defensive_gaps": 0.25,
         "perimeter_defense": 0.12,
         "switchability": 0.08
       },
       "rebound_transition_subscore_weights": {
-        "defensive_rebounding": 0.40,
-        "offensive_rebounding": 0.20,
+        "defensive_rebounding": 0.4,
+        "offensive_rebounding": 0.2,
         "transition": 0.25,
         "rebound_transition_ratio": 0.15
       },
       "accentuation_strength_cap": 0.25,
-      "accentuation_weakness_cap": 0.50,
+      "accentuation_weakness_cap": 0.5,
       "ratio_dead_zone": 0.2,
       "ratio_asymmetric_full_penalty": 1.0,
       "ratio_default_penalty": 0.5,
@@ -634,5 +656,5 @@
       "bootstrap_source": "weights.py + skills.py"
     }
   },
-  "payload_hash": "aa52bc87131c72fd11a1308a492d3c39ed68da5711780b8d9da644389ec93cf3"
+  "payload_hash": "a8a8fe4e953ac9aa0848b7b433f3269339cbd48fedd27f8cd91755435718d37e"
 }
