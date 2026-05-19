@@ -155,6 +155,34 @@ export const SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: 
 ];
 
 // ---------------------------------------------------------------------------
+// Category score utilities (shared by GroupedSubscoreLayout + CohesionScoreDisplay)
+// ---------------------------------------------------------------------------
+
+/** Maps SUBSCORE_GROUPS headings to backend category_scores keys. */
+export const HEADING_TO_CATEGORY_KEY: Record<string, string> = {
+  "Offense — Quality": "offense",
+  "Offense — Balance": "offense",
+  "Defense": "defense",
+  "Rebounding / Transition": "rebounding_transition",
+};
+
+/** Show the category score only on the first group for that category. */
+export const HEADING_SHOWS_SCORE: Record<string, boolean> = {
+  "Offense — Quality": true,
+  "Offense — Balance": false,
+  "Defense": true,
+  "Rebounding / Transition": true,
+};
+
+/** Color class for category score percentage (0-1 scale). */
+export function categoryScoreColor(value: number): string {
+  if (value >= 0.7) return "text-green-500";
+  if (value >= 0.5) return "text-amber-400";
+  if (value >= 0.3) return "text-orange-400";
+  return "text-red-400";
+}
+
+// ---------------------------------------------------------------------------
 // Synergy descriptions
 // ---------------------------------------------------------------------------
 

@@ -17,10 +17,11 @@
 
 import { cn } from "@/lib/utils";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
-import { SUBSCORE_DESCRIPTIONS, SUBSCORE_GROUPS } from "@/lib/cohesion-constants";
+import { SUBSCORE_DESCRIPTIONS, SUBSCORE_GROUPS, HEADING_TO_CATEGORY_KEY, HEADING_SHOWS_SCORE, categoryScoreColor } from "@/lib/cohesion-constants";
 import { subscoreColor } from "@/lib/cohesion-colors";
 import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
 import type { RosterEvaluation } from "@/lib/types";
+
 
 // ---------------------------------------------------------------------------
 // Color utilities (component-specific scales not shared elsewhere)
@@ -340,27 +341,39 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
             </p>
           )}
         </div>
-        {SUBSCORE_GROUPS.map((group) => (
-          <div key={group.heading} className="space-y-2">
-            <p className="text-[11px] font-medium text-muted-foreground/70">
-              {group.heading}
-            </p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              {group.entries.map((entry) => (
-                <SubscoreGrade
-                  key={entry.key}
-                  id={`cohesion-subscore-${entry.key}`}
-                  label={entry.label}
-                  score={starting_lineup.subscores[entry.key] ?? 0}
-                  rotationScore={rotationMedian?.[entry.key]}
-                  description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
-                  hideRotation={isLineupOnly}
-                  medianLabel={`${resolvedLabel} Median`}
-                />
-              ))}
+        {SUBSCORE_GROUPS.map((group) => {
+          const catKey = HEADING_TO_CATEGORY_KEY[group.heading];
+          const showScore = HEADING_SHOWS_SCORE[group.heading] && catKey;
+          const catScore = showScore ? starting_lineup.category_scores?.[catKey] : undefined;
+          return (
+            <div key={group.heading} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-medium text-muted-foreground/70">
+                  {group.heading}
+                </p>
+                {catScore !== undefined && (
+                  <span className={cn("text-xs font-mono tabular-nums font-semibold", categoryScoreColor(catScore))}>
+                    {(catScore * 100).toFixed(0)}%
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {group.entries.map((entry) => (
+                  <SubscoreGrade
+                    key={entry.key}
+                    id={`cohesion-subscore-${entry.key}`}
+                    label={entry.label}
+                    score={starting_lineup.subscores[entry.key] ?? 0}
+                    rotationScore={rotationMedian?.[entry.key]}
+                    description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
+                    hideRotation={isLineupOnly}
+                    medianLabel={`${resolvedLabel} Median`}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="w-full h-px bg-border" />

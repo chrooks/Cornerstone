@@ -7,34 +7,11 @@
  */
 
 import { cn } from "@/lib/utils";
-import { SUBSCORE_GROUPS } from "@/lib/cohesion-constants";
+import { SUBSCORE_GROUPS, HEADING_TO_CATEGORY_KEY, HEADING_SHOWS_SCORE, categoryScoreColor } from "@/lib/cohesion-constants";
 
 interface Accentuation {
   strength_amplification: number;
   weakness_coverage: number;
-}
-
-/** Maps SUBSCORE_GROUPS headings to backend category_scores keys. */
-const HEADING_TO_CATEGORY_KEY: Record<string, string> = {
-  "Offense — Quality": "offense",
-  "Offense — Balance": "offense",
-  "Defense": "defense",
-  "Rebounding / Transition": "rebounding_transition",
-};
-
-/** Show the category score only on the first group for that category. */
-const HEADING_SHOWS_SCORE: Record<string, boolean> = {
-  "Offense — Quality": true,
-  "Offense — Balance": false,
-  "Defense": true,
-  "Rebounding / Transition": true,
-};
-
-function categoryScoreColor(value: number): string {
-  if (value >= 0.7) return "text-green-500";
-  if (value >= 0.5) return "text-yellow-500";
-  if (value >= 0.3) return "text-orange-400";
-  return "text-red-400";
 }
 
 interface GroupedSubscoreLayoutProps {
