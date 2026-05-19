@@ -24,40 +24,22 @@ import type { SkillTier } from "@/lib/types";
 
 const TIER_VALUES: Record<string, number> = {
   None: 0,
-  Capable: 1.5,
-  Proficient: 3,
-  Elite: 6,
-  "All-Time Great": 10,
+  Capable: 1,
+  Proficient: 4,
+  Elite: 8,
+  "All-Time Great": 16,
 };
 
-export const FORMULA_LABELS: Record<string, string> = {
-  spacing: "Spacing",
-  finishing: "Finishing",
-  paint_touch: "Rim Pressure",
-  anchor: "Anchor",
-  post_game: "Post Game",
-  pnr_screener: "PnR Screener",
-  off_ball_impact: "Off-Ball Impact",
-  shot_creation: "Shot Creation",
-  rebounding: "Rebounding",
-  transition: "Transition",
-  perimeter_defense: "Perimeter Defense",
-  interior_defense: "Interior Defense",
-};
+/** Derived from COMPOSITE_COLUMNS — single source of truth for Impact Trait labels. */
+export const FORMULA_LABELS: Record<string, string> = Object.fromEntries(
+  COMPOSITE_COLUMNS.map(({ key, label }) => [key, label]),
+);
 
-const EQUATION_ORDER = [
-  "spacing",
-  "finishing",
-  "paint_touch",
-  "anchor",
-  "post_game",
-  "pnr_screener",
-  "off_ball_impact",
-  "shot_creation",
-  "rebounding",
-  "transition",
-  "perimeter_defense",
-  "interior_defense",
+/** Impact Trait equations grouped by Subscore Tree category. */
+const EQUATION_GROUPS: { heading: string; keys: string[] }[] = [
+  { heading: "Offense", keys: ["spacing", "finishing", "paint_touch", "shot_creation", "off_ball_impact", "ball_security", "pnr_screener", "post_game"] },
+  { heading: "Defense", keys: ["perimeter_defense", "interior_defense"] },
+  { heading: "Rebounding / Transition", keys: ["defensive_rebounding", "offensive_rebounding", "transition"] },
 ];
 
 // Alias for CompositeBars (uses same data as COMPOSITE_COLUMNS)
@@ -135,19 +117,12 @@ function equationTermsFor(composite: string): EquationTerm[] {
         { skill: "mid_post_player", multiplier: 0.7 },
         { composite: "finishing" },
       ];
-    case "anchor":
-      return [
-        { skill: "rebounder" },
-        { composite: "interior_defense" },
-        { skill: "vertical_spacer" },
-        { skill: "screen_setter", multiplier: 0.3 },
-      ];
     case "post_game":
       return [{ skill: "low_post_player" }, { skill: "mid_post_player", multiplier: 0.7 }];
     case "pnr_screener":
       return [{ skill: "pnr_finisher" }, { skill: "screen_setter" }];
     case "off_ball_impact":
-      return [{ composite: "spacing" }, { skill: "cutter" }, { composite: "finishing" }, { skill: "passer", multiplier: 0.5 }];
+      return [{ composite: "spacing" }, { skill: "cutter" }, { composite: "finishing" }, { skill: "passer", multiplier: 0.3 }];
     case "shot_creation":
       return [
         { skill: "pnr_ball_handler" },
@@ -157,8 +132,12 @@ function equationTermsFor(composite: string): EquationTerm[] {
         { composite: "spacing", multiplier: 0.3 },
         { composite: "paint_touch", multiplier: 0.5 },
       ];
-    case "rebounding":
-      return [{ skill: "rebounder" }, { skill: "offensive_rebounder" }];
+    case "ball_security":
+      return [{ skill: "passer" }];
+    case "defensive_rebounding":
+      return [{ skill: "rebounder" }];
+    case "offensive_rebounding":
+      return [{ skill: "offensive_rebounder" }];
     case "transition":
       return [
         { skill: "transition_threat" },
@@ -175,7 +154,7 @@ function equationTermsFor(composite: string): EquationTerm[] {
     case "interior_defense":
       return [
         { skill: "rim_protector" },
-        { skill: "versatile_defender", multiplier: 0.5 },
+        { skill: "versatile_defender", multiplier: 0.25 },
         { skill: "rebounder", multiplier: 0.3 },
       ];
     default:
@@ -335,12 +314,12 @@ function PnrScreenerRawEquation({ idPrefix, skills, rawValue, weights }: PnrScre
   const modifier = Math.max(1, 1 + scale * (verticalValue + spotUpValue));
 
   return (
-    <div id={idPrefix} className="text-[9px] leading-relaxed">
+    <div id={idPrefix} className="text-[9px] leading-relaxed whitespace-nowrap">
       <span id={`${idPrefix}-label`} className="font-semibold text-foreground">PnR Screener</span>
       <span id={`${idPrefix}-equals`} className="mx-1 text-muted-foreground">=</span>
       <span id={`${idPrefix}-total`} className="font-mono font-semibold text-foreground tabular-nums">{rawValue.toFixed(2)}</span>
       <span id={`${idPrefix}-terms-equals`} className="mx-1 text-muted-foreground">=</span>
-      <span id={`${idPrefix}-terms`} className="inline-flex flex-wrap items-center gap-1">
+      <span id={`${idPrefix}-terms`} className="inline-flex items-center gap-1">
         <SkillTierPill id={`${idPrefix}-finisher`} skill="pnr_finisher" tier={skillTier(skills, "pnr_finisher")} compact />
         <span className="font-mono text-muted-foreground">x max(1, 1 + {scale.toFixed(2)} x (</span>
         <SkillTierPill id={`${idPrefix}-vertical`} skill="vertical_spacer" tier={skillTier(skills, "vertical_spacer")} compact />
@@ -368,12 +347,12 @@ function PaintTouchRawEquation({ idPrefix, skills, rawValue, rawComposites, weig
   const multiplier = Math.max(1, 1 + finishingScale * rawFinishing);
 
   return (
-    <div id={idPrefix} className="text-[9px] leading-relaxed">
+    <div id={idPrefix} className="text-[9px] leading-relaxed whitespace-nowrap">
       <span id={`${idPrefix}-label`} className="font-semibold text-foreground">Rim Pressure</span>
       <span id={`${idPrefix}-equals`} className="mx-1 text-muted-foreground">=</span>
       <span id={`${idPrefix}-total`} className="font-mono font-semibold text-foreground tabular-nums">{rawValue.toFixed(2)}</span>
       <span id={`${idPrefix}-terms-equals`} className="mx-1 text-muted-foreground">=</span>
-      <span id={`${idPrefix}-terms`} className="inline-flex flex-wrap items-center gap-1">
+      <span id={`${idPrefix}-terms`} className="inline-flex items-center gap-1">
         <span className="font-mono text-muted-foreground">max(1, 1 + {finishingScale} x</span>
         <CompositeRefPill id={`${idPrefix}-finishing`} compositeKey="finishing" rawValue={rawFinishing} compact />
         <span className="font-mono text-muted-foreground">) {multiplier.toFixed(2)} x (</span>
@@ -408,12 +387,12 @@ function OffBallImpactRawEquation({ idPrefix, skills, rawValue, rawComposites, w
   const rawSpacing = rawComposites["spacing"] ?? 0;
 
   return (
-    <div id={idPrefix} className="text-[9px] leading-relaxed">
+    <div id={idPrefix} className="text-[9px] leading-relaxed whitespace-nowrap">
       <span id={`${idPrefix}-label`} className="font-semibold text-foreground">Off-Ball Impact</span>
       <span id={`${idPrefix}-equals`} className="mx-1 text-muted-foreground">=</span>
       <span id={`${idPrefix}-total`} className="font-mono font-semibold text-foreground tabular-nums">{rawValue.toFixed(2)}</span>
       <span id={`${idPrefix}-terms-equals`} className="mx-1 text-muted-foreground">=</span>
-      <span id={`${idPrefix}-terms`} className="inline-flex flex-wrap items-center gap-1">
+      <span id={`${idPrefix}-terms`} className="inline-flex items-center gap-1">
         <CompositeRefPill id={`${idPrefix}-spacing`} compositeKey="spacing" rawValue={rawSpacing} compact />
         <span className="text-muted-foreground">+</span>
         <SkillTierPill id={`${idPrefix}-cutter`} skill="cutter" tier={skillTier(skills, "cutter")} compact />
@@ -442,85 +421,92 @@ export function PlayerEquationPanel({ idPrefix, skills, rawComposites, weights }
       <summary id={`${idPrefix}-equations-summary`} className="cursor-pointer text-[10px] font-medium text-muted-foreground hover:text-foreground">
         Raw composite equations
       </summary>
-      <div id={`${idPrefix}-equations-list`} className="mt-2 space-y-1.5">
-        {EQUATION_ORDER.map((composite) => {
-          const terms = equationTermsFor(composite);
-          if (composite === "pnr_screener") {
-            return (
-              <PnrScreenerRawEquation
-                key={composite}
-                idPrefix={`${idPrefix}-equation-${composite}`}
-                skills={skills}
-                rawValue={rawComposites[composite] ?? 0}
-                weights={weights}
-              />
-            );
-          }
-          if (composite === "paint_touch") {
-            return (
-              <PaintTouchRawEquation
-                key={composite}
-                idPrefix={`${idPrefix}-equation-${composite}`}
-                skills={skills}
-                rawValue={rawComposites[composite] ?? 0}
-                rawComposites={rawComposites}
-                weights={weights}
-              />
-            );
-          }
-          if (composite === "off_ball_impact") {
-            return (
-              <OffBallImpactRawEquation
-                key={composite}
-                idPrefix={`${idPrefix}-equation-${composite}`}
-                skills={skills}
-                rawValue={rawComposites[composite] ?? 0}
-                rawComposites={rawComposites}
-                weights={weights}
-              />
-            );
-          }
-          return (
-            <div key={composite} id={`${idPrefix}-equation-${composite}`} className="text-[9px] leading-relaxed">
-              <span id={`${idPrefix}-equation-${composite}-label`} className="font-semibold text-foreground">
-                {FORMULA_LABELS[composite]}
-              </span>
-              <span id={`${idPrefix}-equation-${composite}-equals`} className="mx-1 text-muted-foreground">=</span>
-              <span id={`${idPrefix}-equation-${composite}-total`} className="font-mono font-semibold text-foreground tabular-nums">
-                {(rawComposites[composite] ?? 0).toFixed(2)}
-              </span>
-              <span id={`${idPrefix}-equation-${composite}-terms-equals`} className="mx-1 text-muted-foreground">=</span>
-              <span id={`${idPrefix}-equation-${composite}-terms`} className="inline-flex flex-wrap items-center gap-1">
-                {terms.map((term, index) => {
-                  const termKey = term.skill ?? term.composite ?? `term-${index}`;
+      <div id={`${idPrefix}-equations-list`} className="mt-2 space-y-3 max-h-80 overflow-y-auto overflow-x-auto">
+        {EQUATION_GROUPS.map((group) => (
+          <div key={group.heading} id={`${idPrefix}-group-${group.heading.toLowerCase().replace(/\s+\/?\s*/g, "-")}`}>
+            <p className="text-[8px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{group.heading}</p>
+            <div className="space-y-1.5">
+              {group.keys.map((composite) => {
+                const terms = equationTermsFor(composite);
+                if (composite === "pnr_screener") {
                   return (
-                    <span key={`${composite}-${termKey}`} id={`${idPrefix}-equation-${composite}-term-${termKey}`} className="inline-flex items-center gap-1">
-                      {index > 0 && <span id={`${idPrefix}-equation-${composite}-plus-${index}`} className="text-muted-foreground">+</span>}
-                      {term.multiplier != null && (
-                        <span id={`${idPrefix}-equation-${composite}-mult-${termKey}`} className="font-mono text-muted-foreground">{term.multiplier}x</span>
-                      )}
-                      {term.composite ? (
-                        <CompositeRefPill
-                          id={`${idPrefix}-equation-${composite}-pill-${term.composite}`}
-                          compositeKey={term.composite}
-                          rawValue={rawComposites[term.composite] ?? 0}
-                          compact
-                        />
-                      ) : term.skill ? (
-                        <SkillTierPill
-                          id={`${idPrefix}-equation-${composite}-pill-${term.skill}`}
-                          skill={term.skill}
-                          tier={skillTier(skills, term.skill)}
-                          compact
-                        />
-                      ) : null}
-                    </span>
+                    <PnrScreenerRawEquation
+                      key={composite}
+                      idPrefix={`${idPrefix}-equation-${composite}`}
+                      skills={skills}
+                      rawValue={rawComposites[composite] ?? 0}
+                      weights={weights}
+                    />
                   );
-                })}
-              </span>
+                }
+                if (composite === "paint_touch") {
+                  return (
+                    <PaintTouchRawEquation
+                      key={composite}
+                      idPrefix={`${idPrefix}-equation-${composite}`}
+                      skills={skills}
+                      rawValue={rawComposites[composite] ?? 0}
+                      rawComposites={rawComposites}
+                      weights={weights}
+                    />
+                  );
+                }
+                if (composite === "off_ball_impact") {
+                  return (
+                    <OffBallImpactRawEquation
+                      key={composite}
+                      idPrefix={`${idPrefix}-equation-${composite}`}
+                      skills={skills}
+                      rawValue={rawComposites[composite] ?? 0}
+                      rawComposites={rawComposites}
+                      weights={weights}
+                    />
+                  );
+                }
+                return (
+                  <div key={composite} id={`${idPrefix}-equation-${composite}`} className="text-[9px] leading-relaxed whitespace-nowrap">
+                    <span id={`${idPrefix}-equation-${composite}-label`} className="font-semibold text-foreground">
+                      {FORMULA_LABELS[composite]}
+                    </span>
+                    <span id={`${idPrefix}-equation-${composite}-equals`} className="mx-1 text-muted-foreground">=</span>
+                    <span id={`${idPrefix}-equation-${composite}-total`} className="font-mono font-semibold text-foreground tabular-nums">
+                      {(rawComposites[composite] ?? 0).toFixed(2)}
+                    </span>
+                    <span id={`${idPrefix}-equation-${composite}-terms-equals`} className="mx-1 text-muted-foreground">=</span>
+                    <span id={`${idPrefix}-equation-${composite}-terms`} className="inline-flex items-center gap-1">
+                      {terms.map((term, index) => {
+                        const termKey = term.skill ?? term.composite ?? `term-${index}`;
+                        return (
+                          <span key={`${composite}-${termKey}`} id={`${idPrefix}-equation-${composite}-term-${termKey}`} className="inline-flex items-center gap-1">
+                            {index > 0 && <span id={`${idPrefix}-equation-${composite}-plus-${index}`} className="text-muted-foreground">+</span>}
+                            {term.multiplier != null && (
+                              <span id={`${idPrefix}-equation-${composite}-mult-${termKey}`} className="font-mono text-muted-foreground">{term.multiplier}x</span>
+                            )}
+                            {term.composite ? (
+                              <CompositeRefPill
+                                id={`${idPrefix}-equation-${composite}-pill-${term.composite}`}
+                                compositeKey={term.composite}
+                                rawValue={rawComposites[term.composite] ?? 0}
+                                compact
+                              />
+                            ) : term.skill ? (
+                              <SkillTierPill
+                                id={`${idPrefix}-equation-${composite}-pill-${term.skill}`}
+                                skill={term.skill}
+                                tier={skillTier(skills, term.skill)}
+                                compact
+                              />
+                            ) : null}
+                          </span>
+                        );
+                      })}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </details>
   );
