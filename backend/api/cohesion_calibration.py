@@ -362,6 +362,7 @@ def _serialize_lineup_result(lineup: LineupCohesion, lineup_players: list[dict[s
     return {
         "cohesion_score": lineup.score,
         "subscores": lineup.subscores,
+        "category_scores": lineup.category_scores,
         "synergies_applied": list(lineup.synergies_applied),
         "accentuation": {
             "strength_amplification": lineup.accentuation_strength,

@@ -91,6 +91,7 @@ export function ResultsPanel({ testHistory, onLoadLineup }: ResultsPanelProps) {
                 {/* Subscores grouped by category */}
                 <GroupedSubscoreLayout
                   subscores={result.subscores}
+                  categoryScores={result.category_scores}
                   accentuation={result.accentuation}
                   groupGap="space-y-1.5"
                   renderEntry={(key, val) => (

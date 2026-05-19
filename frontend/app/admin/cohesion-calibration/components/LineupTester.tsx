@@ -485,6 +485,7 @@ export function LineupTester({
           <GroupedSubscoreLayout
             id="cohesion-cal-lineup-subscores"
             subscores={displayResult.subscores}
+            categoryScores={displayResult.category_scores}
             accentuation={displayResult.accentuation}
             groupGap="space-y-3"
             headerGap="mb-1"

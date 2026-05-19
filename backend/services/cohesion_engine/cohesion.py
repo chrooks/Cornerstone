@@ -200,13 +200,16 @@ def _rollup_score(
     accentuation_strength: float,
     accentuation_weakness: float,
     values: dict[str, Any],
-) -> float:
+) -> tuple[float, dict[str, float]]:
     """Two-level rollup: intra-category → category → final star score.
 
     1. Compute offense score (quality 70% + balance 30%).
     2. Compute defense and rebounding/transition scores.
     3. Weighted category sum → base star score.
     4. Asymmetric accentuation applied additively post-rollup.
+
+    Returns (final_score, category_scores) where category_scores maps each
+    category name to its 0.0-1.0 weighted contribution before star scaling.
     """
     category_weights: dict[str, float] = values["category_weights"]
     star_rating_max: float = values["star_rating_max"]
@@ -221,6 +224,12 @@ def _rollup_score(
     defense_score = _weighted_category_score(subscores, values["defense_subscore_weights"])
     reb_trans_score = _weighted_category_score(subscores, values["rebound_transition_subscore_weights"])
 
+    category_scores = {
+        "offense": round(offense_score, 4),
+        "defense": round(defense_score, 4),
+        "rebounding_transition": round(reb_trans_score, 4),
+    }
+
     # Category-weighted base
     base = (
         category_weights["offense"] * offense_score
@@ -234,10 +243,11 @@ def _rollup_score(
     strength_bonus = (accentuation_strength / 10.0) * strength_cap
     weakness_penalty = ((10.0 - accentuation_weakness) / 10.0) * weakness_cap
 
-    return round(
+    final = round(
         max(0.0, min(star_rating_max, star_rating_max * base + strength_bonus - weakness_penalty)),
         2,
     )
+    return final, category_scores
 
 
 def evaluate_lineup(players: list[dict[str, Any]], engine: CohesionEngine) -> LineupCohesion:
@@ -319,9 +329,14 @@ def evaluate_lineup(players: list[dict[str, Any]], engine: CohesionEngine) -> Li
         ),
     }
 
+    final_score, category_scores = _rollup_score(
+        subscores, accentuation_strength, accentuation_weakness, values
+    )
+
     return LineupCohesion(
-        score=_rollup_score(subscores, accentuation_strength, accentuation_weakness, values),
+        score=final_score,
         subscores=subscores,
+        category_scores=category_scores,
         synergies_applied=synergies_applied,
         accentuation_strength=accentuation_strength,
         accentuation_weakness=accentuation_weakness,

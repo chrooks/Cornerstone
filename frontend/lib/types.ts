@@ -503,6 +503,7 @@ export interface CohesionPlayerComposites {
 export interface CohesionLineupData {
   cohesion_score: number;
   subscores: Record<string, number>;
+  category_scores?: Record<string, number>;
   synergies_applied: string[];
   archetype_labels?: string[];
   archetype_details?: {

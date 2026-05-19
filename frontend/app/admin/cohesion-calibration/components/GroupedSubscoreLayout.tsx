@@ -6,6 +6,7 @@
  * and for the two accentuation values.
  */
 
+import { cn } from "@/lib/utils";
 import { SUBSCORE_GROUPS } from "@/lib/cohesion-constants";
 
 interface Accentuation {
@@ -13,9 +14,33 @@ interface Accentuation {
   weakness_coverage: number;
 }
 
+/** Maps SUBSCORE_GROUPS headings to backend category_scores keys. */
+const HEADING_TO_CATEGORY_KEY: Record<string, string> = {
+  "Offense — Quality": "offense",
+  "Offense — Balance": "offense",
+  "Defense": "defense",
+  "Rebounding / Transition": "rebounding_transition",
+};
+
+/** Show the category score only on the first group for that category. */
+const HEADING_SHOWS_SCORE: Record<string, boolean> = {
+  "Offense — Quality": true,
+  "Offense — Balance": false,
+  "Defense": true,
+  "Rebounding / Transition": true,
+};
+
+function categoryScoreColor(value: number): string {
+  if (value >= 0.7) return "text-green-500";
+  if (value >= 0.5) return "text-yellow-500";
+  if (value >= 0.3) return "text-orange-400";
+  return "text-red-400";
+}
+
 interface GroupedSubscoreLayoutProps {
   id?: string;
   subscores: Record<string, number>;
+  categoryScores?: Record<string, number>;
   accentuation: Accentuation;
   /** Spacing between category groups. */
   groupGap?: string;
@@ -32,6 +57,7 @@ interface GroupedSubscoreLayoutProps {
 export function GroupedSubscoreLayout({
   id,
   subscores,
+  categoryScores,
   accentuation,
   groupGap = "space-y-2",
   headerGap = "mb-0.5",
@@ -44,11 +70,21 @@ export function GroupedSubscoreLayout({
       {SUBSCORE_GROUPS.map((group) => {
         const entries = group.entries.filter(({ key }) => subscores[key] !== undefined);
         if (entries.length === 0) return null;
+        const catKey = HEADING_TO_CATEGORY_KEY[group.heading];
+        const showScore = HEADING_SHOWS_SCORE[group.heading] && categoryScores && catKey;
+        const catScore = showScore ? categoryScores[catKey] : undefined;
         return (
           <div key={group.heading}>
-            <p className={`text-[7px] uppercase tracking-wider text-muted-foreground/50 ${headerGap}`}>
-              {group.heading}
-            </p>
+            <div className={`flex items-center justify-between ${headerGap}`}>
+              <p className="text-[7px] uppercase tracking-wider text-muted-foreground/50">
+                {group.heading}
+              </p>
+              {catScore !== undefined && (
+                <span className={cn("text-[8px] font-mono tabular-nums font-semibold", categoryScoreColor(catScore))}>
+                  {(catScore * 100).toFixed(0)}%
+                </span>
+              )}
+            </div>
             <div className={gridClassName}>
               {entries.map(({ key }) => renderEntry(key, subscores[key]))}
             </div>

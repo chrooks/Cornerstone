@@ -59,6 +59,7 @@ class LineupCohesion:
     accentuation_strength: float
     accentuation_weakness: float
     accentuation_details: dict = field(default_factory=dict)
+    category_scores: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -71,6 +71,7 @@ export interface LineupTestResult {
   cohesion_score: number;
   mode?: "lineup" | "rotation";
   subscores: Record<string, number>;
+  category_scores?: Record<string, number>;
   synergies_applied: string[];
   archetype_labels?: string[];
   archetype_details?: {
