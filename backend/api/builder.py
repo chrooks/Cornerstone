@@ -255,7 +255,7 @@ def _serialize_player_composites(player) -> dict:
             "pnr_screener": player.pnr_screener,
             "off_ball_impact": player.off_ball_impact,
             "shot_creation": player.shot_creation,
-            "pnr_ball_handler": player.pnr_ball_handler,
+            "pnr_orchestration": player.pnr_orchestration,
             "ball_security": player.ball_security,
             "defensive_rebounding": player.defensive_rebounding,
             "offensive_rebounding": player.offensive_rebounding,

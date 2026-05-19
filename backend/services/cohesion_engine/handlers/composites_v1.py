@@ -132,14 +132,14 @@ def offensive_rebounding(engine: CohesionEngine, ctx: LineupContext) -> float:
     )
 
 
-@CohesionEngine.handler("pnr_ball_handler_v1")
-def pnr_ball_handler(engine: CohesionEngine, ctx: LineupContext) -> float:
-    """Blend primary PnR ball handler with secondary support and depth.
+@CohesionEngine.handler("pnr_orchestration_v1")
+def pnr_orchestration(engine: CohesionEngine, ctx: LineupContext) -> float:
+    """Blend primary PnR orchestrator with secondary support and depth.
     Research: PnR initiation is role-specific — typically 1-2 players per lineup
     handle pick-and-roll actions, distinct from broader shot creation."""
     v = engine.version.values
     return _top_two_plus_depth(
-        ctx.composites, "pnr_ball_handler",
+        ctx.composites, "pnr_orchestration",
         v["pnr_handler_primary_weight"],
         v["pnr_handler_secondary_weight"],
         v["pnr_handler_depth_weight"],

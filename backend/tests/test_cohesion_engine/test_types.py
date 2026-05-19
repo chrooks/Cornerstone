@@ -28,7 +28,7 @@ def make_player_composites() -> PlayerComposites:
         pnr_screener=4.5,
         off_ball_impact=8.0,
         shot_creation=7.8,
-        pnr_ball_handler=0.0,
+        pnr_orchestration=0.0,
         ball_security=4.0,
         defensive_rebounding=5.5,
         offensive_rebounding=3.0,

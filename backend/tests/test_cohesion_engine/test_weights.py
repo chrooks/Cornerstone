@@ -41,7 +41,7 @@ def test_theoretical_maxima_match_impl_spec_fallback_table():
         "pnr_screener": 108.8,
         "off_ball_impact": 101.76,
         "shot_creation": 169.984,
-        "pnr_ball_handler": 28.8,
+        "pnr_orchestration": 28.8,
         "ball_security": 16.0,
         "defensive_rebounding": 16.0,
         "offensive_rebounding": 16.0,

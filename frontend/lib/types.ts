@@ -473,7 +473,7 @@ export interface CohesionCompositeScores {
   pnr_screener: number;
   off_ball_impact: number;
   shot_creation: number;
-  pnr_ball_handler: number;
+  pnr_orchestration: number;
   ball_security: number;
   defensive_rebounding: number;
   offensive_rebounding: number;

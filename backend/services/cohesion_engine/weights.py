@@ -71,7 +71,7 @@ COMPOSITE_NAMES: tuple[str, ...] = (
     "pnr_screener",          # pick-and-roll screening + roll/pop ability
     "off_ball_impact",       # cutting, off-ball movement, and secondary playmaking
     "shot_creation",         # ability to generate shots for self and others
-    "pnr_ball_handler",      # pick-and-roll initiation and creation
+    "pnr_orchestration",     # pick-and-roll initiation and creation
     "ball_security",         # turnover avoidance and ball-handling safety
     "defensive_rebounding",  # securing defensive boards
     "offensive_rebounding",  # crashing the offensive glass
@@ -91,7 +91,7 @@ THEORETICAL_MAX: dict[str, float] = {
     "pnr_screener": 108.8,
     "off_ball_impact": 101.76,
     "shot_creation": 169.984,
-    "pnr_ball_handler": 28.8,
+    "pnr_orchestration": 28.8,
     "ball_security": 16.0,
     "defensive_rebounding": 16.0,
     "offensive_rebounding": 16.0,

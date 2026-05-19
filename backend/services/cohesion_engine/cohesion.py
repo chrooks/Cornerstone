@@ -108,7 +108,7 @@ def _pnr_pairing(
 ) -> float:
     """Score whether PnR handlers and screeners are both good and balanced."""
     handler_quality = _top_two_plus_depth(
-        composites, "pnr_ball_handler",
+        composites, "pnr_orchestration",
         values["pnr_handler_primary_weight"],
         values["pnr_handler_secondary_weight"],
         values["pnr_handler_depth_weight"],

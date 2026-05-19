@@ -145,8 +145,8 @@
           "order": 6
         },
         {
-          "key": "pnr_ball_handler",
-          "label": "PnR Ball Handler",
+          "key": "pnr_orchestration",
+          "label": "PnR Orchestration",
           "order": 7
         },
         {
@@ -356,7 +356,7 @@
         "pnr_screener",
         "off_ball_impact",
         "shot_creation",
-        "pnr_ball_handler",
+        "pnr_orchestration",
         "ball_security",
         "defensive_rebounding",
         "offensive_rebounding",
@@ -372,7 +372,7 @@
         "pnr_screener": 108.8,
         "off_ball_impact": 101.76,
         "shot_creation": 169.984,
-        "pnr_ball_handler": 28.8,
+        "pnr_orchestration": 28.8,
         "ball_security": 16.0,
         "defensive_rebounding": 16.0,
         "offensive_rebounding": 16.0,
@@ -653,7 +653,7 @@
       "pnr_screener": "pnr_screener_v1",
       "off_ball_impact": "off_ball_impact_v1",
       "shot_creation": "shot_creation_v1",
-      "pnr_ball_handler": "pnr_ball_handler_v1",
+      "pnr_orchestration": "pnr_orchestration_v1",
       "ball_security": "ball_security_v1",
       "defensive_rebounding": "defensive_rebounding_v1",
       "offensive_rebounding": "offensive_rebounding_v1",

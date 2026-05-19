@@ -37,7 +37,7 @@ export const FORMULA_LABELS: Record<string, string> = Object.fromEntries(
 
 /** Impact Trait equations grouped by Subscore Tree category. */
 const EQUATION_GROUPS: { heading: string; keys: string[] }[] = [
-  { heading: "Offense", keys: ["spacing", "finishing", "paint_touch", "shot_creation", "pnr_ball_handler", "off_ball_impact", "ball_security", "pnr_screener", "post_game"] },
+  { heading: "Offense", keys: ["spacing", "finishing", "paint_touch", "shot_creation", "pnr_orchestration", "off_ball_impact", "ball_security", "pnr_screener", "post_game"] },
   { heading: "Defense", keys: ["perimeter_defense", "interior_defense"] },
   { heading: "Rebounding / Transition", keys: ["defensive_rebounding", "offensive_rebounding", "transition"] },
 ];
@@ -125,16 +125,16 @@ function equationTermsFor(composite: string): EquationTerm[] {
       return [{ composite: "spacing" }, { skill: "cutter" }, { composite: "finishing" }, { skill: "passer", multiplier: 0.3 }];
     case "shot_creation":
       return [
-        { skill: "pnr_ball_handler" },
+        { skill: "pnr_orchestration" },
         { skill: "passer" },
         { skill: "off_dribble_shooter" },
         { skill: "isolation_scorer" },
         { composite: "spacing", multiplier: 0.3 },
         { composite: "paint_touch", multiplier: 0.5 },
       ];
-    case "pnr_ball_handler":
+    case "pnr_orchestration":
       return [
-        { skill: "pnr_ball_handler" },
+        { skill: "pnr_orchestration" },
         { skill: "passer", multiplier: 0.3 },
         { skill: "driver", multiplier: 0.3 },
         { skill: "off_dribble_shooter", multiplier: 0.2 },
