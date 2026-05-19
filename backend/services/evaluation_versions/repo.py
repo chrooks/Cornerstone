@@ -221,6 +221,32 @@ def publish_draft(
     return get_version(draft_id)
 
 
+def reactivate(version_id: str) -> EvaluationVersion:
+    """Atomically reactivate a previously published Evaluation Version.
+
+    Calls the DB RPC which deactivates the current active Version and
+    activates the target. Raises ValueError if the target is not published
+    or is already active.
+    """
+    client = get_supabase()
+    try:
+        run_query(
+            lambda: client.rpc(
+                "reactivate_evaluation_version",
+                {"p_version_id": version_id},
+            ).execute()
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "not published" in msg:
+            raise ValueError("version_not_published") from exc
+        if "already active" in msg:
+            raise ValueError("version_already_active") from exc
+        raise
+
+    return get_version(version_id)
+
+
 def discard_draft(draft_id: str) -> None:
     """Hard-delete a draft Version. Raises ValueError if not found."""
     client = get_supabase()

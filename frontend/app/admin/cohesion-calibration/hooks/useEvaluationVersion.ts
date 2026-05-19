@@ -10,11 +10,13 @@ import { toast } from "sonner";
 import {
   getActiveEvaluationVersion,
   getDraftEvaluationVersion,
+  listEvaluationVersions,
   createDraft,
   patchDraft,
   validateDraft,
   publishDraft,
   discardDraft,
+  reactivateVersion,
 } from "@/lib/api/evaluation-versions";
 import type {
   EvaluationVersion,
@@ -88,17 +90,20 @@ function computeDiff(
 export function useEvaluationVersion() {
   const [active, setActive] = useState<EvaluationVersion | null>(null);
   const [draft, setDraft] = useState<EvaluationVersion | null>(null);
+  const [versions, setVersions] = useState<EvaluationVersion[]>([]);
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [activeRes, draftRes] = await Promise.all([
+      const [activeRes, draftRes, versionsRes] = await Promise.all([
         getActiveEvaluationVersion(),
         getDraftEvaluationVersion(),
+        listEvaluationVersions(),
       ]);
       if (activeRes.success && activeRes.data) setActive(activeRes.data);
       if (draftRes.success) setDraft(draftRes.data ?? null);
+      if (versionsRes.success && versionsRes.data) setVersions(versionsRes.data);
     } catch {
       // Backend unreachable — leave state as-is
     }
@@ -172,9 +177,22 @@ export function useEvaluationVersion() {
     }
   }, [draft]);
 
+  const handleReactivate = useCallback(async (versionId: string): Promise<boolean> => {
+    const res = await reactivateVersion(versionId);
+    if (res.success && res.data) {
+      setActive(res.data);
+      toast.success(`Reactivated ${res.data.slug}`);
+      await reload();
+      return true;
+    }
+    toast.error(res.error ?? "Failed to reactivate");
+    return false;
+  }, [reload]);
+
   return {
     active,
     draft,
+    versions,
     diff,
     loading,
     reload,
@@ -183,5 +201,6 @@ export function useEvaluationVersion() {
     validate: handleValidate,
     publish: handlePublish,
     discardDraft: handleDiscard,
+    reactivate: handleReactivate,
   };
 }

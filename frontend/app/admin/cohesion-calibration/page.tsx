@@ -97,6 +97,8 @@ export default function CohesionCalibrationPage() {
     validate: handleValidateDraft,
     publish: handlePublishDraft,
     discardDraft: handleDiscardDraft,
+    versions: allVersions,
+    reactivate: handleReactivateVersion,
   } = useEvaluationVersion();
 
   // --- Diff drawer + publish dialog state ---
@@ -376,9 +378,11 @@ export default function CohesionCalibrationPage() {
           <EvaluationVersionHeader
             active={activeVersion}
             draft={draftVersion}
+            versions={allVersions}
             loading={versionLoading}
             onCreateDraft={handleCreateDraft}
             onDiscardDraft={handleDiscardDraft}
+            onReactivate={handleReactivateVersion}
           />
         </header>
 

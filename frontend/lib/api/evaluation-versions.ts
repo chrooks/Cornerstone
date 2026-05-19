@@ -74,6 +74,15 @@ export async function discardDraft(id: string): Promise<ApiResponse<null>> {
   });
 }
 
+export async function reactivateVersion(
+  id: string,
+): Promise<ApiResponse<EvaluationVersion>> {
+  return apiFetch<EvaluationVersion>(
+    `/api/evaluation-versions/${id}/reactivate`,
+    { method: "POST" },
+  );
+}
+
 export async function getRegisteredHandlers(): Promise<ApiResponse<HandlerInfo[]>> {
   return apiFetch<HandlerInfo[]>("/api/evaluation-versions/handlers");
 }

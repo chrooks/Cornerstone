@@ -289,6 +289,29 @@ def publish_draft(draft_id: str):
         }), 500
 
 
+@evaluation_versions_bp.route("/<version_id>/reactivate", methods=["POST"])
+@require_admin
+def reactivate_version(version_id: str):
+    """Atomically reactivate a previously published Evaluation Version."""
+    uuid_err = _validate_uuid(version_id, "version_id")
+    if uuid_err:
+        return jsonify({"success": False, "data": None, "error": uuid_err}), 400
+
+    try:
+        version = repo.reactivate(version_id)
+        return jsonify({
+            "success": True,
+            "data": _version_dict(version),
+            "error": None,
+        })
+    except ValueError as exc:
+        return jsonify({
+            "success": False,
+            "data": None,
+            "error": str(exc),
+        }), 400
+
+
 @evaluation_versions_bp.route("/drafts/<draft_id>", methods=["DELETE"])
 @require_admin
 def discard_draft(draft_id: str):
