@@ -161,6 +161,7 @@ def _serialize_lineup(lineup, starting_players: list[dict[str, Any]], values: di
     return {
         "cohesion_score": lineup.score,
         "subscores": lineup.subscores,
+        "category_scores": lineup.category_scores,
         "synergies_applied": lineup.synergies_applied,
         "accentuation": {
             "strength_amplification": lineup.accentuation_strength,
