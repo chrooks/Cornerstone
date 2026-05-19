@@ -155,19 +155,8 @@ def _fetch_player_with_skills(player_id: str) -> dict | None:
 def _serialize_composites(pc: PlayerComposites) -> dict[str, float]:
     """Extract normalized composite scores from a PlayerComposites dataclass."""
     return {
-        "spacing": pc.spacing,
-        "finishing": pc.finishing,
-        "paint_touch": pc.paint_touch,
-        "post_game": pc.post_game,
-        "pnr_screener": pc.pnr_screener,
-        "off_ball_impact": pc.off_ball_impact,
-        "shot_creation": pc.shot_creation,
-        "ball_security": pc.ball_security,
-        "defensive_rebounding": pc.defensive_rebounding,
-        "offensive_rebounding": pc.offensive_rebounding,
-        "transition": pc.transition,
-        "perimeter_defense": pc.perimeter_defense,
-        "interior_defense": pc.interior_defense,
+        name: getattr(pc, name)
+        for name in weights_module.COMPOSITE_NAMES
     }
 
 
@@ -411,19 +400,8 @@ def _serialize_player_composites(player: PlayerComposites) -> dict[str, Any]:
         "player_id": player.player_id,
         "name": player.name,
         "base": {
-            "spacing": player.spacing,
-            "finishing": player.finishing,
-            "paint_touch": player.paint_touch,
-            "post_game": player.post_game,
-            "pnr_screener": player.pnr_screener,
-            "off_ball_impact": player.off_ball_impact,
-            "shot_creation": player.shot_creation,
-            "ball_security": player.ball_security,
-            "defensive_rebounding": player.defensive_rebounding,
-            "offensive_rebounding": player.offensive_rebounding,
-            "transition": player.transition,
-            "perimeter_defense": player.perimeter_defense,
-            "interior_defense": player.interior_defense,
+            name: getattr(player, name)
+            for name in weights_module.COMPOSITE_NAMES
         },
         "bell_curve": {
             "amplitude": player.bell_amplitude,

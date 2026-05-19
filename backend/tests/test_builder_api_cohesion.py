@@ -11,6 +11,7 @@ import pytest
 
 from app import create_app
 from api import builder
+from services.cohesion_engine import weights as cohesion_weights
 from services.cohesion_engine.weights import VIABLE_LINEUP_THRESHOLD
 
 
@@ -74,7 +75,7 @@ def test_evaluate_returns_cohesion_response_shape(client):
     assert "subscores" in payload["starting_lineup"]
     assert "strength_amplification" in payload["starting_lineup"]["accentuation"]
     assert len(payload["player_composites"]) == 5
-    assert "spacing" in payload["player_composites"][0]["base"]
+    assert set(payload["player_composites"][0]["base"]) == set(cohesion_weights.COMPOSITE_NAMES)
     assert "amplitude" in payload["player_composites"][0]["bell_curve"]
     assert payload["lineup_summary"]["total_lineups"] == 1
     assert isinstance(payload["notes"], list)

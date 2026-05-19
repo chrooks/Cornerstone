@@ -248,20 +248,8 @@ def _serialize_player_composites(player) -> dict:
         "player_id": player.player_id,
         "name": player.name,
         "base": {
-            "spacing": player.spacing,
-            "finishing": player.finishing,
-            "paint_touch": player.paint_touch,
-            "post_game": player.post_game,
-            "pnr_screener": player.pnr_screener,
-            "off_ball_impact": player.off_ball_impact,
-            "shot_creation": player.shot_creation,
-            "pnr_orchestration": player.pnr_orchestration,
-            "ball_security": player.ball_security,
-            "defensive_rebounding": player.defensive_rebounding,
-            "offensive_rebounding": player.offensive_rebounding,
-            "transition": player.transition,
-            "perimeter_defense": player.perimeter_defense,
-            "interior_defense": player.interior_defense,
+            name: getattr(player, name)
+            for name in cohesion_weights.COMPOSITE_NAMES
         },
         "bell_curve": {
             "amplitude": player.bell_amplitude,

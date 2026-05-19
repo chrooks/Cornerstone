@@ -94,7 +94,8 @@ export function FormulaHandlerPicker({ draft, onPatchDraft }: FormulaHandlerPick
       toast.error("Category not found");
       return;
     }
-    const nextOrder = subscoreTree[catIndex].subscores.length;
+    const category = subscoreTree[catIndex];
+    const nextOrder = category?.subscores?.length ?? 0;
 
     // Build label from key
     const label = cleanKey
@@ -147,7 +148,8 @@ export function FormulaHandlerPicker({ draft, onPatchDraft }: FormulaHandlerPick
 
       // Remove matching subscore from tree
       for (let ci = 0; ci < subscoreTree.length; ci++) {
-        const si = subscoreTree[ci].subscores.findIndex(
+        const subscores = subscoreTree[ci]?.subscores ?? [];
+        const si = subscores.findIndex(
           (s: { key: string }) => s.key === refKey,
         );
         if (si >= 0) {

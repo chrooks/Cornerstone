@@ -12,12 +12,14 @@ import { cn } from "@/lib/utils";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
 import { CohesionCompositesTable } from "@/components/cohesion/CohesionResultDetails";
 import {
+  COMPOSITE_COLUMNS,
   SUBSCORE_LABELS,
 } from "@/lib/cohesion-constants";
 import { subscoreColor, synergyChipClass } from "@/lib/cohesion-colors";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import type { CohesionExplanationWeights } from "@/lib/cohesion-weights";
-import type { CohesionLineupCombination, CohesionPlayerComposites, Player } from "@/lib/types";
+import type { CohesionCompositeScores, CohesionLineupCombination, CohesionPlayerComposites, Player } from "@/lib/types";
+import type { SubscoreTreeCategory } from "@/lib/cohesion-constants";
 import type { LineupTestResult, LineupSlot } from "../types";
 import { PlayerEquationPanel } from "./PlayerInspection";
 import { LineupBellCurveChart } from "./BellCurveCharts";
@@ -48,22 +50,9 @@ export function lineupSlotsToCompositeRows(lineupSlots: LineupSlot[]): CohesionP
     .map((slot) => ({
       player_id: slot.player.id,
       name: slot.player.name,
-      base: {
-        spacing: slot.normalizedComposites.spacing ?? 0,
-        finishing: slot.normalizedComposites.finishing ?? 0,
-        paint_touch: slot.normalizedComposites.paint_touch ?? 0,
-        post_game: slot.normalizedComposites.post_game ?? 0,
-        pnr_screener: slot.normalizedComposites.pnr_screener ?? 0,
-        off_ball_impact: slot.normalizedComposites.off_ball_impact ?? 0,
-        shot_creation: slot.normalizedComposites.shot_creation ?? 0,
-        pnr_orchestration: slot.normalizedComposites.pnr_orchestration ?? 0,
-        ball_security: slot.normalizedComposites.ball_security ?? 0,
-        defensive_rebounding: slot.normalizedComposites.defensive_rebounding ?? 0,
-        offensive_rebounding: slot.normalizedComposites.offensive_rebounding ?? 0,
-        transition: slot.normalizedComposites.transition ?? 0,
-        perimeter_defense: slot.normalizedComposites.perimeter_defense ?? 0,
-        interior_defense: slot.normalizedComposites.interior_defense ?? 0,
-      },
+      base: Object.fromEntries(
+        COMPOSITE_COLUMNS.map((column) => [column.key, slot.normalizedComposites[column.key] ?? 0]),
+      ) as unknown as CohesionCompositeScores,
       bell_curve: slot.bellCurve ?? {
         amplitude: 0,
         peak: 78,
@@ -125,6 +114,8 @@ interface LineupTesterProps {
   onEvaluate: () => void;
   evaluating: boolean;
   latestResult: LineupTestResult | null;
+  subscoreTree?: SubscoreTreeCategory[] | null;
+  compositeCoefficients?: Record<string, number> | null;
 }
 
 /** 5-player slot picker + evaluate button + result display. */
@@ -146,6 +137,8 @@ export function LineupTester({
   onEvaluate,
   evaluating,
   latestResult,
+  subscoreTree,
+  compositeCoefficients,
 }: LineupTesterProps) {
   const filledCount = lineupSlots.filter((s) => s.player !== null).length;
   const [selectedSynergy, setSelectedSynergy] = useState<string | null>(null);
@@ -305,6 +298,8 @@ export function LineupTester({
                   skills={slot.skills}
                   rawComposites={slot.rawComposites}
                   weights={weights}
+                  subscoreTree={subscoreTree}
+                  compositeCoefficients={compositeCoefficients}
                 />
               </div>
             ) : (

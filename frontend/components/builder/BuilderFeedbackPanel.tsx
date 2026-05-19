@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getActiveEvaluationVersion } from "@/lib/api/evaluation-versions";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
 import {
   ImpactTraitList,
@@ -20,9 +21,11 @@ import {
 } from "@/lib/builder-read-model";
 import {
   COMPOSITE_COLUMNS,
+  deriveLineupEffectsByImpactTrait,
   IMPACT_TRAIT_DESCRIPTIONS,
   SUBSCORE_DESCRIPTIONS,
   SUBSCORE_LABELS,
+  theoreticalMaxFromEvaluationValues,
 } from "@/lib/cohesion-constants";
 import { qualityTextColor } from "@/lib/cohesion-colors";
 import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
@@ -43,6 +46,7 @@ import type {
   PlayerWithSkills,
   RosterEvaluation,
 } from "@/lib/types";
+import type { EvaluationVersionPayload } from "@/lib/types/evaluation-version";
 
 type FeedbackTab = "feedback" | "skills" | "debug";
 export type BuilderInspectionSource = "build" | "build-player";
@@ -76,40 +80,6 @@ const COMPOSITE_COEFFICIENTS = {
   interior_defense_versatile_defender: 0.25,
   interior_defense_rebounder: 0.3,
 } as const;
-
-const THEORETICAL_MAX: Record<CompositeKey, number> = {
-  spacing: 25,
-  finishing: 20,
-  paint_touch: 85.8,
-  post_game: 17,
-  pnr_screener: 50,
-  off_ball_impact: 61,
-  shot_creation: 50,
-  pnr_orchestration: 28.8,
-  ball_security: 10,
-  defensive_rebounding: 10,
-  offensive_rebounding: 10,
-  transition: 42,
-  perimeter_defense: 17,
-  interior_defense: 18,
-};
-
-const IMPACT_TRAIT_TO_LINEUP_EFFECTS: Record<CompositeKey, string[]> = {
-  spacing: ["spacing", "spacing_creation_ratio", "spacing_paint_touch_ratio"],
-  finishing: ["paint_touch", "spacing_paint_touch_ratio"],
-  paint_touch: ["paint_touch", "spacing_paint_touch_ratio"],
-  post_game: ["post_game"],
-  pnr_screener: ["pnr_pairing"],
-  off_ball_impact: ["off_ball_impact", "creation_offball_ratio"],
-  shot_creation: ["shot_creation", "spacing_creation_ratio", "creation_offball_ratio"],
-  pnr_orchestration: ["pnr_pairing"],
-  ball_security: ["ball_security"],
-  defensive_rebounding: ["defensive_rebounding", "rebound_transition_ratio"],
-  offensive_rebounding: ["offensive_rebounding"],
-  transition: ["transition", "rebound_transition_ratio"],
-  perimeter_defense: ["perimeter_defense", "defensive_coverage", "defensive_gaps", "switchability"],
-  interior_defense: ["interior_defense", "defensive_coverage", "defensive_gaps"],
-};
 
 const SCORE_FACTOR_WEIGHTS: Record<string, string> = {
   starting_5: "45%",
@@ -449,8 +419,8 @@ function scoreTone(value: number): string {
   return "bg-[#e53e3e]/10 text-[#b91c1c] border-[#e53e3e]/25";
 }
 
-function rawToTenPointScale(key: CompositeKey, raw: number): number {
-  const max = THEORETICAL_MAX[key] ?? 10;
+function rawToTenPointScale(key: CompositeKey, raw: number, theoreticalMax: Record<string, number>): number {
+  const max = theoreticalMax[key] ?? 10;
   if (max <= 0) return 0;
   return Math.min(10, Math.max(0, (raw / max) * 10));
 }
@@ -458,6 +428,7 @@ function rawToTenPointScale(key: CompositeKey, raw: number): number {
 function allImpactTraitEntries(
   evaluation: RosterEvaluation | null,
   player: PlayerWithSkills | null,
+  theoreticalMax: Record<string, number>,
 ): ImpactTraitReadEntry[] {
   const playerName = player?.name.toLowerCase();
   const evaluatedPlayer = playerName
@@ -474,7 +445,7 @@ function allImpactTraitEntries(
       rawValue,
       normalizedValue,
       affected: false,
-      value: normalizedValue ?? rawToTenPointScale(key, rawValue),
+      value: normalizedValue ?? rawToTenPointScale(key, rawValue, theoreticalMax),
       valueLabel: normalizedValue == null ? `raw ${formatScore(rawValue)}` : formatScore(normalizedValue),
     };
   });
@@ -628,9 +599,11 @@ function RotationIdentityStrip({ evaluation }: { evaluation: RosterEvaluation | 
 function PlayerContributionInspector({
   evaluation,
   player,
+  theoreticalMax,
 }: {
   evaluation: RosterEvaluation | null;
   player: PlayerWithSkills | null;
+  theoreticalMax: Record<string, number>;
 }) {
   const composite = useMemo(() => {
     if (!evaluation || !player) return null;
@@ -648,10 +621,10 @@ function PlayerContributionInspector({
         ...column,
         rawValue,
         normalizedValue,
-        value: normalizedValue ?? rawToTenPointScale(key, rawValue),
+        value: normalizedValue ?? rawToTenPointScale(key, rawValue, theoreticalMax),
       };
     }).sort((a, b) => b.value - a.value);
-  }, [composite, rawBreakdowns]);
+  }, [composite, rawBreakdowns, theoreticalMax]);
 
   const top = ranked.slice(0, 4);
   const gaps = ranked.slice(-4).reverse();
@@ -749,7 +722,7 @@ function PlayerContributionInspector({
                 const key = column.key as CompositeKey;
                 const normalizedValue = composite ? compositeValue(composite, column.key) : null;
                 const rawValue = rawBreakdowns[key]?.raw ?? 0;
-                const toneValue = normalizedValue ?? rawToTenPointScale(key, rawValue);
+                const toneValue = normalizedValue ?? rawToTenPointScale(key, rawValue, theoreticalMax);
 
                 return (
                   <FeedbackTooltip
@@ -895,8 +868,14 @@ function NewFeedbackRead({
   inspectedPlayer,
   inspectionSource,
   isLineupOnly = false,
+  theoreticalMax,
+  lineupEffectsByImpactTrait,
   onSuggestionFilter,
-}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "inspectedPlayer" | "inspectionSource" | "onSuggestionFilter"> & { isLineupOnly?: boolean }) {
+}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "inspectedPlayer" | "inspectionSource" | "onSuggestionFilter"> & {
+  isLineupOnly?: boolean;
+  theoreticalMax: Record<string, number>;
+  lineupEffectsByImpactTrait: Record<string, string[]>;
+}) {
   const [selectedSkillKey, setSelectedSkillKey] = useState<string | null>(null);
   const targetPlayer = inspectedPlayer;
   const isPlayerRead = targetPlayer !== null;
@@ -905,9 +884,9 @@ function NewFeedbackRead({
   const selectedSkill = skills.find((skill) => skill.skill === selectedSkillKey) ?? null;
   const affectedTraitKeys = new Set(getImpactTraitKeysForSkill(selectedSkill?.skill));
   const affectedLineupEffectKeys = new Set(
-    Array.from(affectedTraitKeys).flatMap((traitKey) => IMPACT_TRAIT_TO_LINEUP_EFFECTS[traitKey as CompositeKey] ?? []),
+    Array.from(affectedTraitKeys).flatMap((traitKey) => lineupEffectsByImpactTrait[traitKey] ?? []),
   );
-  const traits = allImpactTraitEntries(latestEval, targetPlayer).map((trait) => ({
+  const traits = allImpactTraitEntries(latestEval, targetPlayer, theoreticalMax).map((trait) => ({
     ...trait,
     affected: affectedTraitKeys.has(trait.key as CompositeKey),
   }));
@@ -1314,8 +1293,12 @@ function SkillProfileDiagnostic({
   legendDetail,
   latestEval,
   inspectedPlayer,
+  theoreticalMax,
   isLineupOnly = false,
-}: Pick<BuilderFeedbackPanelProps, "allSlots" | "cornerstoneId" | "legendDetail" | "latestEval" | "inspectedPlayer"> & { isLineupOnly?: boolean }) {
+}: Pick<BuilderFeedbackPanelProps, "allSlots" | "cornerstoneId" | "legendDetail" | "latestEval" | "inspectedPlayer"> & {
+  theoreticalMax: Record<string, number>;
+  isLineupOnly?: boolean;
+}) {
   return (
     <div id="builder-skill-profile-diagnostic" className="space-y-5">
       <section id="builder-skill-profile-purpose" className="border border-[#d9d0c9]/70 bg-[#f0f0f0]/45 px-3 py-3">
@@ -1325,7 +1308,7 @@ function SkillProfileDiagnostic({
         </p>
       </section>
       <RotationIdentityStrip evaluation={latestEval} />
-      <PlayerContributionInspector evaluation={latestEval} player={inspectedPlayer} />
+      <PlayerContributionInspector evaluation={latestEval} player={inspectedPlayer} theoreticalMax={theoreticalMax} />
       <LineupImpactSummary evaluation={latestEval} isLineupOnly={isLineupOnly} />
       <section id="builder-skill-profile-matrix" className="space-y-3">
         <SectionLabel id="builder-skill-profile-matrix-label">Full Skill Profile</SectionLabel>
@@ -1360,6 +1343,7 @@ export function BuilderFeedbackPanel({
 }: BuilderFeedbackPanelProps) {
   const isLineupOnly = (maxRosterSlots ?? 9) <= 5;
   const [activeTab, setActiveTab] = useState<FeedbackTab>("feedback");
+  const [evaluationPayload, setEvaluationPayload] = useState<EvaluationVersionPayload | null>(null);
   const tabs: { id: FeedbackTab; label: string; adminOnly?: boolean }[] = [
     { id: "feedback", label: "Feedback" },
     { id: "skills", label: "Skill Matrix" },
@@ -1367,6 +1351,28 @@ export function BuilderFeedbackPanel({
   ];
 
   const visibleTabs = tabs.filter((tab) => !tab.adminOnly || isAdmin);
+  const theoreticalMax = useMemo(
+    () => theoreticalMaxFromEvaluationValues(evaluationPayload?.values),
+    [evaluationPayload],
+  );
+  const lineupEffectsByImpactTrait = useMemo(
+    () => deriveLineupEffectsByImpactTrait(evaluationPayload?.taxonomy.subscore_tree),
+    [evaluationPayload],
+  );
+
+  useEffect(() => {
+    let active = true;
+    getActiveEvaluationVersion().then((res) => {
+      if (active && res.success && res.data) {
+        setEvaluationPayload(res.data.payload);
+      }
+    }).catch(() => {
+      // Builder feedback can still render normalized evaluation data if Version lookup fails.
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div id="builder-feedback-panel" className="flex min-w-0 flex-col lg:h-full">
@@ -1456,6 +1462,8 @@ export function BuilderFeedbackPanel({
             inspectedPlayer={inspectedPlayer}
             inspectionSource={inspectionSource}
             isLineupOnly={isLineupOnly}
+            theoreticalMax={theoreticalMax}
+            lineupEffectsByImpactTrait={lineupEffectsByImpactTrait}
             onSuggestionFilter={onSuggestionFilter}
           />
         </div>
@@ -1467,6 +1475,7 @@ export function BuilderFeedbackPanel({
             legendDetail={legendDetail}
             latestEval={latestEval}
             inspectedPlayer={inspectedPlayer}
+            theoreticalMax={theoreticalMax}
             isLineupOnly={isLineupOnly}
           />
         </div>

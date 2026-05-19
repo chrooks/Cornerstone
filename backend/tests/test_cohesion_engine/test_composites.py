@@ -166,6 +166,19 @@ def test_compute_player_composites_returns_dataclass_with_bell_params():
     assert player.bell_range_up == 8
 
 
+def test_compute_player_composites_populates_all_composite_names():
+    player = composites.compute_player_composites(
+        sample_skills(),
+        player_id="p1",
+        name="Example",
+        values=VALUES,
+        height_inches=80,
+    )
+
+    for composite_name in composites.COMPOSITE_NAMES:
+        assert getattr(player, composite_name) >= 0
+
+
 def test_normalize_composites_guards_zero_theoretical_max():
     """A zero theoretical_max for a composite must not crash with ZeroDivisionError."""
     import copy

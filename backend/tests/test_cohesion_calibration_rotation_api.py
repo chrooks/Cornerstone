@@ -11,6 +11,7 @@ import pytest
 
 from app import create_app
 from api import auth, cohesion_calibration
+from services.cohesion_engine import weights as cohesion_weights
 
 
 class _FakeQuery:
@@ -154,6 +155,7 @@ def test_rotation_endpoint_with_five_players_returns_one_combination(client):
     assert payload["lineup_combinations"][0]["archetype_details"]
     assert payload["starting_lineup"]["cohesion_score"] == payload["lineup_combinations"][0]["cohesion_score"]
     assert len(payload["player_composites"]) == 5
+    assert set(payload["player_composites"][0]["base"]) == set(cohesion_weights.COMPOSITE_NAMES)
     assert payload["team_description"] is None
 
 

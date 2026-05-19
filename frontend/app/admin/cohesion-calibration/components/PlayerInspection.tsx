@@ -11,11 +11,15 @@
  */
 
 import { cn } from "@/lib/utils";
-import { COMPOSITE_COLUMNS } from "@/lib/cohesion-constants";
+import {
+  COMPOSITE_COLUMNS,
+  deriveImpactTraitGroupsFromSubscoreTree,
+} from "@/lib/cohesion-constants";
 import { ALL_SKILL_NAMES, formatSkillName } from "@/lib/skills";
 import { TIER_BADGE_CLASSES, tierToNum } from "@/lib/tiers";
 import { pnrScreenerSecondaryScale } from "@/lib/cohesion-weights";
 import type { CohesionExplanationWeights } from "@/lib/cohesion-weights";
+import type { SubscoreTreeCategory } from "@/lib/cohesion-constants";
 import type { SkillTier } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -34,13 +38,6 @@ const TIER_VALUES: Record<string, number> = {
 export const FORMULA_LABELS: Record<string, string> = Object.fromEntries(
   COMPOSITE_COLUMNS.map(({ key, label }) => [key, label]),
 );
-
-/** Impact Trait equations grouped by Subscore Tree category. */
-const EQUATION_GROUPS: { heading: string; keys: string[] }[] = [
-  { heading: "Offense", keys: ["spacing", "finishing", "paint_touch", "shot_creation", "pnr_orchestration", "off_ball_impact", "ball_security", "pnr_screener", "post_game"] },
-  { heading: "Defense", keys: ["perimeter_defense", "interior_defense"] },
-  { heading: "Rebounding / Transition", keys: ["defensive_rebounding", "offensive_rebounding", "transition"] },
-];
 
 // Alias for CompositeBars (uses same data as COMPOSITE_COLUMNS)
 const COMPOSITE_LABELS = COMPOSITE_COLUMNS;
@@ -96,77 +93,90 @@ function compositeBarColor(score: number): string {
 interface EquationTerm {
   skill?: string;
   composite?: string;
+  label?: string;
   multiplier?: number;
 }
 
-function equationTermsFor(composite: string): EquationTerm[] {
-  switch (composite) {
-    case "spacing":
-      return [
-        { skill: "movement_shooter" },
-        { skill: "spot_up_shooter" },
-        { skill: "off_dribble_shooter", multiplier: 0.5 },
-      ];
-    case "finishing":
-      return [{ skill: "high_flyer" }, { skill: "crafty_finisher" }];
-    case "paint_touch":
-      return [
-        { skill: "driver" },
-        { skill: "vertical_spacer", multiplier: 0.6 },
-        { skill: "low_post_player" },
-        { skill: "mid_post_player", multiplier: 0.7 },
-        { composite: "finishing" },
-      ];
-    case "post_game":
-      return [{ skill: "low_post_player" }, { skill: "mid_post_player", multiplier: 0.7 }];
-    case "pnr_screener":
-      return [{ skill: "pnr_finisher" }, { skill: "screen_setter" }];
-    case "off_ball_impact":
-      return [{ composite: "spacing" }, { skill: "cutter" }, { composite: "finishing" }, { skill: "passer", multiplier: 0.3 }];
-    case "shot_creation":
-      return [
-        { skill: "pnr_orchestration" },
-        { skill: "passer" },
-        { skill: "off_dribble_shooter" },
-        { skill: "isolation_scorer" },
-        { composite: "spacing", multiplier: 0.3 },
-        { composite: "paint_touch", multiplier: 0.5 },
-      ];
-    case "pnr_orchestration":
-      return [
-        { skill: "pnr_orchestration" },
-        { skill: "passer", multiplier: 0.3 },
-        { skill: "driver", multiplier: 0.3 },
-        { skill: "off_dribble_shooter", multiplier: 0.2 },
-      ];
-    case "ball_security":
-      return [{ skill: "passer" }];
-    case "defensive_rebounding":
-      return [{ skill: "rebounder" }];
-    case "offensive_rebounding":
-      return [{ skill: "offensive_rebounder" }];
-    case "transition":
-      return [
-        { skill: "transition_threat" },
-        { skill: "passer" },
-        { skill: "high_flyer", multiplier: 0.7 },
-        { skill: "driver", multiplier: 0.3 },
-        { skill: "spot_up_shooter", multiplier: 0.2 },
-      ];
-    case "perimeter_defense":
-      return [
-        { skill: "perimeter_disruptor" },
-        { skill: "versatile_defender", multiplier: 0.7 },
-      ];
-    case "interior_defense":
-      return [
-        { skill: "rim_protector" },
-        { skill: "versatile_defender", multiplier: 0.25 },
-        { skill: "rebounder", multiplier: 0.3 },
-      ];
-    default:
-      return [];
-  }
+interface EquationTermSpec {
+  skill?: string;
+  composite?: string;
+  coefficientKey?: string;
+  multiplier?: number;
+}
+
+const EQUATION_TERM_SPECS: Record<string, EquationTermSpec[]> = {
+  spacing: [
+    { skill: "movement_shooter" },
+    { skill: "spot_up_shooter" },
+    { skill: "off_dribble_shooter", coefficientKey: "spacing_off_dribble" },
+  ],
+  finishing: [{ skill: "high_flyer" }, { skill: "crafty_finisher" }],
+  paint_touch: [
+    { skill: "driver" },
+    { skill: "vertical_spacer", coefficientKey: "paint_touch_vertical_spacer" },
+    { skill: "low_post_player" },
+    { skill: "mid_post_player", coefficientKey: "paint_touch_mid_post" },
+    { composite: "finishing" },
+  ],
+  post_game: [{ skill: "low_post_player" }, { skill: "mid_post_player", coefficientKey: "post_game_mid_post" }],
+  pnr_screener: [{ skill: "pnr_finisher" }, { skill: "screen_setter" }],
+  off_ball_impact: [{ composite: "spacing" }, { skill: "cutter" }, { composite: "finishing" }, { skill: "passer", coefficientKey: "off_ball_passer" }],
+  shot_creation: [
+    { skill: "pnr_ball_handler" },
+    { skill: "passer" },
+    { skill: "off_dribble_shooter" },
+    { skill: "isolation_scorer" },
+    { composite: "spacing", coefficientKey: "shot_creation_spacing" },
+    { composite: "paint_touch", coefficientKey: "shot_creation_paint_touch" },
+  ],
+  pnr_orchestration: [
+    { skill: "pnr_ball_handler" },
+    { skill: "passer", coefficientKey: "pnr_ball_handler_passer" },
+    { skill: "driver", coefficientKey: "pnr_ball_handler_driver" },
+    { skill: "off_dribble_shooter", coefficientKey: "pnr_ball_handler_off_dribble" },
+  ],
+  ball_security: [{ skill: "passer" }],
+  defensive_rebounding: [{ skill: "rebounder" }],
+  offensive_rebounding: [{ skill: "offensive_rebounder" }],
+  transition: [
+    { skill: "transition_threat" },
+    { skill: "passer" },
+    { skill: "high_flyer", coefficientKey: "transition_high_flyer" },
+    { skill: "driver", coefficientKey: "transition_driver" },
+    { skill: "spot_up_shooter", coefficientKey: "transition_spot_up" },
+  ],
+  perimeter_defense: [
+    { skill: "perimeter_disruptor" },
+    { skill: "versatile_defender", coefficientKey: "perimeter_defense_versatile_defender" },
+  ],
+  interior_defense: [
+    { skill: "rim_protector" },
+    { skill: "versatile_defender", coefficientKey: "interior_defense_versatile_defender" },
+    { skill: "rebounder", coefficientKey: "interior_defense_rebounder" },
+  ],
+};
+
+function coefficientValue(coefficients: Record<string, number>, key: string | undefined, fallback = 1): number {
+  if (!key) return fallback;
+  return coefficients[key] ?? fallback;
+}
+
+function fallbackCoefficientTerms(composite: string, coefficients: Record<string, number>): EquationTerm[] {
+  return Object.entries(coefficients)
+    .filter(([key]) => key.startsWith(`${composite}_`))
+    .map(([key, multiplier]) => ({ label: key, multiplier }));
+}
+
+function equationTermsFor(composite: string, coefficients: Record<string, number>): EquationTerm[] {
+  const specs = EQUATION_TERM_SPECS[composite];
+  if (!specs) return fallbackCoefficientTerms(composite, coefficients);
+  return specs.map((term) => ({
+    skill: term.skill,
+    composite: term.composite,
+    multiplier: term.coefficientKey
+      ? coefficientValue(coefficients, term.coefficientKey)
+      : term.multiplier,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -350,6 +360,8 @@ interface PaintTouchRawEquationProps {
 
 function PaintTouchRawEquation({ idPrefix, skills, rawValue, rawComposites, weights }: PaintTouchRawEquationProps) {
   const finishingScale = weights.COMPOSITE_COEFFICIENTS.paint_touch_finishing_scale ?? 0.08;
+  const verticalScale = weights.COMPOSITE_COEFFICIENTS.paint_touch_vertical_spacer ?? 0.6;
+  const midPostScale = weights.COMPOSITE_COEFFICIENTS.paint_touch_mid_post ?? 0.7;
   const rawFinishing = rawComposites["finishing"] ?? 0;
   const multiplier = Math.max(1, 1 + finishingScale * rawFinishing);
 
@@ -365,12 +377,12 @@ function PaintTouchRawEquation({ idPrefix, skills, rawValue, rawComposites, weig
         <span className="font-mono text-muted-foreground">) {multiplier.toFixed(2)} x (</span>
         <SkillTierPill id={`${idPrefix}-driver`} skill="driver" tier={skillTier(skills, "driver")} compact />
         <span className="text-muted-foreground">+</span>
-        <span className="font-mono text-muted-foreground">0.6x</span>
+        <span className="font-mono text-muted-foreground">{verticalScale}x</span>
         <SkillTierPill id={`${idPrefix}-vertical`} skill="vertical_spacer" tier={skillTier(skills, "vertical_spacer")} compact />
         <span className="text-muted-foreground">+</span>
         <SkillTierPill id={`${idPrefix}-low-post`} skill="low_post_player" tier={skillTier(skills, "low_post_player")} compact />
         <span className="text-muted-foreground">+</span>
-        <span className="font-mono text-muted-foreground">0.7x</span>
+        <span className="font-mono text-muted-foreground">{midPostScale}x</span>
         <SkillTierPill id={`${idPrefix}-mid-post`} skill="mid_post_player" tier={skillTier(skills, "mid_post_player")} compact />
         <span className="font-mono text-muted-foreground">)</span>
       </span>
@@ -419,22 +431,30 @@ interface PlayerEquationPanelProps {
   skills: Record<string, string>;
   rawComposites: Record<string, number>;
   weights: CohesionExplanationWeights;
+  subscoreTree?: SubscoreTreeCategory[] | null;
+  compositeCoefficients?: Record<string, number> | null;
 }
 
 /** Collapsible player-level raw composite formulas for debugging cohesion inputs. */
-export function PlayerEquationPanel({ idPrefix, skills, rawComposites, weights }: PlayerEquationPanelProps) {
+export function PlayerEquationPanel({ idPrefix, skills, rawComposites, weights, subscoreTree, compositeCoefficients }: PlayerEquationPanelProps) {
+  const equationGroups = deriveImpactTraitGroupsFromSubscoreTree(subscoreTree);
+  const coefficients = compositeCoefficients && Object.keys(compositeCoefficients).length > 0
+    ? compositeCoefficients
+    : weights.COMPOSITE_COEFFICIENTS;
+  const equationWeights = { ...weights, COMPOSITE_COEFFICIENTS: coefficients };
+
   return (
     <details id={`${idPrefix}-equations`} className="mt-2 rounded-md border border-border/70 bg-background/70 px-2 py-1.5">
       <summary id={`${idPrefix}-equations-summary`} className="cursor-pointer text-[10px] font-medium text-muted-foreground hover:text-foreground">
         Raw composite equations
       </summary>
       <div id={`${idPrefix}-equations-list`} className="mt-2 space-y-3 max-h-80 overflow-y-auto overflow-x-auto">
-        {EQUATION_GROUPS.map((group) => (
+        {equationGroups.map((group) => (
           <div key={group.heading} id={`${idPrefix}-group-${group.heading.toLowerCase().replace(/\s+\/?\s*/g, "-")}`}>
             <p className="text-[8px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{group.heading}</p>
             <div className="space-y-1.5">
               {group.keys.map((composite) => {
-                const terms = equationTermsFor(composite);
+                const terms = equationTermsFor(composite, coefficients);
                 if (composite === "pnr_screener") {
                   return (
                     <PnrScreenerRawEquation
@@ -442,7 +462,7 @@ export function PlayerEquationPanel({ idPrefix, skills, rawComposites, weights }
                       idPrefix={`${idPrefix}-equation-${composite}`}
                       skills={skills}
                       rawValue={rawComposites[composite] ?? 0}
-                      weights={weights}
+                      weights={equationWeights}
                     />
                   );
                 }
@@ -454,7 +474,7 @@ export function PlayerEquationPanel({ idPrefix, skills, rawComposites, weights }
                       skills={skills}
                       rawValue={rawComposites[composite] ?? 0}
                       rawComposites={rawComposites}
-                      weights={weights}
+                      weights={equationWeights}
                     />
                   );
                 }
@@ -466,7 +486,7 @@ export function PlayerEquationPanel({ idPrefix, skills, rawComposites, weights }
                       skills={skills}
                       rawValue={rawComposites[composite] ?? 0}
                       rawComposites={rawComposites}
-                      weights={weights}
+                      weights={equationWeights}
                     />
                   );
                 }
@@ -503,6 +523,10 @@ export function PlayerEquationPanel({ idPrefix, skills, rawComposites, weights }
                                 tier={skillTier(skills, term.skill)}
                                 compact
                               />
+                            ) : term.label ? (
+                              <span id={`${idPrefix}-equation-${composite}-label-${index}`} className="font-mono text-muted-foreground">
+                                {term.label}
+                              </span>
                             ) : null}
                           </span>
                         );

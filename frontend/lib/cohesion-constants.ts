@@ -16,7 +16,26 @@ export interface CompositeColumn {
   abbr: string;
 }
 
-/** The 13 Impact Trait scoring columns in canonical order. */
+export interface SubscoreTreeEntry {
+  key: string;
+  label: string;
+  order?: number;
+}
+
+export interface SubscoreTreeSubcategory {
+  key: string;
+  label: string;
+  subscores: SubscoreTreeEntry[];
+}
+
+export interface SubscoreTreeCategory {
+  category_key: string;
+  category_label: string;
+  subscores?: SubscoreTreeEntry[];
+  subcategories?: SubscoreTreeSubcategory[];
+}
+
+/** The Impact Trait scoring columns in canonical order. */
 export const COMPOSITE_COLUMNS: CompositeColumn[] = [
   { key: "spacing", abbr: "Spc", label: "Spacing" },
   { key: "finishing", abbr: "Fin", label: "Finishing" },
@@ -155,6 +174,120 @@ export const SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: 
     ],
   },
 ];
+
+const SUBSCORE_SOURCE_TRAIT_KEYS: Record<string, string[]> = {
+  paint_touch: ["finishing"],
+  pnr_pairing: ["pnr_orchestration", "pnr_screener"],
+  spacing_creation_ratio: ["spacing", "shot_creation"],
+  creation_offball_ratio: ["shot_creation", "off_ball_impact"],
+  spacing_paint_touch_ratio: ["spacing", "paint_touch", "finishing"],
+  defensive_coverage: ["perimeter_defense", "interior_defense"],
+  defensive_gaps: ["perimeter_defense", "interior_defense"],
+  switchability: ["perimeter_defense"],
+  rebound_transition_ratio: ["defensive_rebounding", "transition"],
+};
+
+function orderSubscores(subscores: SubscoreTreeEntry[] = []): SubscoreTreeEntry[] {
+  return [...subscores].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+function fallbackSubscoreTree(): SubscoreTreeCategory[] {
+  return SUBSCORE_GROUPS.map((group) => ({
+    category_key: group.heading.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
+    category_label: group.heading,
+    subscores: group.entries.map((entry, order) => ({ ...entry, order })),
+    subcategories: undefined,
+  }));
+}
+
+function effectiveSubscoreTree(subscoreTree?: readonly SubscoreTreeCategory[] | null): SubscoreTreeCategory[] {
+  return subscoreTree && subscoreTree.length > 0 ? [...subscoreTree] : fallbackSubscoreTree();
+}
+
+export function flattenSubscoreTreeCategory(category: SubscoreTreeCategory): SubscoreTreeEntry[] {
+  if (category.subcategories?.length) {
+    return category.subcategories.flatMap((subcategory) => orderSubscores(subcategory.subscores));
+  }
+  return orderSubscores(category.subscores);
+}
+
+export function flattenSubscoreTree(subscoreTree?: readonly SubscoreTreeCategory[] | null): SubscoreTreeEntry[] {
+  return effectiveSubscoreTree(subscoreTree).flatMap(flattenSubscoreTreeCategory);
+}
+
+function sourceTraitKeysForSubscore(subscoreKey: string, impactTraitKeys: Set<string>): string[] {
+  const keys = new Set<string>();
+  for (const traitKey of SUBSCORE_SOURCE_TRAIT_KEYS[subscoreKey] ?? []) {
+    if (impactTraitKeys.has(traitKey)) keys.add(traitKey);
+  }
+  if (impactTraitKeys.has(subscoreKey)) keys.add(subscoreKey);
+  return Array.from(keys);
+}
+
+export function deriveLineupEffectsByImpactTrait(
+  subscoreTree?: readonly SubscoreTreeCategory[] | null,
+  impactTraitKeys: string[] = COMPOSITE_COLUMNS.map((column) => column.key),
+): Record<string, string[]> {
+  const impactTraitSet = new Set(impactTraitKeys);
+  const result = Object.fromEntries(impactTraitKeys.map((key) => [key, [] as string[]]));
+
+  for (const subscore of flattenSubscoreTree(subscoreTree)) {
+    for (const traitKey of sourceTraitKeysForSubscore(subscore.key, impactTraitSet)) {
+      if (!result[traitKey].includes(subscore.key)) {
+        result[traitKey].push(subscore.key);
+      }
+    }
+  }
+
+  return result;
+}
+
+export function deriveImpactTraitGroupsFromSubscoreTree(
+  subscoreTree?: readonly SubscoreTreeCategory[] | null,
+  impactTraitKeys: string[] = COMPOSITE_COLUMNS.map((column) => column.key),
+): { heading: string; keys: string[] }[] {
+  const impactTraitSet = new Set(impactTraitKeys);
+  const used = new Set<string>();
+  const groups: { heading: string; keys: string[] }[] = [];
+
+  for (const category of effectiveSubscoreTree(subscoreTree)) {
+    const keys: string[] = [];
+    for (const subscore of flattenSubscoreTreeCategory(category)) {
+      for (const traitKey of sourceTraitKeysForSubscore(subscore.key, impactTraitSet)) {
+        if (!used.has(traitKey)) {
+          keys.push(traitKey);
+          used.add(traitKey);
+        }
+      }
+    }
+    if (keys.length > 0) {
+      groups.push({ heading: category.category_label, keys });
+    }
+  }
+
+  const unmapped = impactTraitKeys.filter((key) => !used.has(key));
+  if (unmapped.length > 0) {
+    groups.push({ heading: "Other", keys: unmapped });
+  }
+
+  return groups;
+}
+
+function numericRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter((entry): entry is [string, number] => typeof entry[1] === "number"),
+  );
+}
+
+export function theoreticalMaxFromEvaluationValues(values: Record<string, unknown> | null | undefined): Record<string, number> {
+  return numericRecord(values?.theoretical_max);
+}
+
+export function compositeCoefficientsFromEvaluationValues(values: Record<string, unknown> | null | undefined): Record<string, number> {
+  return numericRecord(values?.composite_coefficients);
+}
 
 // ---------------------------------------------------------------------------
 // Category score utilities (shared by GroupedSubscoreLayout + CohesionScoreDisplay)

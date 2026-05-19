@@ -14,6 +14,7 @@
 import { useState, useCallback } from "react";
 import { Toaster, toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { compositeCoefficientsFromEvaluationValues } from "@/lib/cohesion-constants";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
 import {
   fetchPlayerComposites,
@@ -534,6 +535,8 @@ export default function CohesionCalibrationPage() {
                   onEvaluate={handleEvaluateLineup}
                   evaluating={evaluatingLineup}
                   latestResult={latestResult}
+                  subscoreTree={activeVersion?.payload.taxonomy.subscore_tree}
+                  compositeCoefficients={compositeCoefficientsFromEvaluationValues(activeVersion?.payload.values)}
                 />
               )}
               {centerTab === "weights" && (

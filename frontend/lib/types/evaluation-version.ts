@@ -10,7 +10,12 @@ export interface EvaluationVersionPayload {
     subscore_tree: {
       category_key: string;
       category_label: string;
-      subscores: { key: string; label: string; order: number }[];
+      subscores?: { key: string; label: string; order: number }[];
+      subcategories?: {
+        key: string;
+        label: string;
+        subscores: { key: string; label: string; order: number }[];
+      }[];
     }[];
   };
   values: Record<string, unknown>;
