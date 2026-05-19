@@ -469,12 +469,13 @@ export interface CohesionCompositeScores {
   spacing: number;
   finishing: number;
   paint_touch: number;
-  anchor: number;
   post_game: number;
   pnr_screener: number;
   off_ball_impact: number;
   shot_creation: number;
-  rebounding: number;
+  ball_security: number;
+  defensive_rebounding: number;
+  offensive_rebounding: number;
   transition: number;
   perimeter_defense: number;
   interior_defense: number;

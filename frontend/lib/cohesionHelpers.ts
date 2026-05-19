@@ -29,13 +29,11 @@ const OFFENSE_CATEGORIES = new Set([
 
 // Defense-oriented cohesion categories
 const DEFENSE_CATEGORIES = new Set([
-  "anchor",
   "perimeter_defense",
   "interior_defense",
-  "perimeter_defense_total",
-  "interior_defense_total",
+  "switchability",
   "defense_gap",
-  "rebounding",
+  "defensive_rebounding",
 ]);
 
 // -- CohesionNote.type → NoteSeverity mapping --------------------------------

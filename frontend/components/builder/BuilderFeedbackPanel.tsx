@@ -62,7 +62,6 @@ const COMPOSITE_COEFFICIENTS = {
   paint_touch_finishing_scale: 0.08,
   paint_touch_vertical_spacer: 0.6,
   paint_touch_mid_post: 0.7,
-  anchor_screen_setter: 0.3,
   post_game_mid_post: 0.7,
   pnr_screener_secondary_scale: 0.15,
   off_ball_finishing_scale: 0.08,
@@ -82,34 +81,32 @@ const THEORETICAL_MAX: Record<CompositeKey, number> = {
   spacing: 25,
   finishing: 20,
   paint_touch: 85.8,
-  anchor: 41,
   post_game: 17,
   pnr_screener: 50,
   off_ball_impact: 61,
   shot_creation: 50,
-  rebounding: 20,
+  ball_security: 10,
+  defensive_rebounding: 10,
+  offensive_rebounding: 10,
   transition: 42,
   perimeter_defense: 17,
   interior_defense: 18,
 };
 
 const IMPACT_TRAIT_TO_LINEUP_EFFECTS: Record<CompositeKey, string[]> = {
-  spacing: [
-    "spacing_creation_ratio",
-    "spacing_paint_touch_ratio",
-    "rebounding_spacing_deficit",
-  ],
-  finishing: ["paint_touch_total", "spacing_paint_touch_ratio"],
-  paint_touch: ["paint_touch_total", "spacing_paint_touch_ratio"],
-  anchor: ["anchor_total", "defensive_coverage", "defensive_gaps"],
-  post_game: ["post_game_total"],
-  pnr_screener: ["pnr_screener_total", "pnr_pairing"],
-  off_ball_impact: ["creation_offball_ratio"],
-  shot_creation: ["spacing_creation_ratio", "creation_offball_ratio"],
-  rebounding: ["rebounding", "rebound_transition_ratio", "rebounding_spacing_deficit"],
+  spacing: ["spacing", "spacing_creation_ratio", "spacing_paint_touch_ratio"],
+  finishing: ["paint_touch", "spacing_paint_touch_ratio"],
+  paint_touch: ["paint_touch", "spacing_paint_touch_ratio"],
+  post_game: ["post_game"],
+  pnr_screener: ["pnr_pairing"],
+  off_ball_impact: ["off_ball_impact", "creation_offball_ratio"],
+  shot_creation: ["shot_creation", "spacing_creation_ratio", "creation_offball_ratio"],
+  ball_security: ["ball_security"],
+  defensive_rebounding: ["defensive_rebounding", "rebound_transition_ratio"],
+  offensive_rebounding: ["offensive_rebounding"],
   transition: ["transition", "rebound_transition_ratio"],
-  perimeter_defense: ["perimeter_defense_total", "defensive_coverage", "defensive_gaps"],
-  interior_defense: ["interior_defense_total", "defensive_coverage", "defensive_gaps"],
+  perimeter_defense: ["perimeter_defense", "defensive_coverage", "defensive_gaps", "switchability"],
+  interior_defense: ["interior_defense", "defensive_coverage", "defensive_gaps"],
 };
 
 const SCORE_FACTOR_WEIGHTS: Record<string, string> = {
@@ -233,14 +230,17 @@ function computeRawCompositeBreakdowns(skills: PlayerSkillMap | null | undefined
   };
   raw.finishing.raw = sumTerms(raw.finishing.terms);
 
-  raw.rebounding = {
-    terms: [
-      skillFormulaTerm(skills, "rebounder"),
-      skillFormulaTerm(skills, "offensive_rebounder"),
-    ],
+  raw.defensive_rebounding = {
+    terms: [skillFormulaTerm(skills, "rebounder")],
     raw: 0,
   };
-  raw.rebounding.raw = sumTerms(raw.rebounding.terms);
+  raw.defensive_rebounding.raw = sumTerms(raw.defensive_rebounding.terms);
+
+  raw.offensive_rebounding = {
+    terms: [skillFormulaTerm(skills, "offensive_rebounder")],
+    raw: 0,
+  };
+  raw.offensive_rebounding.raw = sumTerms(raw.offensive_rebounding.terms);
 
   raw.perimeter_defense = {
     terms: [
@@ -281,16 +281,11 @@ function computeRawCompositeBreakdowns(skills: PlayerSkillMap | null | undefined
     note: "Skill subtotal is multiplied by finishing, so finishers turn touches into stronger rim pressure.",
   };
 
-  raw.anchor = {
-    terms: [
-      skillFormulaTerm(skills, "rebounder"),
-      compositeFormulaTerm(raw, "interior_defense"),
-      skillFormulaTerm(skills, "vertical_spacer"),
-      skillFormulaTerm(skills, "screen_setter", c.anchor_screen_setter),
-    ],
+  raw.ball_security = {
+    terms: [skillFormulaTerm(skills, "passer")],
     raw: 0,
   };
-  raw.anchor.raw = sumTerms(raw.anchor.terms);
+  raw.ball_security.raw = sumTerms(raw.ball_security.terms);
 
   raw.post_game = {
     terms: [

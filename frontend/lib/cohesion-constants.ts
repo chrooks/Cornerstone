@@ -16,17 +16,18 @@ export interface CompositeColumn {
   abbr: string;
 }
 
-/** The 12 Impact Trait scoring columns in canonical order. */
+/** The 13 Impact Trait scoring columns in canonical order. */
 export const COMPOSITE_COLUMNS: CompositeColumn[] = [
   { key: "spacing", abbr: "Spc", label: "Spacing" },
   { key: "finishing", abbr: "Fin", label: "Finishing" },
   { key: "paint_touch", abbr: "RP", label: "Rim Pressure" },
-  { key: "anchor", abbr: "Anc", label: "Anchor" },
   { key: "post_game", abbr: "Post", label: "Post Game" },
   { key: "pnr_screener", abbr: "PnR", label: "PnR Screener" },
   { key: "off_ball_impact", abbr: "OBI", label: "Off-Ball Impact" },
   { key: "shot_creation", abbr: "SC", label: "Shot Creation" },
-  { key: "rebounding", abbr: "Reb", label: "Rebounding" },
+  { key: "ball_security", abbr: "BS", label: "Ball Security" },
+  { key: "defensive_rebounding", abbr: "DRb", label: "Def Rebounding" },
+  { key: "offensive_rebounding", abbr: "ORb", label: "Off Rebounding" },
   { key: "transition", abbr: "Trn", label: "Transition" },
   { key: "perimeter_defense", abbr: "PD", label: "Perimeter Defense" },
   { key: "interior_defense", abbr: "ID", label: "Interior Defense" },
@@ -37,12 +38,13 @@ export const IMPACT_TRAIT_DESCRIPTIONS: Record<string, string> = {
   spacing: "Floor spacing from shooting gravity.",
   finishing: "Ability to score at the rim.",
   paint_touch: "Rim pressure and interior presence from finishing, vertical spacing, and post play.",
-  anchor: "Defensive anchoring through rim protection, size, rebounding, and screening.",
   post_game: "Half-court post scoring threat.",
   pnr_screener: "Pick-and-roll screening, rolling, popping, and slip value.",
   off_ball_impact: "Cutting, movement, relocation, and secondary playmaking without dominating the ball.",
   shot_creation: "Ability to generate shots for self and teammates.",
-  rebounding: "Board-crashing value on both ends.",
+  ball_security: "Turnover avoidance and ball-handling safety.",
+  defensive_rebounding: "Securing defensive boards through positioning and effort.",
+  offensive_rebounding: "Crashing the offensive glass for second-chance opportunities.",
   transition: "Open-court value as runner, finisher, or pace-pusher.",
   perimeter_defense: "On-ball and help defense around the perimeter.",
   interior_defense: "Rim protection, post defense, and interior rebounding.",
@@ -54,79 +56,98 @@ export const IMPACT_TRAIT_DESCRIPTIONS: Record<string, string> = {
 
 /** Maps subscore keys to display labels. */
 export const SUBSCORE_LABELS: Record<string, string> = {
+  // Offense quality
+  spacing: "Spacing",
+  shot_creation: "Shot Creation",
+  paint_touch: "Rim Pressure",
+  collective_passing: "Passing",
+  off_ball_impact: "Off-Ball Impact",
+  ball_security: "Ball Security",
+  pnr_pairing: "PnR Pairing",
+  post_game: "Post Game",
+  // Offense balance
   spacing_creation_ratio: "Spacing / Creation",
   creation_offball_ratio: "Creation / Off-Ball",
   spacing_paint_touch_ratio: "Spacing / Rim Pressure",
-  rebound_transition_ratio: "Rebound / Transition",
-  rebounding_spacing_deficit: "Spacing Support",
-  paint_touch_total: "Rim Pressure",
-  post_game_total: "Post Game",
-  pnr_pairing: "PnR Pairing",
-  pnr_screener_total: "PnR Screener",
-  anchor_total: "Anchor",
-  perimeter_defense_total: "Perim Defense",
-  interior_defense_total: "Interior Defense",
-  collective_passing: "Passing",
-  rebounding: "Rebounding",
-  transition: "Transition",
+  // Defense
+  interior_defense: "Interior Defense",
   defensive_coverage: "Def Coverage",
   defensive_gaps: "Def Gaps",
+  perimeter_defense: "Perim Defense",
+  switchability: "Switchability",
+  // Rebounding/transition
+  defensive_rebounding: "Def Rebounding",
+  offensive_rebounding: "Off Rebounding",
+  transition: "Transition",
+  rebound_transition_ratio: "Rebound / Transition",
 };
 
 /** Human-readable explanations of Lineup Subscores. */
 export const SUBSCORE_DESCRIPTIONS: Record<string, string> = {
+  spacing: "Lineup-wide floor spacing from shooting gravity.",
+  shot_creation: "Lineup-wide ability to generate shots for self and teammates.",
+  paint_touch: "Lineup-wide ability to pressure the rim.",
+  collective_passing: "Primary creator passing plus lineup-wide passing depth.",
+  off_ball_impact: "Lineup-wide cutting, movement, and secondary playmaking.",
+  ball_security: "Lineup-wide turnover avoidance and ball-handling safety.",
+  pnr_pairing: "How well pick-and-roll handlers and screeners match in quality and balance.",
+  post_game: "Top post option, secondary post option, and post depth blended together.",
   spacing_creation_ratio: "Whether the Lineup has enough spacing for on-ball creators to operate.",
   creation_offball_ratio: "Whether the Lineup balances on-ball creation with off-ball value.",
   spacing_paint_touch_ratio: "Whether the Lineup has enough spacing to support rim pressure.",
-  rebound_transition_ratio: "Whether rebounding and transition play support each other.",
-  rebounding_spacing_deficit: "Whether spacing is adequate or rebounding can offset a spacing deficit.",
-  paint_touch_total: "Lineup-wide ability to pressure the rim.",
-  post_game_total: "Top post option, secondary post option, and post depth blended together.",
-  pnr_pairing: "How well pick-and-roll handlers and screeners match in quality and balance.",
-  pnr_screener_total: "Lineup-wide screening, rolling, popping, and slip value.",
-  anchor_total: "Stabilizing big-man presence through interior defense, rebounding, vertical size, and screening.",
-  perimeter_defense_total: "Primary perimeter defender quality with secondary support and depth.",
-  interior_defense_total: "Primary interior defender quality with secondary support and depth.",
-  collective_passing: "Primary creator passing plus lineup-wide passing depth.",
-  rebounding: "Top rebounders plus team rebounding depth.",
-  transition: "Lineup-wide transition pressure and open-court value.",
+  interior_defense: "Primary interior defender quality with secondary support and depth.",
   defensive_coverage: "Stacked height-based defensive bell-curve coverage after lineup effects.",
   defensive_gaps: "How many height bands avoid falling below the defensive gap threshold.",
+  perimeter_defense: "Primary perimeter defender quality with secondary support and depth.",
+  switchability: "How well the Lineup can switch defensive assignments across positions.",
+  defensive_rebounding: "Top defensive rebounders plus team rebounding depth.",
+  offensive_rebounding: "Top offensive rebounders plus team offensive rebounding depth.",
+  transition: "Lineup-wide transition pressure and open-court value.",
+  rebound_transition_ratio: "Whether rebounding and transition play support each other.",
   accentuation_strength: "How much the Lineup amplifies its best traits.",
   accentuation_weakness: "How well the Lineup covers its weakest traits.",
 };
 
-/** Subscores organized into display groups for UI rendering. */
+/** Subscores organized into the two-level category structure for UI rendering. */
 export const SUBSCORE_GROUPS: { heading: string; entries: { key: string; label: string }[] }[] = [
   {
-    heading: "Fit Ratios",
+    heading: "Offense — Quality",
+    entries: [
+      { key: "spacing", label: "Spacing" },
+      { key: "shot_creation", label: "Shot Creation" },
+      { key: "paint_touch", label: "Rim Pressure" },
+      { key: "collective_passing", label: "Passing" },
+      { key: "off_ball_impact", label: "Off-Ball Impact" },
+      { key: "ball_security", label: "Ball Security" },
+      { key: "pnr_pairing", label: "PnR Pairing" },
+      { key: "post_game", label: "Post Game" },
+    ],
+  },
+  {
+    heading: "Offense — Balance",
     entries: [
       { key: "spacing_creation_ratio", label: "Spacing / Creation" },
       { key: "creation_offball_ratio", label: "Creation / Off-Ball" },
       { key: "spacing_paint_touch_ratio", label: "Spacing / Rim Pressure" },
-      { key: "rebound_transition_ratio", label: "Rebound / Transition" },
-      { key: "rebounding_spacing_deficit", label: "Spacing Support" },
-    ],
-  },
-  {
-    heading: "Lineup Qualities",
-    entries: [
-      { key: "paint_touch_total", label: "Rim Pressure" },
-      { key: "post_game_total", label: "Post Game" },
-      { key: "pnr_pairing", label: "PnR Pairing" },
-      { key: "anchor_total", label: "Anchor" },
-      { key: "collective_passing", label: "Passing" },
-      { key: "rebounding", label: "Rebounding" },
-      { key: "transition", label: "Transition" },
     ],
   },
   {
     heading: "Defense",
     entries: [
-      { key: "perimeter_defense_total", label: "Perim Defense" },
-      { key: "interior_defense_total", label: "Interior Defense" },
+      { key: "interior_defense", label: "Interior Defense" },
       { key: "defensive_coverage", label: "Def Coverage" },
       { key: "defensive_gaps", label: "Def Gaps" },
+      { key: "perimeter_defense", label: "Perim Defense" },
+      { key: "switchability", label: "Switchability" },
+    ],
+  },
+  {
+    heading: "Rebounding / Transition",
+    entries: [
+      { key: "defensive_rebounding", label: "Def Rebounding" },
+      { key: "offensive_rebounding", label: "Off Rebounding" },
+      { key: "transition", label: "Transition" },
+      { key: "rebound_transition_ratio", label: "Rebound / Transition" },
     ],
   },
 ];

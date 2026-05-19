@@ -263,33 +263,33 @@ function topTwoPlusDepthTermsFromTerms(
   ];
 }
 
-function collectiveReboundingValue(lineupSlots: LineupSlot[], weights: CohesionExplanationWeights): number {
+function collectiveDefensiveReboundingValue(lineupSlots: LineupSlot[], weights: CohesionExplanationWeights): number {
   return topTwoPlusDepthValue(
     lineupSlots,
-    "rebounding",
-    weights.REBOUNDING_PRIMARY_WEIGHT,
-    weights.REBOUNDING_SECONDARY_WEIGHT,
-    weights.REBOUNDING_DEPTH_WEIGHT,
+    "defensive_rebounding",
+    weights.DEFENSIVE_REBOUNDING_PRIMARY_WEIGHT,
+    weights.DEFENSIVE_REBOUNDING_SECONDARY_WEIGHT,
+    weights.DEFENSIVE_REBOUNDING_DEPTH_WEIGHT,
   );
 }
 
-function collectiveReboundingTerms(lineupSlots: LineupSlot[], weights: CohesionExplanationWeights): NumericTerm[] {
+function collectiveDefensiveReboundingTerms(lineupSlots: LineupSlot[], weights: CohesionExplanationWeights): NumericTerm[] {
   return topTwoPlusDepthTerms(
     lineupSlots,
-    "rebounding",
-    weights.REBOUNDING_PRIMARY_WEIGHT,
-    weights.REBOUNDING_SECONDARY_WEIGHT,
-    weights.REBOUNDING_DEPTH_WEIGHT,
+    "defensive_rebounding",
+    weights.DEFENSIVE_REBOUNDING_PRIMARY_WEIGHT,
+    weights.DEFENSIVE_REBOUNDING_SECONDARY_WEIGHT,
+    weights.DEFENSIVE_REBOUNDING_DEPTH_WEIGHT,
   );
 }
 
-function collectiveAnchorTerms(lineupSlots: LineupSlot[], weights: CohesionExplanationWeights): NumericTerm[] {
+function collectiveOffensiveReboundingTerms(lineupSlots: LineupSlot[], weights: CohesionExplanationWeights): NumericTerm[] {
   return topTwoPlusDepthTerms(
     lineupSlots,
-    "anchor",
-    weights.ANCHOR_PRIMARY_WEIGHT,
-    weights.ANCHOR_SECONDARY_WEIGHT,
-    weights.ANCHOR_DEPTH_WEIGHT,
+    "offensive_rebounding",
+    weights.OFFENSIVE_REBOUNDING_PRIMARY_WEIGHT,
+    weights.OFFENSIVE_REBOUNDING_SECONDARY_WEIGHT,
+    weights.OFFENSIVE_REBOUNDING_DEPTH_WEIGHT,
   );
 }
 
@@ -297,9 +297,9 @@ function collectivePerimeterDefenseValue(lineupSlots: LineupSlot[], weights: Coh
   return topTwoPlusDepthValue(
     lineupSlots,
     "perimeter_defense",
-    weights.ANCHOR_PRIMARY_WEIGHT,
-    weights.ANCHOR_SECONDARY_WEIGHT,
-    weights.ANCHOR_DEPTH_WEIGHT,
+    weights.PERIMETER_DEFENSE_PRIMARY_WEIGHT,
+    weights.PERIMETER_DEFENSE_SECONDARY_WEIGHT,
+    weights.PERIMETER_DEFENSE_DEPTH_WEIGHT,
   );
 }
 
@@ -307,9 +307,9 @@ function collectivePerimeterDefenseTerms(lineupSlots: LineupSlot[], weights: Coh
   return topTwoPlusDepthTerms(
     lineupSlots,
     "perimeter_defense",
-    weights.ANCHOR_PRIMARY_WEIGHT,
-    weights.ANCHOR_SECONDARY_WEIGHT,
-    weights.ANCHOR_DEPTH_WEIGHT,
+    weights.PERIMETER_DEFENSE_PRIMARY_WEIGHT,
+    weights.PERIMETER_DEFENSE_SECONDARY_WEIGHT,
+    weights.PERIMETER_DEFENSE_DEPTH_WEIGHT,
   );
 }
 
@@ -317,9 +317,9 @@ function collectiveInteriorDefenseTerms(lineupSlots: LineupSlot[], weights: Cohe
   return topTwoPlusDepthTerms(
     lineupSlots,
     "interior_defense",
-    weights.ANCHOR_PRIMARY_WEIGHT,
-    weights.ANCHOR_SECONDARY_WEIGHT,
-    weights.ANCHOR_DEPTH_WEIGHT,
+    weights.INTERIOR_DEFENSE_PRIMARY_WEIGHT,
+    weights.INTERIOR_DEFENSE_SECONDARY_WEIGHT,
+    weights.INTERIOR_DEFENSE_DEPTH_WEIGHT,
   );
 }
 
@@ -464,9 +464,17 @@ function explanationForSubscore(
       return { mode: "ratio", terms: ratioTerms(lineupSlots, "shot_creation", "off_ball_impact") };
     case "spacing_paint_touch_ratio":
       return { mode: "ratio", terms: ratioTerms(lineupSlots, "spacing", "paint_touch") };
-    case "paint_touch_total":
+    case "spacing":
+      return { mode: "average", terms: compositeTerms(lineupSlots, "spacing"), suffix: "/ 5 players" };
+    case "shot_creation":
+      return { mode: "average", terms: compositeTerms(lineupSlots, "shot_creation"), suffix: "/ 5 players" };
+    case "paint_touch":
       return { mode: "average", terms: compositeTerms(lineupSlots, "paint_touch"), suffix: "/ 5 players" };
-    case "post_game_total":
+    case "off_ball_impact":
+      return { mode: "average", terms: compositeTerms(lineupSlots, "off_ball_impact"), suffix: "/ 5 players" };
+    case "ball_security":
+      return { mode: "average", terms: compositeTerms(lineupSlots, "ball_security"), suffix: "/ 5 players" };
+    case "post_game":
       return {
         mode: "model",
         terms: collectivePostGameTerms(lineupSlots, weights),
@@ -475,8 +483,6 @@ function explanationForSubscore(
           `It weights the best post player at ${Math.round(weights.POST_GAME_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.POST_GAME_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.POST_GAME_DEPTH_WEIGHT * 100)}%.`,
         ],
       };
-    case "pnr_screener_total":
-      return { mode: "average", terms: compositeTerms(lineupSlots, "pnr_screener"), suffix: "/ 5 players" };
     case "pnr_pairing": {
       const handlerQuality = pnrHandlerQuality(lineupSlots, weights);
       const screenerQuality = pnrScreenerQuality(lineupSlots, weights);
@@ -495,32 +501,32 @@ function explanationForSubscore(
         ],
       };
     }
-    case "anchor_total":
-      return {
-        mode: "model",
-        terms: collectiveAnchorTerms(lineupSlots, weights),
-        suffix: "primary anchor plus secondary support and depth",
-        detailLines: [
-          "Anchor is no longer a flat five-player average.",
-          `It weights the best anchor at ${Math.round(weights.ANCHOR_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.ANCHOR_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.ANCHOR_DEPTH_WEIGHT * 100)}%, so one elite rim presence can define the lineup's interior backbone.`,
-        ],
-      };
-    case "perimeter_defense_total":
+    case "perimeter_defense":
       return {
         mode: "model",
         terms: collectivePerimeterDefenseTerms(lineupSlots, weights),
         suffix: "primary perimeter defender plus secondary support and depth",
         detailLines: [
-          `It weights the best perimeter defender at ${Math.round(weights.ANCHOR_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.ANCHOR_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.ANCHOR_DEPTH_WEIGHT * 100)}%.`,
+          `It weights the best perimeter defender at ${Math.round(weights.PERIMETER_DEFENSE_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.PERIMETER_DEFENSE_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.PERIMETER_DEFENSE_DEPTH_WEIGHT * 100)}%.`,
         ],
       };
-    case "interior_defense_total":
+    case "interior_defense":
       return {
         mode: "model",
         terms: collectiveInteriorDefenseTerms(lineupSlots, weights),
         suffix: "primary interior defender plus secondary support and depth",
         detailLines: [
-          `It weights the best interior defender at ${Math.round(weights.ANCHOR_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.ANCHOR_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.ANCHOR_DEPTH_WEIGHT * 100)}%.`,
+          `It weights the best interior defender at ${Math.round(weights.INTERIOR_DEFENSE_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.INTERIOR_DEFENSE_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.INTERIOR_DEFENSE_DEPTH_WEIGHT * 100)}%.`,
+        ],
+      };
+    case "switchability":
+      return {
+        mode: "model",
+        terms: bellTerms(lineupSlots),
+        suffix: "overlap density (60%) + floor compression (40%)",
+        detailLines: [
+          "Overlap density: how many defenders cover each height. More overlap means more switching options.",
+          "Floor compression: evenness of coverage across heights. Tighter min/max ratio means fewer exploitable mismatches.",
         ],
       };
     case "collective_passing":
@@ -533,14 +539,22 @@ function explanationForSubscore(
           `It weights the best passer at ${Math.round(weights.PASSING_PRIMARY_CREATOR_WEIGHT * 100)}% and the lineup average at ${Math.round(weights.PASSING_DEPTH_WEIGHT * 100)}%, so an elite hub still matters while secondary passers add depth.`,
         ],
       };
-    case "rebounding":
+    case "defensive_rebounding":
       return {
         mode: "model",
-        terms: collectiveReboundingTerms(lineupSlots, weights),
-        suffix: "top two rebounders plus team depth",
+        terms: collectiveDefensiveReboundingTerms(lineupSlots, weights),
+        suffix: "top defensive rebounders plus team depth",
         detailLines: [
-          "Rebounding is no longer a flat five-player average.",
-          `It weights the best rebounder at ${Math.round(weights.REBOUNDING_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.REBOUNDING_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.REBOUNDING_DEPTH_WEIGHT * 100)}%, so elite possession finishers can carry the glass.`,
+          `It weights the best defensive rebounder at ${Math.round(weights.DEFENSIVE_REBOUNDING_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.DEFENSIVE_REBOUNDING_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.DEFENSIVE_REBOUNDING_DEPTH_WEIGHT * 100)}%.`,
+        ],
+      };
+    case "offensive_rebounding":
+      return {
+        mode: "model",
+        terms: collectiveOffensiveReboundingTerms(lineupSlots, weights),
+        suffix: "top offensive rebounders plus team depth",
+        detailLines: [
+          `It weights the best offensive rebounder at ${Math.round(weights.OFFENSIVE_REBOUNDING_PRIMARY_WEIGHT * 100)}%, second-best at ${Math.round(weights.OFFENSIVE_REBOUNDING_SECONDARY_WEIGHT * 100)}%, and team average at ${Math.round(weights.OFFENSIVE_REBOUNDING_DEPTH_WEIGHT * 100)}%.`,
         ],
       };
     case "transition": {
@@ -560,25 +574,10 @@ function explanationForSubscore(
       return {
         mode: "ratio",
         terms: [
-          { label: "adjusted Rebounding", value: collectiveReboundingValue(lineupSlots, weights) },
+          { label: "Def Rebounding", value: collectiveDefensiveReboundingValue(lineupSlots, weights) },
           { label: "avg Transition", value: average(compositeTerms(lineupSlots, "transition").map((term) => term.value)) },
         ],
       };
-    case "rebounding_spacing_deficit": {
-      const spacing = average(compositeTerms(lineupSlots, "spacing").map((term) => term.value));
-      const rebounding = collectiveReboundingValue(lineupSlots, weights);
-      const spacingDeficit = Math.max(0, 5 - spacing);
-      return {
-        mode: "ratio",
-        terms: [
-          { label: "adjusted Rebounding", value: rebounding },
-          { label: spacingDeficit > 0 ? "spacing deficit" : "no spacing deficit", value: spacingDeficit },
-        ],
-        detailLines: spacingDeficit > 0
-          ? ["Spacing is below 5.0, so rebounding is checked as an offset for the spacing deficit."]
-          : ["This scores 10.0 because spacing is already at or above the deficit threshold."],
-      };
-    }
     case "defensive_coverage":
       return {
         mode: "model",
