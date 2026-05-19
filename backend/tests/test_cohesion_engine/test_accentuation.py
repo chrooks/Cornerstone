@@ -26,12 +26,13 @@ def make_composites(name: str, **overrides: float) -> PlayerComposites:
         "spacing": 1.0,
         "finishing": 1.0,
         "paint_touch": 1.0,
-        "anchor": 1.0,
         "post_game": 1.0,
         "pnr_screener": 1.0,
         "off_ball_impact": 1.0,
         "shot_creation": 1.0,
-        "rebounding": 1.0,
+        "ball_security": 1.0,
+        "defensive_rebounding": 1.0,
+        "offensive_rebounding": 1.0,
         "transition": 1.0,
         "perimeter_defense": 1.0,
         "interior_defense": 1.0,
@@ -56,12 +57,13 @@ def test_strength_amplification_rewards_complementary_pair():
         spacing=9.0,
         finishing=4.0,
         paint_touch=4.0,
-        anchor=4.0,
         post_game=4.0,
         pnr_screener=4.0,
         off_ball_impact=4.0,
         shot_creation=4.0,
-        rebounding=4.0,
+        ball_security=4.0,
+        defensive_rebounding=4.0,
+        offensive_rebounding=4.0,
         transition=4.0,
     )
     interior = make_composites(
@@ -69,12 +71,13 @@ def test_strength_amplification_rewards_complementary_pair():
         spacing=4.0,
         finishing=4.0,
         paint_touch=8.0,
-        anchor=4.0,
         post_game=4.0,
         pnr_screener=4.0,
         off_ball_impact=4.0,
         shot_creation=4.0,
-        rebounding=4.0,
+        ball_security=4.0,
+        defensive_rebounding=4.0,
+        offensive_rebounding=4.0,
         transition=4.0,
     )
 
@@ -86,7 +89,7 @@ def test_strength_amplification_rewards_complementary_pair():
 
 def test_weakness_coverage_rewards_teammate_same_composite_strength():
     weak_spacer = make_composites("Weak Spacer", spacing=1.0, paint_touch=8.0)
-    strong_spacer = make_composites("Strong Spacer", spacing=9.0, anchor=8.0)
+    strong_spacer = make_composites("Strong Spacer", spacing=9.0, interior_defense=8.0)
 
     _strength, weakness = compute_accentuation([weak_spacer, strong_spacer], VALUES)
 

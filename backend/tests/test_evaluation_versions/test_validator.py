@@ -71,8 +71,8 @@ class TestL3SubscoreTreeConsistency:
             {"key": "ghost_composite", "label": "Ghost", "order": 99}
         )
         violations = validate(payload, "note")
-        l3 = [v for v in violations if v.layer == "L3"]
-        assert any(v.code == "subscore_orphan" and "ghost_composite" in v.message for v in l3)
+        l5 = [v for v in violations if v.layer == "L5"]
+        assert any(v.code == "orphan_impact_trait" and "ghost_composite" in v.message for v in l5)
 
     def test_orphan_formula_ref(self):
         payload = _load_v1_payload()

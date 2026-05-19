@@ -16,7 +16,6 @@ def make_composite(
     *,
     spacing: float = 0.0,
     paint_touch: float = 0.0,
-    anchor: float = 0.0,
     shot_creation: float = 0.0,
     transition: float = 0.0,
     perimeter_defense: float = 0.0,
@@ -28,12 +27,13 @@ def make_composite(
         spacing=spacing,
         finishing=paint_touch,
         paint_touch=paint_touch,
-        anchor=anchor,
         post_game=0.0,
         pnr_screener=0.0,
         off_ball_impact=0.0,
         shot_creation=shot_creation,
-        rebounding=0.0,
+        ball_security=0.0,
+        defensive_rebounding=0.0,
+        offensive_rebounding=0.0,
         transition=transition,
         perimeter_defense=perimeter_defense,
         interior_defense=interior_defense,
@@ -80,7 +80,7 @@ def make_evaluation() -> RosterEvaluation:
                 "p2",
                 "Blake Board",
                 paint_touch=7.7,
-                anchor=6.8,
+                interior_defense=6.8,
             ),
         ],
         lineup_summary={
@@ -128,7 +128,7 @@ def test_build_prompt_uses_composites_subscores_archetypes_and_notes():
     prompt = team_description._build_prompt(evaluation, players)
 
     assert "Ada Ace (starter): spacing (elite), shot creation (elite)" in prompt
-    assert "Blake Board (bench): finishing (strong), rim pressure (strong), anchor (strong)" in prompt
+    assert "Blake Board (bench): finishing (strong), rim pressure (strong), interior defense (strong)" in prompt
     assert "Roster archetypes: offensive, defensive" in prompt
     assert "Starting-lineup synergies: OFF-28, DEF-12" in prompt
     assert "spacing-to-creation balance: elite" in prompt

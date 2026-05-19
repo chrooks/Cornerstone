@@ -43,7 +43,6 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "paint_touch_finishing_scale": 0.08,      # finishing bonus added to paint touch raw score
     "paint_touch_vertical_spacer": 0.6,       # vertical spacer's contribution to paint touch
     "paint_touch_mid_post": 0.7,              # mid-post scorer's contribution to paint touch
-    "anchor_screen_setter": 0.3,              # screen setter's fraction of anchor composite
     "post_game_mid_post": 0.7,                # mid-post scorer drives most of post game value
     "pnr_screener_secondary_scale": 0.15,     # secondary screener skills as fraction of PnR screener
     "off_ball_finishing_scale": 0.08,          # finishing bonus for off-ball impact
@@ -59,21 +58,22 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "interior_defense_rebounder": 0.3,        # rebounding contributes to interior D score
 }
 
-# Canonical list of the 12 composite dimensions a player is scored on.
+# Canonical list of the 13 composite dimensions a player is scored on.
 # Order here determines display order in the UI composite bars.
 COMPOSITE_NAMES: tuple[str, ...] = (
-    "spacing",            # floor spacing via shooting gravity
-    "finishing",           # ability to score at the rim
-    "paint_touch",        # combined interior presence (finishing + vertical + post)
-    "anchor",             # defensive anchoring (rim protection + screen setting)
-    "post_game",          # half-court post scoring repertoire
-    "pnr_screener",       # pick-and-roll screening + roll/pop ability
-    "off_ball_impact",    # cutting, off-ball movement, and secondary playmaking
-    "shot_creation",      # ability to generate shots for self and others
-    "rebounding",         # board-crashing on both ends
-    "transition",         # fast-break value (running, finishing, pushing)
-    "perimeter_defense",  # on-ball and help defense on the perimeter
-    "interior_defense",   # rim protection, post defense, interior rebounding
+    "spacing",               # floor spacing via shooting gravity
+    "finishing",              # ability to score at the rim
+    "paint_touch",           # combined interior presence (finishing + vertical + post)
+    "post_game",             # half-court post scoring repertoire
+    "pnr_screener",          # pick-and-roll screening + roll/pop ability
+    "off_ball_impact",       # cutting, off-ball movement, and secondary playmaking
+    "shot_creation",         # ability to generate shots for self and others
+    "ball_security",         # turnover avoidance and ball-handling safety
+    "defensive_rebounding",  # securing defensive boards
+    "offensive_rebounding",  # crashing the offensive glass
+    "transition",            # fast-break value (running, finishing, pushing)
+    "perimeter_defense",     # on-ball and help defense on the perimeter
+    "interior_defense",      # rim protection, post defense, interior rebounding
 )
 
 # Maximum raw score achievable per composite (all contributing skills at ATG).
@@ -83,12 +83,13 @@ THEORETICAL_MAX: dict[str, float] = {
     "spacing": 25.0,
     "finishing": 20.0,
     "paint_touch": 85.8,
-    "anchor": 41.0,
     "post_game": 17.0,
     "pnr_screener": 50.0,
     "off_ball_impact": 61.0,
     "shot_creation": 50.0,
-    "rebounding": 20.0,
+    "ball_security": 10.0,
+    "defensive_rebounding": 10.0,
+    "offensive_rebounding": 10.0,
     "transition": 42.0,
     "perimeter_defense": 17.0,
     "interior_defense": 18.0,
@@ -194,18 +195,29 @@ DEFENSIVE_TRANSITION_BOOST_CAP: float = 2.0       # max transition defense bonus
 # Diminishing returns for stacking multiple players with same composite strength.
 # 1st player = full value, 2nd = 50%, 3rd = 25%, 4th+ = 10%.
 STACKING_RETURNS: tuple[float, ...] = (1.0, 0.5, 0.25, 0.1)
+# Switchability: minimum coverage value to count a player as "covering" a height.
+SWITCHABILITY_COVERAGE_THRESHOLD: float = 0.5
+# Switchability blend: 60% overlap density, 40% floor compression.
+SWITCHABILITY_OVERLAP_WEIGHT: float = 0.6
 # Collective passing subscore: best creator carries 60%, rest is depth average.
 PASSING_PRIMARY_CREATOR_WEIGHT: float = 0.6
 PASSING_DEPTH_WEIGHT: float = 0.4
-# Rebounding subscore: best rebounder 45%, 2nd-best 35%, remaining depth 20%.
-REBOUNDING_PRIMARY_WEIGHT: float = 0.45
-REBOUNDING_SECONDARY_WEIGHT: float = 0.35
-REBOUNDING_DEPTH_WEIGHT: float = 0.20
-# Anchor subscore: primary anchor 60%, secondary 30%, depth 10%.
-# Heavily weighted toward having one dominant rim protector.
-ANCHOR_PRIMARY_WEIGHT: float = 0.6
-ANCHOR_SECONDARY_WEIGHT: float = 0.3
-ANCHOR_DEPTH_WEIGHT: float = 0.1
+# Defensive rebounding subscore: best rebounder 45%, 2nd-best 35%, depth 20%.
+DEFENSIVE_REBOUNDING_PRIMARY_WEIGHT: float = 0.45
+DEFENSIVE_REBOUNDING_SECONDARY_WEIGHT: float = 0.35
+DEFENSIVE_REBOUNDING_DEPTH_WEIGHT: float = 0.20
+# Offensive rebounding subscore: best offensive rebounder 45%, 2nd-best 35%, depth 20%.
+OFFENSIVE_REBOUNDING_PRIMARY_WEIGHT: float = 0.45
+OFFENSIVE_REBOUNDING_SECONDARY_WEIGHT: float = 0.35
+OFFENSIVE_REBOUNDING_DEPTH_WEIGHT: float = 0.20
+# Perimeter defense subscore: primary perimeter defender dominant (60/30/10).
+PERIMETER_DEFENSE_PRIMARY_WEIGHT: float = 0.6
+PERIMETER_DEFENSE_SECONDARY_WEIGHT: float = 0.3
+PERIMETER_DEFENSE_DEPTH_WEIGHT: float = 0.1
+# Interior defense subscore: primary rim protector dominant (60/30/10).
+INTERIOR_DEFENSE_PRIMARY_WEIGHT: float = 0.6
+INTERIOR_DEFENSE_SECONDARY_WEIGHT: float = 0.3
+INTERIOR_DEFENSE_DEPTH_WEIGHT: float = 0.1
 
 # Post game subscore: more distributed than anchor because post scoring
 # benefits from having multiple post threats (high-low action, etc).
@@ -288,29 +300,61 @@ SYNERGY_CREATOR_THRESHOLD: float = 6.0
 # Cohesion rollup weights
 # ---------------------------------------------------------------------------
 
-# Final cohesion score = weighted sum of these subscores. Weights sum to 1.0.
-# Defense (coverage + gaps) is the heaviest at 24% combined — lineups with
-# defensive holes are penalized more than lineups missing offensive polish.
-COHESION_ROLLUP_WEIGHTS: dict[str, float] = {
-    "spacing_creation_ratio": 0.10,       # balance between floor spacing and shot creation
-    "creation_offball_ratio": 0.05,       # balance between on-ball creation and off-ball movement
-    "spacing_paint_touch_ratio": 0.05,    # inside-out balance (shooters vs paint presence)
-    "paint_touch_total": 0.07,            # total interior presence across the lineup
-    "post_game_total": 0.03,              # half-court post scoring depth
-    "pnr_pairing": 0.03,                  # quality of best PnR handler-screener pairing
-    "anchor_total": 0.07,                 # rim protection / defensive anchoring depth
-    "collective_passing": 0.05,           # overall playmaking and ball movement
-    "rebounding": 0.05,                   # board presence across the lineup
-    "transition": 0.05,                   # fast-break capability
-    "rebound_transition_ratio": 0.04,     # connection between boards and fast breaks
-    "rebounding_spacing_deficit": 0.03,   # penalty when rebounders hurt spacing
-    "defensive_coverage": 0.12,           # how well the bell curves cover all heights
-    "defensive_gaps": 0.12,               # penalty for uncovered height windows
-    "perimeter_defense_total": 0.03,      # aggregate perimeter defense
-    "interior_defense_total": 0.03,       # aggregate interior defense
-    "accentuation_strength": 0.04,        # bonus for leaning into lineup strengths
-    "accentuation_weakness": 0.04,        # penalty for unaddressed weaknesses
+# ---------------------------------------------------------------------------
+# Two-level cohesion rollup weights
+# ---------------------------------------------------------------------------
+
+# Category weights (sum to 1.0). Research-backed proportions from
+# lineup-score-model-research-report.md.
+CATEGORY_WEIGHTS: dict[str, float] = {
+    "offense": 0.40,
+    "defense": 0.37,
+    "rebounding_transition": 0.23,
 }
+
+# Within offense, quality Subscores get 70% and balance Subscores get 30%.
+OFFENSE_QUALITY_RATIO: float = 0.70
+
+# Offense quality weights (sum to 1.0).
+OFFENSE_QUALITY_WEIGHTS: dict[str, float] = {
+    "spacing": 0.18,
+    "shot_creation": 0.18,
+    "paint_touch": 0.18,
+    "collective_passing": 0.14,
+    "off_ball_impact": 0.12,
+    "ball_security": 0.10,
+    "pnr_pairing": 0.06,
+    "post_game": 0.04,
+}
+
+# Offense balance weights (sum to 1.0).
+OFFENSE_BALANCE_WEIGHTS: dict[str, float] = {
+    "spacing_creation_ratio": 0.34,
+    "creation_offball_ratio": 0.33,
+    "spacing_paint_touch_ratio": 0.33,
+}
+
+# Defense weights (sum to 1.0).
+DEFENSE_SUBSCORE_WEIGHTS: dict[str, float] = {
+    "interior_defense": 0.30,
+    "defensive_coverage": 0.25,
+    "defensive_gaps": 0.25,
+    "perimeter_defense": 0.12,
+    "switchability": 0.08,
+}
+
+# Rebounding/transition weights (sum to 1.0).
+REBOUND_TRANSITION_SUBSCORE_WEIGHTS: dict[str, float] = {
+    "defensive_rebounding": 0.40,
+    "offensive_rebounding": 0.20,
+    "transition": 0.25,
+    "rebound_transition_ratio": 0.15,
+}
+
+# Asymmetric accentuation caps (stars, applied additively post-rollup).
+# Weakness penalty ~2x strength bonus per research recommendation.
+ACCENTUATION_STRENGTH_CAP: float = 0.25
+ACCENTUATION_WEAKNESS_CAP: float = 0.50
 
 
 # ---------------------------------------------------------------------------
@@ -324,9 +368,6 @@ RATIO_DEAD_ZONE: float = 0.2
 RATIO_ASYMMETRIC_FULL_PENALTY: float = 1.0   # penalty when dominant side has zero complement
 RATIO_DEFAULT_PENALTY: float = 0.5            # default penalty slope outside dead zone
 RATIO_MIN_DENOMINATOR: float = 0.1            # floor to avoid division by zero in ratio calc
-# If top-2 rebounders' spacing composite < this, a deficit penalty applies
-# (big rebounders who can't shoot clog the floor)
-REBOUNDING_SPACING_DEFICIT_THRESHOLD: float = 5.0
 
 
 # ---------------------------------------------------------------------------

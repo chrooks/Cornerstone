@@ -47,29 +47,37 @@ def test_evaluate_lineup_returns_all_subscores_in_range():
     assert isinstance(result, LineupCohesion)
     assert 0.0 <= result.score <= 5.0
     assert set(result.subscores) == {
+        # Offense quality
+        "spacing",
+        "shot_creation",
+        "paint_touch",
+        "collective_passing",
+        "off_ball_impact",
+        "ball_security",
+        "pnr_pairing",
+        "post_game",
+        # Offense balance
         "spacing_creation_ratio",
         "creation_offball_ratio",
         "spacing_paint_touch_ratio",
-        "paint_touch_total",
-        "post_game_total",
-        "pnr_pairing",
-        "anchor_total",
-        "perimeter_defense_total",
-        "interior_defense_total",
-        "collective_passing",
-        "rebounding",
-        "transition",
-        "rebound_transition_ratio",
-        "rebounding_spacing_deficit",
+        # Defense
+        "interior_defense",
         "defensive_coverage",
         "defensive_gaps",
+        "perimeter_defense",
+        "switchability",
+        # Rebounding/transition
+        "defensive_rebounding",
+        "offensive_rebounding",
+        "transition",
+        "rebound_transition_ratio",
     }
     assert all(0.0 <= value <= 10.0 for value in result.subscores.values())
     assert "OFF-28" not in result.synergies_applied
     assert "OFF-02" in result.synergies_applied
     assert result.subscores["pnr_pairing"] > 0.0
-    assert result.subscores["perimeter_defense_total"] > 0.0
-    assert result.subscores["interior_defense_total"] > 0.0
+    assert result.subscores["perimeter_defense"] > 0.0
+    assert result.subscores["interior_defense"] > 0.0
     assert result.accentuation_strength >= 0.0
     assert result.accentuation_weakness >= 0.0
 
@@ -99,5 +107,5 @@ def test_perimeter_defense_can_boost_transition_subscore():
     pressure_result = evaluate_lineup(pressure_lineup, ENGINE)
     neutral_result = evaluate_lineup(neutral_lineup, ENGINE)
 
-    assert pressure_result.subscores["perimeter_defense_total"] > neutral_result.subscores["perimeter_defense_total"]
+    assert pressure_result.subscores["perimeter_defense"] > neutral_result.subscores["perimeter_defense"]
     assert pressure_result.subscores["transition"] > neutral_result.subscores["transition"]

@@ -82,16 +82,6 @@ def transition(engine: CohesionEngine, ctx: LineupContext) -> float:
 # --- Top-two-plus-depth Impact Traits ---
 
 
-@CohesionEngine.handler("anchor_v1")
-def anchor(engine: CohesionEngine, ctx: LineupContext) -> float:
-    """Blend primary interior anchor with secondary support and depth."""
-    v = engine.version.values
-    return _top_two_plus_depth(
-        ctx.composites, "anchor",
-        v["anchor_primary_weight"], v["anchor_secondary_weight"], v["anchor_depth_weight"],
-    )
-
-
 @CohesionEngine.handler("post_game_v1")
 def post_game(engine: CohesionEngine, ctx: LineupContext) -> float:
     """Blend primary post player with secondary option and depth."""
@@ -112,14 +102,34 @@ def pnr_screener(engine: CohesionEngine, ctx: LineupContext) -> float:
     )
 
 
-@CohesionEngine.handler("rebounding_v1")
-def rebounding(engine: CohesionEngine, ctx: LineupContext) -> float:
-    """Blend top two rebounders with team rebounding depth."""
+@CohesionEngine.handler("defensive_rebounding_v1")
+def defensive_rebounding(engine: CohesionEngine, ctx: LineupContext) -> float:
+    """Blend top defensive rebounders with team rebounding depth."""
     v = engine.version.values
     return _top_two_plus_depth(
-        ctx.composites, "rebounding",
-        v["rebounding_primary_weight"], v["rebounding_secondary_weight"], v["rebounding_depth_weight"],
+        ctx.composites, "defensive_rebounding",
+        v["defensive_rebounding_primary_weight"],
+        v["defensive_rebounding_secondary_weight"],
+        v["defensive_rebounding_depth_weight"],
     )
+
+
+@CohesionEngine.handler("offensive_rebounding_v1")
+def offensive_rebounding(engine: CohesionEngine, ctx: LineupContext) -> float:
+    """Blend top offensive rebounders with team offensive rebounding depth."""
+    v = engine.version.values
+    return _top_two_plus_depth(
+        ctx.composites, "offensive_rebounding",
+        v["offensive_rebounding_primary_weight"],
+        v["offensive_rebounding_secondary_weight"],
+        v["offensive_rebounding_depth_weight"],
+    )
+
+
+@CohesionEngine.handler("ball_security_v1")
+def ball_security(engine: CohesionEngine, ctx: LineupContext) -> float:
+    """Average ball security across the lineup. Proxy from passer until dedicated Skill."""
+    return _average(ctx.composites, "ball_security")
 
 
 @CohesionEngine.handler("perimeter_defense_v1")
@@ -128,7 +138,9 @@ def perimeter_defense(engine: CohesionEngine, ctx: LineupContext) -> float:
     v = engine.version.values
     return _top_two_plus_depth(
         ctx.composites, "perimeter_defense",
-        v["anchor_primary_weight"], v["anchor_secondary_weight"], v["anchor_depth_weight"],
+        v["perimeter_defense_primary_weight"],
+        v["perimeter_defense_secondary_weight"],
+        v["perimeter_defense_depth_weight"],
     )
 
 
@@ -138,5 +150,23 @@ def interior_defense(engine: CohesionEngine, ctx: LineupContext) -> float:
     v = engine.version.values
     return _top_two_plus_depth(
         ctx.composites, "interior_defense",
-        v["anchor_primary_weight"], v["anchor_secondary_weight"], v["anchor_depth_weight"],
+        v["interior_defense_primary_weight"],
+        v["interior_defense_secondary_weight"],
+        v["interior_defense_depth_weight"],
     )
+
+
+@CohesionEngine.handler("switchability_v1")
+def switchability(engine: CohesionEngine, ctx: LineupContext) -> float:
+    """Defensive switchability from bell curve overlap density and floor compression.
+
+    Measures how well a lineup can switch defensive assignments across heights.
+    Overlap density: how many defenders cover each height (more = more switchable).
+    Floor compression: evenness of coverage (tight min/max ratio = fewer exploitable gaps).
+    """
+    from services.cohesion_engine.bell_curve import compute_lineup_switchability
+
+    v = engine.version.values
+    overlap_density, floor_compression = compute_lineup_switchability(ctx.lineup, v)
+    blend = v.get("switchability_overlap_weight", 0.6)
+    return overlap_density * blend + floor_compression * (1.0 - blend)

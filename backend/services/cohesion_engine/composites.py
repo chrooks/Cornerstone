@@ -83,7 +83,8 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         + c["spacing_off_dribble"] * _tv("off_dribble_shooter")
     )
     raw_finishing = _tv("high_flyer") + _tv("crafty_finisher")
-    raw_rebounding = _tv("rebounder") + _tv("offensive_rebounder")
+    raw_defensive_rebounding = _tv("rebounder")
+    raw_offensive_rebounding = _tv("offensive_rebounder")
     raw_perimeter_defense = (
         _tv("perimeter_disruptor")
         + c["perimeter_defense_versatile_defender"] * _tv("versatile_defender")
@@ -103,13 +104,8 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         + c["paint_touch_mid_post"] * _tv("mid_post_player")
     )
 
-    # Step 3: independent big-man and transition composites.
-    raw_anchor = (
-        _tv("rebounder")
-        + raw_interior_defense
-        + _tv("vertical_spacer")
-        + c["anchor_screen_setter"] * _tv("screen_setter")
-    )
+    # Step 3: independent composites (post game, PnR screener, transition, ball security).
+    raw_ball_security = _tv("passer")
     raw_post_game = (
         _tv("low_post_player")
         + c["post_game_mid_post"] * _tv("mid_post_player")
@@ -154,12 +150,13 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         "spacing": raw_spacing,
         "finishing": raw_finishing,
         "paint_touch": raw_paint_touch,
-        "anchor": raw_anchor,
         "post_game": raw_post_game,
         "pnr_screener": raw_pnr_screener,
         "off_ball_impact": raw_off_ball_impact,
         "shot_creation": raw_shot_creation,
-        "rebounding": raw_rebounding,
+        "ball_security": raw_ball_security,
+        "defensive_rebounding": raw_defensive_rebounding,
+        "offensive_rebounding": raw_offensive_rebounding,
         "transition": raw_transition,
         "perimeter_defense": raw_perimeter_defense,
         "interior_defense": raw_interior_defense,
@@ -346,12 +343,13 @@ def compute_player_composites(
         spacing=normalized["spacing"],
         finishing=normalized["finishing"],
         paint_touch=normalized["paint_touch"],
-        anchor=normalized["anchor"],
         post_game=normalized["post_game"],
         pnr_screener=normalized["pnr_screener"],
         off_ball_impact=normalized["off_ball_impact"],
         shot_creation=normalized["shot_creation"],
-        rebounding=normalized["rebounding"],
+        ball_security=normalized["ball_security"],
+        defensive_rebounding=normalized["defensive_rebounding"],
+        offensive_rebounding=normalized["offensive_rebounding"],
         transition=normalized["transition"],
         perimeter_defense=normalized["perimeter_defense"],
         interior_defense=normalized["interior_defense"],

@@ -37,12 +37,13 @@ def test_theoretical_maxima_match_impl_spec_fallback_table():
         "spacing": 25.0,
         "finishing": 20.0,
         "paint_touch": 85.8,
-        "anchor": 41.0,
         "post_game": 17.0,
         "pnr_screener": 50.0,
         "off_ball_impact": 61.0,
         "shot_creation": 50.0,
-        "rebounding": 20.0,
+        "ball_security": 10.0,
+        "defensive_rebounding": 10.0,
+        "offensive_rebounding": 10.0,
         "transition": 42.0,
         "perimeter_defense": 17.0,
         "interior_defense": 18.0,
@@ -97,23 +98,22 @@ def test_synergy_scale_factors_match_impl_spec_table():
     assert weights.PNR_HANDLER_SUPPORT_SCALE == 0.35
 
 
-def test_cohesion_rollup_weights_match_impl_spec_and_sum_to_one():
-    assert weights.COHESION_ROLLUP_WEIGHTS["spacing_creation_ratio"] == 0.10
-    assert weights.COHESION_ROLLUP_WEIGHTS["spacing_paint_touch_ratio"] == 0.05
-    assert "pnr_pairing" in weights.COHESION_ROLLUP_WEIGHTS
-    assert "pnr_screener_total" not in weights.COHESION_ROLLUP_WEIGHTS
-    assert weights.COHESION_ROLLUP_WEIGHTS["defensive_coverage"] == 0.12
-    assert weights.COHESION_ROLLUP_WEIGHTS["defensive_gaps"] == 0.12
-    assert weights.COHESION_ROLLUP_WEIGHTS["perimeter_defense_total"] == 0.03
-    assert weights.COHESION_ROLLUP_WEIGHTS["interior_defense_total"] == 0.03
-    assert weights.COHESION_ROLLUP_WEIGHTS["accentuation_strength"] == 0.04
-    assert weights.COHESION_ROLLUP_WEIGHTS["accentuation_weakness"] == 0.04
-    assert sum(weights.COHESION_ROLLUP_WEIGHTS.values()) == pytest.approx(1.0)
+def test_two_level_rollup_weights_sum_correctly():
+    assert sum(weights.CATEGORY_WEIGHTS.values()) == pytest.approx(1.0)
+    assert sum(weights.OFFENSE_QUALITY_WEIGHTS.values()) == pytest.approx(1.0)
+    assert sum(weights.OFFENSE_BALANCE_WEIGHTS.values()) == pytest.approx(1.0)
+    assert sum(weights.DEFENSE_SUBSCORE_WEIGHTS.values()) == pytest.approx(1.0)
+    assert sum(weights.REBOUND_TRANSITION_SUBSCORE_WEIGHTS.values()) == pytest.approx(1.0)
+    assert weights.CATEGORY_WEIGHTS["offense"] == 0.40
+    assert weights.CATEGORY_WEIGHTS["defense"] == 0.37
+    assert weights.CATEGORY_WEIGHTS["rebounding_transition"] == 0.23
+    assert weights.OFFENSE_QUALITY_RATIO == 0.70
+    assert weights.ACCENTUATION_STRENGTH_CAP == 0.25
+    assert weights.ACCENTUATION_WEAKNESS_CAP == 0.50
 
 
 def test_ratio_accentuation_note_and_layer_2_constants_exist():
     assert weights.RATIO_DEAD_ZONE == 0.2
-    assert weights.REBOUNDING_SPACING_DEFICIT_THRESHOLD == 5.0
     assert weights.ACCENTUATION_STRENGTH_THRESHOLD == 7.5
     assert weights.ACCENTUATION_WEAKNESS_THRESHOLD == 2.5
     assert ("perimeter_defense", "interior_defense") in weights.ACCENTUATION_COMPLEMENTARY_PAIRS

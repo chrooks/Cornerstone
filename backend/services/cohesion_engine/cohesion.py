@@ -23,7 +23,6 @@ from .engine import CohesionEngine, LineupContext
 from .ratios import (
     creation_offball_ratio,
     rebound_transition_ratio,
-    rebounding_spacing_deficit_ratio,
     ratio_score,
     spacing_creation_ratio,
     spacing_paint_touch_ratio,
@@ -186,29 +185,68 @@ def _defensive_coverage_subscore(raw_coverage: float, values: dict[str, Any]) ->
     return 10.0 * (1.0 - exp(-raw_coverage / saturation))
 
 
+def _weighted_category_score(
+    subscores: dict[str, float], weights: dict[str, float]
+) -> float:
+    """Compute a single category score from Subscores and their weights."""
+    return sum(
+        weights.get(key, 0.0) * subscores.get(key, 0.0) / 10.0
+        for key in weights
+    )
+
+
 def _rollup_score(
     subscores: dict[str, float],
     accentuation_strength: float,
     accentuation_weakness: float,
     values: dict[str, Any],
 ) -> float:
-    """Convert normalized subscores into a 0-5 lineup score."""
-    rollup_weights: dict[str, float] = values["cohesion_rollup_weights"]
+    """Two-level rollup: intra-category → category → final star score.
+
+    1. Compute offense score (quality 70% + balance 30%).
+    2. Compute defense and rebounding/transition scores.
+    3. Weighted category sum → base star score.
+    4. Asymmetric accentuation applied additively post-rollup.
+    """
+    category_weights: dict[str, float] = values["category_weights"]
     star_rating_max: float = values["star_rating_max"]
-    weighted_sum = 0.0
-    for key, weight in rollup_weights.items():
-        if key == "accentuation_strength":
-            value = accentuation_strength
-        elif key == "accentuation_weakness":
-            value = accentuation_weakness
-        else:
-            value = subscores.get(key, 0.0)
-        weighted_sum += weight * (value / 10.0)
-    return round(star_rating_max * weighted_sum, 2)
+
+    # Offense: quality + balance blend
+    quality_ratio: float = values["offense_quality_ratio"]
+    offense_quality = _weighted_category_score(subscores, values["offense_quality_weights"])
+    offense_balance = _weighted_category_score(subscores, values["offense_balance_weights"])
+    offense_score = offense_quality * quality_ratio + offense_balance * (1.0 - quality_ratio)
+
+    # Defense and rebounding/transition
+    defense_score = _weighted_category_score(subscores, values["defense_subscore_weights"])
+    reb_trans_score = _weighted_category_score(subscores, values["rebound_transition_subscore_weights"])
+
+    # Category-weighted base
+    base = (
+        category_weights["offense"] * offense_score
+        + category_weights["defense"] * defense_score
+        + category_weights["rebounding_transition"] * reb_trans_score
+    )
+
+    # Asymmetric accentuation: additive post-rollup
+    strength_cap: float = values.get("accentuation_strength_cap", 0.25)
+    weakness_cap: float = values.get("accentuation_weakness_cap", 0.50)
+    strength_bonus = (accentuation_strength / 10.0) * strength_cap
+    weakness_penalty = ((10.0 - accentuation_weakness) / 10.0) * weakness_cap
+
+    return round(
+        max(0.0, min(star_rating_max, star_rating_max * base + strength_bonus - weakness_penalty)),
+        2,
+    )
 
 
 def evaluate_lineup(players: list[dict[str, Any]], engine: CohesionEngine) -> LineupCohesion:
-    """Evaluate one lineup and return its cohesion score plus explanations."""
+    """Evaluate one lineup and return its cohesion score plus explanations.
+
+    Two-level rollup: Subscores → category scores → final star rating.
+    Categories: offense (quality + balance), defense, rebounding/transition.
+    Accentuation applied additively post-rollup with asymmetric caps.
+    """
     values = engine.version.values
     formula_refs = engine.version.formula_refs
 
@@ -218,54 +256,67 @@ def evaluate_lineup(players: list[dict[str, Any]], engine: CohesionEngine) -> Li
 
     ctx = LineupContext(composites=player_composites, lineup=synergy_players)
 
-    # Dispatch Impact Trait subscores through registered Formula Handlers
+    # --- Offense quality Subscores (dispatched via Formula Handlers) ---
     spacing = engine.dispatch(formula_refs["spacing"], ctx)
     shot_creation = engine.dispatch(formula_refs["shot_creation"], ctx)
-    off_ball_impact = engine.dispatch(formula_refs["off_ball_impact"], ctx)
     paint_touch = engine.dispatch(formula_refs["paint_touch"], ctx)
+    off_ball_impact = engine.dispatch(formula_refs["off_ball_impact"], ctx)
+    ball_security = engine.dispatch(formula_refs["ball_security"], ctx)
     post_game = engine.dispatch(formula_refs["post_game"], ctx)
-    anchor = engine.dispatch(formula_refs["anchor"], ctx)
-    perimeter_defense = engine.dispatch(formula_refs["perimeter_defense"], ctx)
-    interior_defense = engine.dispatch(formula_refs["interior_defense"], ctx)
-    rebounding = engine.dispatch(formula_refs["rebounding"], ctx)
-    transition = engine.dispatch(formula_refs["transition"], ctx)
 
-    # Non-dispatched subscores (complex logic, raw skill access, or no handler)
+    # Offense quality Subscores (complex logic, not dispatched)
     pnr_pairing = _pnr_pairing(synergy_players, player_composites, values)
     collective_passing = _collective_passing(synergy_players, values)
+
+    # --- Defense Subscores ---
+    perimeter_defense = engine.dispatch(formula_refs["perimeter_defense"], ctx)
+    interior_defense = engine.dispatch(formula_refs["interior_defense"], ctx)
+    switchability = engine.dispatch(formula_refs["switchability"], ctx)
 
     raw_defensive_coverage, gap_penalty, _gap_positions = compute_lineup_defense(
         synergy_players, values
     )
     defensive_coverage = _defensive_coverage_subscore(raw_defensive_coverage, values)
-    reb_min: float = values["defensive_rebounding_minimum"]
-    reb_penalty_scale: float = values["defensive_rebounding_penalty_scale"]
-    if rebounding < reb_min:
-        defensive_coverage -= (reb_min - rebounding) * reb_penalty_scale
     defensive_gaps = 10.0 + gap_penalty
+
+    # --- Rebounding/Transition Subscores ---
+    defensive_rebounding = engine.dispatch(formula_refs["defensive_rebounding"], ctx)
+    offensive_rebounding = engine.dispatch(formula_refs["offensive_rebounding"], ctx)
+    transition = engine.dispatch(formula_refs["transition"], ctx)
     transition += _defensive_transition_boost(synergy_players, perimeter_defense, values)
 
+    # --- Accentuation ---
     accentuation_details = compute_accentuation_details(player_composites, values)
     accentuation_strength = accentuation_details["strength"]["score"]
     accentuation_weakness = accentuation_details["weakness"]["score"]
 
     subscores = {
+        # Offense quality
+        "spacing": _clamp_subscore(spacing),
+        "shot_creation": _clamp_subscore(shot_creation),
+        "paint_touch": _clamp_subscore(paint_touch),
+        "collective_passing": _clamp_subscore(collective_passing),
+        "off_ball_impact": _clamp_subscore(off_ball_impact),
+        "ball_security": _clamp_subscore(ball_security),
+        "pnr_pairing": _clamp_subscore(pnr_pairing),
+        "post_game": _clamp_subscore(post_game),
+        # Offense balance
         "spacing_creation_ratio": spacing_creation_ratio(spacing, shot_creation, values),
         "creation_offball_ratio": creation_offball_ratio(shot_creation, off_ball_impact, values),
         "spacing_paint_touch_ratio": spacing_paint_touch_ratio(spacing, paint_touch, values),
-        "paint_touch_total": _clamp_subscore(paint_touch),
-        "post_game_total": _clamp_subscore(post_game),
-        "pnr_pairing": _clamp_subscore(pnr_pairing),
-        "anchor_total": _clamp_subscore(anchor),
-        "perimeter_defense_total": _clamp_subscore(perimeter_defense),
-        "interior_defense_total": _clamp_subscore(interior_defense),
-        "collective_passing": _clamp_subscore(collective_passing),
-        "rebounding": _clamp_subscore(rebounding),
-        "transition": _clamp_subscore(transition),
-        "rebound_transition_ratio": rebound_transition_ratio(rebounding, transition, values),
-        "rebounding_spacing_deficit": rebounding_spacing_deficit_ratio(rebounding, spacing, values),
+        # Defense
+        "interior_defense": _clamp_subscore(interior_defense),
         "defensive_coverage": _clamp_subscore(defensive_coverage),
         "defensive_gaps": _clamp_subscore(defensive_gaps),
+        "perimeter_defense": _clamp_subscore(perimeter_defense),
+        "switchability": _clamp_subscore(switchability),
+        # Rebounding/transition
+        "defensive_rebounding": _clamp_subscore(defensive_rebounding),
+        "offensive_rebounding": _clamp_subscore(offensive_rebounding),
+        "transition": _clamp_subscore(transition),
+        "rebound_transition_ratio": rebound_transition_ratio(
+            defensive_rebounding, transition, values
+        ),
     }
 
     return LineupCohesion(

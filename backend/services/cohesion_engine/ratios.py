@@ -65,12 +65,3 @@ def rebound_transition_ratio(rebounding: float, transition: float, values: dict[
 def creation_offball_ratio(shot_creation: float, off_ball_impact: float, values: dict[str, Any]) -> float:
     """Score whether on-ball creation is balanced with off-ball gravity."""
     return ratio_score(shot_creation, off_ball_impact, values)
-
-
-def rebounding_spacing_deficit_ratio(rebounding: float, spacing: float, values: dict[str, Any]) -> float:
-    """Score whether spacing is adequate or rebounding can offset a spacing deficit."""
-    threshold: float = values["rebounding_spacing_deficit_threshold"]
-    if spacing >= threshold:
-        return 10.0
-    spacing_deficit = max(0.0, threshold - spacing)
-    return ratio_score(rebounding, spacing_deficit, values)

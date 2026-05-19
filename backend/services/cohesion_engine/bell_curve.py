@@ -279,6 +279,54 @@ def compute_lineup_coverage_by_height(
     return coverage_by_height
 
 
+def compute_lineup_switchability(
+    lineup: list[dict[str, Any]], values: dict[str, Any]
+) -> tuple[float, float]:
+    """
+    Compute overlap density and floor compression for defensive switchability.
+
+    Overlap density: average number of defenders with non-trivial coverage at each
+    height, normalized to 0-10. More overlap = more switching options.
+
+    Floor compression: min_coverage / max_coverage across heights, scaled to 0-10.
+    Tighter ratio = fewer exploitable mismatches when switching.
+
+    Returns (overlap_density_score, floor_compression_score), both on 0-10 scale.
+    """
+    height_min = values["height_min_inches"]
+    height_max = values["height_max_inches"]
+    coverage_threshold: float = values.get("switchability_coverage_threshold", 0.5)
+
+    if not lineup:
+        return 0.0, 0.0
+
+    per_player_values = [_player_defensive_values(player, values) for player in lineup]
+    height_count = height_max - height_min + 1
+
+    total_overlap = 0.0
+    min_coverage = float("inf")
+    max_coverage = 0.0
+
+    for height_index in range(height_count):
+        height_values = [pv[height_index] for pv in per_player_values]
+        contributors = sum(1 for v in height_values if v >= coverage_threshold)
+        total_overlap += contributors
+
+        stacked = sum(height_values)
+        min_coverage = min(min_coverage, stacked)
+        max_coverage = max(max_coverage, stacked)
+
+    avg_overlap = total_overlap / height_count
+    overlap_density_score = round(min(10.0, avg_overlap / len(lineup) * 10.0), 1)
+
+    if max_coverage <= 0:
+        floor_compression_score = 0.0
+    else:
+        floor_compression_score = round(min(10.0, min_coverage / max_coverage * 10.0), 1)
+
+    return overlap_density_score, floor_compression_score
+
+
 def compute_lineup_defense(
     lineup: list[dict[str, Any]], values: dict[str, Any]
 ) -> tuple[float, float, list[int]]:

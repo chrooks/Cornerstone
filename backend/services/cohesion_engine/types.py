@@ -26,12 +26,13 @@ class PlayerComposites:
     spacing: float
     finishing: float
     paint_touch: float
-    anchor: float
     post_game: float
     pnr_screener: float
     off_ball_impact: float
     shot_creation: float
-    rebounding: float
+    ball_security: float
+    defensive_rebounding: float
+    offensive_rebounding: float
     transition: float
     perimeter_defense: float
     interior_defense: float

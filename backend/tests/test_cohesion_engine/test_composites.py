@@ -62,9 +62,9 @@ def test_compute_raw_composites_matches_validated_formula_order():
 
     assert raw["spacing"] == pytest.approx(9.75)
     assert raw["finishing"] == pytest.approx(7.5)
-    assert raw["rebounding"] == pytest.approx(4.5)
+    assert raw["defensive_rebounding"] == pytest.approx(3.0)
+    assert raw["offensive_rebounding"] == pytest.approx(1.5)
     assert raw["paint_touch"] == pytest.approx(21.6)
-    assert raw["anchor"] == pytest.approx(13.725)
     assert raw["post_game"] == pytest.approx(5.7)
     assert raw["pnr_screener"] == pytest.approx(7.2)
     assert raw["transition"] == pytest.approx(21.45)
@@ -72,6 +72,7 @@ def test_compute_raw_composites_matches_validated_formula_order():
     assert raw["interior_defense"] == pytest.approx(7.275)
     assert raw["off_ball_impact"] == pytest.approx(17.55)
     assert raw["shot_creation"] == pytest.approx(29.725)
+    assert raw["ball_security"] == pytest.approx(10.0)
 
 
 def test_compute_raw_composites_accepts_numeric_synergy_values():
@@ -93,12 +94,13 @@ def test_normalize_composites_uses_theoretical_max_when_cache_empty():
             "spacing": 12.5,
             "finishing": 10.0,
             "paint_touch": 42.9,
-            "anchor": 20.5,
             "post_game": 8.5,
             "pnr_screener": 25.0,
             "off_ball_impact": 30.5,
             "shot_creation": 30.0,
-            "rebounding": 10.0,
+            "ball_security": 5.0,
+            "defensive_rebounding": 5.0,
+            "offensive_rebounding": 5.0,
             "transition": 21.0,
             "perimeter_defense": 8.5,
             "interior_defense": 9.0,
@@ -110,12 +112,13 @@ def test_normalize_composites_uses_theoretical_max_when_cache_empty():
         "spacing": 5.0,
         "finishing": 5.0,
         "paint_touch": 5.0,
-        "anchor": 5.0,
         "post_game": 5.0,
         "pnr_screener": 5.0,
         "off_ball_impact": 5.0,
         "shot_creation": 6.0,
-        "rebounding": 5.0,
+        "ball_security": 5.0,
+        "defensive_rebounding": 5.0,
+        "offensive_rebounding": 5.0,
         "transition": 5.0,
         "perimeter_defense": 5.0,
         "interior_defense": 5.0,
@@ -154,6 +157,9 @@ def test_compute_player_composites_returns_dataclass_with_bell_params():
     assert player.spacing == 3.9
     assert player.perimeter_defense == 2.4
     assert player.interior_defense == 4.0
+    assert player.ball_security == 10.0
+    assert player.defensive_rebounding == 3.0
+    assert player.offensive_rebounding == 1.5
     assert player.bell_amplitude == 3.5
     assert player.bell_peak == 80
     assert player.bell_range_down == 7

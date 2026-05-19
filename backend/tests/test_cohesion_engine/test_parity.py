@@ -117,12 +117,12 @@ class TestHandlerParity:
         """Handlers using _top_two_plus_depth match direct computation."""
         v = engine.version.values
         cases = [
-            ("anchor_v1", "anchor", v["anchor_primary_weight"], v["anchor_secondary_weight"], v["anchor_depth_weight"]),
             ("post_game_v1", "post_game", v["post_game_primary_weight"], v["post_game_secondary_weight"], v["post_game_depth_weight"]),
-            ("rebounding_v1", "rebounding", v["rebounding_primary_weight"], v["rebounding_secondary_weight"], v["rebounding_depth_weight"]),
+            ("defensive_rebounding_v1", "defensive_rebounding", v["defensive_rebounding_primary_weight"], v["defensive_rebounding_secondary_weight"], v["defensive_rebounding_depth_weight"]),
+            ("offensive_rebounding_v1", "offensive_rebounding", v["offensive_rebounding_primary_weight"], v["offensive_rebounding_secondary_weight"], v["offensive_rebounding_depth_weight"]),
             ("pnr_screener_v1", "pnr_screener", v["pnr_screener_primary_weight"], v["pnr_screener_secondary_weight"], v["pnr_screener_depth_weight"]),
-            ("perimeter_defense_v1", "perimeter_defense", v["anchor_primary_weight"], v["anchor_secondary_weight"], v["anchor_depth_weight"]),
-            ("interior_defense_v1", "interior_defense", v["anchor_primary_weight"], v["anchor_secondary_weight"], v["anchor_depth_weight"]),
+            ("perimeter_defense_v1", "perimeter_defense", v["perimeter_defense_primary_weight"], v["perimeter_defense_secondary_weight"], v["perimeter_defense_depth_weight"]),
+            ("interior_defense_v1", "interior_defense", v["interior_defense_primary_weight"], v["interior_defense_secondary_weight"], v["interior_defense_depth_weight"]),
         ]
         for handler_name, field, pw, sw, dw in cases:
             dispatched = engine.dispatch(handler_name, ctx)
@@ -166,10 +166,11 @@ class TestModifiedValuesProduceDifferentOutput:
         modified_ctx = LineupContext(composites=modified_composites, lineup=lineup)
 
         handler_names = [
-            "spacing_v1", "finishing_v1", "paint_touch_v1", "anchor_v1",
+            "spacing_v1", "finishing_v1", "paint_touch_v1",
             "post_game_v1", "pnr_screener_v1", "off_ball_impact_v1",
-            "shot_creation_v1", "rebounding_v1", "transition_v1",
-            "perimeter_defense_v1", "interior_defense_v1",
+            "shot_creation_v1", "ball_security_v1",
+            "defensive_rebounding_v1", "offensive_rebounding_v1",
+            "transition_v1", "perimeter_defense_v1", "interior_defense_v1",
         ]
 
         differences = set()

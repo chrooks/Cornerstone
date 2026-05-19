@@ -32,10 +32,11 @@ SUGGESTION_TEMPLATES: dict[str, str] = {
     "paint_touch": "Add a driver or interior scorer to pressure the rim.",
     "post_game": "Add a low-post or mid-post scorer.",
     "pnr_screener": "Add a PnR roll man or screen setter.",
-    "anchor": "Add a rim protector to anchor the paint.",
+    "ball_security": "Add a reliable ball handler to reduce turnovers.",
     "perimeter_defense": "Add a perimeter defender to pressure ball handlers.",
     "interior_defense": "Add an interior defender to protect the paint.",
-    "rebounding": "Add a rebounder to control the glass.",
+    "defensive_rebounding": "Add a rebounder to control the defensive glass.",
+    "offensive_rebounding": "Add an offensive rebounder for second chances.",
     PASSING_CATEGORY: "Add a playmaker to orchestrate the offense.",
     "transition": "Add a transition athlete for fast-break scoring.",
     "off_ball": "Add an off-ball threat - a cutter or movement shooter.",
@@ -48,8 +49,9 @@ OPPORTUNITY_ARCHETYPES: dict[str, str] = {
     "spacing": "a shooter",
     "shot_creation": "a ball handler",
     "paint_touch": "a rim attacker",
-    "anchor": "a rim protector",
-    "rebounding": "a rebounder",
+    "ball_security": "a reliable ball handler",
+    "defensive_rebounding": "a rebounder",
+    "offensive_rebounding": "an offensive rebounder",
     "transition": "a transition athlete",
     "perimeter_defense": "a perimeter defender",
     "interior_defense": "an interior defender",
@@ -64,50 +66,59 @@ COMPOSITE_LABELS: dict[str, str] = {
     "paint_touch": "rim pressure",
     "post_game": "post play",
     "pnr_screener": "screen-and-roll play",
-    "anchor": "paint defense",
+    "ball_security": "ball security",
     "perimeter_defense": "perimeter pressure",
     "interior_defense": "interior defense",
-    "rebounding": "rebounding",
+    "defensive_rebounding": "defensive rebounding",
+    "offensive_rebounding": "offensive rebounding",
     "transition": "transition play",
     "off_ball_impact": "off-ball impact",
 }
 
 SUBSCORE_LABELS: dict[str, str] = {
-    "spacing_creation_ratio": "spacing and creation balance",
-    "spacing_paint_touch_ratio": "spacing and paint pressure balance",
-    "paint_touch_total": "paint pressure",
-    "post_game_total": "post scoring",
-    "pnr_screener_total": "screen-and-roll play",
-    "pnr_pairing": "pick-and-roll pairing",
-    "anchor_total": "paint defense",
-    "perimeter_defense_total": "perimeter pressure",
-    "interior_defense_total": "interior defense",
+    "spacing": "spacing",
+    "shot_creation": "shot creation",
+    "paint_touch": "paint pressure",
     "collective_passing": "passing",
-    "rebounding": "rebounding",
-    "transition": "transition play",
-    "rebound_transition_ratio": "rebound-to-run balance",
-    "rebounding_spacing_deficit": "spacing support",
+    "off_ball_impact": "off-ball impact",
+    "ball_security": "ball security",
+    "pnr_pairing": "pick-and-roll pairing",
+    "post_game": "post scoring",
+    "spacing_creation_ratio": "spacing and creation balance",
+    "creation_offball_ratio": "creation and off-ball balance",
+    "spacing_paint_touch_ratio": "spacing and paint pressure balance",
+    "interior_defense": "interior defense",
     "defensive_coverage": "defensive coverage",
     "defensive_gaps": "defensive coverage",
+    "perimeter_defense": "perimeter pressure",
+    "switchability": "defensive switchability",
+    "defensive_rebounding": "defensive rebounding",
+    "offensive_rebounding": "offensive rebounding",
+    "transition": "transition play",
+    "rebound_transition_ratio": "rebound-to-run balance",
 }
 
 SUBSCORE_SUGGESTIONS: dict[str, str] = {
-    "spacing_creation_ratio": "spacing",
-    "spacing_paint_touch_ratio": "spacing",
-    "paint_touch_total": "paint_touch",
-    "post_game_total": "post_game",
-    "pnr_screener_total": "pnr_screener",
-    "pnr_pairing": "pnr_screener",
-    "anchor_total": "anchor",
-    "perimeter_defense_total": "perimeter_defense",
-    "interior_defense_total": "interior_defense",
+    "spacing": "spacing",
+    "shot_creation": "shot_creation",
+    "paint_touch": "paint_touch",
     "collective_passing": PASSING_CATEGORY,
-    "rebounding": "rebounding",
-    "transition": "transition",
-    "rebound_transition_ratio": "transition",
-    "rebounding_spacing_deficit": "spacing",
+    "off_ball_impact": "off_ball_impact",
+    "ball_security": "ball_security",
+    "pnr_pairing": "pnr_screener",
+    "post_game": "post_game",
+    "spacing_creation_ratio": "spacing",
+    "creation_offball_ratio": "off_ball_impact",
+    "spacing_paint_touch_ratio": "spacing",
+    "interior_defense": "interior_defense",
     "defensive_coverage": DEFENSE_GAP_CATEGORY,
     "defensive_gaps": DEFENSE_GAP_CATEGORY,
+    "perimeter_defense": "perimeter_defense",
+    "switchability": "perimeter_defense",
+    "defensive_rebounding": "defensive_rebounding",
+    "offensive_rebounding": "offensive_rebounding",
+    "transition": "transition",
+    "rebound_transition_ratio": "transition",
 }
 
 
@@ -235,7 +246,7 @@ def _mode_a_strengths(
     strengths: list[Note] = []
 
     for category in (
-        "spacing", "shot_creation", "paint_touch", "anchor",
+        "spacing", "shot_creation", "paint_touch",
         "transition", "perimeter_defense", "interior_defense",
     ):
         strongest = _strongest_player(composites, category)
@@ -244,7 +255,6 @@ def _mode_a_strengths(
                 "spacing": f"{strongest.name}'s shooting creates elite floor spacing.",
                 "shot_creation": f"{strongest.name} is an elite shot creator.",
                 "paint_touch": f"{strongest.name} creates elite rim pressure.",
-                "anchor": f"{strongest.name} anchors the paint.",
                 "transition": f"{strongest.name} is a transition force.",
                 "perimeter_defense": f"{strongest.name} applies elite perimeter pressure.",
                 "interior_defense": f"{strongest.name} protects the interior at an elite level.",
@@ -308,7 +318,7 @@ def _mode_a_strengths(
 
     for composite in composites:
         offense_values = [composite.spacing, composite.paint_touch, composite.shot_creation, composite.off_ball_impact, composite.transition]
-        defense_values = [composite.anchor, composite.perimeter_defense, composite.interior_defense, composite.rebounding, composite.bell_amplitude * 2.5]
+        defense_values = [composite.perimeter_defense, composite.interior_defense, composite.defensive_rebounding, composite.bell_amplitude * 2.5]
         if max(offense_values, default=0.0) >= 7.5 and max(defense_values, default=0.0) >= 7.5:
             raw_value = min(max(offense_values), max(defense_values))
             strengths.append(_note("strength", "two_way", raw_value / 10.0, raw_value, f"{composite.name} is a two-way force.", values))
@@ -344,8 +354,7 @@ def _mode_a_weaknesses(
         "spacing": "No floor spacing - defenders can collapse freely.",
         "shot_creation": "No primary shot creator on the roster.",
         "paint_touch": "No rim pressure.",
-        "anchor": "No rim protection or paint control.",
-        "rebounding": "Rebounding is nonexistent.",
+        "defensive_rebounding": "Defensive rebounding is nonexistent.",
         "transition": "No transition game.",
         "perimeter_defense": "No perimeter pressure at the point of attack.",
         "interior_defense": "No interior defensive presence.",
@@ -355,8 +364,7 @@ def _mode_a_weaknesses(
         "spacing": "Roster lacks floor spacing - need more shooting.",
         "shot_creation": "Shot creation is thin - need a primary ball handler.",
         "paint_touch": "Limited rim pressure - need more interior scoring.",
-        "anchor": "Paint protection is undersized - need an anchor.",
-        "rebounding": "Rebounding is a liability.",
+        "defensive_rebounding": "Defensive rebounding is a liability.",
         "transition": "No reliable transition scoring.",
         "perimeter_defense": "Perimeter defense is exposed.",
         "interior_defense": "Interior defense is soft.",
@@ -364,8 +372,8 @@ def _mode_a_weaknesses(
 
     n_players = max(len(composites), 1)
     for category in (
-        "spacing", "shot_creation", "paint_touch", "anchor",
-        "rebounding", "transition", "perimeter_defense", "interior_defense",
+        "spacing", "shot_creation", "paint_touch",
+        "defensive_rebounding", "transition", "perimeter_defense", "interior_defense",
     ):
         total = sum(_composite_value(composite, category) for composite in composites)
         avg = total / n_players
@@ -426,8 +434,8 @@ def _suggestions_from_weaknesses(weaknesses: Iterable[Note], values: dict[str, A
 
 
 _OPPORTUNITY_CATEGORIES = (
-    "spacing", "shot_creation", "paint_touch", "anchor",
-    "rebounding", "transition", "perimeter_defense", "interior_defense",
+    "spacing", "shot_creation", "paint_touch",
+    "defensive_rebounding", "transition", "perimeter_defense", "interior_defense",
 )
 
 

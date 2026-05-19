@@ -9,7 +9,6 @@ from pathlib import Path
 
 from backend.services.cohesion_engine.ratios import (
     ratio_score,
-    rebounding_spacing_deficit_ratio,
     spacing_paint_touch_ratio,
 )
 
@@ -44,8 +43,3 @@ def test_spacing_paint_touch_asymmetry_penalizes_paint_heavy_lineups_more():
     spacing_heavy = spacing_paint_touch_ratio(8, 3, VALUES)
 
     assert paint_heavy < spacing_heavy
-
-
-def test_rebounding_spacing_deficit_only_fires_when_spacing_is_low():
-    assert rebounding_spacing_deficit_ratio(6, 6, VALUES) == 10.0
-    assert rebounding_spacing_deficit_ratio(4, 3, VALUES) > 0.0

@@ -27,11 +27,12 @@ def make_composite(
     spacing: float = 0.0,
     shot_creation: float = 0.0,
     paint_touch: float = 0.0,
-    anchor: float = 0.0,
     post_game: float = 0.0,
     pnr_screener: float = 0.0,
     off_ball_impact: float = 0.0,
-    rebounding: float = 0.0,
+    ball_security: float = 0.0,
+    defensive_rebounding: float = 0.0,
+    offensive_rebounding: float = 0.0,
     transition: float = 0.0,
     perimeter_defense: float = 0.0,
     interior_defense: float = 0.0,
@@ -43,12 +44,13 @@ def make_composite(
         spacing=spacing,
         finishing=0.0,
         paint_touch=paint_touch,
-        anchor=anchor,
         post_game=post_game,
         pnr_screener=pnr_screener,
         off_ball_impact=off_ball_impact,
         shot_creation=shot_creation,
-        rebounding=rebounding,
+        ball_security=ball_security,
+        defensive_rebounding=defensive_rebounding,
+        offensive_rebounding=offensive_rebounding,
         transition=transition,
         perimeter_defense=perimeter_defense,
         interior_defense=interior_defense,
@@ -79,8 +81,8 @@ def test_mode_a_generates_strengths_weaknesses_and_suggestions():
     notes = generate_notes(players, composites, VALUES)
 
     assert any(note.type == "strength" and note.category == "spacing" for note in notes)
-    assert any(note.type == "weakness" and note.category == "anchor" for note in notes)
-    assert any(note.type == "suggestion" and note.category == "anchor" for note in notes)
+    assert any(note.type == "weakness" for note in notes)
+    assert any(note.type == "suggestion" for note in notes)
     assert all(isinstance(note, Note) for note in notes)
 
 
@@ -108,8 +110,8 @@ def test_mode_b_uses_lineup_level_observations():
         score=3.8,
         subscores={
             "spacing_creation_ratio": 8.4,
-            "paint_touch_total": 7.8,
-            "anchor_total": 2.2,
+            "paint_touch": 7.8,
+            "interior_defense": 2.2,
             "collective_passing": 3.1,
             "defensive_gaps": 4.5,
         },
@@ -122,9 +124,9 @@ def test_mode_b_uses_lineup_level_observations():
 
     assert any(note.type == "strength" and note.category == "spacing_creation_ratio" for note in notes)
     assert any(note.type == "strength" and note.category == "synergy" for note in notes)
-    assert any(note.type == "weakness" and note.category == "anchor_total" for note in notes)
+    assert any(note.type == "weakness" and note.category == "interior_defense" for note in notes)
     assert any(note.type == "suggestion" and note.category == "paint_touch" for note in notes)
-    assert any(note.type == "suggestion" and note.category == "rebounding" for note in notes)
+    assert any(note.type == "suggestion" and note.category == "defensive_rebounding" for note in notes)
     assert any(note.type == "suggestion" and note.category == "shot_creation" for note in notes)
 
 
@@ -136,12 +138,12 @@ def test_notes_are_deduplicated_limited_and_sorted_by_severity_within_type():
         subscores={
             "spacing_creation_ratio": 9.0,
             "spacing_paint_touch_ratio": 8.5,
-            "paint_touch_total": 8.0,
-            "anchor_total": 0.5,
+            "paint_touch": 8.0,
+            "interior_defense": 0.5,
             "collective_passing": 1.0,
             "defensive_coverage": 1.5,
             "defensive_gaps": 1.0,
-            "rebounding": 0.2,
+            "defensive_rebounding": 0.2,
         },
         synergies_applied=[],
         accentuation_strength=0.0,

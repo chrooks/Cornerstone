@@ -24,12 +24,13 @@ def make_player_composites() -> PlayerComposites:
         spacing=8.5,
         finishing=6.0,
         paint_touch=7.2,
-        anchor=3.4,
         post_game=1.0,
         pnr_screener=4.5,
         off_ball_impact=8.0,
         shot_creation=7.8,
-        rebounding=5.5,
+        ball_security=4.0,
+        defensive_rebounding=5.5,
+        offensive_rebounding=3.0,
         transition=6.7,
         perimeter_defense=7.1,
         interior_defense=8.2,
@@ -106,7 +107,7 @@ def test_lineup_note_and_roster_evaluation_construct_cleanly():
 
 def test_lineup_note_and_roster_evaluation_are_frozen():
     lineup = LineupCohesion(4.1, {}, [], 0.0, 0.0)
-    note = Note("weakness", "anchor", 0.7, 1.0, "No rim protection.")
+    note = Note("weakness", "interior_defense", 0.7, 1.0, "No rim protection.")
     evaluation = RosterEvaluation(0.0, {}, lineup, [], {}, [note], None)
 
     with pytest.raises(FrozenInstanceError):

@@ -125,49 +125,59 @@
           "order": 2
         },
         {
-          "key": "anchor",
-          "label": "Anchor",
-          "order": 3
-        },
-        {
           "key": "post_game",
           "label": "Post Game",
-          "order": 4
+          "order": 3
         },
         {
           "key": "pnr_screener",
           "label": "Pnr Screener",
-          "order": 5
+          "order": 4
         },
         {
           "key": "off_ball_impact",
           "label": "Off Ball Impact",
-          "order": 6
+          "order": 5
         },
         {
           "key": "shot_creation",
           "label": "Shot Creation",
+          "order": 6
+        },
+        {
+          "key": "ball_security",
+          "label": "Ball Security",
           "order": 7
         },
         {
-          "key": "rebounding",
-          "label": "Rebounding",
+          "key": "defensive_rebounding",
+          "label": "Defensive Rebounding",
           "order": 8
+        },
+        {
+          "key": "offensive_rebounding",
+          "label": "Offensive Rebounding",
+          "order": 9
         },
         {
           "key": "transition",
           "label": "Transition",
-          "order": 9
+          "order": 10
         },
         {
           "key": "perimeter_defense",
           "label": "Perimeter Defense",
-          "order": 10
+          "order": 11
         },
         {
           "key": "interior_defense",
           "label": "Interior Defense",
-          "order": 11
+          "order": 12
+        },
+        {
+          "key": "switchability",
+          "label": "Switchability",
+          "order": 13
         }
       ],
       "subscore_tree": [
@@ -294,7 +304,6 @@
         "paint_touch_finishing_scale": 0.08,
         "paint_touch_vertical_spacer": 0.6,
         "paint_touch_mid_post": 0.7,
-        "anchor_screen_setter": 0.3,
         "post_game_mid_post": 0.7,
         "pnr_screener_secondary_scale": 0.15,
         "off_ball_finishing_scale": 0.08,
@@ -313,12 +322,13 @@
         "spacing",
         "finishing",
         "paint_touch",
-        "anchor",
         "post_game",
         "pnr_screener",
         "off_ball_impact",
         "shot_creation",
-        "rebounding",
+        "ball_security",
+        "defensive_rebounding",
+        "offensive_rebounding",
         "transition",
         "perimeter_defense",
         "interior_defense"
@@ -327,12 +337,13 @@
         "spacing": 25.0,
         "finishing": 20.0,
         "paint_touch": 85.8,
-        "anchor": 41.0,
         "post_game": 17.0,
         "pnr_screener": 50.0,
         "off_ball_impact": 61.0,
         "shot_creation": 50.0,
-        "rebounding": 20.0,
+        "ball_security": 10.0,
+        "defensive_rebounding": 10.0,
+        "offensive_rebounding": 10.0,
         "transition": 42.0,
         "perimeter_defense": 17.0,
         "interior_defense": 18.0
@@ -416,14 +427,22 @@
         0.25,
         0.1
       ],
+      "switchability_coverage_threshold": 0.5,
+      "switchability_overlap_weight": 0.6,
       "passing_primary_creator_weight": 0.6,
       "passing_depth_weight": 0.4,
-      "rebounding_primary_weight": 0.45,
-      "rebounding_secondary_weight": 0.35,
-      "rebounding_depth_weight": 0.2,
-      "anchor_primary_weight": 0.6,
-      "anchor_secondary_weight": 0.3,
-      "anchor_depth_weight": 0.1,
+      "defensive_rebounding_primary_weight": 0.45,
+      "defensive_rebounding_secondary_weight": 0.35,
+      "defensive_rebounding_depth_weight": 0.2,
+      "offensive_rebounding_primary_weight": 0.45,
+      "offensive_rebounding_secondary_weight": 0.35,
+      "offensive_rebounding_depth_weight": 0.2,
+      "perimeter_defense_primary_weight": 0.6,
+      "perimeter_defense_secondary_weight": 0.3,
+      "perimeter_defense_depth_weight": 0.1,
+      "interior_defense_primary_weight": 0.6,
+      "interior_defense_secondary_weight": 0.3,
+      "interior_defense_depth_weight": 0.1,
       "post_game_primary_weight": 0.5,
       "post_game_secondary_weight": 0.35,
       "post_game_depth_weight": 0.15,
@@ -483,31 +502,46 @@
       "synergy_penalty_severity": 5.0,
       "off_13_raw_spacing_threshold": 15.0,
       "synergy_creator_threshold": 6.0,
-      "cohesion_rollup_weights": {
-        "spacing_creation_ratio": 0.1,
-        "creation_offball_ratio": 0.05,
-        "spacing_paint_touch_ratio": 0.05,
-        "paint_touch_total": 0.07,
-        "post_game_total": 0.03,
-        "pnr_pairing": 0.03,
-        "anchor_total": 0.07,
-        "collective_passing": 0.05,
-        "rebounding": 0.05,
-        "transition": 0.05,
-        "rebound_transition_ratio": 0.04,
-        "rebounding_spacing_deficit": 0.03,
-        "defensive_coverage": 0.12,
-        "defensive_gaps": 0.12,
-        "perimeter_defense_total": 0.03,
-        "interior_defense_total": 0.03,
-        "accentuation_strength": 0.04,
-        "accentuation_weakness": 0.04
+      "category_weights": {
+        "offense": 0.40,
+        "defense": 0.37,
+        "rebounding_transition": 0.23
       },
+      "offense_quality_ratio": 0.70,
+      "offense_quality_weights": {
+        "spacing": 0.18,
+        "shot_creation": 0.18,
+        "paint_touch": 0.18,
+        "collective_passing": 0.14,
+        "off_ball_impact": 0.12,
+        "ball_security": 0.10,
+        "pnr_pairing": 0.06,
+        "post_game": 0.04
+      },
+      "offense_balance_weights": {
+        "spacing_creation_ratio": 0.34,
+        "creation_offball_ratio": 0.33,
+        "spacing_paint_touch_ratio": 0.33
+      },
+      "defense_subscore_weights": {
+        "interior_defense": 0.30,
+        "defensive_coverage": 0.25,
+        "defensive_gaps": 0.25,
+        "perimeter_defense": 0.12,
+        "switchability": 0.08
+      },
+      "rebound_transition_subscore_weights": {
+        "defensive_rebounding": 0.40,
+        "offensive_rebounding": 0.20,
+        "transition": 0.25,
+        "rebound_transition_ratio": 0.15
+      },
+      "accentuation_strength_cap": 0.25,
+      "accentuation_weakness_cap": 0.50,
       "ratio_dead_zone": 0.2,
       "ratio_asymmetric_full_penalty": 1.0,
       "ratio_default_penalty": 0.5,
       "ratio_min_denominator": 0.1,
-      "rebounding_spacing_deficit_threshold": 5.0,
       "accentuation_strength_threshold": 7.5,
       "accentuation_weakness_threshold": 2.5,
       "accentuation_fallback_strength_threshold": 6.0,
@@ -583,15 +617,17 @@
       "spacing": "spacing_v1",
       "finishing": "finishing_v1",
       "paint_touch": "paint_touch_v1",
-      "anchor": "anchor_v1",
       "post_game": "post_game_v1",
       "pnr_screener": "pnr_screener_v1",
       "off_ball_impact": "off_ball_impact_v1",
       "shot_creation": "shot_creation_v1",
-      "rebounding": "rebounding_v1",
+      "ball_security": "ball_security_v1",
+      "defensive_rebounding": "defensive_rebounding_v1",
+      "offensive_rebounding": "offensive_rebounding_v1",
       "transition": "transition_v1",
       "perimeter_defense": "perimeter_defense_v1",
-      "interior_defense": "interior_defense_v1"
+      "interior_defense": "interior_defense_v1",
+      "switchability": "switchability_v1"
     },
     "meta": {
       "version_schema": 1,
