@@ -39,7 +39,7 @@ Product inspirations: **Pokemon Showdown** (RuleSets = metagames/tiers, format-f
 
 ## Architecture Overview
 
-Three-layer NBA skill evaluation and roster builder platform.
+NBA skill evaluation and roster builder platform with RuleSet-scoped team building and versioned evaluation.
 
 ```
 Frontend (Next.js) ──HTTP + JWT──▶ Backend (Flask) ──SQL──▶ Supabase PostgreSQL
@@ -50,15 +50,22 @@ Frontend (Next.js) ──HTTP + JWT──▶ Backend (Flask) ──SQL──▶ 
 - `skill_engine/` evaluates each of 21 skills against JSONB threshold rules → `skill_profiles` (source: `"stats"`)
 - `claude_assessment.py` asks Claude API for the same 21 ratings → `skill_profiles` (source: `"claude"`)
 - `compositing.py` merges both: agreements auto-accepted, disagreements create `skill_flags` for manual review
-- Frontend tools: `/admin/calibration` (threshold editor), `/admin/pipeline` (stat fetch trigger), `/admin/review` (flag resolver)
+- Frontend tools: `/admin/calibration` (stat->skill threshold editor), `/admin/pipeline` (stat fetch trigger), `/admin/review` (flag resolver)
 
 **Layer 2 — Legends Builder** (`/admin/legends`)
 - Manual editor for all-time greats rated on the same 21-skill taxonomy
 - `POST /api/legends/<id>/claude-suggestion` pre-populates ratings; admin accepts or overrides
 
-**Layer 3 — Roster Builder** (`/builder`)
-- Users pick a legend cornerstone ($54M salary), add up to 7 supporting players within a salary cap
-- `POST /api/builder/evaluate` runs `roster_evaluator/` to score the roster: base skill weights, dynamic modifiers, hard checks, cornerstone complement synergies, GM Notes (37+ rules), and a Claude-generated team description
+**Layer 3 — Lab Lifecycle** (`/lab/<ruleset>/legends` → `/lab/<ruleset>/build` → `/lab/<ruleset>/eval`)
+- Users pick a RuleSet (format/metagame), select a legend cornerstone, build a roster within salary cap constraints
+- `POST /api/builder/evaluate` runs `cohesion_engine/` — subscores (spacing, rim pressure, perimeter defense, etc.), synergies, accentuation, lineup combination ranking, and Claude-powered team narrative
+- Teams can be saved against a specific RuleSet Version + Evaluation Version
+- Community leaderboard ranks public saved teams
+
+**Foundational concepts:**
+- **RuleSet** — a named format (e.g., "standard", "all-time"). Each has versioned `rules_json` (team size, salary cap, allowed positions). Only one version published at a time.
+- **Evaluation Version** — immutable snapshot of cohesion engine config (weights, composites, bell curves, synergy bonuses). Independent from RuleSet versions. Only one active at a time.
+- **Saved Team** — persisted roster referencing both `ruleset_version_id` and `evaluation_version_id`.
 
 ---
 
@@ -66,20 +73,25 @@ Frontend (Next.js) ──HTTP + JWT──▶ Backend (Flask) ──SQL──▶ 
 
 ```
 backend/
-  app.py                          # Flask factory — registers 12 blueprints, configures CORS
+  app.py                          # Flask factory — registers 17 blueprints, configures CORS
   api/
     auth.py                       # @require_admin JWT decorator (HS256/RS256/ES256)
     builder.py                    # POST /builder/evaluate
     calibration.py                # GET/PUT /skills/thresholds, /anchors
     cohesion_calibration.py       # Cohesion engine calibration: weights, rotation eval, composites
+    community.py                  # Community leaderboard / social features
     composite.py                  # POST /players/<id>/composite-profile, /claude-assessment
+    evaluation_versions.py        # Evaluation version publishing, reactivation, validation
     health.py                     # GET /health
     legends.py                    # CRUD + /claude-suggestion
     pipeline.py                   # GET /pipeline/status, POST /pipeline/fetch-stats
     players.py                    # Full player management (search, stats, profile, bio)
+    profile.py                    # User profile API
     review.py                     # GET /review/queue, POST /review/<id>/resolve
     rosters.py                    # CRUD for rosters + roster_slots
+    rulesets.py                   # RuleSet read API
     salaries.py                   # GET /salaries/bulk
+    saved_teams.py                # Saved team persistence + evaluation versioning
   services/
     skill_engine/                 # Core stat→skill evaluation sub-package
       conditions.py               # evaluate_condition(), evaluate_conditions_block()
@@ -87,15 +99,7 @@ backend/
       transforms.py               # apply_pre_adjustments(), apply_stabilization()
       cache.py                    # get_thresholds(), compute_and_store_league_averages()
       history.py                  # Multi-season stat blending
-    roster_evaluator/             # Roster scoring engine
-      evaluator.py                # RosterEvaluator.evaluate_roster() — 770 lines, main entry
-      weights.py                  # Per-skill base score contributions
-      modifiers.py                # Dynamic modifiers (playoff, era, tier-scaled) — 1600 lines
-      hard_checks.py              # Validation (physical constraints, draft-pick rules)
-      cornerstone_complement.py   # Synergy scores: how well players complement cornerstone
-      team_description.py         # Claude-powered narrative generation
-      types.py                    # RosterEvaluation dataclass + related types
-    cohesion_engine/              # Lineup/rotation cohesion scoring (newer eval system)
+    cohesion_engine/              # Sole evaluation engine (roster_evaluator/ was removed)
       cohesion.py                 # evaluate_lineup() — subscores, composites, PnR pairing
       roster.py                   # evaluate_roster() — rotation combos, depth, accentuation
       composites.py               # Player composite scores (offense, defense, shooting, etc.)
@@ -107,6 +111,9 @@ backend/
       notes.py                    # Cohesion-specific note generation
       team_description.py         # Claude-powered cohesion narrative
       types.py                    # LineupCohesion, PlayerComposites, RosterEvaluation types
+    evaluation_versions/          # Evaluation version management
+      repo.py                     # get_active(), publish/reactivate version persistence
+      validator.py                # Validates version blob structure and completeness
     skill_engine/pipeline.py      # Orchestrates fetch → evaluate → persist for skill profiles
     claude_assessment.py          # rate_player(), suggest_skills_for_legend()
     compositing.py                # merge_ratings(), create_flags()
@@ -132,11 +139,20 @@ frontend/
     players/                      # Player explorer + [player_id] profile
     builder/                      # Roster editor (drag-drop via @dnd-kit)
       evaluate/                   # Evaluation results: score breakdown, GM Notes, narrative
+    lab/[ruleset]/                # RuleSet-scoped Lab lifecycle
+      legends/                    # Legend selection within a RuleSet
+      build/                      # Builder within a RuleSet context
+      eval/                       # Evaluation within a RuleSet context
+    community/                    # Community leaderboard / social features
+    profile/                      # User profile
+    faq/                          # FAQ page
     admin/
       calibration/                # Threshold JSONB editor (Monaco editor)
+      cohesion-calibration/       # Cohesion engine weight/composite calibration
       pipeline/                   # Pipeline status + trigger
       review/                     # Flag queue + [player_id] resolver
       legends/                    # Legend grid + [legend_id] editor
+      rulesets/                   # RuleSet management
       players/[player_id]/        # Admin player editor
   lib/
     api.ts                        # All backend calls via apiFetch<T>() — injects JWT + base URL
@@ -159,6 +175,7 @@ frontend/
 - **21-skill taxonomy is immutable** — defined in `backend/services/skills.py` and `frontend/lib/skills.ts`. Adding a skill requires a DB migration.
 - **Admin write endpoints require `@require_admin`** — decorator in `api/auth.py` verifies Supabase JWT and checks `user_roles` table. Grant admin via Supabase dashboard (`user_roles` table, `role = 'admin'`).
 - **`NEXT_PUBLIC_CALIBRATION_API_KEY`** — required in frontend `.env.local` for calibration write endpoints.
+- **Evaluation versions are immutable snapshots** — cohesion weights + composites get published as a version via `evaluation_versions/`. Saved teams reference a specific version. Active version loaded at startup (`_warm_cohesion_distributions`).
 
 ---
 
@@ -216,3 +233,7 @@ Default label vocabulary. See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 Single-context layout. See `docs/agents/domain.md`.
+
+### Project flow
+
+Skill Boundary for issue tracking, roadmap, and execution loop. See `docs/agents/project-flow.md`.
