@@ -106,25 +106,45 @@ export function FormulaHandlerPicker({ draft, onPatchDraft }: FormulaHandlerPick
     const ops: JsonPatchOp[] = [
       // Add formula_ref entry
       { op: "add", path: `/formula_refs/${cleanKey}`, value: selectedHandler },
-      // Add Impact Trait
-      {
+    ];
+
+    // Only add taxonomy entries if they don't already exist (may survive a remove+re-add cycle)
+    const traitExists = impactTraits.some((t: { key: string }) => t.key === cleanKey);
+    if (!traitExists) {
+      ops.push({
         op: "add",
         path: `/taxonomy/impact_traits/-`,
         value: { key: cleanKey, label, order: impactTraits.length },
-      },
-      // Add subscore to the tree category
-      {
+      });
+    }
+
+    const subscoreExists = subscoreTree.some((c) =>
+      (c.subscores ?? []).some((s: { key: string }) => s.key === cleanKey),
+    );
+    if (!subscoreExists) {
+      ops.push({
         op: "add",
         path: `/taxonomy/subscore_tree/${catIndex}/subscores/-`,
         value: { key: cleanKey, label, order: nextOrder },
-      },
-    ];
+      });
+    }
 
     await onPatchDraft(ops);
     setSelectedHandler("");
     setTraitKey("");
     toast.success(`Added ${cleanKey} → ${selectedHandler}`);
   }, [draft, onPatchDraft, selectedHandler, traitKey, categoryKey, formulaRefs, subscoreTree, impactTraits]);
+
+  const handleSwapHandler = useCallback(
+    async (refKey: string, newHandler: string) => {
+      if (!draft || !onPatchDraft) return;
+      await onPatchDraft([
+        { op: "replace", path: `/formula_refs/${refKey}`, value: newHandler },
+      ]);
+      toast.success(`Swapped ${refKey} → ${newHandler}`);
+    },
+    [draft, onPatchDraft],
+  );
 
   const handleRemove = useCallback(
     async (refKey: string) => {
@@ -202,7 +222,21 @@ export function FormulaHandlerPicker({ draft, onPatchDraft }: FormulaHandlerPick
                   .map(([key, handler]) => (
                     <tr key={key} className="border-b border-border last:border-0 hover:bg-muted/20">
                       <td className="px-3 py-2 font-mono text-foreground">{key}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{handler}</td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        <select
+                          id={`handler-picker-swap-${key}`}
+                          value={handler}
+                          onChange={(e) => handleSwapHandler(key, e.target.value)}
+                          disabled={noDraft}
+                          className="text-xs bg-transparent border-none cursor-pointer hover:text-foreground transition-colors disabled:cursor-not-allowed"
+                        >
+                          {handlers.map((h) => (
+                            <option key={h.name} value={h.name}>
+                              {h.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
                       <td className="px-3 py-2 text-right">
                         <button
                           id={`handler-picker-remove-${key}`}
