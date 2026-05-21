@@ -25,7 +25,7 @@ from .composites import tier_value, _with_default_skills
 def topological_sort(formulas: dict[str, dict[str, Any]]) -> list[str]:
     """Return composite keys in dependency order.
 
-    Raises ``ValueError`` on circular dependencies.
+    Raises ``ValueError`` on circular or unknown dependencies.
     """
     visited: set[str] = set()
     temp: set[str] = set()
@@ -38,6 +38,10 @@ def topological_sort(formulas: dict[str, dict[str, Any]]) -> list[str]:
             raise ValueError(f"Circular dependency detected involving '{key}'")
         temp.add(key)
         for dep in formulas.get(key, {}).get("depends_on", []):
+            if dep not in formulas:
+                raise ValueError(
+                    f"Unknown dependency '{dep}' in formula for '{key}'"
+                )
             visit(dep)
         temp.remove(key)
         visited.add(key)
@@ -75,6 +79,8 @@ def compute_raw_from_formulas(
     skills: dict[str, str | float],
     formulas: dict[str, dict[str, Any]],
     tier_values: dict[str, float],
+    *,
+    order: list[str] | None = None,
 ) -> dict[str, float]:
     """Compute raw composites from declarative formula definitions.
 
@@ -82,12 +88,16 @@ def compute_raw_from_formulas(
         skills: Player skill map (tier strings or pre-boosted numeric values).
         formulas: The ``composite_formulas`` dict from the Evaluation Version.
         tier_values: Maps tier label strings to numeric scores.
+        order: Pre-computed topological order. When evaluating many players
+            against the same formulas, call ``topological_sort`` once and pass
+            the result here to avoid redundant sorting.
 
     Returns:
         Dict mapping composite key → raw float value.
     """
     skills = _with_default_skills(skills)
-    order = topological_sort(formulas)
+    if order is None:
+        order = topological_sort(formulas)
     raw_results: dict[str, float] = {}
 
     for composite_key in order:

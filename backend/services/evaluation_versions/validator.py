@@ -292,7 +292,8 @@ def _validate_composite_formulas(
                     ))
                 composite_deps.add(f_key)
 
-        # Validate amplifier sources.
+        # Validate amplifier sources and applies_to bounds.
+        num_factors = len(formula.get("factors", []))
         for i, amp in enumerate(formula.get("amplifiers", [])):
             source = amp.get("source")
             if isinstance(source, str):
@@ -314,6 +315,18 @@ def _validate_composite_formulas(
                             code="formula_invalid_amplifier_skill",
                             message=f"Amplifier {i} of '{comp_key}' references unknown skill '{skill_key}'.",
                             target=f"values.composite_formulas.{comp_key}.amplifiers[{i}]",
+                        ))
+
+            # Bounds-check applies_to indices.
+            applies_to = amp.get("applies_to")
+            if applies_to is not None:
+                for idx in applies_to:
+                    if not isinstance(idx, int) or idx < 0 or idx >= num_factors:
+                        violations.append(PublishGateViolation(
+                            layer="L8",
+                            code="formula_amplifier_index_out_of_bounds",
+                            message=f"Amplifier {i} of '{comp_key}' applies_to index {idx} out of range (0..{num_factors - 1}).",
+                            target=f"values.composite_formulas.{comp_key}.amplifiers[{i}].applies_to",
                         ))
 
         # Validate depends_on matches actual composite references.

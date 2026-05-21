@@ -773,30 +773,37 @@ def get_formulas() -> tuple:
     from services.evaluation_versions.repo import get_draft as get_draft_version
     from services.cohesion_engine.formula_export import export_formulas
 
-    draft = get_draft_version()
-    if draft and draft.values.get("composite_formulas"):
+    try:
+        draft = get_draft_version()
+        if draft and draft.values.get("composite_formulas"):
+            return jsonify({
+                "success": True,
+                "data": {"formulas": draft.values["composite_formulas"], "source": "draft"},
+                "error": None,
+            }), 200
+
+        active = get_active_eval_version()
+        if active.values.get("composite_formulas"):
+            return jsonify({
+                "success": True,
+                "data": {"formulas": active.values["composite_formulas"], "source": "active"},
+                "error": None,
+            }), 200
+
+        # Neither version has formulas — generate from coefficients.
+        coefficients = active.values.get("composite_coefficients", {})
+        formulas = export_formulas(coefficients)
         return jsonify({
             "success": True,
-            "data": {"formulas": draft.values["composite_formulas"], "source": "draft"},
+            "data": {"formulas": formulas, "source": "active"},
             "error": None,
         }), 200
-
-    active = get_active_eval_version()
-    if active.values.get("composite_formulas"):
+    except Exception:
+        logger.exception("Error fetching composite formulas")
         return jsonify({
-            "success": True,
-            "data": {"formulas": active.values["composite_formulas"], "source": "active"},
-            "error": None,
-        }), 200
-
-    # Neither version has formulas — generate from coefficients.
-    coefficients = active.values.get("composite_coefficients", {})
-    formulas = export_formulas(coefficients)
-    return jsonify({
-        "success": True,
-        "data": {"formulas": formulas, "source": "active"},
-        "error": None,
-    }), 200
+            "success": False, "data": None,
+            "error": "Failed to load composite formulas",
+        }), 500
 
 
 # ---------------------------------------------------------------------------
@@ -816,9 +823,12 @@ def distribution_preview() -> tuple:
           "formula_override": { ... } | null
         }
     """
+    import copy
+
     from services.cohesion_engine.formula_export import export_formulas
-    from services.cohesion_engine.formula_engine import compute_raw_from_formulas
-    from services.cohesion_engine.composites import _with_default_skills
+    from services.cohesion_engine.formula_engine import compute_raw_from_formulas, topological_sort
+    from services.cohesion_engine.composites import _with_default_skills, _extract_skills
+    from services.evaluation_versions.validator import _validate_composite_formulas
 
     body = request.get_json(silent=True) or {}
     composite_key = body.get("composite_key")
@@ -843,19 +853,24 @@ def distribution_preview() -> tuple:
         }), 400
 
     formula_override = body.get("formula_override")
-    formulas = dict(base_formulas)
+    formulas = copy.deepcopy(base_formulas)
     if formula_override and isinstance(formula_override, dict):
+        # Validate override before computing.
+        override_violations = _validate_composite_formulas({composite_key: formula_override})
+        errors = [v for v in override_violations if v.severity == "error"]
+        if errors:
+            return jsonify({
+                "success": False, "data": None,
+                "error": f"Invalid formula override: {errors[0].message}",
+            }), 400
         formulas[composite_key] = formula_override
+
+    # Pre-compute sort order once — avoids re-sorting per player.
+    formula_order = topological_sort(formulas)
 
     # Fetch all player skill profiles.
     client = get_supabase()
     raw_values: list[float] = []
-
-    def _extract_skills(profile: dict) -> dict[str, str]:
-        return {
-            skill: data.get("final_tier", "None") if isinstance(data, dict) else data
-            for skill, data in profile.items()
-        }
 
     for source_query in [
         lambda: client.table("skill_profiles")
@@ -873,7 +888,7 @@ def distribution_preview() -> tuple:
         result = run_query(source_query)
         for row in result.data:
             skills = _with_default_skills(_extract_skills(row["profile"]))
-            raw = compute_raw_from_formulas(skills, formulas, tier_values)
+            raw = compute_raw_from_formulas(skills, formulas, tier_values, order=formula_order)
             raw_values.append(raw.get(composite_key, 0.0))
 
     if not raw_values:

@@ -172,6 +172,37 @@ def test_topological_sort_circular_raises():
         topological_sort(circular)
 
 
+def test_topological_sort_unknown_dep_raises():
+    """Dependency on a key not present in formulas raises ValueError."""
+    orphan = {
+        "a": {"factors": [], "amplifiers": [], "depends_on": ["nonexistent"]},
+    }
+    with pytest.raises(ValueError, match="nonexistent"):
+        topological_sort(orphan)
+
+
+# ---------------------------------------------------------------------------
+# Delegation path
+# ---------------------------------------------------------------------------
+
+
+def test_compute_raw_composites_delegates_when_formulas_present():
+    """compute_raw_composites uses formula engine when composite_formulas exists in values."""
+    import copy
+
+    skills = _mixed_skills()
+    values_with_formulas = copy.deepcopy(VALUES)
+    values_with_formulas["composite_formulas"] = FORMULAS
+
+    delegated = compute_raw_composites(skills, values_with_formulas)
+    direct = compute_raw_from_formulas(skills, FORMULAS, TIER_VALUES)
+
+    for key in direct:
+        assert abs(delegated[key] - direct[key]) < TOLERANCE, (
+            f"{key}: delegated={delegated[key]}, direct={direct[key]}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Export completeness
 # ---------------------------------------------------------------------------
