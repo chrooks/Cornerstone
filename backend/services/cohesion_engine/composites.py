@@ -65,10 +65,19 @@ def _with_default_skills(skills: dict[str, str | float]) -> dict[str, str | floa
 def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any]) -> dict[str, float]:
     """Compute all raw player composites in dependency order.
 
+    When ``values["composite_formulas"]`` exists, delegates to the declarative
+    formula engine. Otherwise falls back to the hardcoded logic below.
+
     Args:
         skills: Player skill map (tier strings or pre-boosted floats).
         values: The ``engine.version.values`` dict from the active Evaluation Version.
     """
+    composite_formulas = values.get("composite_formulas")
+    if composite_formulas:
+        from .formula_engine import compute_raw_from_formulas
+
+        return compute_raw_from_formulas(skills, composite_formulas, values["tier_values"])
+
     skills = _with_default_skills(skills)
     tv = values["tier_values"]
     c = values["composite_coefficients"]
