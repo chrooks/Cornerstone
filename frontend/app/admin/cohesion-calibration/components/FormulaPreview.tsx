@@ -22,6 +22,7 @@ interface FormulaPreviewProps {
   tierValues: Record<string, number>;
   referencePlayers: ReferencePlayer[];
   selectedComposite: string;
+  onRemovePlayer: (playerId: string) => void;
 }
 
 export function FormulaPreview({
@@ -30,6 +31,7 @@ export function FormulaPreview({
   tierValues,
   referencePlayers,
   selectedComposite,
+  onRemovePlayer,
 }: FormulaPreviewProps) {
   const previews = useMemo(() => {
     return referencePlayers.map((player) => {
@@ -56,6 +58,7 @@ export function FormulaPreview({
               <th className="text-right px-3 py-1.5 font-medium text-muted-foreground w-20">Base</th>
               <th className="text-right px-3 py-1.5 font-medium text-muted-foreground w-20">Draft</th>
               <th className="text-right px-3 py-1.5 font-medium text-muted-foreground w-20">Δ</th>
+              <th className="w-8 px-2 py-1.5" />
             </tr>
           </thead>
           <tbody>
@@ -72,6 +75,16 @@ export function FormulaPreview({
                   delta > 0.01 ? "text-green-600" : delta < -0.01 ? "text-red-500" : "text-muted-foreground"
                 }`}>
                   {delta > 0 ? "+" : ""}{delta.toFixed(2)}
+                </td>
+                <td className="px-2 py-1.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => onRemovePlayer(player.player_id)}
+                    className="text-[10px] text-destructive hover:text-destructive/80 transition-colors cursor-pointer"
+                    title="Unpin"
+                  >
+                    ×
+                  </button>
                 </td>
               </tr>
             ))}

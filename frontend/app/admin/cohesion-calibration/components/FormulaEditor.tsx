@@ -30,7 +30,7 @@ const COMPOSITE_LABELS: Record<string, string> = Object.fromEntries(
 );
 
 export function FormulaEditor({ draft, onPatchDraft, referencePlayersState }: FormulaEditorProps) {
-  const [referencePlayers] = referencePlayersState;
+  const [referencePlayers, setReferencePlayers] = referencePlayersState;
   const noDraft = !draft;
 
   const {
@@ -358,6 +358,7 @@ export function FormulaEditor({ draft, onPatchDraft, referencePlayersState }: Fo
                   tierValues={tierValues}
                   referencePlayers={referencePlayers}
                   selectedComposite={selectedComposite}
+                  onRemovePlayer={(id) => setReferencePlayers((prev) => prev.filter((p) => p.player_id !== id))}
                 />
               );
             })()}
