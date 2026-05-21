@@ -205,6 +205,14 @@ def build_v1_payload() -> dict:
             "depth_quality_weight": W.DEPTH_QUALITY_WEIGHT,
             "total_lineups_full_roster": W.TOTAL_LINEUPS_FULL_ROSTER,
             "archetype_labels": list(W.ARCHETYPE_LABELS),
+            # v2 handler configuration (spacing_v2, shot_creation_v2)
+            "spacing_raw_gate": 1.0,
+            "spacing_multipliers": [0.3, 0.5, 0.75, 1.0, 1.0, 0.95],
+            "shot_creation_raw_gate": 2.0,
+            "shot_creation_multipliers": [0.2, 1.0, 1.0, 1.0, 0.95, 0.90],
+            "shot_creation_primary_weight": 0.6,
+            "shot_creation_secondary_weight": 0.25,
+            "shot_creation_depth_weight": 0.15,
         },
         "formula_refs": {
             **{name: f"{name}_v1" for name in W.COMPOSITE_NAMES},

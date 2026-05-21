@@ -346,7 +346,10 @@
         "transition_spot_up": 0.2,
         "perimeter_defense_versatile_defender": 0.7,
         "interior_defense_versatile_defender": 0.25,
-        "interior_defense_rebounder": 0.3
+        "interior_defense_rebounder": 0.3,
+        "shot_creation_pnr_orchestration": 0.6,
+        "shot_creation_passer": 0.5,
+        "shot_creation_off_dribble": 0.7
       },
       "composite_names": [
         "spacing",
@@ -371,7 +374,7 @@
         "post_game": 27.2,
         "pnr_screener": 108.8,
         "off_ball_impact": 101.76,
-        "shot_creation": 169.984,
+        "shot_creation": 158.464,
         "pnr_orchestration": 28.8,
         "ball_security": 16.0,
         "defensive_rebounding": 16.0,
@@ -643,7 +646,28 @@
         "balanced",
         "paint",
         "shooting"
-      ]
+      ],
+      "spacing_raw_gate": 1.0,
+      "spacing_multipliers": [
+        0.3,
+        0.5,
+        0.75,
+        1.0,
+        1.0,
+        0.95
+      ],
+      "shot_creation_raw_gate": 2.0,
+      "shot_creation_multipliers": [
+        0.2,
+        1.0,
+        1.0,
+        1.0,
+        0.95,
+        0.9
+      ],
+      "shot_creation_primary_weight": 0.6,
+      "shot_creation_secondary_weight": 0.25,
+      "shot_creation_depth_weight": 0.15
     },
     "formula_refs": {
       "spacing": "spacing_v1",

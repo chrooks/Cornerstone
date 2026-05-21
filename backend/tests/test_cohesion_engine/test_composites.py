@@ -71,7 +71,7 @@ def test_compute_raw_composites_matches_validated_formula_order():
     assert raw["perimeter_defense"] == pytest.approx(4.7)
     assert raw["interior_defense"] == pytest.approx(9.45)
     assert raw["off_ball_impact"] == pytest.approx(24.18)
-    assert raw["shot_creation"] == pytest.approx(40.37)
+    assert raw["shot_creation"] == pytest.approx(36.11)
     assert raw["ball_security"] == pytest.approx(16.0)
 
 
@@ -115,7 +115,7 @@ def test_normalize_composites_uses_theoretical_max_when_cache_empty():
         "post_game": 3.1,
         "pnr_screener": 2.3,
         "off_ball_impact": 3.0,
-        "shot_creation": 1.8,
+        "shot_creation": 1.9,
         "ball_security": 3.1,
         "defensive_rebounding": 3.1,
         "offensive_rebounding": 3.1,

@@ -47,6 +47,9 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "pnr_screener_secondary_scale": 0.15,     # secondary screener skills as fraction of PnR screener
     "off_ball_finishing_scale": 0.08,          # finishing bonus for off-ball impact
     "off_ball_passer": 0.3,                   # passing adds secondary off-ball value
+    "shot_creation_pnr_orchestration": 0.6,    # pnr orchestration Impact Trait drives creation
+    "shot_creation_passer": 0.5,              # passing adds secondary creation value
+    "shot_creation_off_dribble": 0.7,         # off-dribble shooting as creation signal
     "shot_creation_spacing": 0.3,             # spacing bonus layered into shot creation
     "shot_creation_paint_touch": 0.5,         # rim pressure scaled down — finishing ≠ creation
     "pnr_ball_handler_passer": 0.3,           # passing amplifies PnR handling (reading the defense)
@@ -90,7 +93,7 @@ THEORETICAL_MAX: dict[str, float] = {
     "post_game": 27.2,
     "pnr_screener": 108.8,
     "off_ball_impact": 101.76,
-    "shot_creation": 169.984,
+    "shot_creation": 158.464,
     "pnr_orchestration": 28.8,
     "ball_security": 16.0,
     "defensive_rebounding": 16.0,

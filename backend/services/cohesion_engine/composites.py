@@ -136,22 +136,22 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         + _tv("passer") * c["off_ball_passer"]
     )
 
-    # Step 5: shot creation references raw spacing and raw rim pressure.
-    raw_shot_creation = (
-        _tv("pnr_ball_handler")
-        + _tv("passer")
-        + _tv("off_dribble_shooter")
-        + _tv("isolation_scorer")
-        + c["shot_creation_spacing"] * raw_spacing
-        + c["shot_creation_paint_touch"] * raw_paint_touch
-    )
-
-    # Step 6: PnR ball handler — focused PnR initiation distinct from broad shot creation.
+    # Step 5: PnR orchestration — focused PnR initiation distinct from broad shot creation.
     raw_pnr_orchestration = (
         _tv("pnr_ball_handler")
         + c["pnr_ball_handler_passer"] * _tv("passer")
         + c["pnr_ball_handler_driver"] * _tv("driver")
         + c["pnr_ball_handler_off_dribble"] * _tv("off_dribble_shooter")
+    )
+
+    # Step 6: shot creation references raw spacing, raw paint touch, and raw pnr orchestration.
+    raw_shot_creation = (
+        c["shot_creation_pnr_orchestration"] * raw_pnr_orchestration
+        + c["shot_creation_passer"] * _tv("passer")
+        + c["shot_creation_off_dribble"] * _tv("off_dribble_shooter")
+        + _tv("isolation_scorer")
+        + c["shot_creation_spacing"] * raw_spacing
+        + c["shot_creation_paint_touch"] * raw_paint_touch
     )
 
     return {

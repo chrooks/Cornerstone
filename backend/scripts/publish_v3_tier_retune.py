@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Register handlers before validation
 import services.cohesion_engine.handlers.composites_v1  # noqa: F401
+import services.cohesion_engine.handlers.composites_v2  # noqa: F401
 
 from services.cohesion_engine.weights import TIER_VALUES, THEORETICAL_MAX
 from services.evaluation_versions import repo, validator

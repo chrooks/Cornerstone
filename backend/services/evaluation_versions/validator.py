@@ -158,6 +158,13 @@ def validate(
         "vd_ext",
         "viable_lineup_threshold",
         "warm_body",
+        "spacing_raw_gate",
+        "spacing_multipliers",
+        "shot_creation_raw_gate",
+        "shot_creation_multipliers",
+        "shot_creation_primary_weight",
+        "shot_creation_secondary_weight",
+        "shot_creation_depth_weight",
     ]
     for key in required_value_keys:
         if key not in values:
