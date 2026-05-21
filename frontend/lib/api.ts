@@ -853,6 +853,38 @@ export async function updateCohesionWeights(
 }
 
 // ---------------------------------------------------------------------------
+// Formula Editor
+// ---------------------------------------------------------------------------
+
+/** Fetch composite formulas from draft or active Evaluation Version. */
+export async function fetchCompositeFormulas(): Promise<ApiResponse<{
+  formulas: Record<string, { factors: unknown[]; amplifiers: unknown[]; depends_on: string[] }>;
+  source: "draft" | "active";
+}>> {
+  return apiFetch("/api/cohesion/formulas");
+}
+
+/** Fetch distribution histogram for a composite with optional formula override. */
+export async function fetchDistributionPreview(
+  compositeKey: string,
+  formulaOverride?: { factors: unknown[]; amplifiers: unknown[]; depends_on: string[] },
+): Promise<ApiResponse<{
+  bins: { min: number; max: number; count: number }[];
+  total_players: number;
+  mean: number;
+  median: number;
+  p90: number;
+}>> {
+  return apiFetch("/api/cohesion/distribution-preview", {
+    method: "POST",
+    body: JSON.stringify({
+      composite_key: compositeKey,
+      formula_override: formulaOverride ?? null,
+    }),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Community Leaderboard
 // ---------------------------------------------------------------------------
 

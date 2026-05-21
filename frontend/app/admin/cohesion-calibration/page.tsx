@@ -24,12 +24,13 @@ import {
 } from "@/lib/api";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import type { Player } from "@/lib/types";
-import type { PlayerCompositeData, BellCurveData, LineupTestResult, CenterTab } from "./types";
+import type { PlayerCompositeData, BellCurveData, LineupTestResult, CenterTab, ReferencePlayer } from "./types";
 import { WeightsEditor } from "./components/WeightsEditor";
 import { ResultsPanel } from "./components/ResultsPanel";
 import { CompositeBars, PlayerSkillsPanel } from "./components/PlayerInspection";
 import { LineupTester, emptyLineupSlot } from "./components/LineupTester";
 import { BellCurveChart } from "./components/BellCurveCharts";
+import { FormulaEditor } from "./components/FormulaEditor";
 import { useLineupSlots } from "./hooks/useLineupSlots";
 import { useTestHistory } from "./hooks/useTestHistory";
 import { useTeamFill } from "./hooks/useTeamFill";
@@ -50,6 +51,7 @@ const CENTER_TABS: { key: CenterTab; label: string }[] = [
   { key: "bell_curves", label: "Bell Curves" },
   { key: "weights", label: "Weights" },
   { key: "handlers", label: "Handlers" },
+  { key: "formulas", label: "Formulas" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -116,6 +118,9 @@ export default function CohesionCalibrationPage() {
 
   // --- Center tab state ---
   const [centerTab, setCenterTab] = useState<CenterTab>("lineup");
+
+  // --- Reference player state (for formula preview) ---
+  const [referencePlayers, setReferencePlayers] = useState<ReferencePlayer[]>([]);
 
   // --- Evaluation state ---
   const [evaluatingLineup, setEvaluatingLineup] = useState(false);
@@ -470,6 +475,38 @@ export default function CohesionCalibrationPage() {
                   </button>
                 </div>
 
+                {/* Pin as reference for formula preview */}
+                <button
+                  id="cohesion-cal-pin-reference-btn"
+                  type="button"
+                  onClick={() => {
+                    if (!selectedComposites) return;
+                    if (referencePlayers.some((p) => p.player_id === selectedComposites.player_id)) {
+                      // Remove if already pinned.
+                      setReferencePlayers((prev) => prev.filter((p) => p.player_id !== selectedComposites.player_id));
+                      return;
+                    }
+                    if (referencePlayers.length >= 5) {
+                      toast.error("Max 5 reference players");
+                      return;
+                    }
+                    setReferencePlayers((prev) => [
+                      ...prev,
+                      {
+                        player_id: selectedComposites.player_id,
+                        name: selectedComposites.name,
+                        skills: selectedComposites.skills,
+                        composites_raw: selectedComposites.composites_raw,
+                      },
+                    ]);
+                  }}
+                  className="w-full text-[10px] font-medium py-1.5 rounded-md border border-border hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
+                >
+                  {referencePlayers.some((p) => p.player_id === selectedComposites.player_id)
+                    ? "Unpin Reference"
+                    : "Pin as Reference"}
+                </button>
+
                 {/* Bell curve params summary */}
                 <div className="text-[9px] text-muted-foreground/60 space-y-0.5">
                   <p>
@@ -544,6 +581,13 @@ export default function CohesionCalibrationPage() {
               )}
               {centerTab === "handlers" && (
                 <FormulaHandlerPicker draft={draftVersion} onPatchDraft={handlePatchDraft} />
+              )}
+              {centerTab === "formulas" && (
+                <FormulaEditor
+                  draft={draftVersion}
+                  onPatchDraft={handlePatchDraft}
+                  referencePlayersState={[referencePlayers, setReferencePlayers]}
+                />
               )}
             </div>
           </div>
