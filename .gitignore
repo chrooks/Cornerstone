@@ -38,3 +38,4 @@ knowledge/
 scripts/composite_results/
 scripts/compute_composites.py
 tmp/
+.understand-anything/
