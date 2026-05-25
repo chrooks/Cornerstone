@@ -11,7 +11,7 @@
  * All state lifted to page level via custom hooks. No global stores.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Toaster, toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { compositeCoefficientsFromEvaluationValues } from "@/lib/cohesion-constants";
@@ -24,12 +24,13 @@ import {
 } from "@/lib/api";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import type { Player } from "@/lib/types";
-import type { PlayerCompositeData, BellCurveData, LineupTestResult, CenterTab } from "./types";
+import type { PlayerCompositeData, BellCurveData, LineupTestResult, CenterTab, ReferencePlayer } from "./types";
 import { WeightsEditor } from "./components/WeightsEditor";
 import { ResultsPanel } from "./components/ResultsPanel";
 import { CompositeBars, PlayerSkillsPanel } from "./components/PlayerInspection";
 import { LineupTester, emptyLineupSlot } from "./components/LineupTester";
 import { BellCurveChart } from "./components/BellCurveCharts";
+import { FormulaEditor } from "./components/FormulaEditor";
 import { useLineupSlots } from "./hooks/useLineupSlots";
 import { useTestHistory } from "./hooks/useTestHistory";
 import { useTeamFill } from "./hooks/useTeamFill";
@@ -40,6 +41,7 @@ import { DraftBanner } from "./components/DraftBanner";
 import { DiffDrawer } from "./components/DiffDrawer";
 import { PublishDialog } from "./components/PublishDialog";
 import { FormulaHandlerPicker } from "./components/FormulaHandlerPicker";
+import { PanelResizeHandle } from "./components/PanelResizeHandle";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -50,6 +52,7 @@ const CENTER_TABS: { key: CenterTab; label: string }[] = [
   { key: "bell_curves", label: "Bell Curves" },
   { key: "weights", label: "Weights" },
   { key: "handlers", label: "Handlers" },
+  { key: "formulas", label: "Formulas" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -116,6 +119,48 @@ export default function CohesionCalibrationPage() {
 
   // --- Center tab state ---
   const [centerTab, setCenterTab] = useState<CenterTab>("lineup");
+
+  // --- Reference player state (for formula preview) ---
+  const [referencePlayers, setReferencePlayers] = useState<ReferencePlayer[]>([]);
+
+  // --- Panel layout state ---
+  const [leftPanelWidth, setLeftPanelWidth] = useState(380);
+  const [rightPanelWidth, setRightPanelWidth] = useState(320);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const leftWidthBeforeCollapse = useRef(380);
+  const rightWidthBeforeCollapse = useRef(320);
+
+  const handleLeftResize = useCallback((deltaX: number) => {
+    setLeftPanelWidth((prev) => Math.max(200, Math.min(600, prev + deltaX)));
+  }, []);
+
+  const handleRightResize = useCallback((deltaX: number) => {
+    // Right panel grows when dragged left (negative delta).
+    setRightPanelWidth((prev) => Math.max(200, Math.min(500, prev - deltaX)));
+  }, []);
+
+  const toggleLeftCollapsed = useCallback(() => {
+    setLeftCollapsed((prev) => {
+      if (!prev) {
+        leftWidthBeforeCollapse.current = leftPanelWidth;
+      } else {
+        setLeftPanelWidth(leftWidthBeforeCollapse.current);
+      }
+      return !prev;
+    });
+  }, [leftPanelWidth]);
+
+  const toggleRightCollapsed = useCallback(() => {
+    setRightCollapsed((prev) => {
+      if (!prev) {
+        rightWidthBeforeCollapse.current = rightPanelWidth;
+      } else {
+        setRightPanelWidth(rightWidthBeforeCollapse.current);
+      }
+      return !prev;
+    });
+  }, [rightPanelWidth]);
 
   // --- Evaluation state ---
   const [evaluatingLineup, setEvaluatingLineup] = useState(false);
@@ -396,14 +441,33 @@ export default function CohesionCalibrationPage() {
           />
         )}
 
-        {/* Three-panel layout */}
+        {/* Three-panel layout — resizable and collapsible */}
         <div id="cohesion-cal-panels" className="flex-1 overflow-hidden flex">
 
-          {/* ── Left panel: Player Composites (~380px) ────────────────── */}
+          {/* ── Left panel: Player Composites ────────────────── */}
           <div
             id="cohesion-cal-left-panel"
-            className="w-[380px] flex-shrink-0 border-r border-border overflow-y-auto p-4 space-y-4"
+            className={cn(
+              "flex-shrink-0 border-r border-border overflow-hidden flex flex-col transition-[width] duration-150",
+              leftCollapsed && "!w-0 !border-r-0",
+            )}
+            style={{ width: leftCollapsed ? 0 : leftPanelWidth }}
           >
+            <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Player Inspector
+              </p>
+              <button
+                id="cohesion-cal-collapse-left"
+                type="button"
+                onClick={toggleLeftCollapsed}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                title="Collapse panel"
+              >
+                ◂
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
             {/* Player search */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
@@ -470,6 +534,38 @@ export default function CohesionCalibrationPage() {
                   </button>
                 </div>
 
+                {/* Pin as reference for formula preview */}
+                <button
+                  id="cohesion-cal-pin-reference-btn"
+                  type="button"
+                  onClick={() => {
+                    if (!selectedComposites) return;
+                    if (referencePlayers.some((p) => p.player_id === selectedComposites.player_id)) {
+                      // Remove if already pinned.
+                      setReferencePlayers((prev) => prev.filter((p) => p.player_id !== selectedComposites.player_id));
+                      return;
+                    }
+                    if (referencePlayers.length >= 5) {
+                      toast.error("Max 5 reference players");
+                      return;
+                    }
+                    setReferencePlayers((prev) => [
+                      ...prev,
+                      {
+                        player_id: selectedComposites.player_id,
+                        name: selectedComposites.name,
+                        skills: selectedComposites.skills,
+                        composites_raw: selectedComposites.composites_raw,
+                      },
+                    ]);
+                  }}
+                  className="w-full text-[10px] font-medium py-1.5 rounded-md border border-border hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
+                >
+                  {referencePlayers.some((p) => p.player_id === selectedComposites.player_id)
+                    ? "Unpin Reference"
+                    : "Pin as Reference"}
+                </button>
+
                 {/* Bell curve params summary */}
                 <div className="text-[9px] text-muted-foreground/60 space-y-0.5">
                   <p>
@@ -487,7 +583,23 @@ export default function CohesionCalibrationPage() {
                 Search a player to view composites
               </div>
             )}
+            </div>
           </div>
+
+          {/* Left resize handle + collapse restore */}
+          {leftCollapsed ? (
+            <button
+              id="cohesion-cal-restore-left"
+              type="button"
+              onClick={toggleLeftCollapsed}
+              className="flex-shrink-0 w-6 flex items-center justify-center border-r border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-[10px] text-muted-foreground"
+              title="Show player panel"
+            >
+              ▸
+            </button>
+          ) : (
+            <PanelResizeHandle id="cohesion-cal-left-resize" onResize={handleLeftResize} />
+          )}
 
           {/* ── Center panel: Tabbed ──────────────────────────────────── */}
           <div id="cohesion-cal-center-panel" className="flex-1 min-w-0 flex flex-col overflow-hidden">
@@ -545,18 +657,53 @@ export default function CohesionCalibrationPage() {
               {centerTab === "handlers" && (
                 <FormulaHandlerPicker draft={draftVersion} onPatchDraft={handlePatchDraft} />
               )}
+              {centerTab === "formulas" && (
+                <FormulaEditor
+                  draft={draftVersion}
+                  onPatchDraft={handlePatchDraft}
+                  referencePlayersState={[referencePlayers, setReferencePlayers]}
+                />
+              )}
             </div>
           </div>
 
-          {/* ── Right panel: Results (~320px) ─────────────────────────── */}
+          {/* Right resize handle + collapse restore */}
+          {rightCollapsed ? (
+            <button
+              id="cohesion-cal-restore-right"
+              type="button"
+              onClick={toggleRightCollapsed}
+              className="flex-shrink-0 w-6 flex items-center justify-center border-l border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-[10px] text-muted-foreground"
+              title="Show test history"
+            >
+              ◂
+            </button>
+          ) : (
+            <PanelResizeHandle id="cohesion-cal-right-resize" onResize={handleRightResize} />
+          )}
+
+          {/* ── Right panel: Results ─────────────────────────── */}
           <div
             id="cohesion-cal-right-panel"
-            className="w-[320px] flex-shrink-0 border-l border-border overflow-hidden flex flex-col"
+            className={cn(
+              "flex-shrink-0 border-l border-border overflow-hidden flex flex-col transition-[width] duration-150",
+              rightCollapsed && "!w-0 !border-l-0",
+            )}
+            style={{ width: rightCollapsed ? 0 : rightPanelWidth }}
           >
-            <div className="flex-shrink-0 px-4 py-3 border-b border-border">
+            <div className="flex-shrink-0 px-4 py-2 border-b border-border flex items-center justify-between">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Test History ({testHistory.length})
               </p>
+              <button
+                id="cohesion-cal-collapse-right"
+                type="button"
+                onClick={toggleRightCollapsed}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                title="Collapse panel"
+              >
+                ▸
+              </button>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
               <ResultsPanel testHistory={testHistory} onLoadLineup={handleLoadTestHistoryLineup} />

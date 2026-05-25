@@ -8,6 +8,7 @@ Checks structural integrity before a draft can be published:
   L4 — Skills referenced by handlers exist in taxonomy
   L5 — orphan Impact Traits with no formula_ref (warning, does not block)
   L7 — changelog note is non-empty
+  L8 — composite_formulas structural integrity (when present)
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from services.cohesion_engine.engine import CohesionEngine
 class PublishGateViolation:
     """One structural issue found during publish gate validation."""
 
-    layer: str           # 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | 'L7'
+    layer: str           # 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | 'L7' | 'L8'
     code: str            # machine-readable error code
     message: str         # human-readable explanation
     target: str = ""     # optional path to the offending field
@@ -222,5 +223,144 @@ def validate(
             message="Changelog note is required for publishing.",
             target="changelog_note",
         ))
+
+    # L8: composite_formulas structural integrity (when present)
+    composite_formulas = values.get("composite_formulas")
+    if composite_formulas and isinstance(composite_formulas, dict):
+        violations.extend(_validate_composite_formulas(composite_formulas))
+
+    return violations
+
+
+def _validate_composite_formulas(
+    formulas: dict[str, Any],
+) -> list[PublishGateViolation]:
+    """L8 validation for composite_formulas structure."""
+    from services.skills import ALL_SKILLS
+    from services.cohesion_engine.weights import COMPOSITE_NAMES
+
+    violations: list[PublishGateViolation] = []
+    valid_skills = set(ALL_SKILLS)
+    formula_keys = set(formulas.keys())
+    expected_keys = set(COMPOSITE_NAMES)
+
+    # Every canonical composite must have an entry.
+    for missing in expected_keys - formula_keys:
+        violations.append(PublishGateViolation(
+            layer="L8",
+            code="formula_missing_composite",
+            message=f"Composite '{missing}' has no entry in composite_formulas.",
+            target=f"values.composite_formulas.{missing}",
+        ))
+
+    for comp_key, formula in formulas.items():
+        if not isinstance(formula, dict):
+            violations.append(PublishGateViolation(
+                layer="L8",
+                code="formula_invalid_shape",
+                message=f"composite_formulas.{comp_key} must be a dict.",
+                target=f"values.composite_formulas.{comp_key}",
+            ))
+            continue
+
+        # Validate factors.
+        composite_deps: set[str] = set()
+        for i, factor in enumerate(formula.get("factors", [])):
+            f_type = factor.get("type")
+            f_key = factor.get("key", "")
+            if f_type == "skill" and f_key not in valid_skills:
+                violations.append(PublishGateViolation(
+                    layer="L8",
+                    code="formula_invalid_skill",
+                    message=f"Factor {i} of '{comp_key}' references unknown skill '{f_key}'.",
+                    target=f"values.composite_formulas.{comp_key}.factors[{i}]",
+                ))
+            elif f_type == "composite":
+                if f_key not in formula_keys:
+                    violations.append(PublishGateViolation(
+                        layer="L8",
+                        code="formula_invalid_composite_ref",
+                        message=f"Factor {i} of '{comp_key}' references unknown composite '{f_key}'.",
+                        target=f"values.composite_formulas.{comp_key}.factors[{i}]",
+                    ))
+                if f_key == comp_key:
+                    violations.append(PublishGateViolation(
+                        layer="L8",
+                        code="formula_self_reference",
+                        message=f"Factor {i} of '{comp_key}' references itself.",
+                        target=f"values.composite_formulas.{comp_key}.factors[{i}]",
+                    ))
+                composite_deps.add(f_key)
+
+        # Validate amplifier sources and applies_to bounds.
+        num_factors = len(formula.get("factors", []))
+        for i, amp in enumerate(formula.get("amplifiers", [])):
+            source = amp.get("source")
+            if isinstance(source, str):
+                # Composite source.
+                if source not in formula_keys:
+                    violations.append(PublishGateViolation(
+                        layer="L8",
+                        code="formula_invalid_amplifier_source",
+                        message=f"Amplifier {i} of '{comp_key}' references unknown composite '{source}'.",
+                        target=f"values.composite_formulas.{comp_key}.amplifiers[{i}]",
+                    ))
+                composite_deps.add(source)
+            elif isinstance(source, dict):
+                # Skill-sum source.
+                for skill_key in source.get("skills", []):
+                    if skill_key not in valid_skills:
+                        violations.append(PublishGateViolation(
+                            layer="L8",
+                            code="formula_invalid_amplifier_skill",
+                            message=f"Amplifier {i} of '{comp_key}' references unknown skill '{skill_key}'.",
+                            target=f"values.composite_formulas.{comp_key}.amplifiers[{i}]",
+                        ))
+
+            # Bounds-check applies_to indices.
+            applies_to = amp.get("applies_to")
+            if applies_to is not None:
+                for idx in applies_to:
+                    if not isinstance(idx, int) or idx < 0 or idx >= num_factors:
+                        violations.append(PublishGateViolation(
+                            layer="L8",
+                            code="formula_amplifier_index_out_of_bounds",
+                            message=f"Amplifier {i} of '{comp_key}' applies_to index {idx} out of range (0..{num_factors - 1}).",
+                            target=f"values.composite_formulas.{comp_key}.amplifiers[{i}].applies_to",
+                        ))
+
+        # Validate depends_on matches actual composite references.
+        declared_deps = set(formula.get("depends_on", []))
+        if declared_deps != composite_deps:
+            missing_deps = composite_deps - declared_deps
+            extra_deps = declared_deps - composite_deps
+            if missing_deps:
+                violations.append(PublishGateViolation(
+                    layer="L8",
+                    code="formula_depends_on_incomplete",
+                    message=f"'{comp_key}' references composites {missing_deps} but depends_on is missing them.",
+                    target=f"values.composite_formulas.{comp_key}.depends_on",
+                ))
+            if extra_deps:
+                violations.append(PublishGateViolation(
+                    layer="L8",
+                    code="formula_depends_on_extra",
+                    message=f"'{comp_key}' depends_on lists {extra_deps} which are not referenced by factors or amplifiers.",
+                    target=f"values.composite_formulas.{comp_key}.depends_on",
+                    severity="warning",
+                ))
+
+    # Circular dependency check via topological sort.
+    if formula_keys:
+        from services.cohesion_engine.formula_engine import topological_sort
+        try:
+            topological_sort(formulas)
+        except ValueError as exc:
+            violations.append(PublishGateViolation(
+                layer="L8",
+                code="formula_circular_dependency",
+                message=f"Circular dependency in composite_formulas: {exc}",
+                target="values.composite_formulas",
+            ))
 
     return violations

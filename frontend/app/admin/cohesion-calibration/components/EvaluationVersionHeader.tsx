@@ -185,7 +185,11 @@ export function EvaluationVersionHeader({
         <button
           id="eval-version-discard-btn"
           type="button"
-          onClick={onDiscardDraft}
+          onClick={() => {
+            if (window.confirm("Discard this draft? All unpublished changes will be lost.")) {
+              onDiscardDraft();
+            }
+          }}
           className="text-[10px] font-medium px-2.5 py-1 rounded-md border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
         >
           Discard draft

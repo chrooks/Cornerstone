@@ -11,6 +11,8 @@ Endpoints:
   POST /rotation/evaluate             — Run rotation evaluation with ranked lineup diagnostics
   GET  /weights                       — All engine weight constants
   PUT  /weights                       — Apply partial weight overrides (in-memory)
+  GET  /formulas                      — Composite formulas from draft or active version
+  POST /distribution-preview          — Histogram of raw composite distribution
 """
 
 from __future__ import annotations
@@ -754,3 +756,178 @@ def update_weights() -> tuple:
         "data": None,
         "error": "Weight overrides are retired. Use the Evaluation Version draft API at /api/evaluation-versions/drafts instead.",
     }), 410
+
+
+# ---------------------------------------------------------------------------
+# GET /formulas
+# ---------------------------------------------------------------------------
+
+@cohesion_calibration_bp.route("/formulas")
+@require_admin
+def get_formulas() -> tuple:
+    """Return composite formulas from draft (if exists) or active Evaluation Version.
+
+    If neither version has ``composite_formulas`` in its values, generates them
+    on the fly from the current coefficients via ``export_formulas``.
+    """
+    from services.evaluation_versions.repo import get_draft as get_draft_version
+    from services.cohesion_engine.formula_export import export_formulas
+
+    try:
+        draft = get_draft_version()
+        if draft and draft.values.get("composite_formulas"):
+            return jsonify({
+                "success": True,
+                "data": {"formulas": draft.values["composite_formulas"], "source": "draft"},
+                "error": None,
+            }), 200
+
+        active = get_active_eval_version()
+        if active.values.get("composite_formulas"):
+            return jsonify({
+                "success": True,
+                "data": {"formulas": active.values["composite_formulas"], "source": "active"},
+                "error": None,
+            }), 200
+
+        # Neither version has formulas — generate from coefficients.
+        coefficients = active.values.get("composite_coefficients", {})
+        formulas = export_formulas(coefficients)
+        return jsonify({
+            "success": True,
+            "data": {"formulas": formulas, "source": "active"},
+            "error": None,
+        }), 200
+    except Exception:
+        logger.exception("Error fetching composite formulas")
+        return jsonify({
+            "success": False, "data": None,
+            "error": "Failed to load composite formulas",
+        }), 500
+
+
+# ---------------------------------------------------------------------------
+# POST /distribution-preview
+# ---------------------------------------------------------------------------
+
+@cohesion_calibration_bp.route("/distribution-preview", methods=["POST"])
+@require_admin
+def distribution_preview() -> tuple:
+    """Return a histogram of raw composite values across the player pool.
+
+    Accepts an optional formula override to preview how changes would shift
+    the distribution. Request body:
+
+        {
+          "composite_key": "spacing",
+          "formula_override": { ... } | null
+        }
+    """
+    import copy
+
+    from services.cohesion_engine.formula_export import export_formulas
+    from services.cohesion_engine.formula_engine import compute_raw_from_formulas, topological_sort
+    from services.cohesion_engine.composites import _with_default_skills, _extract_skills
+    from services.evaluation_versions.validator import _validate_composite_formulas
+
+    body = request.get_json(silent=True) or {}
+    composite_key = body.get("composite_key")
+    if not composite_key or not isinstance(composite_key, str):
+        return jsonify({
+            "success": False, "data": None,
+            "error": "composite_key is required",
+        }), 400
+
+    values = _active_values()
+    tier_values = values["tier_values"]
+
+    # Resolve formulas — use override for target composite if provided.
+    base_formulas = values.get("composite_formulas")
+    if not base_formulas:
+        base_formulas = export_formulas(values.get("composite_coefficients", {}))
+
+    if composite_key not in base_formulas:
+        return jsonify({
+            "success": False, "data": None,
+            "error": f"Unknown composite key: {composite_key}",
+        }), 400
+
+    formula_override = body.get("formula_override")
+    formulas = copy.deepcopy(base_formulas)
+    if formula_override and isinstance(formula_override, dict):
+        # Validate override before computing.
+        override_violations = _validate_composite_formulas({composite_key: formula_override})
+        errors = [v for v in override_violations if v.severity == "error"]
+        if errors:
+            return jsonify({
+                "success": False, "data": None,
+                "error": f"Invalid formula override: {errors[0].message}",
+            }), 400
+        formulas[composite_key] = formula_override
+
+    # Pre-compute sort order once — avoids re-sorting per player.
+    formula_order = topological_sort(formulas)
+
+    # Fetch all player skill profiles.
+    client = get_supabase()
+    raw_values: list[float] = []
+
+    for source_query in [
+        lambda: client.table("skill_profiles")
+            .select("profile")
+            .eq("season", CURRENT_SEASON)
+            .eq("source", "composite")
+            .execute(),
+        lambda: client.table("skill_profiles")
+            .select("profile")
+            .eq("source", "manual")
+            .eq("is_legend", True)
+            .execute(),
+    ]:
+        from services.supabase_client import run_query
+        result = run_query(source_query)
+        for row in result.data:
+            skills = _with_default_skills(_extract_skills(row["profile"]))
+            raw = compute_raw_from_formulas(skills, formulas, tier_values, order=formula_order)
+            raw_values.append(raw.get(composite_key, 0.0))
+
+    if not raw_values:
+        return jsonify({
+            "success": True,
+            "data": {"bins": [], "total_players": 0, "mean": 0, "median": 0, "p90": 0},
+            "error": None,
+        }), 200
+
+    # Bin into 20 equal-width bins.
+    sorted_vals = sorted(raw_values)
+    n = len(sorted_vals)
+    val_min = sorted_vals[0]
+    val_max = sorted_vals[-1]
+    num_bins = 20
+
+    if val_max <= val_min:
+        bins = [{"min": val_min, "max": val_max, "count": n}]
+    else:
+        bin_width = (val_max - val_min) / num_bins
+        bins = []
+        for i in range(num_bins):
+            b_min = val_min + i * bin_width
+            b_max = val_min + (i + 1) * bin_width
+            count = sum(1 for v in sorted_vals if b_min <= v < b_max) if i < num_bins - 1 else sum(1 for v in sorted_vals if b_min <= v <= b_max)
+            bins.append({"min": round(b_min, 2), "max": round(b_max, 2), "count": count})
+
+    mean = sum(sorted_vals) / n
+    median = sorted_vals[n // 2] if n % 2 == 1 else (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2
+    p90_idx = min(int(n * 0.9), n - 1)
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "bins": bins,
+            "total_players": n,
+            "mean": round(mean, 2),
+            "median": round(median, 2),
+            "p90": round(sorted_vals[p90_idx], 2),
+        },
+        "error": None,
+    }), 200

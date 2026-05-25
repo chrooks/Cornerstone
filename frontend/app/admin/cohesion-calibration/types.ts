@@ -109,4 +109,54 @@ export interface LineupTestResult {
 }
 
 /** Active tab in the center panel. */
-export type CenterTab = "bell_curves" | "lineup" | "weights" | "handlers";
+export type CenterTab = "bell_curves" | "lineup" | "weights" | "handlers" | "formulas";
+
+// ---------------------------------------------------------------------------
+// Formula editor types
+// ---------------------------------------------------------------------------
+
+/** A single term in a composite formula — either a Skill tier value or another composite's raw value. */
+export interface FormulaFactor {
+  type: "skill" | "composite";
+  key: string;
+  coefficient: number;
+}
+
+/** Multiplicative modifier applied to the entire factor sum or specific factors. */
+export interface FormulaAmplifier {
+  source: string | { skills: string[] };
+  scale: number;
+  floor: number;
+  applies_to?: number[] | null;
+}
+
+/** Declarative definition of one composite formula. */
+export interface CompositeFormula {
+  factors: FormulaFactor[];
+  amplifiers: FormulaAmplifier[];
+  depends_on: string[];
+}
+
+/** Reference player pinned for live formula preview. */
+export interface ReferencePlayer {
+  player_id: string;
+  name: string;
+  skills: Record<string, string>;
+  composites_raw: Record<string, number>;
+}
+
+/** Histogram bin from POST /api/cohesion/distribution-preview. */
+export interface DistributionBin {
+  min: number;
+  max: number;
+  count: number;
+}
+
+/** Response from POST /api/cohesion/distribution-preview. */
+export interface DistributionPreviewData {
+  bins: DistributionBin[];
+  total_players: number;
+  mean: number;
+  median: number;
+  p90: number;
+}
