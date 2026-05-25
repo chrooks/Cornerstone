@@ -7,23 +7,31 @@ Checks structural integrity before a draft can be published:
   L3 — formula_refs ↔ Impact Trait consistency (orphan refs block publish)
   L4 — Skills referenced by handlers exist in taxonomy
   L5 — orphan Impact Traits with no formula_ref (warning, does not block)
+  L6 — composite_coefficients keys must be in the COMPOSITE_COEFFICIENTS
+       allowlist (warning — supports staged migrations where the key lands
+       before the formula that consumes it)
   L7 — changelog note is non-empty
   L8 — composite_formulas structural integrity (when present)
+  L9 — composite_coefficients values must be finite numbers (error —
+       non-finite values silently propagate through the composite pipeline
+       and poison every downstream rating)
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
 from services.cohesion_engine.engine import CohesionEngine
+from services.cohesion_engine.weights import COMPOSITE_COEFFICIENTS
 
 
 @dataclass(frozen=True)
 class PublishGateViolation:
     """One structural issue found during publish gate validation."""
 
-    layer: str           # 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | 'L7' | 'L8'
+    layer: str           # 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | 'L6' | 'L7' | 'L8' | 'L9'
     code: str            # machine-readable error code
     message: str         # human-readable explanation
     target: str = ""     # optional path to the offending field
@@ -215,6 +223,9 @@ def validate(
             target="taxonomy.skills",
         ))
 
+    # L6 + L9: composite_coefficients allowlist + non-finite checks
+    violations.extend(_validate_composite_coefficients(values))
+
     # L7: changelog note non-empty
     if not changelog_note or not changelog_note.strip():
         violations.append(PublishGateViolation(
@@ -228,6 +239,73 @@ def validate(
     composite_formulas = values.get("composite_formulas")
     if composite_formulas and isinstance(composite_formulas, dict):
         violations.extend(_validate_composite_formulas(composite_formulas))
+
+    return violations
+
+
+def _validate_composite_coefficients(
+    values: dict[str, Any],
+) -> list[PublishGateViolation]:
+    """Validate the ``composite_coefficients`` block.
+
+    L6 (warning): every key must be in the ``COMPOSITE_COEFFICIENTS`` allowlist
+    from ``services.cohesion_engine.weights``. Unknown keys persist invisibly
+    and create silent-drift risk (see #46).
+
+    L9 (error): every value must be a finite number (``math.isfinite``).
+    Non-finite values (``inf``, ``-inf``, ``NaN``) propagate silently through
+    the composite pipeline, poisoning every downstream rating (see #45). Bool
+    values are rejected as non-numeric because ``bool`` is an ``int`` subclass
+    in Python and would otherwise slip past the type check.
+    """
+    violations: list[PublishGateViolation] = []
+
+    coefficients = values.get("composite_coefficients")
+    if not isinstance(coefficients, dict):
+        # Absence/shape is enforced by L2; nothing to scan without a mapping.
+        return violations
+
+    allowlist = set(COMPOSITE_COEFFICIENTS.keys())
+
+    for key, value in coefficients.items():
+        # L6 — unknown key (warning, does not block publish)
+        if key not in allowlist:
+            violations.append(PublishGateViolation(
+                layer="L6",
+                code="coefficient_key_unknown",
+                message=(
+                    f"composite_coefficients key '{key}' is not in the "
+                    f"COMPOSITE_COEFFICIENTS allowlist. Remove the orphan "
+                    f"key or add it to services/cohesion_engine/weights.py."
+                ),
+                target=f"values.composite_coefficients.{key}",
+                severity="warning",
+            ))
+
+        # L9 — non-numeric or non-finite value (error, blocks publish)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            violations.append(PublishGateViolation(
+                layer="L9",
+                code="coefficient_value_non_numeric",
+                message=(
+                    f"composite_coefficients['{key}'] must be a finite "
+                    f"number, got {type(value).__name__} ({value!r})."
+                ),
+                target=f"values.composite_coefficients.{key}",
+                severity="error",
+            ))
+        elif not math.isfinite(value):
+            violations.append(PublishGateViolation(
+                layer="L9",
+                code="coefficient_value_non_finite",
+                message=(
+                    f"composite_coefficients['{key}'] must be finite, "
+                    f"got {value!r}. Non-finite coefficients silently "
+                    f"corrupt every downstream composite."
+                ),
+                target=f"values.composite_coefficients.{key}",
+                severity="error",
+            ))
 
     return violations
 
