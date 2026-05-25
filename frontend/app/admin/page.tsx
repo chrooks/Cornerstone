@@ -1,396 +1,487 @@
 "use client";
 
+/**
+ * Admin Hub — landing page for all admin Surfaces.
+ *
+ * Two responsibilities:
+ *   1. Surface system health at a glance: Rule Set count, current Evaluation
+ *      Version, pending review items.
+ *   2. Provide consistent navigation to every active admin surface (RuleSets,
+ *      Calibration, Cohesion Calibration, Pipeline, Review, Legends).
+ *
+ * Each data source is fetched independently so a slow endpoint doesn't block
+ * the rest of the page from rendering.
+ */
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getPipelineStatus, getReviewQueue, listLegends, testThresholds } from "@/lib/api";
-import type { PipelineStatus } from "@/lib/types";
+import {
+  getReviewQueue,
+  listRuleSets,
+} from "@/lib/api";
+import { getActiveEvaluationVersion } from "@/lib/api/evaluation-versions";
+import type { RuleSetSummary } from "@/lib/types";
+import type { EvaluationVersion } from "@/lib/types/evaluation-version";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
-// Types for the hub dashboard stats
+// Loading state types
 // ---------------------------------------------------------------------------
 
-interface HubStats {
-  pipeline: PipelineStatus | null;
-  pendingReview: number | null;
-  anchorPassRate: number | null;    // 0–100
-  anchorCount: number | null;       // total anchors tested
-  legendsTotal: number;
-  legendsComplete: number;
-  legendsProfiled: number;          // complete = all 20 skills
-  autoAccepted: number | null;
-  pipelineError: boolean;
-  reviewError: boolean;
-  anchorError: boolean;
-  legendsError: boolean;
+type LoadState<T> =
+  | { status: "loading" }
+  | { status: "ready"; value: T }
+  | { status: "error" };
+
+function initialLoading<T>(): LoadState<T> {
+  return { status: "loading" };
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Small UI primitives — kept inline to avoid a new component library.
 // ---------------------------------------------------------------------------
 
-/** Derive a pipeline stage label from the status counts. */
-function pipelineStageLabel(status: PipelineStatus | null): string {
-  if (!status) return "—";
-  if (status.players_with_composite > 0) {
-    return `Composited: ${status.players_with_composite} players`;
-  }
-  if (status.players_with_skills > 0) {
-    return `Skills: ${status.players_with_skills} players`;
-  }
-  if (status.players_with_stats > 0) {
-    return `Stats: ${status.players_with_stats} players`;
-  }
-  return "Not started";
-}
-
-// ---------------------------------------------------------------------------
-// Navigation card
-// ---------------------------------------------------------------------------
-
-interface NavCardProps {
-  href: string;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  badge: React.ReactNode;
-}
-
-function NavCard({ href, title, description, icon, badge }: NavCardProps) {
+function Spinner({ className }: { className?: string }) {
   return (
-    <Link
-      href={href}
-      className="block rounded-lg border bg-card p-5 hover:shadow-md hover:border-foreground/20 transition-all group"
-    >
-      <div className="flex items-start justify-between gap-3 mb-3">
-        {/* Icon */}
-        <div className="flex-shrink-0 text-2xl text-muted-foreground group-hover:text-foreground transition-colors">
-          {icon}
-        </div>
-        {/* Badge */}
-        <div>{badge}</div>
-      </div>
-      <h3 className="font-semibold text-sm mb-0.5">{title}</h3>
-      <p className="text-xs text-muted-foreground">{description}</p>
-    </Link>
-  );
-}
-
-/** Small inline loading spinner for badge states. */
-function Spinner() {
-  return (
-    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+    <span
+      className={cn(
+        "inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent",
+        className,
+      )}
+    />
   );
 }
 
 // ---------------------------------------------------------------------------
-// Stat block (bottom row)
+// Health stat block — one of three top-of-page status cards.
 // ---------------------------------------------------------------------------
 
-interface StatBlockProps {
+interface HealthStatProps {
+  id: string;
   label: string;
-  value: React.ReactNode;
-  detail?: React.ReactNode;
-  progress?: number | null;   // 0–100
+  state: LoadState<{ primary: React.ReactNode; secondary?: React.ReactNode }>;
+  tone?: "neutral" | "alert" | "ok";
+  accentRail: string; // tailwind bg-* class for the left rail
 }
 
-function StatBlock({ label, value, detail, progress }: StatBlockProps) {
+function HealthStat({ id, label, state, tone = "neutral", accentRail }: HealthStatProps) {
   return (
-    <div className="rounded-lg border bg-card px-5 py-4 flex-1 min-w-0">
-      <p className="text-xs text-muted-foreground font-medium mb-1">{label}</p>
-      <p className="text-lg font-bold tracking-tight">{value}</p>
-      {detail && <p className="text-xs text-muted-foreground mt-0.5">{detail}</p>}
-      {progress != null && (
-        <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full bg-emerald-500 rounded-full"
-            style={{ width: `${Math.min(progress, 100)}%` }}
-          />
-        </div>
+    <div
+      id={id}
+      className="relative flex-1 min-w-0 overflow-hidden rounded-xl border bg-card p-5"
+    >
+      {/* Left accent rail — gives each health surface a distinct identity */}
+      <div
+        aria-hidden
+        className={cn("absolute left-0 top-0 bottom-0 w-1", accentRail)}
+      />
+      <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">
+        {label}
+      </p>
+      {state.status === "loading" ? (
+        <Spinner className="text-muted-foreground" />
+      ) : state.status === "error" ? (
+        <p className="text-sm text-muted-foreground italic">Unavailable</p>
+      ) : (
+        <>
+          <p
+            className={cn(
+              "text-2xl font-bold tracking-tight leading-tight",
+              tone === "alert" && "text-amber-700",
+              tone === "ok" && "text-emerald-700",
+            )}
+          >
+            {state.value.primary}
+          </p>
+          {state.value.secondary && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {state.value.secondary}
+            </p>
+          )}
+        </>
       )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Hub dashboard page (admin)
+// Navigation card — one per admin Surface.
+// ---------------------------------------------------------------------------
+
+interface AdminSurfaceCardProps {
+  id: string;
+  href: string;
+  title: string;
+  description: string;
+  glyph: string;        // single character used as visual mark
+  hint?: React.ReactNode; // small status badge at the right
+}
+
+function AdminSurfaceCard({
+  id,
+  href,
+  title,
+  description,
+  glyph,
+  hint,
+}: AdminSurfaceCardProps) {
+  return (
+    <Link
+      id={id}
+      href={href}
+      className={cn(
+        "group block rounded-xl border bg-card p-5",
+        "transition-all hover:border-foreground/30 hover:shadow-sm",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40",
+      )}
+    >
+      <div className="flex items-start gap-4">
+        {/* Glyph — square mark sized to anchor the card without being decorative */}
+        <span
+          aria-hidden
+          className={cn(
+            "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg",
+            "bg-foreground/[0.04] text-base font-bold text-foreground/70",
+            "transition-colors group-hover:bg-foreground/[0.08] group-hover:text-foreground",
+          )}
+        >
+          {glyph}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-semibold text-sm leading-tight">{title}</h3>
+            {hint}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+            {description}
+          </p>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Hint badges shown on navigation cards
+// ---------------------------------------------------------------------------
+
+function HintBadge({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "alert" | "ok";
+}) {
+  return (
+    <span
+      className={cn(
+        "text-[10px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap",
+        tone === "neutral" &&
+          "border-border bg-muted text-muted-foreground",
+        tone === "alert" &&
+          "border-amber-300 bg-amber-50 text-amber-700",
+        tone === "ok" &&
+          "border-emerald-300 bg-emerald-50 text-emerald-700",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page
 // ---------------------------------------------------------------------------
 
 export default function AdminHubPage() {
-  const [stats, setStats] = useState<HubStats>({
-    pipeline:         null,
-    pendingReview:    null,
-    anchorPassRate:   null,
-    anchorCount:      null,
-    legendsTotal:     36,
-    legendsComplete:  0,
-    legendsProfiled:  0,
-    autoAccepted:     null,
-    pipelineError:    false,
-    reviewError:      false,
-    anchorError:      false,
-    legendsError:     false,
-  });
-
-  // Track loading state per data source so the page renders immediately with spinners
-  const [pipelineLoading, setPipelineLoading] = useState(true);
-  const [reviewLoading, setReviewLoading] = useState(true);
-  const [anchorLoading, setAnchorLoading] = useState(true);
-  const [legendsLoading, setLegendsLoading] = useState(true);
+  // Each data source has its own LoadState so badges resolve independently.
+  const [ruleSetsState, setRuleSetsState] =
+    useState<LoadState<RuleSetSummary[]>>(initialLoading);
+  const [activeEvalState, setActiveEvalState] =
+    useState<LoadState<EvaluationVersion>>(initialLoading);
+  const [reviewState, setReviewState] =
+    useState<LoadState<number>>(initialLoading);
 
   useEffect(() => {
-    // Fetch all four data sources in parallel — each resolves independently
-    // so a slow endpoint doesn't block the others from rendering.
-
-    // 1. Pipeline status
-    getPipelineStatus()
+    listRuleSets()
       .then((res) => {
         if (res.success && res.data) {
-          setStats((prev) => ({
-            ...prev,
-            pipeline: res.data,
-            autoAccepted: res.data ? res.data.total_flags - res.data.unresolved_flags : null,
-          }));
+          setRuleSetsState({ status: "ready", value: res.data });
         } else {
-          setStats((prev) => ({ ...prev, pipelineError: true }));
+          setRuleSetsState({ status: "error" });
         }
       })
-      .catch(() => setStats((prev) => ({ ...prev, pipelineError: true })))
-      .finally(() => setPipelineLoading(false));
+      .catch(() => setRuleSetsState({ status: "error" }));
 
-    // 2. Review queue pending count (we only need the count — fetch minimal params)
+    getActiveEvaluationVersion()
+      .then((res) => {
+        if (res.success && res.data) {
+          setActiveEvalState({ status: "ready", value: res.data });
+        } else {
+          setActiveEvalState({ status: "error" });
+        }
+      })
+      .catch(() => setActiveEvalState({ status: "error" }));
+
     getReviewQueue()
       .then((res) => {
         if (res.success && res.data) {
-          setStats((prev) => ({ ...prev, pendingReview: res.data!.length }));
+          setReviewState({ status: "ready", value: res.data.length });
         } else {
-          setStats((prev) => ({ ...prev, reviewError: true }));
+          setReviewState({ status: "error" });
         }
       })
-      .catch(() => setStats((prev) => ({ ...prev, reviewError: true })))
-      .finally(() => setReviewLoading(false));
-
-    // 3. Anchor pass rate — test all anchors and compute overall pass rate
-    testThresholds("all")
-      .then((res) => {
-        if (res.success && res.data) {
-          // Data may be a single result or an array (all-skill test returns array)
-          const results = Array.isArray(res.data) ? res.data : [res.data];
-          let totalTested = 0;
-          let totalPassed = 0;
-          for (const r of results) {
-            totalTested += r.anchors_tested ?? 0;
-            totalPassed += r.passed ?? 0;
-          }
-          const passRate = totalTested > 0 ? Math.round((totalPassed / totalTested) * 100) : null;
-          setStats((prev) => ({ ...prev, anchorPassRate: passRate, anchorCount: totalTested }));
-        } else {
-          setStats((prev) => ({ ...prev, anchorError: true }));
-        }
-      })
-      .catch(() => setStats((prev) => ({ ...prev, anchorError: true })))
-      .finally(() => setAnchorLoading(false));
-
-    // 4. Legends completion
-    listLegends()
-      .then((res) => {
-        if (res.success && res.data) {
-          const total   = res.data.length;
-          const complete = res.data.filter((l) => l.completion >= 20).length;
-          const profiled = res.data.filter((l) => l.completion > 0).length;
-          setStats((prev) => ({
-            ...prev,
-            legendsTotal:    total,
-            legendsComplete: complete,
-            legendsProfiled: profiled,
-          }));
-        } else {
-          setStats((prev) => ({ ...prev, legendsError: true }));
-        }
-      })
-      .catch(() => setStats((prev) => ({ ...prev, legendsError: true })))
-      .finally(() => setLegendsLoading(false));
+      .catch(() => setReviewState({ status: "error" }));
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Badge builders for each navigation card
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // Derived values for top stat row
+  // -------------------------------------------------------------------------
 
-  const pipelineBadge = (
-    <span className="text-xs font-medium px-2 py-0.5 rounded-full border border-border bg-muted text-muted-foreground whitespace-nowrap">
-      {pipelineLoading ? <Spinner /> : stats.pipelineError ? "—" : pipelineStageLabel(stats.pipeline)}
-    </span>
-  );
+  const ruleSetStat: LoadState<{ primary: React.ReactNode; secondary?: React.ReactNode }> =
+    ruleSetsState.status === "ready"
+      ? (() => {
+          const all = ruleSetsState.value;
+          const active = all.filter((r) => r.status === "active").length;
+          const comingSoon = all.filter((r) => r.status === "coming_soon").length;
+          return {
+            status: "ready",
+            value: {
+              primary: `${active} active`,
+              secondary:
+                comingSoon > 0
+                  ? `${comingSoon} coming soon · ${all.length} total`
+                  : `${all.length} total`,
+            },
+          };
+        })()
+      : ruleSetsState.status === "error"
+        ? { status: "error" }
+        : { status: "loading" };
 
-  const pendingCount = stats.pendingReview;
-  const reviewBadge = (
-    <span
-      className={cn(
-        "text-xs font-medium px-2 py-0.5 rounded-full border whitespace-nowrap",
-        reviewLoading
-          ? "border-border bg-muted text-muted-foreground"
-          : stats.reviewError
-          ? "border-border bg-muted text-muted-foreground"
-          : pendingCount != null && pendingCount > 0
-          ? "border-amber-300 bg-amber-50 text-amber-700"
-          : "border-emerald-300 bg-emerald-50 text-emerald-700"
-      )}
-    >
-      {reviewLoading ? <Spinner /> : stats.reviewError ? "—" : `${pendingCount ?? "—"} pending`}
-    </span>
-  );
+  const evalVersionStat: LoadState<{
+    primary: React.ReactNode;
+    secondary?: React.ReactNode;
+  }> =
+    activeEvalState.status === "ready"
+      ? {
+          status: "ready",
+          value: {
+            primary: activeEvalState.value.slug,
+            secondary: `Status: ${activeEvalState.value.status}`,
+          },
+        }
+      : activeEvalState.status === "error"
+        ? { status: "error" }
+        : { status: "loading" };
 
-  const anchorBadge = (
-    <span className="text-xs font-medium px-2 py-0.5 rounded-full border border-border bg-muted text-muted-foreground whitespace-nowrap">
-      {anchorLoading ? (
+  const pendingReviewStat: LoadState<{
+    primary: React.ReactNode;
+    secondary?: React.ReactNode;
+  }> =
+    reviewState.status === "ready"
+      ? {
+          status: "ready",
+          value: {
+            primary: `${reviewState.value} pending`,
+            secondary:
+              reviewState.value === 0
+                ? "Queue clear"
+                : "Awaiting manual resolution",
+          },
+        }
+      : reviewState.status === "error"
+        ? { status: "error" }
+        : { status: "loading" };
+
+  const reviewTone: "neutral" | "alert" | "ok" =
+    reviewState.status === "ready"
+      ? reviewState.value === 0
+        ? "ok"
+        : "alert"
+      : "neutral";
+
+  // -------------------------------------------------------------------------
+  // Hint badges per surface card
+  // -------------------------------------------------------------------------
+
+  const ruleSetsHint =
+    ruleSetsState.status === "loading" ? (
+      <HintBadge>
         <Spinner />
-      ) : stats.anchorError ? (
-        "—"
-      ) : stats.anchorCount === 0 ? (
-        "No anchors set"
-      ) : stats.anchorPassRate != null ? (
-        `${stats.anchorPassRate}% anchors passing`
-      ) : (
-        "—"
-      )}
-    </span>
-  );
+      </HintBadge>
+    ) : ruleSetsState.status === "error" ? (
+      <HintBadge>—</HintBadge>
+    ) : (
+      <HintBadge>
+        {ruleSetsState.value.filter((r) => r.status === "active").length} active
+      </HintBadge>
+    );
 
-  const legendsBadge = (
-    <span className="text-xs font-medium px-2 py-0.5 rounded-full border border-border bg-muted text-muted-foreground whitespace-nowrap">
-      {legendsLoading ? (
+  const reviewHint =
+    reviewState.status === "loading" ? (
+      <HintBadge>
         <Spinner />
-      ) : stats.legendsError ? (
-        "—"
-      ) : (
-        `${stats.legendsComplete}/${stats.legendsTotal} complete`
-      )}
-    </span>
-  );
+      </HintBadge>
+    ) : reviewState.status === "error" ? (
+      <HintBadge>—</HintBadge>
+    ) : reviewState.value > 0 ? (
+      <HintBadge tone="alert">{reviewState.value} pending</HintBadge>
+    ) : (
+      <HintBadge tone="ok">Clear</HintBadge>
+    );
 
-  // ---------------------------------------------------------------------------
+  const cohesionHint =
+    activeEvalState.status === "loading" ? (
+      <HintBadge>
+        <Spinner />
+      </HintBadge>
+    ) : activeEvalState.status === "error" ? (
+      <HintBadge>—</HintBadge>
+    ) : (
+      <HintBadge>{activeEvalState.value.slug}</HintBadge>
+    );
+
+  // -------------------------------------------------------------------------
   // Render
-  // ---------------------------------------------------------------------------
-
-  const pipelineStatus = stats.pipeline;
-  const totalQualifying = pipelineStatus?.total_qualifying_players ?? 0;
-  const totalComposite  = pipelineStatus?.players_with_composite ?? 0;
-  const playerCompletePct = totalQualifying > 0
-    ? Math.round((totalComposite / totalQualifying) * 100)
-    : 0;
-
-  const legendCompletePct = stats.legendsTotal > 0
-    ? Math.round((stats.legendsComplete / stats.legendsTotal) * 100)
-    : 0;
+  // -------------------------------------------------------------------------
 
   return (
-    <main id="hub-page" className="max-w-5xl mx-auto px-4 py-10">
-      {/* Page header */}
-      <div id="hub-header" className="mb-8">
-        <h1 id="hub-title" className="text-3xl font-bold tracking-tight">Cornerstone</h1>
-        <p id="hub-subtitle" className="text-muted-foreground mt-1">
-          Internal tool for building NBA player skill profiles.
+    <main
+      id="admin-hub-page"
+      className="max-w-6xl mx-auto px-4 py-10"
+    >
+      {/* Header — establishes that this is the admin landing page */}
+      <header id="admin-hub-header" className="mb-8">
+        <p
+          id="admin-hub-eyebrow"
+          className="text-[11px] uppercase tracking-[0.18em] font-semibold text-muted-foreground"
+        >
+          Cornerstone · Admin
         </p>
-      </div>
+        <h1
+          id="admin-hub-title"
+          className="text-3xl font-bold tracking-tight mt-1"
+        >
+          System overview
+        </h1>
+        <p
+          id="admin-hub-subtitle"
+          className="text-sm text-muted-foreground mt-2 max-w-2xl"
+        >
+          Health at a glance and quick navigation to every admin surface.
+        </p>
+      </header>
 
-      {/* Row 1 — Navigation cards (4 across) */}
-      <div id="hub-nav-cards" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div id="hub-card-pipeline">
-          <NavCard
+      {/* Row 1 — System health stat blocks */}
+      <section
+        id="admin-hub-health"
+        aria-labelledby="admin-hub-health-label"
+        className="mb-10"
+      >
+        <h2
+          id="admin-hub-health-label"
+          className="sr-only"
+        >
+          System health
+        </h2>
+        <div
+          id="admin-hub-health-row"
+          className="flex flex-col sm:flex-row gap-4"
+        >
+          <HealthStat
+            id="admin-hub-health-rulesets"
+            label="Rule Sets"
+            state={ruleSetStat}
+            accentRail="bg-sky-400"
+          />
+          <HealthStat
+            id="admin-hub-health-eval-version"
+            label="Active Evaluation Version"
+            state={evalVersionStat}
+            accentRail="bg-violet-400"
+          />
+          <HealthStat
+            id="admin-hub-health-review"
+            label="Review Queue"
+            state={pendingReviewStat}
+            tone={reviewTone}
+            accentRail={
+              reviewTone === "alert"
+                ? "bg-amber-400"
+                : reviewTone === "ok"
+                  ? "bg-emerald-400"
+                  : "bg-neutral-300"
+            }
+          />
+        </div>
+      </section>
+
+      {/* Row 2 — Admin Surface navigation */}
+      <section
+        id="admin-hub-surfaces"
+        aria-labelledby="admin-hub-surfaces-label"
+      >
+        <div className="flex items-baseline justify-between mb-4">
+          <h2
+            id="admin-hub-surfaces-label"
+            className="text-sm font-semibold uppercase tracking-wider text-muted-foreground"
+          >
+            Admin Surfaces
+          </h2>
+        </div>
+
+        <div
+          id="admin-hub-surfaces-grid"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+        >
+          <AdminSurfaceCard
+            id="admin-hub-card-rulesets"
+            href="/admin/rulesets"
+            title="Rule Sets"
+            description="Manage Rule Sets, edit drafts, and publish new versions."
+            glyph="R"
+            hint={ruleSetsHint}
+          />
+          <AdminSurfaceCard
+            id="admin-hub-card-cohesion-calibration"
+            href="/admin/cohesion-calibration"
+            title="Cohesion Calibration"
+            description="Tune the active Evaluation Version: weights, formulas, composites."
+            glyph="C"
+            hint={cohesionHint}
+          />
+          <AdminSurfaceCard
+            id="admin-hub-card-calibration"
+            href="/admin/calibration"
+            title="Skill Calibration"
+            description="Edit stat-to-skill thresholds and anchor players."
+            glyph="S"
+          />
+          <AdminSurfaceCard
+            id="admin-hub-card-pipeline"
             href="/admin/pipeline"
             title="Pipeline"
-            description="Run stat mapping and Claude assessment"
-            icon="▶"
-            badge={pipelineBadge}
+            description="Fetch NBA stats, run skill evaluation, generate composites."
+            glyph="P"
           />
-        </div>
-        <div id="hub-card-review">
-          <NavCard
+          <AdminSurfaceCard
+            id="admin-hub-card-review"
             href="/admin/review"
             title="Review Queue"
-            description="Resolve flagged skill assessments"
-            icon="📋"
-            badge={reviewBadge}
+            description="Resolve flagged disagreements between stats and Claude ratings."
+            glyph="Q"
+            hint={reviewHint}
           />
-        </div>
-        <div id="hub-card-calibration">
-          <NavCard
-            href="/admin/calibration"
-            title="Calibration"
-            description="Tune skill classification thresholds"
-            icon="⚙"
-            badge={anchorBadge}
-          />
-        </div>
-        <div id="hub-card-legends">
-          <NavCard
+          <AdminSurfaceCard
+            id="admin-hub-card-legends"
             href="/admin/legends"
             title="Legends"
-            description="Profile all-time greats"
-            icon="★"
-            badge={legendsBadge}
+            description="Curate all-time greats and their 21-skill profiles."
+            glyph="L"
           />
         </div>
-      </div>
-
-      {/* Row 2 — Status summary (3 stat blocks) */}
-      <div id="hub-stats-row" className="flex flex-col sm:flex-row gap-4">
-        <div id="hub-stat-players">
-          <StatBlock
-            label="Current Players"
-            value={
-              pipelineLoading ? (
-                <Spinner />
-              ) : (
-                `${totalComposite} / ${totalQualifying} profiles complete`
-              )
-            }
-            detail={pipelineLoading ? undefined : `${playerCompletePct}%`}
-            progress={pipelineLoading ? null : playerCompletePct}
-          />
-        </div>
-
-        <div id="hub-stat-legends">
-          <StatBlock
-            label="Legends"
-            value={
-              legendsLoading ? (
-                <Spinner />
-              ) : (
-                `${stats.legendsComplete} / ${stats.legendsTotal} profiled`
-              )
-            }
-            detail={legendsLoading ? undefined : `${legendCompletePct}%`}
-            progress={legendsLoading ? null : legendCompletePct}
-          />
-        </div>
-
-        <div id="hub-stat-review">
-          <StatBlock
-            label="Review Queue"
-            value={
-              reviewLoading || pipelineLoading ? (
-                <Spinner />
-              ) : (
-                `${stats.pendingReview ?? "—"} pending`
-              )
-            }
-            detail={
-              !pipelineLoading && pipelineStatus
-                ? (() => {
-                    const autoAccepted = stats.autoAccepted ?? 0;
-                    // Errors = flags that are neither pending nor auto-accepted
-                    const errors = Math.max(
-                      0,
-                      pipelineStatus.total_flags - (pipelineStatus.unresolved_flags ?? 0) - autoAccepted
-                    );
-                    return `${autoAccepted} auto-accepted · ${errors} errors`;
-                  })()
-                : undefined
-            }
-          />
-        </div>
-      </div>
+      </section>
     </main>
   );
 }
