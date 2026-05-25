@@ -33,10 +33,6 @@ type LoadState<T> =
   | { status: "ready"; value: T }
   | { status: "error" };
 
-function initialLoading<T>(): LoadState<T> {
-  return { status: "loading" };
-}
-
 // ---------------------------------------------------------------------------
 // Small UI primitives — kept inline to avoid a new component library.
 // ---------------------------------------------------------------------------
@@ -196,11 +192,11 @@ function HintBadge({
 export default function AdminHubPage() {
   // Each data source has its own LoadState so badges resolve independently.
   const [ruleSetsState, setRuleSetsState] =
-    useState<LoadState<RuleSetSummary[]>>(initialLoading);
+    useState<LoadState<RuleSetSummary[]>>({ status: "loading" });
   const [activeEvalState, setActiveEvalState] =
-    useState<LoadState<EvaluationVersion>>(initialLoading);
+    useState<LoadState<EvaluationVersion>>({ status: "loading" });
   const [reviewState, setReviewState] =
-    useState<LoadState<number>>(initialLoading);
+    useState<LoadState<number>>({ status: "loading" });
 
   useEffect(() => {
     listRuleSets()
