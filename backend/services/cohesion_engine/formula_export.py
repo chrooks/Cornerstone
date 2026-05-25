@@ -76,9 +76,11 @@ def export_formulas(coefficients: dict[str, float]) -> dict[str, dict[str, Any]]
             "depends_on": [],
         },
         "finishing": {
+            # crafty_finisher now weighted by finishing_crafty_weight (default 1.3).
+            # high_flyer stays at implicit 1.0.
             "factors": [
+                _skill("crafty_finisher", c.get("finishing_crafty_weight", 1.0)),
                 _skill("high_flyer"),
-                _skill("crafty_finisher"),
             ],
             "amplifiers": [],
             "depends_on": [],
@@ -116,24 +118,28 @@ def export_formulas(coefficients: dict[str, float]) -> dict[str, dict[str, Any]]
         },
         # ── Step 2: paint_touch — amplifier on entire sum ────────────
         #
-        # finishing_mult = max(1.0, 1.0 + scale * raw_finishing)
-        # raw_paint_touch = finishing_mult * (driver + vs + lpp + mpp)
+        # finishing_mult = max(0.9, 0.9 + scale * raw_finishing)  ← engine math: max(floor, floor + scale*src)
+        # raw_paint_touch = finishing_mult * (driver + vs + lpp + mpp + oreb_term)
         "paint_touch": {
             "factors": [
                 _skill("driver"),
                 _skill("vertical_spacer", c["paint_touch_vertical_spacer"]),
                 _skill("low_post_player"),
                 _skill("mid_post_player", c["paint_touch_mid_post"]),
+                _skill("offensive_rebounder", c.get("paint_touch_oreb", 0.0)),
             ],
             "amplifiers": [
-                _amplifier("finishing", scale=c["paint_touch_finishing_scale"]),
+                _amplifier("finishing", scale=c["paint_touch_finishing_scale"], floor=0.9),
             ],
             "depends_on": ["finishing"],
         },
         # ── Step 3: independent composites ───────────────────────────
+        # ball_security expanded from single-skill proxy to 3-skill model.
         "ball_security": {
             "factors": [
                 _skill("passer"),
+                _skill("pnr_ball_handler", c.get("ball_security_pnr_handler", 0.0)),
+                _skill("driver", c.get("ball_security_driver", 0.0)),
             ],
             "amplifiers": [],
             "depends_on": [],
@@ -166,41 +172,36 @@ def export_formulas(coefficients: dict[str, float]) -> dict[str, dict[str, Any]]
             ],
             "depends_on": [],
         },
-        # transition:
-        #   passer_mult = max(1.0, 1.0 + 0.2 * passer)
-        #   raw = tt * passer_mult + hf + driver + sus
-        #
-        # Amplifier applies only to factor[0] (transition_threat) and sources
-        # from a single skill.
+        # transition: multiplicative passer amplifier DROPPED (was double-counting synergies).
+        # Now flat additive: transition_passer * passer and transition_off_dribble * ods.
+        # Fixes latent bug: passer=ATG, transition_threat=None → now contributes positively.
         "transition": {
             "factors": [
                 _skill("transition_threat"),
                 _skill("high_flyer", c["transition_high_flyer"]),
                 _skill("driver", c["transition_driver"]),
                 _skill("spot_up_shooter", c["transition_spot_up"]),
+                _skill("off_dribble_shooter", c.get("transition_off_dribble", 0.0)),
+                _skill("passer", c.get("transition_passer", 0.0)),
             ],
-            "amplifiers": [
-                _amplifier(
-                    source={"skills": ["passer"]},
-                    scale=c["transition_passer_scale"],
-                    applies_to=[0],
-                ),
-            ],
+            "amplifiers": [],
             "depends_on": [],
         },
         # ── Step 4: off-ball impact ──────────────────────────────────
+        # Two new additive terms: movement_shooter gravity and screen_setter off-screen.
         # cutting_mult = max(1.0, 1.0 + 0.08 * raw_finishing)
-        # raw = raw_spacing + cutter * cutting_mult + passer * 0.3
-        #
-        # Amplifier applies only to factor[1] (cutter) from composite finishing.
+        # Amplifier now applies to factor[3] (cutter) — reindexed after new terms.
+        # raw = spacing + mv_bonus*movement_shooter + ss_bonus*screen_setter + cutter*mult + passer*0.3
         "off_ball_impact": {
             "factors": [
                 _composite("spacing"),
+                _skill("movement_shooter", c.get("off_ball_movement_bonus", 0.0)),
+                _skill("screen_setter", c.get("off_ball_screen_setter", 0.0)),
                 _skill("cutter"),
                 _skill("passer", c["off_ball_passer"]),
             ],
             "amplifiers": [
-                _amplifier("finishing", scale=c["off_ball_finishing_scale"], applies_to=[1]),
+                _amplifier("finishing", scale=c["off_ball_finishing_scale"], applies_to=[3]),
             ],
             "depends_on": ["spacing", "finishing"],
         },
@@ -216,13 +217,13 @@ def export_formulas(coefficients: dict[str, float]) -> dict[str, dict[str, Any]]
             "depends_on": [],
         },
         # ── Step 6: shot creation ────────────────────────────────────
-        # raw = 0.6*pnr_orch + 0.5*passer + 0.7*ods + iso + 0.3*spacing + 0.5*pt
+        # isolation_scorer now uses explicit shot_creation_iso coefficient (was implicit 1.0).
         "shot_creation": {
             "factors": [
                 _composite("pnr_orchestration", c["shot_creation_pnr_orchestration"]),
                 _skill("passer", c["shot_creation_passer"]),
                 _skill("off_dribble_shooter", c["shot_creation_off_dribble"]),
-                _skill("isolation_scorer"),
+                _skill("isolation_scorer", c.get("shot_creation_iso", 1.0)),
                 _composite("spacing", c["shot_creation_spacing"]),
                 _composite("paint_touch", c["shot_creation_paint_touch"]),
             ],

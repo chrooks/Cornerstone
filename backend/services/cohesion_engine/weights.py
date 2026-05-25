@@ -55,13 +55,22 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "pnr_ball_handler_passer": 0.3,           # passing amplifies PnR handling (reading the defense)
     "pnr_ball_handler_driver": 0.3,           # driving ability to turn the corner off screens
     "pnr_ball_handler_off_dribble": 0.2,      # pull-up shooting off PnR creates dual threat
-    "transition_passer_scale": 0.2,           # transition passing as fraction of transition composite
     "transition_high_flyer": 0.7,             # athleticism dominates transition scoring
     "transition_driver": 0.3,                 # driving adds secondary transition value
     "transition_spot_up": 0.2,                # catch-and-shoot in transition (trailing shooter)
     "perimeter_defense_versatile_defender": 0.7,  # versatile defender dominates perimeter D composite
     "interior_defense_versatile_defender": 0.25,  # versatile defender's partial interior D credit
     "interior_defense_rebounder": 0.3,        # rebounding contributes to interior D score
+    # ── Audit additions (2026-05-25) ─────────────────────────────────────────
+    "off_ball_movement_bonus": 0.25,          # movement shooter gravity beyond spacing value
+    "off_ball_screen_setter": 0.2,            # off-screen action distinct from PnR screening
+    "paint_touch_oreb": 0.4,                  # putback/offensive rebounding as rim pressure
+    "finishing_crafty_weight": 1.3,           # crafty finisher draws fouls; higher PPP than high_flyer
+    "transition_off_dribble": 0.18,           # pull-up transition value (Lillard/Curry archetype)
+    "shot_creation_iso": 1.0,                 # ISO coefficient explicit (was implicit 1.0)
+    "ball_security_pnr_handler": 0.45,        # PnR ball-handling pressure → lost-ball avoidance
+    "ball_security_driver": 0.35,             # drive turnovers are major live-ball TO source
+    "transition_passer": 0.4,                 # flat additive passing bonus (fixes outlet-passer bug)
 }
 
 # Canonical list of the 13 composite dimensions a player is scored on.
@@ -85,20 +94,21 @@ COMPOSITE_NAMES: tuple[str, ...] = (
 
 # Maximum raw score achievable per composite (all contributing skills at ATG).
 # Used as the denominator when normalizing raw composites to 0-10 scale.
-# These are hand-calculated from the composite formulas in composites.py.
+# Recomputed programmatically after 2026-05-25 audit (compute_raw_composites
+# with all skills at All-Time Great, using COMPOSITE_COEFFICIENTS defaults).
 THEORETICAL_MAX: dict[str, float] = {
     "spacing": 40.0,
-    "finishing": 32.0,
-    "paint_touch": 187.968,
+    "finishing": 36.8,
+    "paint_touch": 227.56479999999996,
     "post_game": 27.2,
     "pnr_screener": 108.8,
-    "off_ball_impact": 101.76,
-    "shot_creation": 158.464,
+    "off_ball_impact": 115.104,
+    "shot_creation": 178.26239999999999,
     "pnr_orchestration": 28.8,
-    "ball_security": 16.0,
+    "ball_security": 28.799999999999997,
     "defensive_rebounding": 16.0,
     "offensive_rebounding": 16.0,
-    "transition": 86.4,
+    "transition": 44.480000000000004,
     "perimeter_defense": 27.2,
     "interior_defense": 24.8,
 }

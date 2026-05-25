@@ -26,29 +26,48 @@ def test_composite_coefficients_match_resolved_formulas():
     assert weights.COMPOSITE_COEFFICIENTS["post_game_mid_post"] == 0.7
     assert weights.COMPOSITE_COEFFICIENTS["pnr_screener_secondary_scale"] == 0.15
     assert weights.COMPOSITE_COEFFICIENTS["shot_creation_spacing"] == 0.3
-    assert weights.COMPOSITE_COEFFICIENTS["transition_passer_scale"] == 0.2
     assert weights.COMPOSITE_COEFFICIENTS["perimeter_defense_versatile_defender"] == 0.7
     assert weights.COMPOSITE_COEFFICIENTS["interior_defense_versatile_defender"] == 0.25
     assert weights.COMPOSITE_COEFFICIENTS["interior_defense_rebounder"] == 0.3
+    # ── Audit additions (2026-05-25) ────────────────────────────────────
+    assert weights.COMPOSITE_COEFFICIENTS["off_ball_movement_bonus"] == 0.25
+    assert weights.COMPOSITE_COEFFICIENTS["off_ball_screen_setter"] == 0.2
+    assert weights.COMPOSITE_COEFFICIENTS["paint_touch_oreb"] == 0.4
+    assert weights.COMPOSITE_COEFFICIENTS["finishing_crafty_weight"] == 1.3
+    assert weights.COMPOSITE_COEFFICIENTS["transition_off_dribble"] == 0.18
+    assert weights.COMPOSITE_COEFFICIENTS["shot_creation_iso"] == 1.0
+    assert weights.COMPOSITE_COEFFICIENTS["ball_security_pnr_handler"] == 0.45
+    assert weights.COMPOSITE_COEFFICIENTS["ball_security_driver"] == 0.35
+    assert weights.COMPOSITE_COEFFICIENTS["transition_passer"] == 0.4
+    # Orphan check: removed in 2026-05-25 audit after passer_transition_mult dropped.
+    assert "transition_passer_scale" not in weights.COMPOSITE_COEFFICIENTS
 
 
 def test_theoretical_maxima_match_impl_spec_fallback_table():
-    assert weights.THEORETICAL_MAX == {
+    # Recomputed programmatically after 2026-05-25 audit.
+    # Changes vs prior table:
+    #   finishing: 32.0 → 36.8 (crafty_finisher now weighted 1.3x)
+    #   paint_touch: 187.968 → 227.565 (floor 0.9→0.9 base, oreb term added)
+    #   off_ball_impact: 101.76 → 115.104 (movement_shooter + screen_setter terms)
+    #   shot_creation: 158.464 → 178.262 (paint_touch change cascades)
+    #   ball_security: 16.0 → 28.8 (pnr_handler + driver terms added)
+    #   transition: 86.4 → 44.48 (passer_mult dropped; flat additive passer/ods)
+    assert weights.THEORETICAL_MAX == pytest.approx({
         "spacing": 40.0,
-        "finishing": 32.0,
-        "paint_touch": 187.968,
+        "finishing": 36.8,
+        "paint_touch": 227.56479999999996,
         "post_game": 27.2,
         "pnr_screener": 108.8,
-        "off_ball_impact": 101.76,
-        "shot_creation": 158.464,
+        "off_ball_impact": 115.104,
+        "shot_creation": 178.26239999999999,
         "pnr_orchestration": 28.8,
-        "ball_security": 16.0,
+        "ball_security": 28.799999999999997,
         "defensive_rebounding": 16.0,
         "offensive_rebounding": 16.0,
-        "transition": 86.4,
+        "transition": 44.480000000000004,
         "perimeter_defense": 27.2,
         "interior_defense": 24.8,
-    }
+    }, rel=1e-6)
 
 
 def test_bell_curve_tables_and_peak_shifts_match_impl_spec():

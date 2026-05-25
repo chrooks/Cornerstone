@@ -64,14 +64,18 @@ def test_compute_raw_composites_matches_validated_formula_order():
     assert raw["finishing"] == pytest.approx(9.0)
     assert raw["defensive_rebounding"] == pytest.approx(4.0)
     assert raw["offensive_rebounding"] == pytest.approx(1.0)
-    assert raw["paint_touch"] == pytest.approx(29.24)
+    # paint_touch: floor changed 1.0→0.9, offensive_rebounder term added
+    assert raw["paint_touch"] == pytest.approx(27.54)
     assert raw["post_game"] == pytest.approx(6.6)
     assert raw["pnr_screener"] == pytest.approx(9.8)
-    assert raw["transition"] == pytest.approx(37.5)
+    # transition: passer_mult dropped; flat additive transition_passer + transition_off_dribble added
+    assert raw["transition"] == pytest.approx(11.9)
     assert raw["perimeter_defense"] == pytest.approx(4.7)
     assert raw["interior_defense"] == pytest.approx(9.45)
     assert raw["off_ball_impact"] == pytest.approx(24.18)
-    assert raw["shot_creation"] == pytest.approx(36.11)
+    # shot_creation: iso now explicit, paint_touch changed
+    assert raw["shot_creation"] == pytest.approx(35.26)
+    # ball_security: expanded to 3 skills (passer=ATG gives same value since no pnr/driver)
     assert raw["ball_security"] == pytest.approx(16.0)
 
 

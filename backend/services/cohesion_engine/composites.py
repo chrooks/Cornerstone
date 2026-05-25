@@ -91,7 +91,7 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         + _tv("spot_up_shooter")
         + c["spacing_off_dribble"] * _tv("off_dribble_shooter")
     )
-    raw_finishing = _tv("high_flyer") + _tv("crafty_finisher")
+    raw_finishing = c.get("finishing_crafty_weight", 1.0) * _tv("crafty_finisher") + _tv("high_flyer")
     raw_defensive_rebounding = _tv("rebounder")
     raw_offensive_rebounding = _tv("offensive_rebounder")
     raw_perimeter_defense = (
@@ -105,16 +105,28 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
     )
 
     # Step 2: rim pressure uses raw finishing as an amplifier.
-    finishing_mult = max(1.0, 1.0 + c["paint_touch_finishing_scale"] * raw_finishing)
+    # Floor changed 1.0 → 0.9: non-finishers who generate paint touches they
+    # can't convert are penalized (research-backed). Formula matches the declarative
+    # engine convention: max(floor, floor + scale * source), so floor=0.9 means
+    # a zero-finishing player multiplies paint touch by 0.9 (10% penalty).
+    finishing_mult = max(0.9, 0.9 + c["paint_touch_finishing_scale"] * raw_finishing)
     raw_paint_touch = finishing_mult * (
         _tv("driver")
         + c["paint_touch_vertical_spacer"] * _tv("vertical_spacer")
         + _tv("low_post_player")
         + c["paint_touch_mid_post"] * _tv("mid_post_player")
+        + c.get("paint_touch_oreb", 0.0) * _tv("offensive_rebounder")
     )
 
     # Step 3: independent composites (post game, PnR screener, transition, ball security).
-    raw_ball_security = _tv("passer")
+    # ball_security expanded from single-skill proxy to 3-skill model:
+    # passer = bad-pass avoidance, pnr_handler = lost-ball avoidance under pressure,
+    # driver = drive turnover avoidance (live-ball TO source).
+    raw_ball_security = (
+        _tv("passer")
+        + c.get("ball_security_pnr_handler", 0.0) * _tv("pnr_ball_handler")
+        + c.get("ball_security_driver", 0.0) * _tv("driver")
+    )
     raw_post_game = (
         _tv("low_post_player")
         + c["post_game_mid_post"] * _tv("mid_post_player")
@@ -126,21 +138,25 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         * (_tv("vertical_spacer") + _tv("spot_up_shooter")),
     )
     raw_pnr_screener = _tv("pnr_finisher") * pnr_secondary_mult + _tv("screen_setter")
-    passer_transition_mult = max(
-        1.0,
-        1.0 + c["transition_passer_scale"] * _tv("passer"),
-    )
+    # transition: drop multiplicative passer amplifier (was double-counting vs synergies).
+    # Replaces passer_mult with flat additive term. Fixes latent bug where a great
+    # outlet-passer with no transition_threat contributed zero transition value.
     raw_transition = (
-        _tv("transition_threat") * passer_transition_mult
+        _tv("transition_threat")
         + c["transition_high_flyer"] * _tv("high_flyer")
         + c["transition_driver"] * _tv("driver")
         + c["transition_spot_up"] * _tv("spot_up_shooter")
+        + c.get("transition_off_dribble", 0.0) * _tv("off_dribble_shooter")
+        + c.get("transition_passer", 0.0) * _tv("passer")
     )
 
     # Step 4: off-ball impact references raw spacing and raw finishing.
+    # Two new additive terms added: movement_shooter gravity and screen_setter off-screen actions.
     cutting_finishing_mult = max(1.0, 1.0 + c["off_ball_finishing_scale"] * raw_finishing)
     raw_off_ball_impact = (
         raw_spacing
+        + c.get("off_ball_movement_bonus", 0.0) * _tv("movement_shooter")
+        + c.get("off_ball_screen_setter", 0.0) * _tv("screen_setter")
         + _tv("cutter") * cutting_finishing_mult
         + _tv("passer") * c["off_ball_passer"]
     )
@@ -154,11 +170,12 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
     )
 
     # Step 6: shot creation references raw spacing, raw paint touch, and raw pnr orchestration.
+    # isolation_scorer now uses an explicit coefficient (was implicit 1.0) for API tunability.
     raw_shot_creation = (
         c["shot_creation_pnr_orchestration"] * raw_pnr_orchestration
         + c["shot_creation_passer"] * _tv("passer")
         + c["shot_creation_off_dribble"] * _tv("off_dribble_shooter")
-        + _tv("isolation_scorer")
+        + c.get("shot_creation_iso", 1.0) * _tv("isolation_scorer")
         + c["shot_creation_spacing"] * raw_spacing
         + c["shot_creation_paint_touch"] * raw_paint_touch
     )
