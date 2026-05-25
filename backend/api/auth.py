@@ -176,6 +176,44 @@ def require_admin(f: F) -> F:
     return decorated  # type: ignore[return-value]
 
 
+def is_admin_request() -> bool:
+    """
+    Non-raising admin check for endpoints that conditionally enrich responses.
+
+    Returns True only when the request carries a Bearer token that verifies
+    against the configured JWT algorithm AND the resolved user_id has an admin
+    role in the user_roles table. Returns False on any failure (missing header,
+    invalid token, missing role, role-lookup error) so callers can degrade
+    gracefully to a public projection without leaking 401/403 to clients that
+    legitimately should receive the stripped public response.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return False
+
+    token = auth_header.split(" ", 1)[1]
+
+    try:
+        payload = _verify_jwt(token)
+        user_id: str = payload["sub"]
+    except (jwt.InvalidTokenError, RuntimeError, KeyError):
+        return False
+
+    try:
+        res = (
+            get_supabase()
+            .table("user_roles")
+            .select("role")
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception:
+        return False
+
+    return bool(res.data)
+
+
 def require_user(f: F) -> F:
     """
     Decorator that enforces ordinary Supabase user authentication.

@@ -14,7 +14,7 @@ from uuid import UUID
 
 from flask import Blueprint, jsonify, request
 
-from api.auth import require_admin
+from api.auth import is_admin_request, require_admin
 from services.cohesion_engine.engine import CohesionEngine
 from services.evaluation_versions import repo, validator
 
@@ -40,6 +40,38 @@ def _version_dict(v) -> dict:
     }
 
 
+def _public_payload_projection(payload: dict) -> dict:
+    """
+    Strip an Evaluation Version payload down to fields safe to expose to
+    unauthenticated callers. The public Builder reads `values.tier_values`
+    (skill→numeric mapping), `values.theoretical_max` (per-trait normalization
+    ceilings), and `taxonomy.subscore_tree` (Impact Trait → Lineup Subscore
+    mapping). Everything else — formulas, coefficients, weights, full taxonomy
+    metadata — stays admin-only.
+    """
+    values = payload.get("values") or {}
+    taxonomy = payload.get("taxonomy") or {}
+    return {
+        "values": {
+            "tier_values": values.get("tier_values", {}),
+            "theoretical_max": values.get("theoretical_max", {}),
+        },
+        "taxonomy": {
+            "subscore_tree": taxonomy.get("subscore_tree", []),
+        },
+    }
+
+
+def _public_version_dict(v) -> dict:
+    """Serialize an EvaluationVersion with payload stripped for public callers."""
+    return {
+        "id": v.id,
+        "slug": v.slug,
+        "status": v.status,
+        "payload": _public_payload_projection(v.payload),
+    }
+
+
 def _validate_uuid(value: str, label: str = "id") -> str | None:
     """Return None if valid UUID, or error message."""
     try:
@@ -50,13 +82,23 @@ def _validate_uuid(value: str, label: str = "id") -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Read endpoints (public)
+# Read endpoints
+#
+# `list` and `draft` are admin-only — they expose the full engine config
+# (composite formulas, coefficients, weights, full taxonomy) which is internal
+# IP and a probing surface for crafted-input attacks against the scoring model.
+#
+# `active` stays public but serves a stripped projection (tier_values,
+# theoretical_max, subscore_tree only) so the unauthenticated Builder can still
+# normalize Impact Traits. Admin callers with a valid Bearer token receive the
+# full payload for calibration surfaces.
 # ---------------------------------------------------------------------------
 
 
 @evaluation_versions_bp.route("", methods=["GET"])
+@require_admin
 def list_versions():
-    """List all Evaluation Versions, newest first."""
+    """List all Evaluation Versions, newest first (admin only)."""
     versions = repo.list_versions()
     return jsonify({
         "success": True,
@@ -67,12 +109,18 @@ def list_versions():
 
 @evaluation_versions_bp.route("/active", methods=["GET"])
 def get_active():
-    """Return the currently active Evaluation Version."""
+    """
+    Return the currently active Evaluation Version.
+
+    Public callers receive a stripped payload safe for the Builder. Admin
+    callers (valid Bearer token + admin role) receive the full payload.
+    """
     try:
         version = repo.get_active()
+        serialized = _version_dict(version) if is_admin_request() else _public_version_dict(version)
         return jsonify({
             "success": True,
-            "data": _version_dict(version),
+            "data": serialized,
             "error": None,
         })
     except Exception:
@@ -85,8 +133,9 @@ def get_active():
 
 
 @evaluation_versions_bp.route("/draft", methods=["GET"])
+@require_admin
 def get_draft():
-    """Return the current draft Evaluation Version, or null."""
+    """Return the current draft Evaluation Version, or null (admin only)."""
     draft = repo.get_draft()
     return jsonify({
         "success": True,
