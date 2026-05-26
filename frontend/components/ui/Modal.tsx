@@ -19,9 +19,18 @@ interface ModalProps {
   children: React.ReactNode;
   /** Maximum width class, e.g. "max-w-md". Defaults to max-w-lg. */
   maxWidthClass?: string;
+  /** Element id of the dialog's heading, wired to `aria-labelledby`. */
+  ariaLabelledBy?: string;
 }
 
-export function Modal({ id, open, onClose, children, maxWidthClass = "max-w-lg" }: ModalProps) {
+export function Modal({
+  id,
+  open,
+  onClose,
+  children,
+  maxWidthClass = "max-w-lg",
+  ariaLabelledBy,
+}: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape
@@ -62,6 +71,7 @@ export function Modal({ id, open, onClose, children, maxWidthClass = "max-w-lg" 
         id={id}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={ariaLabelledBy}
         className={cn(
           "w-full rounded-[6px] p-6",
           "border border-[#d9d0c9]",

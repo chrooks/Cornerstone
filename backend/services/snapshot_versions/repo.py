@@ -260,3 +260,61 @@ def reset_working_state_from_active(client=None) -> None:
     run_query(
         lambda: c.rpc("reset_working_state_from_active", {}).execute()
     )
+
+
+def reactivate_release(release_id: str, client=None) -> SnapshotRelease:
+    """Atomically reactivate a previously published Snapshot Release.
+
+    Calls reactivate_snapshot_release(p_release_id) Postgres RPC which
+    atomically flips the current active row to is_active=false and the
+    target to is_active=true (preserving data_cutoff_at). Then forces a
+    cohesion distribution cache rewarm so the new active Snapshot's
+    composites are used immediately.
+
+    Raises:
+        ValueError('release_not_found') if the target Release does not exist.
+        ValueError('not_published') if the target Release is not published.
+        ValueError('draft_in_flight') if any draft/review row is open.
+    """
+    c = client or _get_client()
+
+    try:
+        run_query(
+            lambda: c.rpc(
+                "reactivate_snapshot_release",
+                {"p_release_id": release_id},
+            ).execute()
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "release_not_found" in msg:
+            raise ValueError("release_not_found") from exc
+        if "not_published" in msg:
+            raise ValueError("not_published") from exc
+        if "draft_in_flight" in msg:
+            raise ValueError("draft_in_flight") from exc
+        raise
+
+    # Rewarm distribution cache against the freshly reactivated snapshot.
+    # _force_clear_distributions bypasses the draft-pin guard (mirrors publish).
+    try:
+        from services.cohesion_engine.composites import (
+            _force_clear_distributions,
+            ensure_distributions,
+        )
+        from services.evaluation_versions.repo import get_active
+        from services.players_service import CURRENT_SEASON
+
+        _force_clear_distributions()
+        active_version = get_active()
+        ensure_distributions(
+            CURRENT_SEASON,
+            active_version.payload.get("values", {}),
+            force=True,
+        )
+    except Exception:
+        logger.exception(
+            "Cache rewarm after reactivate failed — next evaluation will retry lazily"
+        )
+
+    return get_release(release_id, client=c)

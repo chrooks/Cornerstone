@@ -975,6 +975,12 @@ export function listSnapshotReleases(limit = 20): Promise<ApiResponse<SnapshotRe
   return apiFetch<SnapshotRelease[]>(`/api/snapshots/releases?limit=${limit}`);
 }
 
+export function reactivateSnapshotRelease(id: string): Promise<ApiResponse<SnapshotRelease>> {
+  return apiFetch<SnapshotRelease>(`/api/snapshots/releases/${id}/reactivate`, {
+    method: "POST",
+  });
+}
+
 export function getPipelineRun(runId: string): Promise<ApiResponse<PipelineRun>> {
   return apiFetch<PipelineRun>(`/api/pipeline/runs/${runId}`);
 }

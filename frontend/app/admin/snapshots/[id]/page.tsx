@@ -3,17 +3,20 @@
 /**
  * /admin/snapshots/[id] — Read-only Snapshot Release detail.
  *
- * 880px column. Shows ReleaseDetailCard only.
+ * 880px column. Shows ReleaseDetailCard + Reactivate Affordance for
+ * published, non-active Releases (#53).
  * Returns 404-style message for non-published IDs.
  */
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast, Toaster } from "sonner";
 import { cn } from "@/lib/utils";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, reactivateSnapshotRelease } from "@/lib/api";
 import type { ApiResponse, SnapshotRelease } from "@/lib/types";
 import { StateChip } from "../_components/StateChip";
+import { ReactivateModal } from "../_components/ReactivateModal";
 
 type LoadState =
   | { status: "loading" }
@@ -32,7 +35,14 @@ function Spinner({ className }: { className?: string }) {
   );
 }
 
-function ReleaseDetailCard({ release }: { release: SnapshotRelease }) {
+interface ReleaseDetailCardProps {
+  release: SnapshotRelease;
+  onReactivateClick: () => void;
+}
+
+function ReleaseDetailCard({ release, onReactivateClick }: ReleaseDetailCardProps) {
+  const canReactivate = release.status === "published" && !release.is_active;
+
   return (
     <section
       id="snapshot-detail-card"
@@ -100,13 +110,40 @@ function ReleaseDetailCard({ release }: { release: SnapshotRelease }) {
           <dd className="font-mono text-xs text-neutral-600">{release.id}</dd>
         </div>
       </dl>
+
+      {canReactivate && (
+        <div
+          id="snapshot-detail-reactivate-row"
+          className="mt-6 pt-6 border-t border-[#d9d0c9] flex items-center justify-between gap-4"
+        >
+          <p
+            id="snapshot-detail-reactivate-help"
+            className="text-xs text-neutral-500 leading-relaxed"
+          >
+            Roll back to this Release. The current active Snapshot will be deactivated.
+          </p>
+          <button
+            id="snapshot-detail-reactivate-btn"
+            type="button"
+            onClick={onReactivateClick}
+            className="shrink-0 text-xs font-semibold px-4 py-2 rounded-[4px] transition-colors
+              bg-[#ffa05c] text-[#0e0907] hover:bg-[#fe6d34]
+              focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-2"
+          >
+            Reactivate this Release
+          </button>
+        </div>
+      )}
     </section>
   );
 }
 
 export default function SnapshotDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
+  const [modalOpen, setModalOpen] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -123,8 +160,37 @@ export default function SnapshotDetailPage() {
       .catch(() => setLoadState({ status: "error" }));
   }, [id]);
 
+  const handleReactivateConfirm = async () => {
+    if (!id) return;
+    setIsReactivating(true);
+    try {
+      const res = await reactivateSnapshotRelease(id);
+      if (!res.success || !res.data) {
+        const code = res.error ?? "unknown_error";
+        const message =
+          code === "draft_in_flight"
+            ? "Cannot reactivate while a draft is open. Discard or publish the draft first."
+            : code === "not_published"
+              ? "Only published Releases can be reactivated."
+              : `Reactivation failed: ${code}`;
+        toast.error(message);
+        return;
+      }
+      toast.success(`Reactivated '${res.data.label}'`);
+      setModalOpen(false);
+      router.push(`/admin/snapshots/${res.data.id}`);
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+
+  const handleModalClose = useCallback(() => {
+    if (!isReactivating) setModalOpen(false);
+  }, [isReactivating]);
+
   return (
     <main id="snapshot-detail-page" className="max-w-[880px] mx-auto px-4 py-8">
+      <Toaster richColors position="top-right" />
       <div id="snapshot-detail-breadcrumb" className="flex items-center gap-2 text-xs text-neutral-500 mb-6">
         <Link href="/admin/snapshots" className="hover:text-[#0e0907] transition-colors">
           Snapshots
@@ -162,7 +228,20 @@ export default function SnapshotDetailPage() {
       )}
 
       {loadState.status === "ready" && (
-        <ReleaseDetailCard release={loadState.release} />
+        <>
+          <ReleaseDetailCard
+            release={loadState.release}
+            onReactivateClick={() => setModalOpen(true)}
+          />
+          <ReactivateModal
+            id="snapshot-detail-reactivate-modal"
+            open={modalOpen}
+            label={loadState.release.label}
+            onClose={handleModalClose}
+            onConfirm={handleReactivateConfirm}
+            isSubmitting={isReactivating}
+          />
+        </>
       )}
     </main>
   );

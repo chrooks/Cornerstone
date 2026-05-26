@@ -543,3 +543,92 @@ class TestResetWorkingState:
 
         client.rpc.assert_called_once()
         assert client.rpc.call_args[0][0] == "reset_working_state_from_active"
+
+
+# ---------------------------------------------------------------------------
+# Tests: reactivate_release (#53)
+# ---------------------------------------------------------------------------
+
+
+class TestReactivateRelease:
+    _RELEASE_ID = "bbbbbbbb-0000-0000-0000-000000000002"
+
+    def _wire_release_fetch(self, client, row):
+        (
+            client
+            .table.return_value
+            .select.return_value
+            .eq.return_value
+            .single.return_value
+            .execute.return_value
+        ) = _result(row)
+
+    def test_reactivate_calls_rpc_with_release_id(self):
+        from services.snapshot_versions import repo
+
+        client = MagicMock()
+        client.rpc.return_value.execute.return_value = _result(None)
+        self._wire_release_fetch(client, _make_published_row(id=self._RELEASE_ID))
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with patch("services.cohesion_engine.composites._force_clear_distributions"):
+                with patch("services.cohesion_engine.composites.ensure_distributions"):
+                    with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                        from services.cohesion_engine.engine import EvaluationVersion
+                        mock_active.return_value = EvaluationVersion(
+                            id="ev-1", slug="cohesion-v1", status="published",
+                            payload={"values": {}},
+                        )
+                        result = repo.reactivate_release(self._RELEASE_ID)
+
+        rpc_call = client.rpc.call_args
+        assert rpc_call[0][0] == "reactivate_snapshot_release"
+        assert rpc_call[0][1] == {"p_release_id": self._RELEASE_ID}
+        assert result.id == self._RELEASE_ID
+
+    def test_reactivate_rewarms_cache_in_order(self):
+        from services.snapshot_versions import repo
+
+        client = MagicMock()
+        client.rpc.return_value.execute.return_value = _result(None)
+        self._wire_release_fetch(client, _make_published_row(id=self._RELEASE_ID))
+
+        call_order = []
+        with patch.object(repo, "_get_client", return_value=client):
+            with patch(
+                "services.cohesion_engine.composites._force_clear_distributions",
+                side_effect=lambda: call_order.append("clear"),
+            ):
+                with patch(
+                    "services.cohesion_engine.composites.ensure_distributions",
+                    side_effect=lambda *a, **kw: call_order.append("ensure"),
+                ):
+                    with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                        from services.cohesion_engine.engine import EvaluationVersion
+                        mock_active.return_value = EvaluationVersion(
+                            id="ev-1", slug="cohesion-v1", status="published",
+                            payload={"values": {}},
+                        )
+                        repo.reactivate_release(self._RELEASE_ID)
+
+        assert call_order == ["clear", "ensure"]
+
+    @pytest.mark.parametrize(
+        "rpc_message,expected_code",
+        [
+            ("ERROR: not_published", "not_published"),
+            ("ERROR: draft_in_flight", "draft_in_flight"),
+            ("ERROR: release_not_found", "release_not_found"),
+        ],
+    )
+    def test_reactivate_translates_rpc_errors(self, rpc_message, expected_code):
+        from services.snapshot_versions import repo
+
+        client = MagicMock()
+        client.rpc.return_value.execute.side_effect = Exception(rpc_message)
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with pytest.raises(ValueError) as exc_info:
+                repo.reactivate_release(self._RELEASE_ID)
+
+        assert str(exc_info.value) == expected_code

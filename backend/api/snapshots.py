@@ -264,6 +264,37 @@ def publish_draft(draft_id: str):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/snapshots/releases/<release_id>/reactivate (#53)
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/releases/<release_id>/reactivate", methods=["POST"])
+@require_admin
+def reactivate_release(release_id: str):
+    """Atomically reactivate a previously published Snapshot Release.
+
+    Wraps repo.reactivate_release which calls the reactivate_snapshot_release
+    Postgres RPC and forces a cohesion distribution cache rewarm.
+    """
+    uuid_err = _validate_uuid(release_id, "release_id")
+    if uuid_err:
+        return _err(uuid_err, 400)
+    try:
+        release = repo.reactivate_release(release_id)
+        return _ok(_release_dict(release))
+    except ValueError as exc:
+        code = str(exc)
+        if code == "release_not_found":
+            return _err(code, 404)
+        if code == "draft_in_flight":
+            return _err(code, 409)
+        return _err(code, 400)
+    except Exception:
+        logger.exception("Failed to reactivate Snapshot Release %s", release_id)
+        return _err("Failed to reactivate Snapshot Release", 500)
+
+
+# ---------------------------------------------------------------------------
 # POST /api/snapshots/reset-working-state
 # ---------------------------------------------------------------------------
 

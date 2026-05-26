@@ -333,3 +333,88 @@ class TestPublishInvalidatesCache:
         # The cache management happens inside repo.publish_draft which is mocked,
         # so verify the endpoint delegates correctly (status 200)
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# POST /api/snapshots/releases/<id>/reactivate (#53)
+# ---------------------------------------------------------------------------
+
+
+class TestReactivateReleaseEndpoint:
+    _RELEASE_ID = "bbbbbbbb-0000-0000-0000-000000000002"
+
+    def test_reactivate_requires_admin(self, anon_client):
+        resp = anon_client.post(
+            f"/api/snapshots/releases/{self._RELEASE_ID}/reactivate"
+        )
+        assert resp.status_code == 401
+
+    def test_reactivate_validates_uuid(self, admin_client):
+        resp = admin_client.post(
+            "/api/snapshots/releases/not-a-uuid/reactivate",
+            headers=admin_client.auth_header,
+        )
+        assert resp.status_code == 400
+
+    def test_reactivate_happy_path(self, admin_client):
+        from services.snapshot_versions import repo
+
+        reactivated = _fake_release(status="published", is_active=True)
+        with patch.object(repo, "reactivate_release", return_value=reactivated) as spy:
+            resp = admin_client.post(
+                f"/api/snapshots/releases/{self._RELEASE_ID}/reactivate",
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["success"] is True
+        assert body["data"]["is_active"] is True
+        spy.assert_called_once_with(self._RELEASE_ID)
+
+    def test_reactivate_returns_400_when_not_published(self, admin_client):
+        from services.snapshot_versions import repo
+
+        with patch.object(
+            repo,
+            "reactivate_release",
+            side_effect=ValueError("not_published"),
+        ):
+            resp = admin_client.post(
+                f"/api/snapshots/releases/{self._RELEASE_ID}/reactivate",
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 400
+        assert resp.get_json()["error"] == "not_published"
+
+    def test_reactivate_returns_409_when_draft_in_flight(self, admin_client):
+        from services.snapshot_versions import repo
+
+        with patch.object(
+            repo,
+            "reactivate_release",
+            side_effect=ValueError("draft_in_flight"),
+        ):
+            resp = admin_client.post(
+                f"/api/snapshots/releases/{self._RELEASE_ID}/reactivate",
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 409
+        assert resp.get_json()["error"] == "draft_in_flight"
+
+    def test_reactivate_returns_404_when_release_not_found(self, admin_client):
+        from services.snapshot_versions import repo
+
+        with patch.object(
+            repo,
+            "reactivate_release",
+            side_effect=ValueError("release_not_found"),
+        ):
+            resp = admin_client.post(
+                f"/api/snapshots/releases/{self._RELEASE_ID}/reactivate",
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 404
