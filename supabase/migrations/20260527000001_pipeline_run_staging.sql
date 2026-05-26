@@ -66,9 +66,28 @@ ALTER TABLE public.pipeline_runs
   ADD COLUMN IF NOT EXISTS committed_at TIMESTAMPTZ;
 
 -- ---------------------------------------------------------------------------
+-- 3a. Backfill committed_at for historical successful runs.
+--
+--     Pre-M1, every `status='success'` run wrote its results directly to the
+--     live tables (no staging layer existed). Conceptually those runs are
+--     "already committed" — their effects are realized in draft_skill_profiles /
+--     draft_skill_flags. Set `committed_at = COALESCE(finished_at, created_at)`
+--     so they are excluded from the partial unique index predicate below.
+--
+--     Without this backfill, the partial unique index creation in step 6 fails
+--     with SQLSTATE 23505 on any release that has more than one historical
+--     successful run.
+-- ---------------------------------------------------------------------------
+UPDATE public.pipeline_runs
+   SET committed_at = COALESCE(finished_at, started_at)
+ WHERE status = 'success'
+   AND committed_at IS NULL;
+
+-- ---------------------------------------------------------------------------
 -- 6. Partial unique index: at most one pending-commit run per draft release.
 --    A run is "pending commit" when status='success' AND committed_at IS NULL.
 --    Discarded, error, and committed runs are excluded from the predicate.
+--    Historical successful runs are backfilled above so they do not collide.
 -- ---------------------------------------------------------------------------
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pipeline_runs_one_pending_commit
   ON public.pipeline_runs (snapshot_release_id)
