@@ -303,6 +303,14 @@ def save_threshold_edit(skill_name: str):
     if not skill_name or len(skill_name) > 100:
         return _err("Invalid skill_name")
 
+    # Allowlist check against the canonical 21-skill taxonomy.
+    # Without this, a typo (or worse, a malicious caller) could create a
+    # threshold_edit run whose params reference a Skill that does not exist,
+    # which never lands cleanly in draft_skill_thresholds on commit.
+    from services.skills import ALL_SKILLS
+    if skill_name not in ALL_SKILLS:
+        return _err("unknown_skill", 400)
+
     body = request.get_json(silent=True)
     if body is None:
         return _err("Request body must be valid JSON")
