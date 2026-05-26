@@ -26,6 +26,7 @@ from flask import g, jsonify, request
 from jwt.algorithms import ECAlgorithm, RSAAlgorithm
 
 from services.supabase_client import get_supabase
+from services.snapshot_versions import repo as snap_repo
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +213,39 @@ def is_admin_request() -> bool:
         return False
 
     return bool(res.data)
+
+
+def require_open_draft(f: F) -> F:
+    """
+    Decorator that enforces an open Snapshot Release draft exists.
+
+    Flow:
+      - Call snap_repo.get_draft() to find a row with status IN ('draft','review').
+      - If none found: return HTTP 409 {"success": false, "data": null, "error": "no_open_draft"}.
+      - If found: set g.draft_id = draft.id and call the wrapped route.
+      - If snap_repo.get_draft() raises: return HTTP 500.
+
+    Stack this inside @require_admin so admin auth runs first:
+        @require_admin
+        @require_open_draft
+        def my_write_endpoint(): ...
+    """
+
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        try:
+            draft = snap_repo.get_draft()
+        except Exception:
+            logger.exception("require_open_draft: failed to query draft status")
+            return jsonify({"success": False, "data": None, "error": "Failed to check draft status"}), 500
+
+        if draft is None:
+            return jsonify({"success": False, "data": None, "error": "no_open_draft"}), 409
+
+        g.draft_id = draft.id
+        return f(*args, **kwargs)
+
+    return decorated  # type: ignore[return-value]
 
 
 def require_user(f: F) -> F:

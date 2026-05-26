@@ -15,7 +15,7 @@ from services.supabase_client import get_supabase, run_query
 
 logger = logging.getLogger(__name__)
 
-PipelineName = Literal["stat_fetch", "salary_scrape", "bio_team_sync"]
+PipelineName = Literal["stat_fetch", "salary_scrape", "bio_team_sync", "skill_evaluation", "threshold_edit"]
 PipelineScope = Literal["bulk", "player"]
 
 
@@ -29,9 +29,16 @@ def start_run(
     scope: PipelineScope,
     snapshot_release_id: Optional[str],
     player_id: Optional[str] = None,
+    params: Optional[dict] = None,
     client=None,
 ) -> str:
-    """Insert a new running pipeline_run row and return the run_id."""
+    """Insert a new running pipeline_run row and return the run_id.
+
+    Args:
+        params: Optional JSONB column for run-specific metadata (e.g. proposed
+                thresholds for threshold_edit runs). Requires the params column
+                migration (20260527000005_pipeline_runs_params.sql) to be applied.
+    """
     c = client or _get_client()
     payload: dict = {
         "pipeline_name": name,
@@ -43,6 +50,8 @@ def start_run(
         payload["snapshot_release_id"] = snapshot_release_id
     if player_id:
         payload["player_id"] = player_id
+    if params is not None:
+        payload["params"] = params
 
     result = run_query(
         lambda: c.table("pipeline_runs").insert(payload).execute()
@@ -92,6 +101,44 @@ def any_running(snapshot_release_id: Optional[str], client=None) -> bool:
     )
     result = run_query(lambda: query.limit(1).execute())
     return bool(result.data)
+
+
+def get_run(run_id: str, client=None) -> Optional[dict]:
+    """Return a single pipeline_run row by id, or None if not found."""
+    c = client or _get_client()
+    try:
+        result = run_query(
+            lambda: c.table("pipeline_runs")
+            .select("*")
+            .eq("id", run_id)
+            .single()
+            .execute()
+        )
+        return result.data
+    except Exception:
+        return None
+
+
+def mark_committed(run_id: str, committed_at: str, client=None) -> None:
+    """Set committed_at on a pipeline_run row to record a successful commit."""
+    c = client or _get_client()
+    run_query(
+        lambda: c.table("pipeline_runs")
+        .update({"committed_at": committed_at})
+        .eq("id", run_id)
+        .execute()
+    )
+
+
+def mark_discarded(run_id: str, client=None) -> None:
+    """Set status='discarded' on a pipeline_run row."""
+    c = client or _get_client()
+    run_query(
+        lambda: c.table("pipeline_runs")
+        .update({"status": "discarded"})
+        .eq("id", run_id)
+        .execute()
+    )
 
 
 def list_recent(

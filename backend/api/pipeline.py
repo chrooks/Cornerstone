@@ -23,7 +23,7 @@ from typing import Any
 
 from flask import Blueprint, jsonify, request
 
-from api.auth import require_admin
+from api.auth import require_admin, require_open_draft
 from services.supabase_client import get_supabase, run_query
 from services.players_service import (
     CURRENT_SEASON,
@@ -374,6 +374,82 @@ def bio_team_sync_bulk():
     ).start()
 
     return _ok({"run_id": run_id})
+
+
+@pipeline_bp.route("/pipeline/skill-evaluation", methods=["POST"])
+@require_admin
+@require_open_draft
+def skill_evaluation_batch():
+    """Kick off a background skill-evaluation run scoped to the current open draft.
+
+    Request body (all optional):
+      {
+        "player_ids": ["<uuid>", ...],  // empty = all qualifying players
+        "season": "2025-26",
+        "skill_filter": ["Scorer", "Playmaker"]  // omit = all 21 skills
+      }
+
+    Side effect: spawns a background worker that reads existing player_stats,
+    evaluates each player against draft thresholds, stages results in
+    pipeline_run_results, then marks the run success.
+
+    Returns: { "run_id": "<uuid>", "status": "running" }
+    """
+    from flask import g
+    from services.skill_engine.evaluation_only import evaluate_skills_for_run
+
+    body = request.get_json(silent=True) or {}
+    player_ids: list[str] = body.get("player_ids") or []
+    season: str = body.get("season", CURRENT_SEASON)
+    skill_filter: list[str] | None = body.get("skill_filter") or None
+
+    draft_id = g.draft_id
+
+    # Check for a pending-commit run before starting a new one
+    try:
+        run_id = runs_repo.start_run(
+            name="skill_evaluation",
+            scope="player" if player_ids else "bulk",
+            snapshot_release_id=draft_id,
+            player_id=player_ids[0] if len(player_ids) == 1 else None,
+        )
+    except Exception as exc:
+        err_msg = str(exc).lower()
+        if "unique" in err_msg or "duplicate" in err_msg:
+            return _err("pending_commit_run_exists — commit or discard the current run first", 409)
+        logger.exception("Failed to start skill-evaluation run")
+        return _err("Failed to start skill-evaluation run", 500)
+
+    def _worker():
+        try:
+            # Resolve player_ids if empty
+            resolved_ids = player_ids
+            if not resolved_ids:
+                supabase = get_supabase()
+                result = run_query(
+                    lambda: supabase.table("players")
+                    .select("id")
+                    .eq("season", season)
+                    .gte("minutes_per_game", DEFAULT_MIN_MPG)
+                    .execute()
+                )
+                resolved_ids = [r["id"] for r in (result.data or [])]
+                logger.info("skill-evaluation [%s]: %d qualifying players", run_id, len(resolved_ids))
+
+            evaluate_skills_for_run(
+                run_id=run_id,
+                player_ids=resolved_ids,
+                season=season,
+                skill_filter=skill_filter,
+            )
+            runs_repo.complete_run(run_id, rows_processed=len(resolved_ids))
+        except Exception as exc:
+            logger.exception("skill-evaluation [%s]: fatal error", run_id)
+            runs_repo.complete_run(run_id, rows_processed=0, error=str(exc))
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+    return _ok({"run_id": run_id, "status": "running"})
 
 
 @pipeline_bp.route("/pipeline/bio-team-sync/<player_id>", methods=["POST"])
