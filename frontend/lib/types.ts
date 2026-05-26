@@ -872,3 +872,54 @@ export interface CommunityTeamsResponse {
   page: number;
   per_page: number;
 }
+
+// ---------------------------------------------------------------------------
+// Snapshot Release types
+// ---------------------------------------------------------------------------
+
+/** A Snapshot Release row — immutable once published. */
+export interface SnapshotRelease {
+  id: string;
+  label: string;
+  season: string;
+  status: "draft" | "review" | "published" | "archived";
+  is_active: boolean;
+  published_at: string | null;
+  created_at: string;
+}
+
+/** A draft/review Snapshot Release augmented with live-run state. */
+export interface SnapshotDraftSummary extends SnapshotRelease {
+  has_running_jobs: boolean;
+}
+
+/** A single pipeline run row from pipeline_runs. */
+export interface PipelineRun {
+  id: string;
+  pipeline_name: "stat_fetch" | "salary_scrape" | "bio_team_sync";
+  scope: "bulk" | "player";
+  player_id: string | null;
+  snapshot_release_id: string | null;
+  status: "running" | "success" | "error";
+  rows_processed: number;
+  error_tail: string | null;
+  started_at: string;
+  finished_at: string | null;
+}
+
+/** Validation counts returned before publish. */
+export interface SnapshotPublishValidation {
+  players_missing_canonical: number;
+  players_missing_composite: number;
+}
+
+/** Count summary for the review-state Surface. */
+export interface SnapshotCountSummary {
+  players_total: number;
+  players_changed_since_active: number;
+  players_missing_composite: number;
+  /** Always 0 in this slice — issue #7 owns threshold versioning. */
+  thresholds_changed: number;
+  /** manual skill_profiles updated after the active snapshot's published_at. */
+  manual_overrides_since_active: number;
+}

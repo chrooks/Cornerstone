@@ -911,3 +911,95 @@ export async function getCommunityTeams(params?: {
   const qs = searchParams.toString();
   return apiFetch<CommunityTeamsResponse>(`/api/community/teams${qs ? `?${qs}` : ""}`);
 }
+
+// ---------------------------------------------------------------------------
+// Snapshot Release API wrappers (A-11: returns Promise<ApiResponse<T>>)
+// ---------------------------------------------------------------------------
+
+import type {
+  SnapshotRelease,
+  SnapshotDraftSummary,
+  PipelineRun,
+  SnapshotPublishValidation,
+  SnapshotCountSummary,
+} from "./types";
+
+export function getActiveSnapshot(): Promise<ApiResponse<SnapshotRelease>> {
+  return apiFetch<SnapshotRelease>("/api/snapshots/active");
+}
+
+export function getDraftSnapshot(): Promise<ApiResponse<SnapshotDraftSummary | null>> {
+  return apiFetch<SnapshotDraftSummary | null>("/api/snapshots/draft");
+}
+
+export function createDraftSnapshot(): Promise<ApiResponse<SnapshotRelease>> {
+  return apiFetch<SnapshotRelease>("/api/snapshots/drafts", { method: "POST" });
+}
+
+export function moveDraftToReview(id: string): Promise<ApiResponse<SnapshotRelease>> {
+  return apiFetch<SnapshotRelease>(`/api/snapshots/drafts/${id}/move-to-review`, { method: "POST" });
+}
+
+export function moveReviewToDraft(id: string): Promise<ApiResponse<SnapshotRelease>> {
+  return apiFetch<SnapshotRelease>(`/api/snapshots/drafts/${id}/move-to-draft`, { method: "POST" });
+}
+
+export function discardDraft(id: string): Promise<ApiResponse<null>> {
+  return apiFetch<null>(`/api/snapshots/drafts/${id}`, { method: "DELETE" });
+}
+
+export function publishDraft(
+  id: string,
+  label: string,
+  allow_missing_composite: boolean,
+): Promise<ApiResponse<SnapshotRelease>> {
+  return apiFetch<SnapshotRelease>(`/api/snapshots/drafts/${id}/publish`, {
+    method: "POST",
+    body: JSON.stringify({ label, allow_missing_composite }),
+  });
+}
+
+export function resetWorkingState(): Promise<ApiResponse<{ ok: boolean }>> {
+  return apiFetch<{ ok: boolean }>("/api/snapshots/reset-working-state", { method: "POST" });
+}
+
+export function getDraftValidation(id: string): Promise<ApiResponse<SnapshotPublishValidation>> {
+  return apiFetch<SnapshotPublishValidation>(`/api/snapshots/drafts/${id}/validation`);
+}
+
+export function getDraftSummary(id: string): Promise<ApiResponse<SnapshotCountSummary>> {
+  return apiFetch<SnapshotCountSummary>(`/api/snapshots/drafts/${id}/summary`);
+}
+
+export function listSnapshotReleases(limit = 20): Promise<ApiResponse<SnapshotRelease[]>> {
+  return apiFetch<SnapshotRelease[]>(`/api/snapshots/releases?limit=${limit}`);
+}
+
+export function getPipelineRun(runId: string): Promise<ApiResponse<PipelineRun>> {
+  return apiFetch<PipelineRun>(`/api/pipeline/runs/${runId}`);
+}
+
+export function triggerStatFetch(opts?: {
+  player_ids?: string[];
+  season?: string;
+  refresh?: boolean;
+}): Promise<ApiResponse<{ run_id: string }>> {
+  return apiFetch<{ run_id: string }>("/api/pipeline/fetch-stats", {
+    method: "POST",
+    body: JSON.stringify(opts ?? {}),
+  });
+}
+
+export function triggerSalaryScrape(player_id?: string): Promise<ApiResponse<{ run_id: string }>> {
+  const path = player_id
+    ? `/api/pipeline/salary-scrape/${player_id}`
+    : "/api/pipeline/salary-scrape";
+  return apiFetch<{ run_id: string }>(path, { method: "POST" });
+}
+
+export function triggerBioTeamSync(player_id?: string): Promise<ApiResponse<{ run_id: string }>> {
+  const path = player_id
+    ? `/api/pipeline/bio-team-sync/${player_id}`
+    : "/api/pipeline/bio-team-sync";
+  return apiFetch<{ run_id: string }>(path, { method: "POST" });
+}

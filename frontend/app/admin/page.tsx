@@ -455,11 +455,11 @@ export default function AdminHubPage() {
             glyph="S"
           />
           <AdminSurfaceCard
-            id="admin-hub-card-pipeline"
-            href="/admin/pipeline"
-            title="Pipeline"
-            description="Fetch NBA stats, run skill evaluation, generate composites."
-            glyph="P"
+            id="admin-hub-card-snapshots"
+            href="/admin/snapshots"
+            title="Snapshots"
+            description="Stage pipeline runs, manage draft Snapshots, and publish releases."
+            glyph="S"
           />
           <AdminSurfaceCard
             id="admin-hub-card-review"
