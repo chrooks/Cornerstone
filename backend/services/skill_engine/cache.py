@@ -2,7 +2,7 @@
 skill_engine/cache.py — Module-level TTL caches for thresholds and league averages.
 
 Provides:
-  - get_thresholds:                     5-min TTL cache, reads skill_thresholds table
+  - get_thresholds:                     5-min TTL cache, reads draft_skill_thresholds table
   - get_league_averages:                24-hr TTL cache, reads league_averages table
   - compute_and_store_league_averages:  compute from player_stats, persist, refresh cache
 """
@@ -79,7 +79,7 @@ def get_thresholds(supabase: Client, refresh: bool = False) -> dict[str, Any]:
 
     logger.info("Loading skill thresholds from Supabase")
     rows = (
-        supabase.table("skill_thresholds")
+        supabase.table("draft_skill_thresholds")
         .select("skill_name, thresholds")
         .execute()
     )

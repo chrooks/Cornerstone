@@ -67,14 +67,14 @@ def load_all_profiles() -> list[dict]:
     client = get_supabase()
 
     profiles = run_query(
-        lambda: client.table("skill_profiles")
+        lambda: client.table("draft_skill_profiles")
         .select("player_id, profile")
         .eq("season", SEASON)
         .eq("source", "composite")
         .execute()
     )
     legend_profiles = run_query(
-        lambda: client.table("skill_profiles")
+        lambda: client.table("draft_skill_profiles")
         .select("player_id, profile")
         .eq("source", "manual")
         .eq("is_legend", True)

@@ -109,7 +109,7 @@ def _fetch_player_with_skills(player_id: str) -> dict | None:
         player = legend_res.data[0]
         # Fetch legend skill profile (manual source)
         profile_res = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("profile")
             .eq("legend_id", player_id)
             .eq("is_legend", True)
@@ -121,7 +121,7 @@ def _fetch_player_with_skills(player_id: str) -> dict | None:
         player = player_res.data[0]
         # Fetch composite skill profile for current players
         profile_res = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("profile")
             .eq("player_id", player_id)
             .eq("source", "composite")
@@ -873,12 +873,12 @@ def distribution_preview() -> tuple:
     raw_values: list[float] = []
 
     for source_query in [
-        lambda: client.table("skill_profiles")
+        lambda: client.table("draft_skill_profiles")
             .select("profile")
             .eq("season", CURRENT_SEASON)
             .eq("source", "composite")
             .execute(),
-        lambda: client.table("skill_profiles")
+        lambda: client.table("draft_skill_profiles")
             .select("profile")
             .eq("source", "manual")
             .eq("is_legend", True)

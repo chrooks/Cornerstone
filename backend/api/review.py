@@ -88,7 +88,7 @@ def review_queue():
 
         # Step 1: Get composite profiles for this season
         composite_profiles = run_query(lambda: (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id, player_id")
             .eq("season", season)
             .eq("source", "composite")
@@ -110,7 +110,7 @@ def review_queue():
             chunk = composite_ids[i : i + _CHUNK]
             # Default arg captures chunk value so the lambda closure is correct
             rows = run_query(lambda c=chunk: (
-                supabase.table("skill_flags")
+                supabase.table("draft_skill_flags")
                 .select("id, skill_profile_id, skill_name, flag_reason")
                 .in_("skill_profile_id", c)
                 .is_("resolution", "null")
@@ -245,7 +245,7 @@ def player_flags(player_id: str):
 
         # Fetch all three skill profiles for this player+season
         profile_rows = run_query(lambda: (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id, source, profile")
             .eq("player_id", player_id)
             .eq("season", season)
@@ -262,7 +262,7 @@ def player_flags(player_id: str):
         flags: list[dict] = []
         if composite_profile_id:
             flag_rows = run_query(lambda: (
-                supabase.table("skill_flags")
+                supabase.table("draft_skill_flags")
                 .select(
                     "id, skill_name, stat_rating, claude_rating, flag_reason, "
                     "stat_values, claude_justification, resolution, resolved_value, "
@@ -320,11 +320,11 @@ def resolve_flag(player_id: str):
     Resolve a single skill flag for a player.
 
     After resolution:
-    - Updates skill_flags: sets resolution, resolved_value, resolved_at, notes.
+    - Updates draft_skill_flags: sets resolution, resolved_value, resolved_at, notes.
     - Updates the composite skill_profile.profile JSONB: final_tier → resolved tier,
       source → "resolved".
     - If ALL flags for this composite profile are now resolved, marks
-      skill_profiles.reviewed = true.
+      draft_skill_profiles.reviewed = true.
 
     Path params:
       player_id — Supabase UUID
@@ -367,7 +367,7 @@ def resolve_flag(player_id: str):
 
         # Find the composite skill_profile for this player+season
         profile_row = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id, profile")
             .eq("player_id", player_id)
             .eq("season", season)
@@ -387,7 +387,7 @@ def resolve_flag(player_id: str):
         # resolved row alongside a new proficient_tier_review flag) don't cause the
         # already-resolved row to be targeted, leaving the real unresolved flag stuck.
         flag_row = (
-            supabase.table("skill_flags")
+            supabase.table("draft_skill_flags")
             .select("id, stat_rating, claude_rating, resolution")
             .eq("skill_profile_id", profile_id)
             .eq("skill_name", skill_name)
@@ -413,7 +413,7 @@ def resolve_flag(player_id: str):
         resolved_at = datetime.now(timezone.utc).isoformat()
 
         # Update the skill_flag record
-        supabase.table("skill_flags").update({
+        supabase.table("draft_skill_flags").update({
             "resolution":     resolution,
             "resolved_value": resolved_tier,
             "resolved_at":    resolved_at,
@@ -428,13 +428,13 @@ def resolve_flag(player_id: str):
                 "source":     "resolved",
             }
             updated_profile = {**profile_data, skill_name: updated_skill}
-            supabase.table("skill_profiles").update({
+            supabase.table("draft_skill_profiles").update({
                 "profile": updated_profile,
             }).eq("id", profile_id).execute()
 
         # Check if all flags for this composite profile are now resolved
         remaining = (
-            supabase.table("skill_flags")
+            supabase.table("draft_skill_flags")
             .select("id")
             .eq("skill_profile_id", profile_id)
             .is_("resolution", "null")
@@ -444,7 +444,7 @@ def resolve_flag(player_id: str):
 
         if all_resolved:
             # Mark the composite profile as fully reviewed
-            supabase.table("skill_profiles").update({
+            supabase.table("draft_skill_profiles").update({
                 "reviewed":    True,
                 "reviewed_at": resolved_at,
             }).eq("id", profile_id).execute()
@@ -511,7 +511,7 @@ def bulk_resolve():
 
         # Find the composite profile
         profile_row = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id, profile")
             .eq("player_id", player_id)
             .eq("season", season)
@@ -528,7 +528,7 @@ def bulk_resolve():
 
         # Get all unresolved flags for this composite profile
         flag_rows = (
-            supabase.table("skill_flags")
+            supabase.table("draft_skill_flags")
             .select("id, skill_name, stat_rating, claude_rating")
             .eq("skill_profile_id", profile_id)
             .is_("resolution", "null")
@@ -556,7 +556,7 @@ def bulk_resolve():
             )
 
             # Update the individual flag record
-            supabase.table("skill_flags").update({
+            supabase.table("draft_skill_flags").update({
                 "resolution":     resolution,
                 "resolved_value": resolved_tier,
                 "resolved_at":    resolved_at,
@@ -574,13 +574,13 @@ def bulk_resolve():
             resolved_count += 1
 
         # Persist the updated composite profile (all skills updated in one write)
-        supabase.table("skill_profiles").update({
+        supabase.table("draft_skill_profiles").update({
             "profile": updated_profile,
         }).eq("id", profile_id).execute()
 
         # Verify that no flags remain unresolved (guards against concurrent modifications)
         remaining = (
-            supabase.table("skill_flags")
+            supabase.table("draft_skill_flags")
             .select("id")
             .eq("skill_profile_id", profile_id)
             .is_("resolution", "null")
@@ -589,7 +589,7 @@ def bulk_resolve():
         all_resolved = len(remaining.data or []) == 0
 
         if all_resolved:
-            supabase.table("skill_profiles").update({
+            supabase.table("draft_skill_profiles").update({
                 "reviewed":    True,
                 "reviewed_at": resolved_at,
             }).eq("id", profile_id).execute()
@@ -654,7 +654,7 @@ def manual_override_skill(player_id: str):
 
         # Find the composite profile for this player+season
         profile_row = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id, profile")
             .eq("player_id", player_id)
             .eq("season", season)
@@ -676,7 +676,7 @@ def manual_override_skill(player_id: str):
             _empty_skill = {"final_tier": "None", "stat_tier": None, "claude_tier": None, "source": "manual_override", "flagged": False}
             profile_data = {skill: dict(_empty_skill) for skill in _ALL_SKILLS}
             new_profile_row = (
-                supabase.table("skill_profiles")
+                supabase.table("draft_skill_profiles")
                 .insert({
                     "player_id": player_id,
                     "season":    season,
@@ -694,7 +694,7 @@ def manual_override_skill(player_id: str):
 
         # Check if a skill_flag already exists for this skill
         existing_flag = (
-            supabase.table("skill_flags")
+            supabase.table("draft_skill_flags")
             .select("id")
             .eq("skill_profile_id", profile_id)
             .eq("skill_name", skill_name)
@@ -705,7 +705,7 @@ def manual_override_skill(player_id: str):
         if existing_flag.data:
             # Update the existing flag with the manual override resolution
             flag_id = existing_flag.data[0]["id"]
-            supabase.table("skill_flags").update({
+            supabase.table("draft_skill_flags").update({
                 "resolution":     "manual_override",
                 "resolved_value": resolved_value,
                 "resolved_at":    resolved_at,
@@ -715,7 +715,7 @@ def manual_override_skill(player_id: str):
             # Create a new flag row for the manual override
             # Pull the current stat/claude ratings from stored profiles for audit trail
             stats_profile_row = (
-                supabase.table("skill_profiles")
+                supabase.table("draft_skill_profiles")
                 .select("profile")
                 .eq("player_id", player_id)
                 .eq("season", season)
@@ -726,7 +726,7 @@ def manual_override_skill(player_id: str):
             stats_profile = (stats_profile_row.data or [{}])[0].get("profile") or {}
 
             claude_profile_row = (
-                supabase.table("skill_profiles")
+                supabase.table("draft_skill_profiles")
                 .select("profile")
                 .eq("player_id", player_id)
                 .eq("season", season)
@@ -749,7 +749,7 @@ def manual_override_skill(player_id: str):
             else:
                 claude_rating = "None"
 
-            supabase.table("skill_flags").insert({
+            supabase.table("draft_skill_flags").insert({
                 "skill_profile_id":  profile_id,
                 "skill_name":        skill_name,
                 "stat_rating":       stat_rating,
@@ -780,7 +780,7 @@ def manual_override_skill(player_id: str):
                 "flag_reason":  "manual_override",
             }
         updated_profile = {**profile_data, skill_name: updated_skill}
-        supabase.table("skill_profiles").update({
+        supabase.table("draft_skill_profiles").update({
             "profile": updated_profile,
         }).eq("id", profile_id).execute()
 
@@ -869,9 +869,9 @@ def skill_breakdown(player_id: str):
         # Run the condition breakdown — same logic as calibration's test-thresholds
         condition_results = collect_condition_results(rule, stats_blob, league_avgs)
 
-        # Also fetch the stored stat tier from skill_profiles for display
+        # Also fetch the stored stat tier from draft_skill_profiles for display
         profile_row = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("profile")
             .eq("player_id", player_id)
             .eq("season", season)

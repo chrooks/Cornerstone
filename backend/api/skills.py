@@ -10,7 +10,7 @@ All responses use the standard envelope: {success, data, error}.
 player_id params are Supabase UUIDs.
 
 The skill engine is fully data-driven: all tier logic lives in the
-skill_thresholds table, not in this file. See skill_engine.py.
+draft_skill_thresholds table, not in this file. See skill_engine.py.
 """
 
 import logging
@@ -134,7 +134,7 @@ def player_skills(player_id: str):
 @require_admin
 def batch_skills():
     """
-    Batch-evaluate skills for multiple players and persist results to skill_profiles.
+    Batch-evaluate skills for multiple players and persist results to draft_skill_profiles.
 
     Processes players sequentially (not in parallel) — a full league run
     (all qualifying players) may take several minutes.

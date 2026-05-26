@@ -54,8 +54,8 @@ class TestCountSummaryFields:
             _result(players),           # players query
             _result(composite_profiles),# composite profiles chunk
             _result(active_row),        # active snapshot_releases
-            _result(changed_profiles),  # skill_profiles updated after published_at
-            _result(manual_profiles),   # manual skill_profiles updated after published_at
+            _result(changed_profiles),  # draft_skill_profiles updated after published_at
+            _result(manual_profiles),   # manual draft_skill_profiles updated after published_at
         ]
 
         exec_mock = MagicMock(side_effect=execute_seq)
@@ -93,7 +93,7 @@ class TestCountSummaryFields:
 
     def test_count_summary_returns_manual_overrides_since_active(self):
         """manual_overrides_since_active must be present and count manual
-        skill_profiles updated after the active snapshot's published_at."""
+        draft_skill_profiles updated after the active snapshot's published_at."""
         from services.snapshot_versions import summary
 
         manual_profile = _make_skill_profile("p1", source="manual")

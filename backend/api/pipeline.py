@@ -92,7 +92,7 @@ def pipeline_status():
         players_with_stats = len(set(r["player_id"] for r in (stats_rows.data or [])))
 
         skills_profiles = run_query(lambda: (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("player_id")
             .eq("season", season)
             .eq("source", "stats")
@@ -101,7 +101,7 @@ def pipeline_status():
         players_with_skills = len(set(r["player_id"] for r in (skills_profiles.data or [])))
 
         composite_profiles = run_query(lambda: (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id, player_id")
             .eq("season", season)
             .eq("source", "composite")
@@ -122,7 +122,7 @@ def pipeline_status():
         for i in range(0, len(composite_ids), _CHUNK):
             chunk = composite_ids[i: i + _CHUNK]
             unresolved = run_query(lambda c=chunk: (
-                supabase.table("skill_flags")
+                supabase.table("draft_skill_flags")
                 .select("id, skill_profile_id")
                 .in_("skill_profile_id", c)
                 .is_("resolution", "null")
@@ -135,7 +135,7 @@ def pipeline_status():
                     flagged_player_ids.add(pid)
 
             all_flags = run_query(lambda c=chunk: (
-                supabase.table("skill_flags")
+                supabase.table("draft_skill_flags")
                 .select("id")
                 .in_("skill_profile_id", c)
                 .execute()

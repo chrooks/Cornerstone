@@ -523,7 +523,7 @@ def test_save_team_resolves_snapshot_player_ids_on_insert(client, fake_supabase)
     """Server resolves snapshot_player_id + canonical_player_id from source_player_id."""
     for slot in range(2, 10):
         source_player_id = f"44444444-4444-4444-4444-44444444444{slot}"
-        fake_supabase.rows.setdefault("snapshot_players", []).append({
+        fake_supabase.rows.setdefault("released_players", []).append({
             "id": SNAPSHOT_PLAYER_IDS[slot],
             "snapshot_release_id": SNAPSHOT_RELEASE_ID,
             "canonical_player_id": CANONICAL_PLAYER_IDS[slot],
@@ -682,7 +682,7 @@ def _seed_saved_team(fake_supabase, *, missing_slots: list[int] | None = None):
     for slot in range(2, 10):
         if slot in missing:
             continue
-        fake_supabase.rows.setdefault("snapshot_players", []).append({
+        fake_supabase.rows.setdefault("released_players", []).append({
             "id": f"current-snap-{slot}",
             "snapshot_release_id": CURRENT_SNAPSHOT_RELEASE_ID,
             "canonical_player_id": CANONICAL_PLAYER_IDS[slot],
@@ -1294,7 +1294,7 @@ def _seed_shared_team_for_rebuild(fake_supabase, *, visibility: str = "public") 
 
     for slot in range(2, 10):
         source_player_id = f"44444444-4444-4444-4444-44444444444{slot}"
-        fake_supabase.rows.setdefault("snapshot_players", []).append({
+        fake_supabase.rows.setdefault("released_players", []).append({
             "id": f"current-snap-{slot}",
             "snapshot_release_id": CURRENT_SNAPSHOT_RELEASE_ID,
             "canonical_player_id": CANONICAL_PLAYER_IDS.get(slot),

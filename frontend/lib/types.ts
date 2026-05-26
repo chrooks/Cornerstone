@@ -137,7 +137,7 @@ export interface ThresholdRule {
   [key: string]: unknown;
 }
 
-/** Row from skill_thresholds table */
+/** Row from draft_skill_thresholds table */
 export interface ThresholdRow {
   id: string;
   skill_name: string;
@@ -235,7 +235,7 @@ export interface FlaggedPlayerSummary {
   flag_reasons: string[];
 }
 
-/** A single skill flag record from the skill_flags table */
+/** A single skill flag record from the draft_skill_flags table */
 export interface SkillFlag {
   id: string;
   skill_name: string;
@@ -250,7 +250,7 @@ export interface SkillFlag {
   notes: string | null;
 }
 
-/** Composite skill result stored in the skill_profiles.profile JSONB */
+/** Composite skill result stored in the draft_skill_profiles.profile JSONB */
 export interface CompositeSkillResult {
   final_tier: string;
   stat_tier: string | null;
@@ -930,6 +930,6 @@ export interface SnapshotCountSummary {
   players_missing_composite: number;
   /** Always 0 in this slice — issue #7 owns threshold versioning. */
   thresholds_changed: number;
-  /** manual skill_profiles updated after the active snapshot's published_at. */
+  /** manual draft_skill_profiles updated after the active snapshot's published_at. */
   manual_overrides_since_active: number;
 }

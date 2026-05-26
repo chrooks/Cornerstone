@@ -120,7 +120,7 @@ export function DiscardActions({ id, draftId, onDiscarded }: DiscardActionsProps
           >
             Reset working state from active Snapshot
             <span className="block text-[11px] text-neutral-400 mt-0.5">
-              Overwrites live skill_profiles and player salaries.
+              Overwrites live draft_skill_profiles and player salaries.
             </span>
           </button>
         </div>
@@ -133,7 +133,7 @@ export function DiscardActions({ id, draftId, onDiscarded }: DiscardActionsProps
         </h2>
         <p id={`${id}-discard-body`} className="text-xs text-neutral-600 mb-5">
           The draft row will be permanently deleted. Live tables are untouched — any
-          pipeline output from this draft remains in <code className="font-mono">skill_profiles</code>.
+          pipeline output from this draft remains in <code className="font-mono">draft_skill_profiles</code>.
           A new draft can be created immediately.
         </p>
         <div id={`${id}-discard-actions`} className="flex justify-end gap-3">
@@ -166,7 +166,7 @@ export function DiscardActions({ id, draftId, onDiscarded }: DiscardActionsProps
         <p id={`${id}-reset-body`} className="text-xs text-neutral-600 mb-3">
           This will <strong>overwrite</strong> all live{" "}
           <code className="font-mono">composite</code> and{" "}
-          <code className="font-mono">stats</code> skill_profiles for the current season,
+          <code className="font-mono">stats</code> draft_skill_profiles for the current season,
           and reset player salary/team/position to the values frozen in the active published Snapshot.
           Any pipeline output from this draft will be lost.
         </p>

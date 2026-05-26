@@ -203,7 +203,7 @@ def publish_draft(
 
     Steps:
     1. Guard: raise if any pipeline_run is still running for this draft (mirrors move_to_review).
-    2. Call publish_snapshot_draft RPC (freezes snapshot_players, flips is_active).
+    2. Call publish_snapshot_draft RPC (freezes released_players, flips is_active).
     3. _force_clear_distributions() to bypass the draft-pin guard.
     4. ensure_distributions(force=True) to rewarm from the new active snapshot.
     """
