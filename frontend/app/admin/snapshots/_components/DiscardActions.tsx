@@ -95,7 +95,7 @@ export function DiscardActions({ id, draftId, onDiscarded }: DiscardActionsProps
       {menuOpen && (
         <div
           id={`${id}-menu`}
-          className="absolute right-0 mt-1 w-64 rounded-[6px] border border-[#d9d0c9] bg-white
+          className="absolute right-0 bottom-full mb-1 w-64 rounded-[6px] border border-[#d9d0c9] bg-white
             shadow-lg z-10 overflow-hidden"
         >
           <button

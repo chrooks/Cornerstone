@@ -12,10 +12,10 @@
  * Tokens: Card White surface, Warm Border, Hardwood Amber CTA.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import PlayerSearchCombobox from "@/components/PlayerSearchCombobox";
+import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
 import { StateChip } from "./StateChip";
 import { getPipelineRun } from "@/lib/api";
 import type { Player, PipelineRun } from "@/lib/types";
@@ -47,17 +47,15 @@ export function PipelineCard({
 }: PipelineCardProps) {
   const [cardState, setCardState] = useState<PipelineCardState>(frozen ? "frozen" : "idle");
   const [currentRun, setCurrentRun] = useState<PipelineRun | null>(lastRun ?? null);
-  const [pollTimer, setPollTimer] = useState<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const stopPolling = useCallback(() => {
-    if (pollTimer) clearInterval(pollTimer);
-    setPollTimer(null);
-  }, [pollTimer]);
-
-  // Cleanup: clear any active poll timer on unmount
-  useEffect(() => () => stopPolling(), [stopPolling]);
+  // Cleanup on unmount only. Refs avoid re-render cascade that was killing the timer.
+  useEffect(() => () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+  }, []);
 
   const startPolling = useCallback((runId: string) => {
+    if (timerRef.current) clearInterval(timerRef.current);
     const timer = setInterval(async () => {
       try {
         const res = await getPipelineRun(runId);
@@ -65,20 +63,29 @@ export function PipelineCard({
           setCurrentRun(res.data);
           if (res.data.status === "success") {
             clearInterval(timer);
+            timerRef.current = null;
             setCardState("idle");
-            toast.success(`${title} complete — ${res.data.rows_processed} rows`);
+            toast.success(`${title} complete: ${res.data.rows_processed} rows`);
           } else if (res.data.status === "error") {
             clearInterval(timer);
+            timerRef.current = null;
             setCardState("error");
             toast.error(`${title} failed`);
           }
+        } else if (!res.success) {
+          clearInterval(timer);
+          timerRef.current = null;
+          setCardState("error");
+          toast.error(`${title} status check failed: ${res.error ?? "unknown"}`);
         }
-      } catch {
-        // Transient — keep polling
+      } catch (err) {
+        clearInterval(timer);
+        timerRef.current = null;
+        setCardState("error");
+        toast.error(`${title} status check failed`);
       }
     }, 2000);
-    setPollTimer(timer);
-    return timer;
+    timerRef.current = timer;
   }, [title]);
 
   const handleBulkRun = useCallback(async () => {
@@ -115,7 +122,7 @@ export function PipelineCard({
     <article
       id={id}
       className={cn(
-        "rounded-[6px] border border-[#d9d0c9] p-6",
+        "rounded-[6px] border border-[#d9d0c9] p-6 flex flex-col h-full",
         isFrozen && "opacity-60 pointer-events-none",
       )}
       style={{ backgroundColor: "#f7f7f7" }}
@@ -140,6 +147,8 @@ export function PipelineCard({
         )}
       </div>
 
+      {/* Trigger group pinned to card bottom */}
+      <div id={`${id}-triggers`} className="mt-auto">
       {/* Bulk action */}
       <div id={`${id}-bulk-area`} className="mb-4">
         {isRunning ? (
@@ -211,7 +220,7 @@ export function PipelineCard({
           <button
             id={`${id}-retry-btn`}
             type="button"
-            onClick={() => { setCardState("idle"); }}
+            onClick={() => { setCardState("idle"); setCurrentRun(null); }}
             className="mt-2 text-[11px] text-red-700 underline hover:no-underline"
           >
             Dismiss and retry
@@ -233,6 +242,7 @@ export function PipelineCard({
             : ""}
         </p>
       )}
+      </div>
     </article>
   );
 }
