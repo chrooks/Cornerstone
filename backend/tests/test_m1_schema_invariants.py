@@ -33,21 +33,22 @@ import pytest
 
 @pytest.mark.skip(reason="Requires live DB with M1 migrations applied (wire in M2)")
 def test_pipeline_run_results_pk_rejects_duplicate_run_player_source():
-    """PRIMARY KEY (run_id, player_id, source) rejects a second insert for the
-    same (run_id, player_id, source) triple.
+    """PRIMARY KEY (run_id, player_id, source) — enforced by constraint
+    `pipeline_run_results_pkey` — rejects a second insert for the same triple.
 
     SQL to verify:
         INSERT INTO pipeline_run_results (run_id, player_id, season, source, profile)
           VALUES ('<run>', '<player>', '2025-26', 'composite', '{}');
-        -- second insert with identical PK must raise unique_violation.
+        -- second insert with identical PK must raise unique_violation
+        -- (constraint name: pipeline_run_results_pkey).
     """
     pass
 
 
 @pytest.mark.skip(reason="Requires live DB with M1 migrations applied (wire in M2)")
 def test_pipeline_run_results_source_check_rejects_unknown_value():
-    """CHECK (source IN ('stats','claude','composite','manual')) rejects an
-    unknown source value.
+    """CHECK (source IN ('stats','claude','composite','manual')) — anonymous
+    table-level CHECK constraint — rejects an unknown source value.
 
     SQL to verify:
         INSERT INTO pipeline_run_results (..., source='unknown', ...)
@@ -58,8 +59,9 @@ def test_pipeline_run_results_source_check_rejects_unknown_value():
 
 @pytest.mark.skip(reason="Requires live DB with M1 migrations applied (wire in M2)")
 def test_pipeline_run_results_cascade_deletes_on_run_delete():
-    """ON DELETE CASCADE from pipeline_runs.id removes all staged profile rows
-    when the parent run row is deleted.
+    """ON DELETE CASCADE on the FK `pipeline_run_results.run_id ->
+    pipeline_runs.id` removes all staged profile rows when the parent run row
+    is deleted.
 
     SQL to verify:
         DELETE FROM pipeline_runs WHERE id = '<run>';
@@ -75,22 +77,46 @@ def test_pipeline_run_results_cascade_deletes_on_run_delete():
 
 
 @pytest.mark.skip(reason="Requires live DB with M1 migrations applied (wire in M2)")
-def test_pipeline_run_flag_results_pk_rejects_duplicate_run_player_skill():
-    """PRIMARY KEY (run_id, player_id, skill_name) rejects a second insert for
-    the same triple.
+def test_pipeline_run_flag_results_pk_rejects_duplicate_run_player_skill_season():
+    """PRIMARY KEY (run_id, player_id, skill_name, season) — enforced by
+    constraint `pipeline_run_flag_results_pkey` — rejects a second insert for
+    the same quadruple.
+
+    Season is part of the PK so a multi-season skill_evaluation run can stage
+    flags for the same (player, skill) across different seasons without
+    colliding. Added in migration 20260527000004 after the original
+    (run_id, player_id, skill_name) PK was identified as too narrow.
 
     SQL to verify:
         INSERT INTO pipeline_run_flag_results (run_id, player_id, skill_name,
-          flag_reason) VALUES ('<run>', '<player>', 'Scorer', 'tiers differ');
-        -- second insert must raise unique_violation.
+          season, flag_reason)
+          VALUES ('<run>', '<player>', 'Scorer', '2025-26', 'tiers differ');
+        -- second insert with identical PK must raise unique_violation
+        -- (constraint name: pipeline_run_flag_results_pkey).
+    """
+    pass
+
+
+@pytest.mark.skip(reason="Requires live DB with M1 migrations applied (wire in M2)")
+def test_pipeline_run_flag_results_pk_allows_distinct_seasons():
+    """Same (run_id, player_id, skill_name) across distinct seasons must NOT
+    collide on the PK after the season add in migration 20260527000004.
+
+    SQL to verify:
+        INSERT INTO pipeline_run_flag_results VALUES ('<run>', '<player>',
+          'Scorer', '2025-26', 'tiers differ');
+        INSERT INTO pipeline_run_flag_results VALUES ('<run>', '<player>',
+          'Scorer', '2024-25', 'tiers differ');
+        -- Both inserts succeed.
     """
     pass
 
 
 @pytest.mark.skip(reason="Requires live DB with M1 migrations applied (wire in M2)")
 def test_pipeline_run_flag_results_cascade_deletes_on_run_delete():
-    """ON DELETE CASCADE from pipeline_runs.id removes all staged flag rows
-    when the parent run row is deleted.
+    """ON DELETE CASCADE on the FK `pipeline_run_flag_results.run_id ->
+    pipeline_runs.id` removes all staged flag rows when the parent run row
+    is deleted.
 
     SQL to verify:
         DELETE FROM pipeline_runs WHERE id = '<run>';
