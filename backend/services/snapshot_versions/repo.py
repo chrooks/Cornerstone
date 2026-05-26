@@ -197,6 +197,7 @@ def publish_draft(
     draft_id: str,
     label: str,
     allow_missing_composite: bool = False,
+    allow_open_flags: bool = False,
     client=None,
 ) -> SnapshotRelease:
     """Atomically publish a draft via the Postgres RPC, then rewarm the distribution cache.
@@ -206,6 +207,12 @@ def publish_draft(
     2. Call publish_snapshot_draft RPC (freezes released_players, flips is_active).
     3. _force_clear_distributions() to bypass the draft-pin guard.
     4. ensure_distributions(force=True) to rewarm from the new active snapshot.
+
+    Args:
+        allow_missing_composite: bypass the missing-composite gate.
+        allow_open_flags: bypass the open-flags Draft gate. The RPC's
+            p_allow_open_flags parameter is the source of truth; we just
+            forward the caller's intent.
     """
     from services.pipeline_runs import repo as runs_repo
     from services.snapshot_versions import validator
@@ -222,16 +229,31 @@ def publish_draft(
 
     c = client or _get_client()
 
-    run_query(
-        lambda: c.rpc(
-            "publish_snapshot_draft",
-            params={
-                "p_draft_id": draft_id,
-                "p_label": label,
-                "p_allow_missing_composite": allow_missing_composite,
-            },
-        ).execute()
-    )
+    try:
+        run_query(
+            lambda: c.rpc(
+                "publish_snapshot_draft",
+                params={
+                    "p_draft_id": draft_id,
+                    "p_label": label,
+                    "p_allow_missing_composite": allow_missing_composite,
+                    "p_allow_open_flags": allow_open_flags,
+                },
+            ).execute()
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        # Translate known RPC RAISE EXCEPTION codes into ValueError so the
+        # API layer's existing ValueError handler maps them to 422/409.
+        for code in (
+            "open_flags_not_acknowledged",
+            "missing_composite_not_acknowledged",
+            "draft_not_found_or_not_in_draft_state",
+            "legends_missing_canonical_player",
+        ):
+            if code in msg:
+                raise ValueError(code) from exc
+        raise
 
     # Rewarm distribution cache against the freshly published snapshot
     try:

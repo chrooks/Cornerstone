@@ -249,6 +249,70 @@ class TestPublishDraftEndpoint:
         assert body["success"] is True
         assert body["data"]["is_active"] is True
 
+    def test_publish_default_allow_open_flags_false_blocks_publish_when_flags_open(
+        self, admin_client
+    ):
+        """When allow_open_flags is omitted, the gate fires and the route returns 422.
+
+        Mirrors how the RPC raises open_flags_not_acknowledged when unresolved
+        flags exist and the override was not passed.
+        """
+        from services.snapshot_versions import repo
+
+        with patch.object(
+            repo,
+            "publish_draft",
+            side_effect=ValueError("open_flags_not_acknowledged: 7 flags"),
+        ) as mocked:
+            resp = admin_client.post(
+                "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                json={"label": "Test", "allow_missing_composite": True},
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 422
+        assert "open_flags_not_acknowledged" in resp.get_json()["error"]
+        # The default forwarded to repo.publish_draft must be False.
+        assert mocked.call_args.kwargs["allow_open_flags"] is False
+
+    def test_publish_allow_open_flags_true_bypasses_gate(self, admin_client):
+        """allow_open_flags=True in the body is forwarded to repo.publish_draft."""
+        from services.snapshot_versions import repo
+
+        published = _fake_release(status="published", is_active=True)
+        with patch.object(repo, "publish_draft", return_value=published) as mocked:
+            resp = admin_client.post(
+                "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                json={
+                    "label": "Test",
+                    "allow_missing_composite": True,
+                    "allow_open_flags": True,
+                },
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 200
+        assert mocked.call_args.kwargs["allow_open_flags"] is True
+
+    def test_publish_invalid_allow_open_flags_returns_400(self, admin_client):
+        """Non-bool values for allow_open_flags must be rejected, not coerced.
+
+        Coercion would silently turn the string 'false' into True (since
+        bool('false') is True) and bypass the gate without the admin's intent.
+        """
+        resp = admin_client.post(
+            "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+            json={
+                "label": "Test",
+                "allow_missing_composite": True,
+                "allow_open_flags": "true",  # string, not bool
+            },
+            headers=admin_client.auth_header,
+        )
+
+        assert resp.status_code == 400
+        assert resp.get_json()["error"] == "invalid_allow_open_flags"
+
 
 # ---------------------------------------------------------------------------
 # GET /api/snapshots/drafts/<id>/validation
