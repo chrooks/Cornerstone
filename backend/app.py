@@ -109,6 +109,7 @@ from api.rulesets import rulesets_bp
 from api.profile import profile_bp
 from api.community import community_bp
 from api.evaluation_versions import evaluation_versions_bp
+from api.snapshots import snapshots_bp
 
 
 def _warm_cohesion_distributions() -> None:
@@ -176,6 +177,7 @@ def create_app() -> Flask:
     app.register_blueprint(profile_bp)  # User Profile API
     app.register_blueprint(community_bp)  # Community leaderboard
     app.register_blueprint(evaluation_versions_bp)  # Evaluation Version publishing
+    app.register_blueprint(snapshots_bp)            # Snapshot Release lifecycle
 
     _warm_cohesion_distributions()
 

@@ -1,13 +1,18 @@
 """
-api/pipeline.py — Pipeline status and stats-fetch endpoints.
+api/pipeline.py — Pipeline status and ingestion trigger endpoints.
 
 Endpoints:
-  GET  /api/pipeline/status              — aggregate counts for the pipeline dashboard
-  POST /api/pipeline/fetch-stats         — kick off background stats fetch, returns job_id
-  GET  /api/pipeline/job-status/<job_id> — poll progress of a background fetch job
+  GET  /api/pipeline/status                  — aggregate counts for the pipeline dashboard
+  POST /api/pipeline/fetch-stats             — kick off background stats fetch
+  GET  /api/pipeline/runs/<run_id>           — poll a specific pipeline run
+  POST /api/pipeline/salary-scrape           — kick off bulk salary scrape
+  POST /api/pipeline/salary-scrape/<player_id> — single-player salary scrape
+  POST /api/pipeline/bio-team-sync           — kick off bulk bio/team sync
+  POST /api/pipeline/bio-team-sync/<player_id> — single-player bio/team sync
 
-The skill-mapping and composite pipeline runs use the existing /api/skills/batch
-and /api/composite/batch endpoints (called directly from the frontend).
+Pipeline run state is persisted in pipeline_runs (not in-process memory).
+A-4: only write to pipeline_runs at start / complete / error.
+A-9: salary scrape is NOT implicit in fetch-stats; it is a first-class trigger.
 """
 
 import logging
@@ -26,19 +31,15 @@ from services.players_service import (
     get_or_fetch_players,
     get_or_fetch_player_stats,
     run_bulk_salary_scrape,
+    run_bulk_bio_team_sync,
+    run_player_bio_team_sync,
 )
+from services.pipeline_runs import repo as runs_repo
+from services.snapshot_versions import repo as snap_repo
 
 logger = logging.getLogger(__name__)
 
 pipeline_bp = Blueprint("pipeline", __name__, url_prefix="/api")
-
-# ---------------------------------------------------------------------------
-# In-memory background job registry.
-# Each job is a dict with: status, progress, total, result, error, started_at,
-# finished_at.  Only one fetch-stats job runs at a time (guarded by _job_lock).
-# ---------------------------------------------------------------------------
-_jobs: dict[str, dict[str, Any]] = {}
-_job_lock = threading.Lock()
 
 
 def _ok(data) -> tuple:
@@ -51,6 +52,15 @@ def _err(msg: str, status: int = 500) -> tuple:
     return jsonify({"success": False, "data": None, "error": msg}), status
 
 
+def _get_draft_id() -> str | None:
+    """Return the open draft's id, or None."""
+    try:
+        draft = snap_repo.get_draft()
+        return draft.id if draft else None
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # GET /api/pipeline/status
 # ---------------------------------------------------------------------------
@@ -58,34 +68,12 @@ def _err(msg: str, status: int = 500) -> tuple:
 
 @pipeline_bp.route("/pipeline/status", methods=["GET"])
 def pipeline_status():
-    """
-    Return aggregate pipeline status for the given season.
-
-    Provides the counts needed to drive the pipeline dashboard:
-    how many players have stats, skill profiles, composite profiles,
-    and how many flags are outstanding.
-
-    Query params:
-      ?season=2025-26  (default: current season)
-
-    Response data:
-      {
-        "season": str,
-        "total_qualifying_players": int,    # players with >= 15 MPG
-        "players_with_stats": int,          # players with at least one stats blob
-        "players_with_skills": int,         # players with source='stats' skill profile
-        "players_with_composite": int,      # players with source='composite' profile
-        "unresolved_flags": int,            # skill_flags with resolution IS NULL
-        "total_flags": int,                 # all skill_flags (resolved + unresolved)
-        "flagged_players": int,             # distinct players with >=1 unresolved flag
-      }
-    """
+    """Return aggregate pipeline status for the given season."""
     season = request.args.get("season", CURRENT_SEASON)
 
     try:
         supabase = get_supabase()
 
-        # --- Qualifying players -------------------------------------------------
         qualifying = run_query(lambda: (
             supabase.table("players")
             .select("id")
@@ -95,7 +83,6 @@ def pipeline_status():
         ))
         total_qualifying = len(qualifying.data or [])
 
-        # --- Players with stats blobs (distinct) --------------------------------
         stats_rows = run_query(lambda: (
             supabase.table("player_stats")
             .select("player_id")
@@ -104,7 +91,6 @@ def pipeline_status():
         ))
         players_with_stats = len(set(r["player_id"] for r in (stats_rows.data or [])))
 
-        # --- Players with stats skill profiles (distinct) -----------------------
         skills_profiles = run_query(lambda: (
             supabase.table("skill_profiles")
             .select("player_id")
@@ -114,7 +100,6 @@ def pipeline_status():
         ))
         players_with_skills = len(set(r["player_id"] for r in (skills_profiles.data or [])))
 
-        # --- Composite profiles — need id+player_id for flag counting -----------
         composite_profiles = run_query(lambda: (
             supabase.table("skill_profiles")
             .select("id, player_id")
@@ -122,7 +107,6 @@ def pipeline_status():
             .eq("source", "composite")
             .execute()
         ))
-        # Map: profile_id → player_id (for resolving flagged player list)
         composite_profile_map: dict[str, str] = {
             r["id"]: r["player_id"]
             for r in (composite_profiles.data or [])
@@ -130,17 +114,13 @@ def pipeline_status():
         composite_ids = list(composite_profile_map.keys())
         players_with_composite = len(set(composite_profile_map.values()))
 
-        # --- Flag counts --------------------------------------------------------
-        # Batch composite_ids in chunks of 500 to respect PostgREST URL limits.
         unresolved_count = 0
         total_flags_count = 0
         flagged_player_ids: set[str] = set()
 
         _CHUNK = 500
         for i in range(0, len(composite_ids), _CHUNK):
-            chunk = composite_ids[i : i + _CHUNK]
-
-            # Unresolved flags — default arg captures chunk value for the lambda closure
+            chunk = composite_ids[i: i + _CHUNK]
             unresolved = run_query(lambda c=chunk: (
                 supabase.table("skill_flags")
                 .select("id, skill_profile_id")
@@ -154,7 +134,6 @@ def pipeline_status():
                 if pid:
                     flagged_player_ids.add(pid)
 
-            # All flags (for total count)
             all_flags = run_query(lambda c=chunk: (
                 supabase.table("skill_flags")
                 .select("id")
@@ -162,6 +141,9 @@ def pipeline_status():
                 .execute()
             ))
             total_flags_count += len(all_flags.data or [])
+
+        # Include recent pipeline runs in the response
+        recent_runs = runs_repo.list_recent(limit=5)
 
         return _ok({
             "season":                     season,
@@ -172,6 +154,7 @@ def pipeline_status():
             "unresolved_flags":           unresolved_count,
             "total_flags":                total_flags_count,
             "flagged_players":            len(flagged_player_ids),
+            "recent_runs":                recent_runs,
         })
 
     except Exception:
@@ -184,37 +167,21 @@ def pipeline_status():
 # ---------------------------------------------------------------------------
 
 
-def _run_fetch_stats_job(
-    job_id: str,
-    player_ids: list[str],
-    season: str,
-    refresh: bool,
-) -> None:
-    """Background worker: fetch stats for each player and update job progress."""
-    job = _jobs[job_id]
+def _run_fetch_stats_job(run_id: str, player_ids: list[str], season: str, refresh: bool) -> None:
+    """Background worker: fetch stats. A-9: no implicit salary scrape."""
+    supabase = get_supabase()
+    fetched = 0
+    errors = 0
+
     try:
-        supabase = get_supabase()
-
-        # Resolve player list if none supplied (all qualifying players)
         if not player_ids:
-            all_players = get_or_fetch_players(
-                season, DEFAULT_MIN_MPG, False, supabase,
-            )
+            all_players = get_or_fetch_players(season, DEFAULT_MIN_MPG, False, supabase)
             player_ids = [p["id"] for p in all_players]
-            logger.info(
-                "fetch-stats [%s]: %d qualifying players for season %s",
-                job_id, len(player_ids), season,
-            )
+            logger.info("fetch-stats [%s]: %d qualifying players", run_id, len(player_ids))
 
-        total   = len(player_ids)
-        fetched = 0
-        errors  = 0
-
-        # Store total so the polling endpoint can report progress
-        job["total"] = total
+        total = len(player_ids)
 
         for idx, pid in enumerate(player_ids, start=1):
-            logger.info("fetch-stats [%s] %d/%d: player %s", job_id, idx, total, pid)
             try:
                 blob = get_or_fetch_player_stats(pid, season, supabase, refresh=refresh)
                 if blob:
@@ -222,143 +189,214 @@ def _run_fetch_stats_job(
                 else:
                     errors += 1
             except Exception:
-                logger.exception(
-                    "fetch-stats [%s]: error fetching player %s", job_id, pid,
-                )
+                logger.exception("fetch-stats [%s]: error player %s", run_id, pid)
                 errors += 1
 
-            # Update progress after each player so polls see real-time counts
-            job["progress"] = idx
-            job["fetched"]  = fetched
-            job["errors"]   = errors
-
-        logger.info(
-            "fetch-stats [%s] complete: %d fetched, %d errors out of %d",
-            job_id, fetched, errors, total,
-        )
-
-        # Scrape salaries from ESPN (~30-45s) and upsert into Supabase
-        salary_matched   = 0
-        salary_unmatched = 0
-        try:
-            salary_result    = run_bulk_salary_scrape(None, supabase)
-            salary_matched   = salary_result.get("matched", 0)
-            salary_unmatched = salary_result.get("unmatched", 0)
-            logger.info(
-                "fetch-stats [%s] salary scrape: %d matched, %d unmatched",
-                job_id, salary_matched, salary_unmatched,
-            )
-        except Exception:
-            logger.exception(
-                "fetch-stats [%s]: salary scrape failed (non-fatal)", job_id,
-            )
-
-        # Mark job complete with final results
-        job["status"] = "complete"
-        job["result"] = {
-            "total":            total,
-            "fetched":          fetched,
-            "skipped":          0,
-            "errors":           errors,
-            "salary_matched":   salary_matched,
-            "salary_unmatched": salary_unmatched,
-        }
+        logger.info("fetch-stats [%s] complete: %d/%d fetched", run_id, fetched, total)
+        runs_repo.complete_run(run_id, rows_processed=fetched)
 
     except Exception as exc:
-        logger.exception("fetch-stats [%s]: fatal error", job_id)
-        job["status"] = "error"
-        job["error"]  = str(exc)
-
-    finally:
-        job["finished_at"] = datetime.now(timezone.utc).isoformat()
+        logger.exception("fetch-stats [%s]: fatal error", run_id)
+        runs_repo.complete_run(run_id, rows_processed=fetched, error=str(exc))
 
 
 @pipeline_bp.route("/pipeline/fetch-stats", methods=["POST"])
 @require_admin
 def fetch_stats_batch():
-    """
-    Kick off a background stats fetch for all qualifying players.
+    """Kick off a background stats fetch. Returns run_id (was job_id)."""
+    body = request.get_json(silent=True) or {}
+    player_ids = body.get("player_ids") or []
+    season = body.get("season", CURRENT_SEASON)
+    refresh = bool(body.get("refresh", False))
 
-    Returns immediately with a job_id. Poll GET /api/pipeline/job-status/<job_id>
-    to track progress.
+    draft_id = _get_draft_id()
+    scope = "player" if player_ids else "bulk"
 
-    Request body (JSON, all optional):
-      {
-        "player_ids": ["uuid1", ...],  // empty = all qualifying players
-        "season":     "2025-26",       // default: current season
-        "refresh":    false            // force re-fetch even if stats are cached
-      }
+    try:
+        run_id = runs_repo.start_run(
+            name="stat_fetch",
+            scope=scope,
+            snapshot_release_id=draft_id,
+            player_id=player_ids[0] if len(player_ids) == 1 else None,
+        )
+    except Exception:
+        logger.exception("Failed to start pipeline run")
+        return _err("Failed to start pipeline run", 500)
 
-    Response data:
-      { "job_id": str }
-    """
-    # Only allow one fetch-stats job at a time
-    with _job_lock:
-        active = [
-            jid for jid, j in _jobs.items()
-            if j.get("status") == "running"
-        ]
-        if active:
-            return _err(
-                f"A stats fetch is already running (job {active[0]}). "
-                "Wait for it to finish or check its status.",
-                409,
-            )
-
-        body       = request.get_json(silent=True) or {}
-        player_ids = body.get("player_ids") or []
-        season     = body.get("season", CURRENT_SEASON)
-        refresh    = bool(body.get("refresh", False))
-
-        job_id = str(uuid.uuid4())
-        _jobs[job_id] = {
-            "status":      "running",
-            "progress":    0,
-            "total":       0,
-            "fetched":     0,
-            "errors":      0,
-            "result":      None,
-            "error":       None,
-            "started_at":  datetime.now(timezone.utc).isoformat(),
-            "finished_at": None,
-        }
-
-    # Spawn background thread — Flask's threaded=True lets this run
-    # without blocking other request handlers
     thread = threading.Thread(
         target=_run_fetch_stats_job,
-        args=(job_id, player_ids, season, refresh),
+        args=(run_id, player_ids, season, refresh),
         daemon=True,
     )
     thread.start()
 
-    return _ok({"job_id": job_id})
+    return _ok({"run_id": run_id})
 
 
 # ---------------------------------------------------------------------------
-# GET /api/pipeline/job-status/<job_id>
+# GET /api/pipeline/runs/<run_id>
+# (replaces legacy GET /api/pipeline/job-status/<job_id>)
 # ---------------------------------------------------------------------------
 
 
+@pipeline_bp.route("/pipeline/runs/<run_id>", methods=["GET"])
+@require_admin
+def get_run(run_id: str):
+    """Return current state of a specific pipeline run.
+
+    Admin-only: the error_tail field may contain internal stack traces.
+    """
+    try:
+        supabase = get_supabase()
+        result = run_query(
+            lambda: supabase.table("pipeline_runs")
+            .select("*")
+            .eq("id", run_id)
+            .single()
+            .execute()
+        )
+        return _ok(result.data)
+    except Exception:
+        return _err(f"Run not found: {run_id}", 404)
+
+
+# Legacy job-status route for backward compat with existing frontend polls
 @pipeline_bp.route("/pipeline/job-status/<job_id>", methods=["GET"])
-def job_status(job_id: str):
-    """
-    Poll the progress of a background fetch-stats job.
+def job_status_legacy(job_id: str):
+    """Legacy endpoint; delegates to /pipeline/runs/<job_id>."""
+    return get_run(job_id)
 
-    Response data:
-      {
-        "status":      "running" | "complete" | "error",
-        "progress":    int,    // players processed so far
-        "total":       int,    // total players to process
-        "fetched":     int,    // successful fetches so far
-        "errors":      int,    // fetch errors so far
-        "result":      {...},  // final result dict (null while running)
-        "error":       str,    // error message if status == "error"
-        "started_at":  str,
-        "finished_at": str | null,
-      }
-    """
-    job = _jobs.get(job_id)
-    if not job:
-        return _err(f"Unknown job: {job_id}", 404)
-    return _ok(dict(job))
+
+# ---------------------------------------------------------------------------
+# POST /api/pipeline/salary-scrape
+# ---------------------------------------------------------------------------
+
+
+def _run_salary_scrape_job(run_id: str, player_id: str | None) -> None:
+    """Background worker: scrape salaries."""
+    supabase = get_supabase()
+    rows = 0
+    try:
+        if player_id:
+            # Single-player salary update — use bulk scrape filtered to team
+            player_row = supabase.table("players").select("team").eq("id", player_id).single().execute()
+            team = player_row.data.get("team") if player_row.data else None
+            result = run_bulk_salary_scrape(team, supabase)
+        else:
+            result = run_bulk_salary_scrape(None, supabase)
+        rows = result.get("matched", 0)
+        runs_repo.complete_run(run_id, rows_processed=rows)
+    except Exception as exc:
+        logger.exception("salary-scrape [%s]: fatal error", run_id)
+        runs_repo.complete_run(run_id, rows_processed=rows, error=str(exc))
+
+
+@pipeline_bp.route("/pipeline/salary-scrape", methods=["POST"])
+@require_admin
+def salary_scrape_bulk():
+    """Kick off a bulk salary scrape."""
+    draft_id = _get_draft_id()
+    try:
+        run_id = runs_repo.start_run("salary_scrape", "bulk", snapshot_release_id=draft_id)
+    except Exception:
+        return _err("Failed to start salary scrape run", 500)
+
+    threading.Thread(
+        target=_run_salary_scrape_job,
+        args=(run_id, None),
+        daemon=True,
+    ).start()
+
+    return _ok({"run_id": run_id})
+
+
+@pipeline_bp.route("/pipeline/salary-scrape/<player_id>", methods=["POST"])
+@require_admin
+def salary_scrape_player(player_id: str):
+    """Kick off a per-player salary scrape."""
+    draft_id = _get_draft_id()
+    try:
+        run_id = runs_repo.start_run(
+            "salary_scrape", "player",
+            snapshot_release_id=draft_id,
+            player_id=player_id,
+        )
+    except Exception:
+        return _err("Failed to start salary scrape run", 500)
+
+    threading.Thread(
+        target=_run_salary_scrape_job,
+        args=(run_id, player_id),
+        daemon=True,
+    ).start()
+
+    return _ok({"run_id": run_id})
+
+
+# ---------------------------------------------------------------------------
+# POST /api/pipeline/bio-team-sync
+# ---------------------------------------------------------------------------
+
+
+def _run_bio_team_sync_job(run_id: str, player_id: str | None, season: str) -> None:
+    """Background worker: bio/team sync."""
+    supabase = get_supabase()
+    rows = 0
+    try:
+        if player_id:
+            result = run_player_bio_team_sync(player_id, supabase)
+        else:
+            result = run_bulk_bio_team_sync(season, supabase)
+        rows = result.get("refreshed", 0)
+        runs_repo.complete_run(run_id, rows_processed=rows)
+    except Exception as exc:
+        logger.exception("bio-team-sync [%s]: fatal error", run_id)
+        runs_repo.complete_run(run_id, rows_processed=rows, error=str(exc))
+
+
+@pipeline_bp.route("/pipeline/bio-team-sync", methods=["POST"])
+@require_admin
+def bio_team_sync_bulk():
+    """Kick off a bulk bio/team sync."""
+    body = request.get_json(silent=True) or {}
+    season = body.get("season", CURRENT_SEASON)
+    draft_id = _get_draft_id()
+
+    try:
+        run_id = runs_repo.start_run("bio_team_sync", "bulk", snapshot_release_id=draft_id)
+    except Exception:
+        return _err("Failed to start bio/team sync run", 500)
+
+    threading.Thread(
+        target=_run_bio_team_sync_job,
+        args=(run_id, None, season),
+        daemon=True,
+    ).start()
+
+    return _ok({"run_id": run_id})
+
+
+@pipeline_bp.route("/pipeline/bio-team-sync/<player_id>", methods=["POST"])
+@require_admin
+def bio_team_sync_player(player_id: str):
+    """Kick off a per-player bio/team sync."""
+    body = request.get_json(silent=True) or {}
+    season = body.get("season", CURRENT_SEASON)
+    draft_id = _get_draft_id()
+
+    try:
+        run_id = runs_repo.start_run(
+            "bio_team_sync", "player",
+            snapshot_release_id=draft_id,
+            player_id=player_id,
+        )
+    except Exception:
+        return _err("Failed to start bio/team sync run", 500)
+
+    threading.Thread(
+        target=_run_bio_team_sync_job,
+        args=(run_id, player_id, season),
+        daemon=True,
+    ).start()
+
+    return _ok({"run_id": run_id})

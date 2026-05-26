@@ -239,8 +239,48 @@ def set_distributions(distributions: dict[str, list[float]] | None) -> None:
         )
 
 
+def _invalidation_allowed() -> bool:
+    """
+    Return False while a Snapshot draft/review is open.
+
+    Invariant: the distribution cache must not be cleared mid-draft so that
+    production cohesion reads remain stable against the previously published
+    Snapshot.  Only the publish flow (which explicitly calls
+    _force_clear_distributions) is exempt from this guard.
+
+    Lazy import avoids a circular import at module load time.
+    """
+    try:
+        from services.snapshot_versions.repo import get_draft
+        return get_draft() is None
+    except Exception:
+        # If the draft check fails, allow invalidation (safe default)
+        return True
+
+
 def clear_distributions() -> None:
-    """Clear cached distributions so normalization falls back to theoretical max."""
+    """
+    Clear cached distributions — gated by the draft-pin Invariant.
+
+    No-ops while a Snapshot draft or review is open.  Call
+    _force_clear_distributions() to bypass the guard (publish flow only).
+    """
+    if not _invalidation_allowed():
+        logger.debug(
+            "clear_distributions skipped: draft in progress (distribution cache pinned)"
+        )
+        return
+    global _DISTRIBUTION_SEASON
+    _DISTRIBUTION_SEASON = None
+    set_distributions(None)
+
+
+def _force_clear_distributions() -> None:
+    """
+    Unconditionally clear the distribution cache.
+
+    Bypass for the publish flow. Do not call from any other code path.
+    """
     global _DISTRIBUTION_SEASON
     _DISTRIBUTION_SEASON = None
     set_distributions(None)

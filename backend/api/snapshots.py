@@ -1,0 +1,322 @@
+"""
+api/snapshots.py — Snapshot Release lifecycle endpoints.
+
+Blueprint prefix: /api/snapshots
+All endpoints require @require_admin (reads via service-role client per A-6).
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import logging
+from uuid import UUID
+
+from flask import Blueprint, jsonify, request
+
+from api.auth import require_admin
+from services.snapshot_versions import repo, validator, summary
+
+logger = logging.getLogger(__name__)
+
+snapshots_bp = Blueprint("snapshots", __name__, url_prefix="/api/snapshots")
+
+
+# ---------------------------------------------------------------------------
+# Serialisation helpers
+# ---------------------------------------------------------------------------
+
+
+def _release_dict(r) -> dict:
+    return {
+        "id": r.id,
+        "label": r.label,
+        "season": r.season,
+        "status": r.status,
+        "is_active": r.is_active,
+        "published_at": r.published_at,
+        "created_at": r.created_at,
+    }
+
+
+def _ok(data, status: int = 200):
+    return jsonify({"success": True, "data": data, "error": None}), status
+
+
+def _err(msg: str, status: int = 500):
+    return jsonify({"success": False, "data": None, "error": msg}), status
+
+
+def _validate_uuid(value: str, label: str = "id"):
+    try:
+        UUID(value)
+        return None
+    except (ValueError, AttributeError):
+        return f"Invalid {label}: {value}"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/snapshots/active
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/active", methods=["GET"])
+@require_admin
+def get_active():
+    """Return the active published Snapshot Release."""
+    try:
+        release = repo.get_active_release()
+        return _ok(_release_dict(release))
+    except Exception:
+        logger.exception("Failed to fetch active Snapshot Release")
+        return _err("Failed to fetch active Snapshot Release", 500)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/snapshots/draft
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/draft", methods=["GET"])
+@require_admin
+def get_draft():
+    """Return the current open draft/review, or null."""
+    try:
+        draft = repo.get_draft()
+        if draft is None:
+            return _ok(None)
+
+        data = _release_dict(draft)
+        # Augment with has_running_jobs
+        from services.pipeline_runs import repo as runs_repo
+        data["has_running_jobs"] = runs_repo.any_running(draft.id)
+        return _ok(data)
+    except Exception:
+        logger.exception("Failed to fetch draft Snapshot Release")
+        return _err("Failed to fetch draft Snapshot Release", 500)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/snapshots/releases
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/releases", methods=["GET"])
+@require_admin
+def list_releases():
+    """Return recent published Snapshot Releases."""
+    limit = min(int(request.args.get("limit", 20)), 100)
+    try:
+        releases = repo.list_releases(limit=limit)
+        return _ok([_release_dict(r) for r in releases])
+    except Exception:
+        logger.exception("Failed to list Snapshot Releases")
+        return _err("Failed to list Snapshot Releases", 500)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/snapshots/releases/<release_id>
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/releases/<release_id>", methods=["GET"])
+@require_admin
+def get_release(release_id: str):
+    """Return a single published Snapshot Release by ID."""
+    uuid_err = _validate_uuid(release_id, "release_id")
+    if uuid_err:
+        return _err(uuid_err, 400)
+    try:
+        release = repo.get_release(release_id)
+        if release.status != "published":
+            return _err("not_found", 404)
+        return _ok(_release_dict(release))
+    except Exception:
+        logger.exception("Failed to fetch Snapshot Release %s", release_id)
+        return _err("Snapshot Release not found", 404)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/snapshots/drafts
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/drafts", methods=["POST"])
+@require_admin
+def create_draft():
+    """Create a new draft Snapshot Release."""
+    try:
+        draft = repo.create_draft()
+        return _ok(_release_dict(draft), 201)
+    except ValueError as exc:
+        code = str(exc)
+        status = 409 if code == "draft_already_exists" else 400
+        return _err(code, status)
+    except Exception:
+        logger.exception("Failed to create draft Snapshot Release")
+        return _err("Failed to create draft", 500)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/snapshots/drafts/<draft_id>/move-to-review
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/drafts/<draft_id>/move-to-review", methods=["POST"])
+@require_admin
+def move_to_review(draft_id: str):
+    """Flip draft → review. Blocked if pipeline runs are in flight."""
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return _err(uuid_err, 400)
+    try:
+        release = repo.move_to_review(draft_id)
+        return _ok(_release_dict(release))
+    except ValueError as exc:
+        code = str(exc)
+        status = 409 if code in ("pipeline_runs_in_flight", "draft_not_found_or_not_draft") else 400
+        return _err(code, status)
+    except Exception:
+        logger.exception("Failed to move draft to review")
+        return _err("Failed to move to review", 500)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/snapshots/drafts/<draft_id>/move-to-draft
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/drafts/<draft_id>/move-to-draft", methods=["POST"])
+@require_admin
+def move_to_draft(draft_id: str):
+    """Flip review → draft."""
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return _err(uuid_err, 400)
+    try:
+        release = repo.move_to_draft(draft_id)
+        return _ok(_release_dict(release))
+    except ValueError as exc:
+        return _err(str(exc), 400)
+    except Exception:
+        logger.exception("Failed to move review to draft")
+        return _err("Failed to move to draft", 500)
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/snapshots/drafts/<draft_id>
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/drafts/<draft_id>", methods=["DELETE"])
+@require_admin
+def discard_draft(draft_id: str):
+    """Hard-delete a draft/review row. Live tables are untouched."""
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return _err(uuid_err, 400)
+    try:
+        repo.discard_draft(draft_id)
+        return _ok(None)
+    except ValueError:
+        return _err("draft_not_found", 404)
+    except Exception:
+        logger.exception("Failed to discard draft %s", draft_id)
+        return _err("Failed to discard draft", 500)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/snapshots/drafts/<draft_id>/publish
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/drafts/<draft_id>/publish", methods=["POST"])
+@require_admin
+def publish_draft(draft_id: str):
+    """Validate and atomically publish a draft Snapshot Release."""
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return _err(uuid_err, 400)
+
+    body = request.get_json(silent=True) or {}
+    label = body.get("label", "").strip()
+    allow_missing_composite = bool(body.get("allow_missing_composite", False))
+
+    if not label:
+        return _err("label_required", 400)
+
+    try:
+        published = repo.publish_draft(
+            draft_id,
+            label=label,
+            allow_missing_composite=allow_missing_composite,
+        )
+        return _ok(_release_dict(published))
+    except ValueError as exc:
+        code = str(exc)
+        if "pipeline_runs_in_flight" in code:
+            return _err(code, 409)
+        if "missing_composite_not_acknowledged" in code:
+            return _err(code, 422)
+        return _err(code, 400)
+    except Exception:
+        logger.exception("Failed to publish draft %s", draft_id)
+        return _err("Failed to publish draft", 500)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/snapshots/reset-working-state
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/reset-working-state", methods=["POST"])
+@require_admin
+def reset_working_state():
+    """Reset live skill_profiles and players from the active Snapshot."""
+    try:
+        repo.reset_working_state_from_active()
+        return _ok({"ok": True})
+    except ValueError as exc:
+        return _err(str(exc), 400)
+    except Exception:
+        logger.exception("Failed to reset working state")
+        return _err("Failed to reset working state", 500)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/snapshots/drafts/<draft_id>/validation
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/drafts/<draft_id>/validation", methods=["GET"])
+@require_admin
+def get_validation(draft_id: str):
+    """Return pre-publish validation counts for the publish modal."""
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return _err(uuid_err, 400)
+    try:
+        counts = validator.validate_publishable(draft_id)
+        return _ok(counts)
+    except Exception:
+        logger.exception("Failed to validate draft %s", draft_id)
+        return _err("Failed to validate draft", 500)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/snapshots/drafts/<draft_id>/summary
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/drafts/<draft_id>/summary", methods=["GET"])
+@require_admin
+def get_summary(draft_id: str):
+    """Return count summary for the review-state Surface."""
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return _err(uuid_err, 400)
+    try:
+        counts = summary.count_summary(draft_id)
+        return _ok(counts)
+    except Exception:
+        logger.exception("Failed to summarize draft %s", draft_id)
+        return _err("Failed to summarize draft", 500)

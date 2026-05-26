@@ -445,6 +445,44 @@ def run_bulk_salary_scrape(
 
 
 # ---------------------------------------------------------------------------
+# Bio / team sync (A-10)
+# ---------------------------------------------------------------------------
+
+
+def run_bulk_bio_team_sync(season: str, supabase: Client) -> dict:
+    """
+    Re-sync bio and team data (name, team, position, physical attributes)
+    for all qualifying players by re-fetching from nba_api with refresh=True.
+
+    Returns {"refreshed": int, "errors": int}.
+    """
+    logger.info("run_bulk_bio_team_sync: refreshing all players for season %s", season)
+    errors = 0
+    try:
+        players = get_or_fetch_players(season, DEFAULT_MIN_MPG, refresh=True, supabase=supabase)
+        return {"refreshed": len(players), "errors": 0}
+    except Exception:
+        logger.exception("run_bulk_bio_team_sync: bulk refresh failed")
+        return {"refreshed": 0, "errors": 1}
+
+
+def run_player_bio_team_sync(player_id: str, supabase: Client) -> dict:
+    """
+    Re-sync bio and team data for a single player by forcing a fresh stats fetch.
+
+    Returns {"refreshed": int, "errors": int}.
+    """
+    logger.info("run_player_bio_team_sync: refreshing player %s", player_id)
+    try:
+        blob = get_or_fetch_player_stats(player_id, CURRENT_SEASON, supabase, refresh=True)
+        refreshed = 1 if blob else 0
+        return {"refreshed": refreshed, "errors": 0 if blob else 1}
+    except Exception:
+        logger.exception("run_player_bio_team_sync: refresh failed for %s", player_id)
+        return {"refreshed": 0, "errors": 1}
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
