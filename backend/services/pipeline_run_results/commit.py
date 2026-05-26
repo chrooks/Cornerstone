@@ -7,10 +7,10 @@ commit_run:
       2. UPSERTs pipeline_run_flag_results rows into draft_skill_flags
       3. For threshold_edit runs: writes proposed thresholds from params into
          draft_skill_thresholds for the affected skill
-      4. Sets pipeline_runs.committed_at = now()
+      4. Sets pipeline_runs.committed_at = now() and returns the canonical value
       5. Deletes staged rows
   - For threshold_edit runs: refreshes the in-memory threshold cache.
-  - Returns the committed_at timestamp as a string.
+  - Returns the committed_at timestamp (canonical Postgres value) as a string.
 
 discard_run:
   - Deletes staged rows from both staging tables.
@@ -20,7 +20,6 @@ discard_run:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 
 from services.supabase_client import get_supabase, run_query
 from services.pipeline_run_results.repo import discard_staged_rows
@@ -38,36 +37,32 @@ def commit_run(run_id: str) -> str:
     """Commit a staged pipeline run into the draft working tables.
 
     Calls the Postgres RPC commit_pipeline_run which handles the atomic
-    upsert + threshold write + staged-row cleanup in a single transaction.
+    upsert + threshold write + staged-row cleanup in a single transaction,
+    and returns the canonical committed_at timestamp written to pipeline_runs.
 
     For threshold_edit runs, also refreshes the in-memory threshold cache
     so the next evaluation uses the newly committed thresholds without
     waiting for the 5-minute TTL.
 
     Returns:
-        The committed_at timestamp as an ISO-8601 string.
+        The committed_at timestamp as a string. This is the canonical Postgres
+        value — either returned directly by the RPC, or read back from
+        pipeline_runs.committed_at if the RPC's return value is unavailable.
 
     Raises:
-        RuntimeError if the RPC fails.
+        Propagates any exception from the RPC. The RPC is the sole Contract
+        for commits; there is no Python-side fallback.
     """
     client = _get_client()
 
-    committed_at = datetime.now(timezone.utc).isoformat()
+    rpc_result = run_query(
+        lambda: client.rpc(
+            "commit_pipeline_run",
+            {"p_run_id": run_id},
+        ).execute()
+    )
 
-    try:
-        run_query(
-            lambda: client.rpc(
-                "commit_pipeline_run",
-                {"p_run_id": run_id},
-            ).execute()
-        )
-    except Exception:
-        # RPC not yet deployed — fall back to Python-side commit
-        logger.warning(
-            "commit_pipeline_run RPC not available — using Python fallback for run %s",
-            run_id,
-        )
-        _python_fallback_commit(run_id, committed_at, client)
+    committed_at = _extract_committed_at(rpc_result, run_id, client)
 
     # Check if this was a threshold_edit run; if so, refresh threshold cache
     try:
@@ -82,83 +77,35 @@ def commit_run(run_id: str) -> str:
     return committed_at
 
 
-def _python_fallback_commit(run_id: str, committed_at: str, client) -> None:
-    """Python-side fallback commit when the Postgres RPC is not deployed.
+def _extract_committed_at(rpc_result, run_id: str, client) -> str:
+    """Pull the canonical committed_at out of the RPC response.
 
-    Upserts staged profile rows into draft_skill_profiles, staged flag rows
-    into draft_skill_flags, and marks the run committed.
-
-    This is not fully atomic (no single DB transaction), but acceptable as a
-    fallback during early M2 development before the RPC migration is applied.
+    The hardened commit_pipeline_run RPC returns TIMESTAMPTZ. Supabase-py
+    surfaces scalar function returns in result.data. If the value is missing
+    for any reason (older RPC deployed, unexpected response shape), fall
+    forward by reading pipeline_runs.committed_at directly — still the
+    canonical Postgres value, never datetime.now().
     """
-    # Fetch staged profile rows
-    profile_result = run_query(
-        lambda: client.table("pipeline_run_results")
-        .select("*")
-        .eq("run_id", run_id)
-        .execute()
-    )
-    profile_rows = profile_result.data or []
+    data = getattr(rpc_result, "data", None)
+    if isinstance(data, str) and data:
+        return data
+    if isinstance(data, list) and data:
+        first = data[0]
+        if isinstance(first, str):
+            return first
+        if isinstance(first, dict):
+            for key in ("commit_pipeline_run", "committed_at"):
+                value = first.get(key)
+                if isinstance(value, str) and value:
+                    return value
 
-    # Upsert into draft_skill_profiles
-    for row in profile_rows:
-        upsert_payload = {
-            "player_id": row["player_id"],
-            "season": row["season"],
-            "source": row["source"],
-            "profile": row["profile"],
-            "reviewed": False,
-            "review_required": any(
-                v.get("review_recommended", False)
-                for v in (row.get("profile") or {}).values()
-                if isinstance(v, dict)
-            ),
-        }
-        run_query(
-            lambda p=upsert_payload: client.table("draft_skill_profiles")
-            .upsert(p, on_conflict="player_id,season,source")
-            .execute()
+    run_row = runs_repo.get_run(run_id, client=client)
+    if not run_row or not run_row.get("committed_at"):
+        raise RuntimeError(
+            f"commit_pipeline_run returned no committed_at and run {run_id} "
+            "has no committed_at after RPC — refusing to fabricate a timestamp."
         )
-
-    # Fetch staged flag rows
-    flag_result = run_query(
-        lambda: client.table("pipeline_run_flag_results")
-        .select("*")
-        .eq("run_id", run_id)
-        .execute()
-    )
-    flag_rows = flag_result.data or []
-
-    # Upsert into draft_skill_flags
-    for row in flag_rows:
-        upsert_payload = {
-            "skill_profile_id": None,  # Will be resolved by join on player_id/season/source
-            "player_id": row["player_id"],
-            "skill_name": row["skill_name"],
-            "flag_reason": row["flag_reason"],
-            "claude_tier": row.get("claude_tier"),
-            "stats_tier": row.get("stats_tier"),
-            "resolution": None,
-        }
-        try:
-            run_query(
-                lambda p=upsert_payload: client.table("draft_skill_flags")
-                .insert(p)
-                .execute()
-            )
-        except Exception:
-            logger.exception("Failed to insert flag row for player %s", row.get("player_id"))
-
-    # Clean up staging rows
-    discard_staged_rows(run_id)
-
-    # Mark committed
-    runs_repo.mark_committed(run_id, committed_at, client=client)
-
-    logger.info(
-        "Python fallback commit complete for run %s: %d profiles, %d flags",
-        run_id, len(profile_rows), len(flag_rows),
-    )
+    return run_row["committed_at"]
 
 
 def discard_run(run_id: str) -> None:

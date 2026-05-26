@@ -165,6 +165,49 @@ def test_commit_pipeline_run_409_when_already_committed(admin_client):
     assert "already_committed" in body["error"]
 
 
+def test_commit_pipeline_run_propagates_rpc_error(admin_client):
+    """If the commit RPC raises, the route returns 500 — never silently swallow.
+
+    The Python-side fallback was removed; the RPC is the sole Contract for
+    commits. An RPC failure must surface, not be masked by a fallback path
+    that may not satisfy the same atomicity guarantees.
+    """
+    with patch("services.pipeline_runs.repo.get_run", return_value=_mock_run("run-explode")):
+        with patch(
+            "services.pipeline_run_results.commit.commit_run",
+            side_effect=RuntimeError("RPC blew up"),
+        ):
+            resp = admin_client.post(
+                "/api/pipeline-runs/run-explode/commit", headers=AUTH
+            )
+
+    assert resp.status_code == 500
+    body = resp.get_json()
+    assert body["success"] is False
+
+
+def test_commit_pipeline_run_returns_canonical_rpc_timestamp(admin_client):
+    """The committed_at returned to the client is the value the RPC produced.
+
+    Read-back consistency: whatever string commit_run returns (sourced from
+    the Postgres RPC, never a Python datetime.now()) is what surfaces in the
+    response body. No drift between server clock and DB clock.
+    """
+    canonical = "2026-05-27T12:34:56.789Z"
+    with patch("services.pipeline_runs.repo.get_run", return_value=_mock_run("run-canon")):
+        with patch(
+            "services.pipeline_run_results.commit.commit_run",
+            return_value=canonical,
+        ):
+            resp = admin_client.post(
+                "/api/pipeline-runs/run-canon/commit", headers=AUTH
+            )
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["data"]["committed_at"] == canonical
+
+
 # ---------------------------------------------------------------------------
 # POST /api/pipeline-runs/<id>/discard
 # ---------------------------------------------------------------------------
