@@ -23,6 +23,29 @@ interface ModalProps {
   ariaLabelledBy?: string;
 }
 
+// Tabbable selector — matches the canonical focus-trap set without pulling in a
+// dependency. Filtering for `:not([disabled])` and `[tabindex='-1']` handles
+// disabled and programmatically-focused-only nodes.
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "area[href]",
+  "button:not([disabled])",
+  "input:not([disabled]):not([type='hidden'])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "iframe",
+  "object",
+  "embed",
+  "[contenteditable='true']",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function getFocusable(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (el) => !el.hasAttribute("disabled") && el.tabIndex !== -1,
+  );
+}
+
 export function Modal({
   id,
   open,
@@ -32,27 +55,75 @@ export function Modal({
   ariaLabelledBy,
 }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
 
-  // Close on Escape
+  // Close on Escape + trap Tab/Shift-Tab inside the dialog
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusable = getFocusable(panel);
+      if (focusable.length === 0) {
+        // Nothing tabbable inside — keep focus on the panel itself
+        e.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (e.shiftKey) {
+        if (active === first || !panel.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last || !panel.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  // Prevent body scroll while open
+  // Prevent body scroll, capture the opener, move focus into the dialog, and
+  // restore focus to the opener on close.
   useEffect(() => {
     if (open) {
+      openerRef.current = (document.activeElement as HTMLElement) ?? null;
       document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
+
+      // Defer focus to next tick so the portal has mounted children
+      const id = window.requestAnimationFrame(() => {
+        const panel = panelRef.current;
+        if (!panel) return;
+        const focusable = getFocusable(panel);
+        if (focusable.length > 0) {
+          focusable[0].focus();
+        } else {
+          panel.tabIndex = -1;
+          panel.focus();
+        }
+      });
+      return () => {
+        window.cancelAnimationFrame(id);
+        document.body.style.overflow = "";
+        openerRef.current?.focus?.();
+        openerRef.current = null;
+      };
     }
-    return () => {
-      document.body.style.overflow = "";
-    };
+    return;
   }, [open]);
 
   if (!open || typeof document === "undefined") return null;
@@ -69,6 +140,7 @@ export function Modal({
     >
       <div
         id={id}
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={ariaLabelledBy}
