@@ -72,7 +72,7 @@ def validate_publishable(
         for i in range(0, len(player_ids), _CHUNK):
             chunk = player_ids[i: i + _CHUNK]
             profiles = run_query(
-                lambda c_chunk=chunk: c.table("skill_profiles")
+                lambda c_chunk=chunk: c.table("draft_skill_profiles")
                 .select("player_id")
                 .in_("player_id", c_chunk)
                 .eq("source", "composite")

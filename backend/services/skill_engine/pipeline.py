@@ -82,7 +82,7 @@ def batch_evaluate_skills(
     supabase: Client,
 ) -> dict[str, dict]:
     """
-    Evaluate skills for a list of players sequentially and persist to skill_profiles.
+    Evaluate skills for a list of players sequentially and persist to draft_skill_profiles.
 
     If player_ids is empty, fetches all qualifying players (>= DEFAULT_MIN_MPG)
     for the season and processes them all (full league run — may take minutes).
@@ -90,9 +90,9 @@ def batch_evaluate_skills(
     For each player:
       1. Evaluate skills via evaluate_all_skills
       2. Apply auto-promotions
-      3. Upsert the full skills_result into skill_profiles table
+      3. Upsert the full skills_result into draft_skill_profiles table
 
-    The skill_profiles upsert uses (player_id, season, source) as the unique key.
+    The draft_skill_profiles upsert uses (player_id, season, source) as the unique key.
     source is always "stats" for this automated pipeline.
 
     Returns: { player_id: skills_result_dict, ... }
@@ -146,7 +146,7 @@ def batch_evaluate_skills(
             skills_result = evaluate_all_skills(stats_blob, thresholds, league_avgs)
             skills_result = apply_auto_promotions(skills_result, thresholds)
 
-            # Persist to skill_profiles — upsert on (player_id, season, source).
+            # Persist to draft_skill_profiles — upsert on (player_id, season, source).
             # Low-confidence skills are preserved from the existing profile so that
             # hand-tuned or manually reviewed values aren't blown away on every run.
             _upsert_skill_profile(player_id, season, skills_result, supabase, thresholds)
@@ -175,7 +175,7 @@ def _upsert_skill_profile(
     thresholds: dict | None = None,
 ) -> None:
     """
-    Upsert a skill profile record into the skill_profiles table.
+    Upsert a skill profile record into the draft_skill_profiles table.
 
     Unique constraint: (player_id, season, source). If a row already exists
     for this combination, it is updated in-place (profile and timestamps).
@@ -195,7 +195,7 @@ def _upsert_skill_profile(
 
         if low_confidence_skills:
             existing_row = (
-                supabase.table("skill_profiles")
+                supabase.table("draft_skill_profiles")
                 .select("profile")
                 .eq("player_id", player_id)
                 .eq("season", season)
@@ -235,7 +235,7 @@ def _upsert_skill_profile(
     }
 
     # Use upsert with on_conflict specifying the unique column combination
-    supabase.table("skill_profiles").upsert(
+    supabase.table("draft_skill_profiles").upsert(
         profile_row, on_conflict="player_id,season,source"
     ).execute()
 

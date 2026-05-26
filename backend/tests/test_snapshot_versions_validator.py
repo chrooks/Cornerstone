@@ -62,7 +62,7 @@ class TestValidatePublishableMissingCompositePlayers:
                 mock_rq.side_effect = [
                     _result(players),  # players query
                     _result([{"nba_api_id": "1"}, {"nba_api_id": "1"}]),  # canonical_players
-                    _result([]),  # composite skill_profiles — both missing
+                    _result([]),  # composite draft_skill_profiles — both missing
                 ]
                 result = validator.validate_publishable("draft-001")
 
@@ -89,7 +89,7 @@ class TestValidatePublishableMissingCompositePlayers:
                     _result(
                         [{"nba_api_id": str(i)} for i in range(75)]
                     ),  # canonical_players — all match
-                    _result([]),  # composite skill_profiles — all missing
+                    _result([]),  # composite draft_skill_profiles — all missing
                 ]
                 result = validator.validate_publishable("draft-001")
 
@@ -108,7 +108,7 @@ class TestValidatePublishableMissingCompositePlayers:
                     _result([{"nba_api_id": "1"}]),  # canonical_players
                     _result(
                         [{"player_id": "p1"}, {"player_id": "p2"}]
-                    ),  # composite skill_profiles — none missing
+                    ),  # composite draft_skill_profiles — none missing
                 ]
                 result = validator.validate_publishable("draft-001")
 

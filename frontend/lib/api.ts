@@ -480,7 +480,7 @@ export async function bulkResolveFlags(
 // ---------------------------------------------------------------------------
 
 /**
- * Permanently delete a player and all associated data (skill_profiles, skill_flags, player_stats).
+ * Permanently delete a player and all associated data (draft_skill_profiles, draft_skill_flags, player_stats).
  * This is irreversible.
  */
 export async function deletePlayer(

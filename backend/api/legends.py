@@ -7,7 +7,7 @@ Endpoints:
   PUT  /api/legends/<legend_id>/skills           — upsert partial skill profile
   POST /api/legends/<legend_id>/claude-suggestion — Claude's suggestions (not persisted)
 
-Legend skill profiles are stored in skill_profiles with:
+Legend skill profiles are stored in draft_skill_profiles with:
   is_legend=true, source='manual', season=NULL, legend_id=<legend uuid>
   player_id is left NULL for legend rows.
 
@@ -134,7 +134,7 @@ def list_legends():
         # Fetch all legend skill profiles in one query (is_legend=true, source=manual)
         # We only need legend_id and the profile JSONB for completion counting
         profiles_res = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("legend_id, profile")
             .eq("is_legend", True)
             .eq("source", "manual")
@@ -211,7 +211,7 @@ def get_legend(legend_id: str):
 
         # Fetch skill profile (manual legend profile)
         profile_res = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id, profile")
             .eq("legend_id", legend_id)
             .eq("is_legend", True)
@@ -311,7 +311,7 @@ def update_legend_skills(legend_id: str):
 
         # Fetch existing profile to merge (partial update support)
         existing_res = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id, profile")
             .eq("legend_id", legend_id)
             .eq("is_legend", True)
@@ -326,7 +326,7 @@ def update_legend_skills(legend_id: str):
             merged_profile = {**existing_profile, **incoming_profile}
             # Update the existing row
             (
-                supabase.table("skill_profiles")
+                supabase.table("draft_skill_profiles")
                 .update({"profile": merged_profile})
                 .eq("id", existing_res.data[0]["id"])
                 .execute()
@@ -335,7 +335,7 @@ def update_legend_skills(legend_id: str):
             # Create a new profile row (upsert via insert)
             merged_profile = {**_empty_profile(), **incoming_profile}
             (
-                supabase.table("skill_profiles")
+                supabase.table("draft_skill_profiles")
                 .insert({
                     "legend_id":  legend_id,
                     "is_legend":  True,
@@ -635,7 +635,7 @@ def claude_suggestion(legend_id: str):
 
         # Fetch existing skill profile (if any) — used to build diff context for Claude
         profile_res = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("profile")
             .eq("legend_id", legend_id)
             .eq("is_legend", True)

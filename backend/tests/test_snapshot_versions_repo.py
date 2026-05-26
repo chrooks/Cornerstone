@@ -227,10 +227,10 @@ class TestDiscardDraft:
         with patch.object(repo, "_get_client", return_value=client):
             repo.discard_draft(draft_id)  # should not raise
 
-        # Verify DELETE was called on snapshot_releases, NOT on skill_profiles
+        # Verify DELETE was called on snapshot_releases, NOT on draft_skill_profiles
         assert client.table.call_args_list[0][0][0] == "snapshot_releases"
         all_tables_accessed = [call[0][0] for call in client.table.call_args_list]
-        assert "skill_profiles" not in all_tables_accessed
+        assert "draft_skill_profiles" not in all_tables_accessed
 
 
 # ---------------------------------------------------------------------------

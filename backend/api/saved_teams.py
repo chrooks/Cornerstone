@@ -237,7 +237,7 @@ def _resolve_snapshot_player(
     if not source_player_id:
         return None, None
     res = (
-        supabase.table("snapshot_players")
+        supabase.table("released_players")
         .select("id, canonical_player_id")
         .eq("snapshot_release_id", snapshot_release_id)
         .eq("source_player_id", source_player_id)
@@ -470,7 +470,7 @@ def _resolve_cornerstone_for_rebuild(
     source_id = cornerstone_row.get("source_player_id")
     if source_id:
         res = (
-            supabase.table("snapshot_players")
+            supabase.table("released_players")
             .select("source_player_id, name")
             .eq("snapshot_release_id", current_snapshot_release_id)
             .eq("source_player_id", source_id)
@@ -506,7 +506,7 @@ def _resolve_players_for_rebuild(
 ) -> list[dict[str, Any]]:
     """Resolve each non-cornerstone saved player against the current Snapshot Release.
 
-    Uses canonical_player_id → snapshot_players join. Falls back to
+    Uses canonical_player_id → released_players join. Falls back to
     source_player_id when canonical_player_id is absent (legacy data).
     """
     reports: list[dict[str, Any]] = []
@@ -553,7 +553,7 @@ def _resolve_players_for_rebuild(
         current_row = None
         if canonical_id:
             res = (
-                supabase.table("snapshot_players")
+                supabase.table("released_players")
                 .select("source_player_id, name, team, position, salary, skill_profile_snapshot")
                 .eq("snapshot_release_id", current_snapshot_release_id)
                 .eq("canonical_player_id", canonical_id)
@@ -565,7 +565,7 @@ def _resolve_players_for_rebuild(
                 current_row = rows[0]
         elif source_id:
             res = (
-                supabase.table("snapshot_players")
+                supabase.table("released_players")
                 .select("source_player_id, name, team, position, salary, skill_profile_snapshot")
                 .eq("snapshot_release_id", current_snapshot_release_id)
                 .eq("source_player_id", source_id)

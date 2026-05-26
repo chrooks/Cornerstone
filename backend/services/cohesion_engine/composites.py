@@ -363,7 +363,7 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
     all_raw: dict[str, list[float]] = {name: [] for name in COMPOSITE_NAMES}
 
     profiles = _run_query(
-        lambda: client.table("skill_profiles")
+        lambda: client.table("draft_skill_profiles")
         .select("profile")
         .eq("season", season)
         .eq("source", "composite")
@@ -376,7 +376,7 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
             all_raw[name].append(value)
 
     legend_profiles = _run_query(
-        lambda: client.table("skill_profiles")
+        lambda: client.table("draft_skill_profiles")
         .select("profile")
         .eq("source", "manual")
         .eq("is_legend", True)

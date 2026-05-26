@@ -30,7 +30,7 @@ def count_summary(draft_id: str, client=None) -> dict:
             "players_changed_since_active": int,
             "players_missing_composite": int,
             "thresholds_changed": int,           # always 0 in this slice; #7 owns threshold versioning
-            "manual_overrides_since_active": int, # manual skill_profiles updated after active published_at
+            "manual_overrides_since_active": int, # manual draft_skill_profiles updated after active published_at
         }
     """
     c = client or _get_client()
@@ -53,7 +53,7 @@ def count_summary(draft_id: str, client=None) -> dict:
         for i in range(0, len(player_ids), _CHUNK):
             chunk = player_ids[i: i + _CHUNK]
             profiles = run_query(
-                lambda c_chunk=chunk: c.table("skill_profiles")
+                lambda c_chunk=chunk: c.table("draft_skill_profiles")
                 .select("player_id")
                 .in_("player_id", c_chunk)
                 .eq("source", "composite")
@@ -78,7 +78,7 @@ def count_summary(draft_id: str, client=None) -> dict:
             if active_published_at:
                 # Players whose composite profile was updated after the last publish
                 updated_profiles = run_query(
-                    lambda: c.table("skill_profiles")
+                    lambda: c.table("draft_skill_profiles")
                     .select("player_id")
                     .eq("source", "composite")
                     .eq("season", _CURRENT_SEASON)
@@ -90,9 +90,9 @@ def count_summary(draft_id: str, client=None) -> dict:
                 }
                 changed_since_active = len(changed_player_ids)
 
-                # Manual skill_profiles updated after the last publish
+                # Manual draft_skill_profiles updated after the last publish
                 manual_profiles = run_query(
-                    lambda: c.table("skill_profiles")
+                    lambda: c.table("draft_skill_profiles")
                     .select("player_id")
                     .eq("source", "manual")
                     .eq("season", _CURRENT_SEASON)

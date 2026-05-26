@@ -302,7 +302,7 @@ def reactivate_release(release_id: str):
 @snapshots_bp.route("/reset-working-state", methods=["POST"])
 @require_admin
 def reset_working_state():
-    """Reset live skill_profiles and players from the active Snapshot."""
+    """Reset live draft_skill_profiles and players from the active Snapshot."""
     try:
         repo.reset_working_state_from_active()
         return _ok({"ok": True})

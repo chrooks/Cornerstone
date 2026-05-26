@@ -458,7 +458,7 @@ def _fetch_legends_for_bulk() -> list:
     """
     Return legends that have at least one rated skill, shaped as PlayerWithSkills dicts.
 
-    Legends are identified by is_legend=True, source='manual' in skill_profiles.
+    Legends are identified by is_legend=True, source='manual' in draft_skill_profiles.
     Skills are condensed to { skill_name: tier_string } — same shape as current players.
     Nulls (unrated skills) are omitted; 'None' tiers are kept to match current-player parity.
     """
@@ -479,7 +479,7 @@ def _fetch_legends_for_bulk() -> list:
 
     # Fetch manual skill profiles for all legends in one query
     profiles_res = (
-        supabase.table("skill_profiles")
+        supabase.table("draft_skill_profiles")
         .select("legend_id, profile")
         .in_("legend_id", legend_ids)
         .eq("is_legend", True)
@@ -533,7 +533,7 @@ def _fetch_legends_for_bulk() -> list:
 def _fetch_bulk_players(season: str, min_mpg: float) -> list:
     """
     Execute all three Supabase queries needed for the bulk players response
-    (players → skill_profiles → skill_flags) and join them in Python.
+    (players → draft_skill_profiles → draft_skill_flags) and join them in Python.
 
     Isolated into a standalone function so the route handler can retry the
     entire sequence on an HTTP/2 connection reset (RemoteProtocolError) by
@@ -569,7 +569,7 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
     for i in range(0, len(player_ids), _BATCH):
         batch = player_ids[i : i + _BATCH]
         rows = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id, player_id, profile")
             .in_("player_id", batch)
             .eq("season", season)
@@ -596,7 +596,7 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
         for i in range(0, len(profile_ids), _BATCH):
             batch = profile_ids[i : i + _BATCH]
             flags_rows = (
-                supabase.table("skill_flags")
+                supabase.table("draft_skill_flags")
                 .select("skill_profile_id, resolution")
                 .in_("skill_profile_id", batch)
                 .limit(_FLAG_BATCH_LIMIT)
@@ -771,8 +771,8 @@ def search_players():
 def delete_player(player_id: str):
     """
     Permanently delete a player and ALL of their associated data:
-      1. skill_flags  — rows linked via skill_profiles
-      2. skill_profiles — composite and stat profiles for this player
+      1. draft_skill_flags  — rows linked via draft_skill_profiles
+      2. draft_skill_profiles — composite and stat profiles for this player
       3. player_stats — cached stat blobs for this player
       4. players      — the player record itself
 
@@ -789,21 +789,21 @@ def delete_player(player_id: str):
         supabase = get_supabase()
 
         # Step 1: Find all skill_profile IDs for this player so we can delete
-        # their associated flags (FK: skill_flags.skill_profile_id → skill_profiles.id)
+        # their associated flags (FK: draft_skill_flags.skill_profile_id → draft_skill_profiles.id)
         profiles_res = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id")
             .eq("player_id", player_id)
             .execute()
         )
         profile_ids = [row["id"] for row in (profiles_res.data or [])]
 
-        # Step 2: Delete skill_flags linked to those profiles
+        # Step 2: Delete draft_skill_flags linked to those profiles
         if profile_ids:
-            supabase.table("skill_flags").delete().in_("skill_profile_id", profile_ids).execute()
+            supabase.table("draft_skill_flags").delete().in_("skill_profile_id", profile_ids).execute()
 
-        # Step 3: Delete skill_profiles for this player
-        supabase.table("skill_profiles").delete().eq("player_id", player_id).execute()
+        # Step 3: Delete draft_skill_profiles for this player
+        supabase.table("draft_skill_profiles").delete().eq("player_id", player_id).execute()
 
         # Step 4: Delete cached player_stats rows
         supabase.table("player_stats").delete().eq("player_id", player_id).execute()
@@ -943,7 +943,7 @@ def player_profile(player_id: str):
 
         # Fetch composite skill profile (if it exists)
         profile_row = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("id, profile")
             .eq("player_id", player_id)
             .eq("season", season)
@@ -965,7 +965,7 @@ def player_profile(player_id: str):
 
             # Fetch flag summary counts
             flag_rows = (
-                supabase.table("skill_flags")
+                supabase.table("draft_skill_flags")
                 .select("id, resolution")
                 .eq("skill_profile_id", composite_profile_id)
                 .execute()

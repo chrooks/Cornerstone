@@ -191,7 +191,7 @@ def _validate_threshold_rule(rule: dict) -> str | None:
 @require_admin
 def get_all_thresholds():
     """
-    Return all skill threshold rules from the skill_thresholds table.
+    Return all skill threshold rules from the draft_skill_thresholds table.
     Includes the full JSONB blob (volume gates, tier conditions, stabilization
     config, tier bumps, pre-adjustments, auto-promotions, stat_confidence, etc.).
 
@@ -200,7 +200,7 @@ def get_all_thresholds():
     try:
         supabase = get_supabase()
         rows = (
-            supabase.table("skill_thresholds")
+            supabase.table("draft_skill_thresholds")
             .select("id, skill_name, thresholds, updated_at")
             .order("skill_name")
             .execute()
@@ -244,7 +244,7 @@ def upsert_threshold(skill_name: str):
         supabase = get_supabase()
 
         # Upsert on skill_name conflict — insert if new, update if exists
-        supabase.table("skill_thresholds").upsert(
+        supabase.table("draft_skill_thresholds").upsert(
             {"skill_name": skill_name, "thresholds": body},
             on_conflict="skill_name",
         ).execute()

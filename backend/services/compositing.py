@@ -29,8 +29,8 @@ Compositing matrix (stat_confidence is the primary axis):
     one-tier disagreements become flagged instead of auto-accepted.
 
 Persistence:
-  Three skill_profiles records per player (source = "stats", "claude", "composite").
-  One skill_flags record per flagged skill.
+  Three draft_skill_profiles records per player (source = "stats", "claude", "composite").
+  One draft_skill_flags record per flagged skill.
 """
 
 import logging
@@ -335,7 +335,7 @@ def _upsert_skill_profile(
     supabase: Client,
 ) -> str:
     """
-    Upsert a skill_profiles record and return its ID.
+    Upsert a draft_skill_profiles record and return its ID.
 
     Unique constraint: (player_id, season, source).
     """
@@ -350,16 +350,16 @@ def _upsert_skill_profile(
         "is_legend":       False,
     }
     result = (
-        supabase.table("skill_profiles")
+        supabase.table("draft_skill_profiles")
         .upsert(row, on_conflict="player_id,season,source")
         .execute()
     )
     record_id = result.data[0]["id"] if result.data else None
-    logger.debug("Upserted skill_profiles source=%s for player %s — id=%s", source, player_id, record_id)
+    logger.debug("Upserted draft_skill_profiles source=%s for player %s — id=%s", source, player_id, record_id)
     return record_id
 
 
-def _upsert_skill_flags(
+def _upsert_draft_skill_flags(
     composite_profile_id: str,
     composite: dict,
     stat_skills_result: dict,
@@ -367,7 +367,7 @@ def _upsert_skill_flags(
     supabase: Client,
 ) -> int:
     """
-    Upsert skill_flags records for every flagged skill.
+    Upsert draft_skill_flags records for every flagged skill.
 
     Uses (skill_profile_id, skill_name) as the logical unique key.
     Supabase does not have a composite unique constraint for upsert here, so
@@ -377,7 +377,7 @@ def _upsert_skill_flags(
         Number of flag records created.
     """
     if not composite_profile_id:
-        logger.warning("Cannot upsert skill_flags — composite_profile_id is None")
+        logger.warning("Cannot upsert draft_skill_flags — composite_profile_id is None")
         return 0
 
     # Collect all flagged skills
@@ -409,14 +409,14 @@ def _upsert_skill_flags(
 
     # Delete existing flags for this composite profile, then re-insert
     # This is the safest upsert strategy for a table without a multi-col unique constraint.
-    supabase.table("skill_flags").delete().eq(
+    supabase.table("draft_skill_flags").delete().eq(
         "skill_profile_id", composite_profile_id
     ).execute()
 
-    supabase.table("skill_flags").insert(flagged_rows).execute()
+    supabase.table("draft_skill_flags").insert(flagged_rows).execute()
 
     logger.debug(
-        "Inserted %d skill_flags for composite profile %s", len(flagged_rows), composite_profile_id
+        "Inserted %d draft_skill_flags for composite profile %s", len(flagged_rows), composite_profile_id
     )
     return len(flagged_rows)
 
@@ -430,7 +430,7 @@ def persist_profiles(
     supabase: Client,
 ) -> dict:
     """
-    Persist all three skill_profiles (stats, claude, composite) and all skill_flags.
+    Persist all three draft_skill_profiles (stats, claude, composite) and all draft_skill_flags.
 
     Args:
         player_id:          Supabase UUID.
@@ -469,7 +469,7 @@ def persist_profiles(
     )
 
     # Skill flags — only for composite profile
-    flags_created = _upsert_skill_flags(
+    flags_created = _upsert_draft_skill_flags(
         composite_profile_id,
         composite,
         stat_skills_result,

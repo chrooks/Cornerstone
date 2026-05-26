@@ -75,12 +75,12 @@ def _get_stat_skills(player_id: str, season: str, supabase: Client) -> dict:
     """
     Fetch the stat-based skill profile.
 
-    First tries the skill_profiles DB cache (source='stats'). If not found,
+    First tries the draft_skill_profiles DB cache (source='stats'). If not found,
     computes fresh via the skill mapping service and persists it.
     """
     try:
         row = (
-            supabase.table("skill_profiles")
+            supabase.table("draft_skill_profiles")
             .select("profile")
             .eq("player_id", player_id)
             .eq("season", season)
@@ -197,7 +197,7 @@ def composite_profile_endpoint(player_id: str):
       2. Compute notability score
       3. Run Claude assessment (14 skills)
       4. Composite all 19 skills
-      5. Persist stats / claude / composite skill_profiles and skill_flags
+      5. Persist stats / claude / composite draft_skill_profiles and draft_skill_flags
 
     Path params:
       player_id — Supabase UUID
