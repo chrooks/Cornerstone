@@ -907,10 +907,20 @@ export interface PipelineRun {
   finished_at: string | null;
 }
 
+/** A single Player surfaced in the missing-composite disclosure. */
+export interface MissingCompositePlayer {
+  id: string;
+  name: string;
+  team: string | null;
+  position: string | null;
+}
+
 /** Validation counts returned before publish. */
 export interface SnapshotPublishValidation {
   players_missing_canonical: number;
   players_missing_composite: number;
+  /** Full list of Players lacking a composite Skill Profile. */
+  missing_composite_players: MissingCompositePlayer[];
 }
 
 /** Count summary for the review-state Surface. */

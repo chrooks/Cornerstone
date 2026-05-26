@@ -291,7 +291,11 @@ export default function SnapshotDraftPage() {
           <h2 className="text-[11px] uppercase tracking-wider font-semibold text-neutral-400 mb-4">
             Publish Summary
           </h2>
-          <CountSummary id="snapshot-draft-count-summary" summary={summary} />
+          <CountSummary
+            id="snapshot-draft-count-summary"
+            summary={summary}
+            missingCompositePlayers={validation?.missing_composite_players ?? []}
+          />
         </section>
       )}
 

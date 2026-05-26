@@ -32,14 +32,19 @@ def validate_publishable(
         {
             "players_missing_canonical": int,  # hard block if > 0
             "players_missing_composite": int,  # soft warning
+            "missing_composite_players": [    # full list — Player identities for the disclosure
+                {"id": str, "name": str, "team": str | None, "position": str | None},
+                ...
+            ],
         }
     """
     c = client or _get_client()
 
-    # Players in the current season that lack a canonical_player mapping
+    # Players in the current season — pull display fields up front so we can
+    # surface missing-composite Player identities without a second round-trip.
     all_players = run_query(
         lambda: c.table("players")
-        .select("id, nba_api_id")
+        .select("id, nba_api_id, name, team, position")
         .eq("season", _CURRENT_SEASON)
         .execute()
     )
@@ -60,6 +65,7 @@ def validate_publishable(
     # Players in the current season missing a composite profile
     player_ids = [str(p["id"]) for p in players]
     missing_composite = 0
+    missing_composite_players: list[dict] = []
     if player_ids:
         _CHUNK = 500
         composite_player_ids: set[str] = set()
@@ -75,9 +81,23 @@ def validate_publishable(
             composite_player_ids.update(
                 str(r["player_id"]) for r in (profiles.data or [])
             )
-        missing_composite = sum(1 for pid in player_ids if pid not in composite_player_ids)
+
+        for p in players:
+            pid = str(p["id"])
+            if pid in composite_player_ids:
+                continue
+            missing_composite += 1
+            missing_composite_players.append(
+                {
+                    "id": pid,
+                    "name": p.get("name") or "Unknown",
+                    "team": p.get("team"),
+                    "position": p.get("position"),
+                }
+            )
 
     return {
         "players_missing_canonical": missing_canonical,
         "players_missing_composite": missing_composite,
+        "missing_composite_players": missing_composite_players,
     }
