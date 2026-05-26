@@ -50,17 +50,10 @@ ALTER TABLE public.pipeline_run_flag_results
 -- B. Document the staging Boundary on both staging tables.
 -- ---------------------------------------------------------------------------
 COMMENT ON TABLE public.pipeline_run_results IS
-  'Staged profile rows for a pipeline_runs row, pre-commit. ' ||
-  'Boundary: only regular-player profile rows pass through staging. ' ||
-  'Legend profile rows (is_legend=true) write directly to draft_skill_profiles ' ||
-  'via the Legend editor (/admin/legends) and bypass this table. ' ||
-  '`season NOT NULL` reflects that constraint.';
+  'Staged profile rows for a pipeline_runs row, pre-commit. Boundary: only regular-player profile rows pass through staging. Legend profile rows (is_legend=true) write directly to draft_skill_profiles via the Legend editor (/admin/legends) and bypass this table. season NOT NULL reflects that constraint.';
 
 COMMENT ON TABLE public.pipeline_run_flag_results IS
-  'Staged flag rows for a pipeline_runs row, pre-commit. ' ||
-  'Boundary: legends do not produce flags, so no legend rows ever appear here. ' ||
-  'PK is (run_id, player_id, skill_name, season) so a multi-season ' ||
-  'skill_evaluation run does not collide.';
+  'Staged flag rows for a pipeline_runs row, pre-commit. Boundary: legends do not produce flags, so no legend rows ever appear here. PK is (run_id, player_id, skill_name, season) so a multi-season skill_evaluation run does not collide.';
 
 -- ---------------------------------------------------------------------------
 -- C. publish_snapshot_draft: add stable id DESC tiebreaker to DISTINCT ON.
