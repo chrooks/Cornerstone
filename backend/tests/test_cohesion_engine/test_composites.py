@@ -201,10 +201,10 @@ def test_normalize_composites_guards_zero_theoretical_max():
 
 def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
     """After M3: build_distributions reads released_players.skill_profile_snapshot,
-    not draft_skill_profiles.profile. Patching snapshots_active so the active-release
+    not draft_skill_profiles.profile. Patching snapshot_versions.active so the active-release
     guard succeeds without a live DB.
     """
-    import services.snapshots_active as snapshots_active_mod
+    import services.snapshot_versions.active as snapshots_active_mod
 
     FAKE_RELEASE_ID = "fake-release-id"
 

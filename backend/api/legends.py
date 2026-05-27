@@ -29,7 +29,7 @@ from services.skills import (
     ALL_SKILLS as _ALL_SKILLS_FROM_MODULE,
     SKILL_DEFINITIONS as _SKILL_DEFINITIONS_FROM_MODULE,
 )
-from services.snapshots_active import (
+from services.snapshot_versions.active import (
     ActiveReleaseMissingError,
     get_active_release_id,
 )

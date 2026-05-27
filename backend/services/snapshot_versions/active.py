@@ -1,5 +1,5 @@
 """
-services/snapshots_active.py — per-request memoization Seam for the active Snapshot Release.
+services/snapshot_versions/active.py — per-request memoization Seam for the active Snapshot Release.
 
 Wraps snapshot_versions.repo.get_active_release so all Lab read paths share one
 cached lookup per Flask request. Cohesion warmup (no request context) calls this

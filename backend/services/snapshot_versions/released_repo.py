@@ -8,7 +8,7 @@ data should go through this module; admin Surfaces continue to read
 draft_skill_profiles directly via their own paths.
 
 All queries filter by `snapshot_release_id = active_release_id`. Callers obtain
-the active release id via services.snapshots_active.get_active_release_id().
+the active release id via services.snapshot_versions.active.get_active_release_id().
 """
 
 from __future__ import annotations

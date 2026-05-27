@@ -22,7 +22,7 @@ from flask import Blueprint, jsonify, request
 from services.supabase_client import get_supabase, reset_client
 from services import players_service, nba_api_client
 from services.players_service import CURRENT_SEASON
-from services.snapshots_active import (
+from services.snapshot_versions.active import (
     ActiveReleaseMissingError,
     get_active_release_id,
 )

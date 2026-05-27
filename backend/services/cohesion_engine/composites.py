@@ -365,7 +365,7 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
     receive the small distribution, but normalization falls back to theoretical
     maxima until the cache has enough population data.
     """
-    from services.snapshots_active import get_active_release_id, ActiveReleaseMissingError
+    from services.snapshot_versions.active import get_active_release_id, ActiveReleaseMissingError
 
     client = _get_supabase_client()
     all_raw: dict[str, list[float]] = {name: [] for name in COMPOSITE_NAMES}

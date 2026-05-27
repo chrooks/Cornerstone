@@ -8,7 +8,7 @@ Contract under test (M3):
 - GET /api/players (legends section) reads released_players for legend profiles.
 - flag_summary is always {total: 0, unresolved: 0} on Lab reads (no flag table
   in released_players).
-- ActiveReleaseMissingError in snapshots_active → 503 from Lab routes.
+- ActiveReleaseMissingError in snapshot_versions.active → 503 from Lab routes.
 
 All tests use Flask test client with patched DB dependencies — no live DB needed.
 """
@@ -413,7 +413,7 @@ def test_draft_edit_does_not_leak_to_legends_listing(app):
 
 
 # ---------------------------------------------------------------------------
-# snapshots_active.get_active_release_id unit tests
+# snapshot_versions.active.get_active_release_id unit tests
 # ---------------------------------------------------------------------------
 
 
@@ -430,10 +430,10 @@ class _FakeRelease:
 
 def test_get_active_release_id_returns_id_outside_request():
     """Outside a request context, returns the release id from repo."""
-    from services.snapshots_active import get_active_release_id
+    from services.snapshot_versions.active import get_active_release_id
 
     with patch(
-        "services.snapshots_active._query_active_release_id",
+        "services.snapshot_versions.active._query_active_release_id",
         return_value=ACTIVE_RELEASE_ID,
     ):
         result = get_active_release_id()
@@ -443,7 +443,7 @@ def test_get_active_release_id_returns_id_outside_request():
 
 def test_get_active_release_id_memoizes_within_request(app):
     """Within a request context, repeated calls return cached value without re-querying."""
-    from services.snapshots_active import get_active_release_id
+    from services.snapshot_versions.active import get_active_release_id
 
     call_count = 0
 
@@ -452,7 +452,7 @@ def test_get_active_release_id_memoizes_within_request(app):
         call_count += 1
         return ACTIVE_RELEASE_ID
 
-    with patch("services.snapshots_active._query_active_release_id", side_effect=_fake_query):
+    with patch("services.snapshot_versions.active._query_active_release_id", side_effect=_fake_query):
         with app.test_request_context("/"):
             id1 = get_active_release_id()
             id2 = get_active_release_id()
@@ -464,10 +464,10 @@ def test_get_active_release_id_memoizes_within_request(app):
 
 def test_get_active_release_id_raises_on_missing_release():
     """Raises ActiveReleaseMissingError when repo raises."""
-    from services.snapshots_active import get_active_release_id, ActiveReleaseMissingError
+    from services.snapshot_versions.active import get_active_release_id, ActiveReleaseMissingError
 
     with patch(
-        "services.snapshots_active._query_active_release_id",
+        "services.snapshot_versions.active._query_active_release_id",
         side_effect=ActiveReleaseMissingError("no active release"),
     ):
         with pytest.raises(ActiveReleaseMissingError):
@@ -476,7 +476,7 @@ def test_get_active_release_id_raises_on_missing_release():
 
 def test_get_active_release_id_does_not_memoize_outside_request():
     """Outside a request context, every call hits _query_active_release_id."""
-    from services.snapshots_active import get_active_release_id
+    from services.snapshot_versions.active import get_active_release_id
 
     call_count = 0
 
@@ -485,7 +485,7 @@ def test_get_active_release_id_does_not_memoize_outside_request():
         call_count += 1
         return ACTIVE_RELEASE_ID
 
-    with patch("services.snapshots_active._query_active_release_id", side_effect=_fake_query):
+    with patch("services.snapshot_versions.active._query_active_release_id", side_effect=_fake_query):
         get_active_release_id()
         get_active_release_id()
 
@@ -499,7 +499,7 @@ def test_get_active_release_id_does_not_memoize_outside_request():
 
 def test_player_detail_returns_503_when_no_active_release(app):
     """GET /api/players/<id>/profile returns 503 when ActiveReleaseMissingError raised."""
-    from services.snapshots_active import ActiveReleaseMissingError
+    from services.snapshot_versions.active import ActiveReleaseMissingError
 
     supabase = MagicMock()
     q = MagicMock()
@@ -724,7 +724,7 @@ def test_admin_legends_detail_reads_draft_when_source_draft(app):
 
 def test_lab_legends_list_returns_503_when_no_active_release(app):
     """GET /api/legends with no active release returns 503 no_active_release."""
-    from services.snapshots_active import ActiveReleaseMissingError
+    from services.snapshot_versions.active import ActiveReleaseMissingError
 
     supabase = _make_supabase_for_legends_route(
         legend_released_profile=RELEASED_LEGEND_PROFILE,
