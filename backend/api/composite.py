@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Blueprint, jsonify, request
 from supabase import Client
 
-from api.auth import require_admin
+from api.auth import require_admin, require_open_draft
 from services.supabase_client import get_supabase
 from services.players_service import CURRENT_SEASON, DEFAULT_MIN_MPG
 from services import skill_engine
@@ -109,6 +109,7 @@ def _get_stat_skills(player_id: str, season: str, supabase: Client) -> dict:
 
 @composite_bp.route("/players/<player_id>/claude-assessment", methods=["POST"])
 @require_admin
+@require_open_draft
 def claude_assessment(player_id: str):
     """
     Run Claude's skill assessment for a single player.
@@ -188,6 +189,7 @@ def claude_assessment(player_id: str):
 
 @composite_bp.route("/players/<player_id>/composite-profile", methods=["POST"])
 @require_admin
+@require_open_draft
 def composite_profile_endpoint(player_id: str):
     """
     Run the full composite pipeline for a single player and persist results.
@@ -289,6 +291,7 @@ def composite_profile_endpoint(player_id: str):
 
 @composite_bp.route("/composite/batch", methods=["POST"])
 @require_admin
+@require_open_draft
 def composite_batch():
     """
     Run the full composite pipeline for many players concurrently.

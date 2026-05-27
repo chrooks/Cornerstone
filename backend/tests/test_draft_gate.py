@@ -205,3 +205,94 @@ def test_require_open_draft_draft_id_is_string_in_g():
 
     data = resp.get_json()
     assert isinstance(data["draft_id"], str)
+
+
+# ---------------------------------------------------------------------------
+# Integration: confirm the gate is wired on existing admin-write Surfaces
+# ---------------------------------------------------------------------------
+
+
+_GATED_ROUTES: list[tuple[str, str, dict | None]] = [
+    # (method, path, json_body)
+    # pipeline.py — 5 ingestion triggers
+    ("POST", "/api/pipeline/fetch-stats", {}),
+    ("POST", "/api/pipeline/salary-scrape", {}),
+    ("POST", "/api/pipeline/salary-scrape/aaaaaaaa-0000-0000-0000-000000000001", None),
+    ("POST", "/api/pipeline/bio-team-sync", {}),
+    ("POST", "/api/pipeline/bio-team-sync/aaaaaaaa-0000-0000-0000-000000000001", None),
+    # calibration.py — anchor writes (PUT thresholds is the special-case 409 path)
+    ("POST", "/api/anchors", {}),
+    ("DELETE", "/api/anchors/aaaaaaaa-0000-0000-0000-000000000001", None),
+    # review.py — 3 flag-resolution writes
+    ("POST", "/api/review/aaaaaaaa-0000-0000-0000-000000000001/resolve", {}),
+    ("POST", "/api/review/bulk-resolve", {}),
+    ("POST", "/api/review/aaaaaaaa-0000-0000-0000-000000000001/manual-override", {}),
+    # legends.py — 2 PUT writes
+    ("PUT", "/api/legends/aaaaaaaa-0000-0000-0000-000000000001/skills", {}),
+    ("PUT", "/api/legends/aaaaaaaa-0000-0000-0000-000000000001/attributes", {}),
+    # players.py — 4 mutation routes
+    ("POST", "/api/players/manual-include", {}),
+    ("DELETE", "/api/players/aaaaaaaa-0000-0000-0000-000000000001/manual-include", None),
+    ("DELETE", "/api/players/aaaaaaaa-0000-0000-0000-000000000001", None),
+    ("PATCH", "/api/players/aaaaaaaa-0000-0000-0000-000000000001/bio", {}),
+    # composite.py — 3 admin-only composite Surfaces
+    ("POST", "/api/players/aaaaaaaa-0000-0000-0000-000000000001/claude-assessment", {}),
+    ("POST", "/api/players/aaaaaaaa-0000-0000-0000-000000000001/composite-profile", {}),
+    ("POST", "/api/composite/batch", {}),
+]
+
+
+@pytest.fixture()
+def gated_app_client(monkeypatch):
+    """Full app test client with admin auth bypassed."""
+    from app import create_app
+    import api.auth as auth_mod
+    from unittest.mock import MagicMock
+
+    monkeypatch.setattr(auth_mod, "_verify_jwt", lambda _t: {"sub": "test-admin"})
+    mock_role_result = MagicMock()
+    mock_role_result.data = {"role": "admin"}
+    mock_client = MagicMock()
+    (
+        mock_client
+        .table.return_value
+        .select.return_value
+        .eq.return_value
+        .maybe_single.return_value
+        .execute.return_value
+    ) = mock_role_result
+    monkeypatch.setattr(auth_mod, "get_supabase", lambda: mock_client)
+
+    app = create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        yield c
+
+
+@pytest.mark.parametrize("method,path,body", _GATED_ROUTES)
+def test_draft_gate_applied_to_existing_calibration_writes(
+    gated_app_client, monkeypatch, method, path, body
+):
+    """Every legacy admin-write Surface returns 409 no_open_draft with no draft.
+
+    This is the parametrized contract sweep for Fix 5: each gated route
+    must hit require_open_draft before the handler body runs, so when
+    snap_repo.get_draft returns None we get the canonical 409 envelope
+    rather than a 200/500 from the handler logic.
+    """
+    import api.auth as auth_mod
+    monkeypatch.setattr(auth_mod.snap_repo, "get_draft", lambda client=None: None)
+
+    headers = {
+        "Authorization": "Bearer fake-admin",
+        # Some calibration routes also require this header; harmless elsewhere.
+        "X-Calibration-Key": "anything",
+    }
+    resp = gated_app_client.open(path, method=method, headers=headers, json=body)
+
+    assert resp.status_code == 409, (
+        f"{method} {path} returned {resp.status_code}, expected 409 no_open_draft"
+    )
+    payload = resp.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "no_open_draft"

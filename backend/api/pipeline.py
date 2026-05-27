@@ -202,6 +202,7 @@ def _run_fetch_stats_job(run_id: str, player_ids: list[str], season: str, refres
 
 @pipeline_bp.route("/pipeline/fetch-stats", methods=["POST"])
 @require_admin
+@require_open_draft
 def fetch_stats_batch():
     """Kick off a background stats fetch. Returns run_id (was job_id)."""
     body = request.get_json(silent=True) or {}
@@ -293,6 +294,7 @@ def _run_salary_scrape_job(run_id: str, player_id: str | None) -> None:
 
 @pipeline_bp.route("/pipeline/salary-scrape", methods=["POST"])
 @require_admin
+@require_open_draft
 def salary_scrape_bulk():
     """Kick off a bulk salary scrape."""
     draft_id = _get_draft_id()
@@ -312,6 +314,7 @@ def salary_scrape_bulk():
 
 @pipeline_bp.route("/pipeline/salary-scrape/<player_id>", methods=["POST"])
 @require_admin
+@require_open_draft
 def salary_scrape_player(player_id: str):
     """Kick off a per-player salary scrape."""
     draft_id = _get_draft_id()
@@ -356,6 +359,7 @@ def _run_bio_team_sync_job(run_id: str, player_id: str | None, season: str) -> N
 
 @pipeline_bp.route("/pipeline/bio-team-sync", methods=["POST"])
 @require_admin
+@require_open_draft
 def bio_team_sync_bulk():
     """Kick off a bulk bio/team sync."""
     body = request.get_json(silent=True) or {}
@@ -454,6 +458,7 @@ def skill_evaluation_batch():
 
 @pipeline_bp.route("/pipeline/bio-team-sync/<player_id>", methods=["POST"])
 @require_admin
+@require_open_draft
 def bio_team_sync_player(player_id: str):
     """Kick off a per-player bio/team sync."""
     body = request.get_json(silent=True) or {}

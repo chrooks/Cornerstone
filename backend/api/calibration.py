@@ -600,6 +600,7 @@ def get_anchors():
 
 @calibration_bp.route("/anchors", methods=["POST"])
 @require_admin
+@require_open_draft
 def create_anchor():
     """
     Create or update an anchor player entry for a given skill.
@@ -665,6 +666,7 @@ def create_anchor():
 
 @calibration_bp.route("/anchors/<anchor_id>", methods=["DELETE"])
 @require_admin
+@require_open_draft
 def delete_anchor(anchor_id: str):
     """Remove an anchor player entry by its UUID."""
     if not _validate_uuid(anchor_id):
