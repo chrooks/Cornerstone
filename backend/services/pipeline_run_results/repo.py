@@ -75,10 +75,12 @@ def _get_client():
 
 
 def stage_profile_rows(run_id: str, rows: Iterable[StagedProfileRow]) -> None:
-    """Insert staged profile rows into pipeline_run_results.
+    """Upsert staged profile rows into pipeline_run_results.
 
     Each row gets run_id attached. Rows with the same (run_id, player_id, source)
-    are upserted on conflict (idempotent re-stage).
+    are upserted on conflict — idempotent re-stage supports worker retry safety:
+    if a worker crashes and re-stages, the second call overwrites rather than
+    raising a unique-key error.
 
     Empty rows list is a no-op.
     """
@@ -100,7 +102,7 @@ def stage_profile_rows(run_id: str, rows: Iterable[StagedProfileRow]) -> None:
 
     run_query(
         lambda: client.table("pipeline_run_results")
-        .insert(payload)
+        .upsert(payload, on_conflict="run_id,player_id,source")
         .execute()
     )
     logger.debug("Staged %d profile rows for run %s", len(payload), run_id)

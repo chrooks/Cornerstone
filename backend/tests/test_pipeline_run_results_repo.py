@@ -71,16 +71,16 @@ def test_stage_profile_rows_inserts_into_staging_table(mock_supabase):
 
 
 def test_stage_profile_rows_attaches_run_id(mock_supabase):
-    """Each row in the insert payload must include run_id."""
+    """Each row in the upsert payload must include run_id."""
     rows = [StagedProfileRow(player_id="p1", season="2025-26", source="stats", profile={})]
 
     captured_payload = []
 
-    def capture_insert(payload):
+    def capture_upsert(payload, **kwargs):
         captured_payload.extend(payload)
-        return mock_supabase.table.return_value.insert.return_value
+        return mock_supabase.table.return_value.upsert.return_value
 
-    mock_supabase.table.return_value.insert.side_effect = capture_insert
+    mock_supabase.table.return_value.upsert.side_effect = capture_upsert
 
     with patch("services.pipeline_run_results.repo._get_client", return_value=mock_supabase):
         stage_profile_rows("run-xyz", rows)
@@ -279,6 +279,42 @@ def test_stage_profile_rows_empty_list_is_noop(mock_supabase):
     for call_args in mock_supabase.table.call_args_list:
         table_name = call_args[0][0]
         assert table_name != "pipeline_run_results", "Should not insert into staging for empty rows"
+
+
+# ---------------------------------------------------------------------------
+# Case 5b: stage_profile_rows is idempotent on duplicate (run_id, player_id, source)
+# ---------------------------------------------------------------------------
+
+
+def test_stage_profile_rows_is_idempotent_on_duplicate_pk(mock_supabase):
+    """Staging the same (run_id, player_id, source) twice must call upsert, not insert.
+
+    This verifies worker-retry safety: if a worker crashes mid-run and re-stages
+    results, the second stage call must overwrite rather than raise a unique-key error.
+    The second call's profile blob should be the one that survives.
+    """
+    row_v1 = StagedProfileRow(player_id="p-dupe", season="2025-26", source="stats", profile={"Scorer": {"tier": "Capable"}})
+    row_v2 = StagedProfileRow(player_id="p-dupe", season="2025-26", source="stats", profile={"Scorer": {"tier": "Elite"}})
+
+    upsert_calls = []
+
+    def capture_upsert(payload, **kwargs):
+        upsert_calls.extend(payload)
+        return mock_supabase.table.return_value.upsert.return_value
+
+    mock_supabase.table.return_value.upsert.side_effect = capture_upsert
+
+    with patch("services.pipeline_run_results.repo._get_client", return_value=mock_supabase):
+        stage_profile_rows("run-dupe", [row_v1])
+        stage_profile_rows("run-dupe", [row_v2])
+
+    # upsert must have been called twice — once per stage_profile_rows call
+    assert len(upsert_calls) == 2, f"Expected 2 upsert calls, got {len(upsert_calls)}"
+    # The second call carries the newer profile
+    assert upsert_calls[1]["profile"] == {"Scorer": {"tier": "Elite"}}
+    # insert must NOT have been called for the staging table
+    for c in mock_supabase.table.return_value.insert.call_args_list:
+        assert False, "insert() was called — expected upsert() for idempotent staging"
 
 
 # ---------------------------------------------------------------------------
