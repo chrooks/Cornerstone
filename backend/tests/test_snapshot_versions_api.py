@@ -99,18 +99,17 @@ class TestAuthGating:
         assert resp.status_code == 401
 
     def test_get_pipeline_run_requires_admin(self, anon_client):
-        """GET /api/pipeline/runs/<run_id> must require admin auth (MEDIUM-2).
+        """GET /api/pipeline-runs/<run_id> must require admin auth (MEDIUM-2).
         The endpoint surfaces error_tail which may include internal data."""
-        resp = anon_client.get("/api/pipeline/runs/some-run-id")
+        resp = anon_client.get("/api/pipeline-runs/aaaaaaaa-0000-0000-0000-000000000001")
         assert resp.status_code == 401
 
     def test_get_pipeline_run_succeeds_with_admin(self, admin_client, monkeypatch):
-        """GET /api/pipeline/runs/<run_id> returns 200 with valid admin JWT."""
-        from services.supabase_client import run_query as real_rq
-        import api.pipeline as pipeline_mod
+        """GET /api/pipeline-runs/<run_id> returns 200 with valid admin JWT."""
+        from services.pipeline_runs import repo as runs_repo
 
         run_row = {
-            "id": "run-uuid-001",
+            "id": "aaaaaaaa-0000-0000-0000-000000000001",
             "pipeline_name": "stat_fetch",
             "scope": "bulk",
             "status": "success",
@@ -120,23 +119,10 @@ class TestAuthGating:
             "finished_at": "2026-05-26T00:05:00Z",
         }
 
-        mock_result = MagicMock()
-        mock_result.data = run_row
-        mock_supabase = MagicMock()
-        (
-            mock_supabase
-            .table.return_value
-            .select.return_value
-            .eq.return_value
-            .single.return_value
-            .execute.return_value
-        ) = mock_result
-
-        monkeypatch.setattr(pipeline_mod, "get_supabase", lambda: mock_supabase)
-        monkeypatch.setattr(pipeline_mod, "run_query", lambda fn: fn())
+        monkeypatch.setattr(runs_repo, "get_run", lambda run_id, client=None: run_row)
 
         resp = admin_client.get(
-            "/api/pipeline/runs/run-uuid-001",
+            "/api/pipeline-runs/aaaaaaaa-0000-0000-0000-000000000001",
             headers=admin_client.auth_header,
         )
         assert resp.status_code == 200
