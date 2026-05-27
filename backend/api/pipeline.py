@@ -21,7 +21,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from api.auth import require_admin, require_open_draft
 from services.supabase_client import get_supabase, run_query
@@ -210,7 +210,7 @@ def fetch_stats_batch():
     season = body.get("season", CURRENT_SEASON)
     refresh = bool(body.get("refresh", False))
 
-    draft_id = _get_draft_id()
+    draft_id = g.draft_id
     scope = "player" if player_ids else "bulk"
 
     try:
@@ -297,7 +297,7 @@ def _run_salary_scrape_job(run_id: str, player_id: str | None) -> None:
 @require_open_draft
 def salary_scrape_bulk():
     """Kick off a bulk salary scrape."""
-    draft_id = _get_draft_id()
+    draft_id = g.draft_id
     try:
         run_id = runs_repo.start_run("salary_scrape", "bulk", snapshot_release_id=draft_id)
     except Exception:
@@ -317,7 +317,7 @@ def salary_scrape_bulk():
 @require_open_draft
 def salary_scrape_player(player_id: str):
     """Kick off a per-player salary scrape."""
-    draft_id = _get_draft_id()
+    draft_id = g.draft_id
     try:
         run_id = runs_repo.start_run(
             "salary_scrape", "player",
@@ -364,7 +364,7 @@ def bio_team_sync_bulk():
     """Kick off a bulk bio/team sync."""
     body = request.get_json(silent=True) or {}
     season = body.get("season", CURRENT_SEASON)
-    draft_id = _get_draft_id()
+    draft_id = g.draft_id
 
     try:
         run_id = runs_repo.start_run("bio_team_sync", "bulk", snapshot_release_id=draft_id)
@@ -463,7 +463,7 @@ def bio_team_sync_player(player_id: str):
     """Kick off a per-player bio/team sync."""
     body = request.get_json(silent=True) or {}
     season = body.get("season", CURRENT_SEASON)
-    draft_id = _get_draft_id()
+    draft_id = g.draft_id
 
     try:
         run_id = runs_repo.start_run(
