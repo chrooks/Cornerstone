@@ -217,6 +217,18 @@ def get_all_thresholds():
 # PUT /api/skills/thresholds/<skill_name>
 # ---------------------------------------------------------------------------
 
+# INTENTIONAL ESCAPE SEAM — no @require_open_draft on this route.
+#
+# Without ?force=true: returns 409 so callers use /save for draft-aware staging.
+# With ?force=true:    writes directly to draft_skill_thresholds, bypassing the
+#   pipeline-run / diff-preview / commit workflow entirely.
+#
+# This is a documented emergency direct-write path for situations where the
+# normal draft workflow is unavailable (e.g., no open draft exists, or an urgent
+# production fix is needed). It is intentional that this route does NOT gate on
+# an open draft — callers who supply ?force=true have explicitly acknowledged
+# the bypass. The test suite locks this Contract in
+# test_put_thresholds_force_true_bypasses_draft_gate_with_explicit_intent.
 @calibration_bp.route("/skills/thresholds/<skill_name>", methods=["PUT"])
 @require_admin
 @require_write_key
