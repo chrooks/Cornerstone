@@ -2,6 +2,7 @@
 
 -- publish_snapshot_draft: atomically freezes the draft into snapshot_players,
 -- flips is_active, and returns the new published row.
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.publish_snapshot_draft(
   p_draft_id UUID,
   p_label TEXT,
@@ -94,6 +95,7 @@ $$;
 
 -- reset_working_state_from_active: rewrites live composite skill_profiles
 -- and players salary/team/position from the active-published snapshot_players.
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.reset_working_state_from_active()
 RETURNS void
 LANGUAGE plpgsql

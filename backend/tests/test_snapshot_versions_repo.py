@@ -392,6 +392,87 @@ class TestPublishDraftRunsGuard:
 
 
 # ---------------------------------------------------------------------------
+# Tests: publish_draft — pending_commits_exist guard
+# ---------------------------------------------------------------------------
+
+
+class TestPublishDraftPendingCommitsGuard:
+    """publish_draft must block when any Pipeline run has status='success',
+    committed_at IS NULL, and snapshot_release_id=draft_id. This prevents
+    publishing a draft while staged results are waiting to be committed or
+    discarded (data would otherwise be silently dropped)."""
+
+    _DRAFT_ID = "aaaaaaaa-0000-0000-0000-000000000001"
+
+    def test_publish_raises_pending_commits_exist_when_uncommitted_success_run(self):
+        """publish_draft raises ValueError('pending_commits_exist') when a
+        Pipeline run has status='success', committed_at=NULL, and
+        snapshot_release_id matches the draft."""
+        from services.snapshot_versions import repo
+
+        client = MagicMock()
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with patch("services.pipeline_runs.repo.any_running", return_value=False):
+                with patch(
+                    "services.pipeline_runs.repo.any_pending_commit",
+                    return_value=True,
+                ):
+                    with pytest.raises(ValueError, match="pending_commits_exist"):
+                        repo.publish_draft(
+                            self._DRAFT_ID,
+                            label="Test label",
+                            allow_missing_composite=True,
+                        )
+
+        # RPC must NOT have been called
+        client.rpc.assert_not_called()
+
+    def test_publish_proceeds_when_pending_commit_for_different_draft(self):
+        """publish_draft proceeds when the pending-commit run belongs to a
+        different draft (snapshot_release_id != draft_id). The any_pending_commit
+        query is scoped to the specific draft_id."""
+        from services.snapshot_versions import repo
+
+        published_row = _make_published_row(id=self._DRAFT_ID)
+        client = MagicMock()
+        client.rpc.return_value.execute.return_value = _result(None)
+        (
+            client
+            .table.return_value
+            .select.return_value
+            .eq.return_value
+            .single.return_value
+            .execute.return_value
+        ) = _result(published_row)
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with patch("services.pipeline_runs.repo.any_running", return_value=False):
+                # any_pending_commit returns False — this draft has no pending runs
+                with patch(
+                    "services.pipeline_runs.repo.any_pending_commit",
+                    return_value=False,
+                ):
+                    with patch("services.cohesion_engine.composites._force_clear_distributions"):
+                        with patch("services.cohesion_engine.composites.ensure_distributions"):
+                            with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                                from services.cohesion_engine.engine import EvaluationVersion
+                                mock_active.return_value = EvaluationVersion(
+                                    id="ev-1", slug="cohesion-v1", status="published",
+                                    payload={"values": {}},
+                                )
+                                result = repo.publish_draft(
+                                    self._DRAFT_ID,
+                                    label="Test label",
+                                    allow_missing_composite=True,
+                                )
+
+        # RPC was called — publish proceeded
+        assert result is not None
+        client.rpc.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # Tests: publish_draft — missing_composite_not_acknowledged preflight
 # ---------------------------------------------------------------------------
 

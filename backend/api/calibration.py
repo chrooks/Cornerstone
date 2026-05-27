@@ -14,12 +14,13 @@ All responses use the standard {success, data, error} envelope.
 
 import logging
 import os
+import threading
 import uuid as _uuid_mod
 from functools import wraps
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 
-from api.auth import require_admin
+from api.auth import require_admin, require_open_draft
 from services.supabase_client import get_supabase
 from services.skill_engine.cache import get_thresholds, get_league_averages
 from services.skill_engine.evaluator import evaluate_skill, collect_condition_results
@@ -216,11 +217,28 @@ def get_all_thresholds():
 # PUT /api/skills/thresholds/<skill_name>
 # ---------------------------------------------------------------------------
 
+# INTENTIONAL ESCAPE SEAM — no @require_open_draft on this route.
+#
+# Without ?force=true: returns 409 so callers use /save for draft-aware staging.
+# With ?force=true:    writes directly to draft_skill_thresholds, bypassing the
+#   pipeline-run / diff-preview / commit workflow entirely.
+#
+# This is a documented emergency direct-write path for situations where the
+# normal draft workflow is unavailable (e.g., no open draft exists, or an urgent
+# production fix is needed). It is intentional that this route does NOT gate on
+# an open draft — callers who supply ?force=true have explicitly acknowledged
+# the bypass. The test suite locks this Contract in
+# test_put_thresholds_force_true_bypasses_draft_gate_with_explicit_intent.
 @calibration_bp.route("/skills/thresholds/<skill_name>", methods=["PUT"])
 @require_admin
+@require_write_key
 def upsert_threshold(skill_name: str):
     """
     Upsert a threshold rule for the given skill.
+
+    In draft-aware mode this endpoint requires ?force=true to write directly.
+    Without ?force=true, returns 409 directing the caller to use /save instead
+    (which stages a threshold_edit pipeline run for diff preview + commit).
 
     Validates the JSONB structure before persisting — rejects rules missing
     the 'tiers' key, using invalid operators, or with malformed block structure.
@@ -230,6 +248,14 @@ def upsert_threshold(skill_name: str):
     """
     if not skill_name or len(skill_name) > 100:
         return _err("Invalid skill_name")
+
+    force = request.args.get("force", "").lower() in ("true", "1", "yes")
+    if not force:
+        return _err(
+            "Direct threshold updates require ?force=true. "
+            "Use POST /api/skills/thresholds/<skill_name>/save to stage a draft run.",
+            409,
+        )
 
     body = request.get_json(silent=True)
     if body is None:
@@ -252,12 +278,126 @@ def upsert_threshold(skill_name: str):
         # Bust the in-memory threshold cache so the next evaluation uses the new rules
         get_thresholds(supabase, refresh=True)
 
+        # Audit: record a synchronous pipeline_run row for traceability.
+        # snapshot_release_id=None — intentional. ?force=true writes directly to
+        # draft_skill_thresholds outside any draft lifecycle. The audit row documents
+        # the emergency write even when no Snapshot Release draft is open.
+        try:
+            from services.pipeline_runs import repo as runs_repo
+            from dataclasses import asdict
+            from services.pipeline_runs.repo import ThresholdEditParams
+            audit_params = asdict(ThresholdEditParams(skill_name=skill_name, thresholds=body))
+            runs_repo.record_force_audit(
+                pipeline_name="threshold_edit",
+                params=audit_params,
+                snapshot_release_id=None,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to record force-audit pipeline_run for skill '%s' — "
+                "write already succeeded; audit failure is non-fatal",
+                skill_name,
+            )
+
         logger.info("Upserted threshold for skill '%s' and refreshed cache", skill_name)
         return _ok({"skill_name": skill_name, "message": "Threshold saved and cache refreshed"})
 
     except Exception:
         logger.exception("Error in PUT /api/skills/thresholds/%s", skill_name)
         return _err("Internal server error", status=500)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/skills/thresholds/<skill_name>/save
+# (draft-aware threshold staging — creates a threshold_edit pipeline run)
+# ---------------------------------------------------------------------------
+
+
+@calibration_bp.route("/skills/thresholds/<skill_name>/save", methods=["POST"])
+@require_admin
+@require_write_key
+@require_open_draft
+def save_threshold_edit(skill_name: str):
+    """
+    Stage a threshold edit as a threshold_edit pipeline run.
+
+    This is the draft-aware alternative to PUT /api/skills/thresholds/<skill_name>.
+    Instead of writing directly to draft_skill_thresholds, this endpoint:
+      1. Creates a pipeline_runs row (pipeline_name='threshold_edit').
+      2. Spawns a background worker that applies the proposed thresholds in-memory
+         (not persisted yet), re-evaluates every Player for that Skill, and stages
+         results in pipeline_run_results.
+      3. Returns the run_id immediately so the caller can poll for completion and
+         preview the diff before committing.
+
+    Request body: full proposed thresholds JSONB for the skill (same shape as PUT).
+    Response: { "run_id": "<uuid>" }
+    """
+    if not skill_name or len(skill_name) > 100:
+        return _err("Invalid skill_name")
+
+    # Allowlist check against the canonical 21-skill taxonomy.
+    # Without this, a typo (or worse, a malicious caller) could create a
+    # threshold_edit run whose params reference a Skill that does not exist,
+    # which never lands cleanly in draft_skill_thresholds on commit.
+    from services.skills import ALL_SKILLS
+    if skill_name not in ALL_SKILLS:
+        return _err("unknown_skill", 400)
+
+    body = request.get_json(silent=True)
+    if body is None:
+        return _err("Request body must be valid JSON")
+
+    validation_error = _validate_threshold_rule(body)
+    if validation_error:
+        return _err(f"Invalid threshold rule: {validation_error}")
+
+    draft_id = g.draft_id
+
+    from dataclasses import asdict
+    from services.pipeline_runs import repo as runs_repo
+    from services.pipeline_runs.repo import ThresholdEditParams
+    from services.skill_engine.evaluation_only import evaluate_skills_for_run
+
+    try:
+        run_id = runs_repo.start_run(
+            name="threshold_edit",
+            scope="bulk",
+            snapshot_release_id=draft_id,
+            params=asdict(ThresholdEditParams(skill_name=skill_name, thresholds=body)),
+        )
+    except Exception as exc:
+        err_msg = str(exc).lower()
+        if "unique" in err_msg or "duplicate" in err_msg:
+            return _err("pending_commit_run_exists — commit or discard the current run first", 409)
+        logger.exception("Failed to start threshold_edit run for skill '%s'", skill_name)
+        return _err("Failed to start threshold_edit run", 500)
+
+    def _worker():
+        try:
+            supabase = get_supabase()
+            # Fetch all qualifying players for this season
+            from services.players_service import CURRENT_SEASON, DEFAULT_MIN_MPG
+            result = supabase.table("players").select("id").eq("season", CURRENT_SEASON).gte("minutes_per_game", DEFAULT_MIN_MPG).execute()
+            player_ids = [r["id"] for r in (result.data or [])]
+
+            # Use override thresholds so draft_skill_thresholds is NOT modified yet
+            override = {skill_name: body}
+            evaluate_skills_for_run(
+                run_id=run_id,
+                player_ids=player_ids,
+                season=CURRENT_SEASON,
+                skill_filter=[skill_name],
+                thresholds_override=override,
+            )
+            runs_repo.complete_run(run_id, rows_processed=len(player_ids))
+        except Exception as exc:
+            logger.exception("threshold_edit [%s]: fatal error", run_id)
+            runs_repo.complete_run(run_id, rows_processed=0, error=str(exc))
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+    return _ok({"run_id": run_id})
 
 
 # ---------------------------------------------------------------------------
@@ -495,6 +635,7 @@ def get_anchors():
 
 @calibration_bp.route("/anchors", methods=["POST"])
 @require_admin
+@require_open_draft
 def create_anchor():
     """
     Create or update an anchor player entry for a given skill.
@@ -560,6 +701,7 @@ def create_anchor():
 
 @calibration_bp.route("/anchors/<anchor_id>", methods=["DELETE"])
 @require_admin
+@require_open_draft
 def delete_anchor(anchor_id: str):
     """Remove an anchor player entry by its UUID."""
     if not _validate_uuid(anchor_id):

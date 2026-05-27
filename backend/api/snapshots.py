@@ -239,7 +239,19 @@ def publish_draft(draft_id: str):
 
     body = request.get_json(silent=True) or {}
     label = body.get("label", "").strip()
-    allow_missing_composite = bool(body.get("allow_missing_composite", False))
+
+    # Strict bool validation: reject truthy non-bool values (e.g. "true",
+    # 1, "yes"). The RPC's gate is binary so we keep the Contract binary
+    # at the HTTP Surface too.
+    raw_allow_missing = body.get("allow_missing_composite", False)
+    if not isinstance(raw_allow_missing, bool):
+        return _err("invalid_allow_missing_composite", 400)
+    allow_missing_composite = raw_allow_missing
+
+    raw_allow_open_flags = body.get("allow_open_flags", False)
+    if not isinstance(raw_allow_open_flags, bool):
+        return _err("invalid_allow_open_flags", 400)
+    allow_open_flags = raw_allow_open_flags
 
     if not label:
         return _err("label_required", 400)
@@ -249,13 +261,18 @@ def publish_draft(draft_id: str):
             draft_id,
             label=label,
             allow_missing_composite=allow_missing_composite,
+            allow_open_flags=allow_open_flags,
         )
         return _ok(_release_dict(published))
     except ValueError as exc:
         code = str(exc)
         if "pipeline_runs_in_flight" in code:
             return _err(code, 409)
+        if "pending_commits_exist" in code:
+            return _err(code, 409)
         if "missing_composite_not_acknowledged" in code:
+            return _err(code, 422)
+        if "open_flags_not_acknowledged" in code:
             return _err(code, 422)
         return _err(code, 400)
     except Exception:

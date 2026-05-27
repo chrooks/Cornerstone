@@ -21,9 +21,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
-from api.auth import require_admin
+from api.auth import require_admin, require_open_draft
 from services.supabase_client import get_supabase, run_query
 from services.players_service import (
     CURRENT_SEASON,
@@ -202,6 +202,7 @@ def _run_fetch_stats_job(run_id: str, player_ids: list[str], season: str, refres
 
 @pipeline_bp.route("/pipeline/fetch-stats", methods=["POST"])
 @require_admin
+@require_open_draft
 def fetch_stats_batch():
     """Kick off a background stats fetch. Returns run_id (was job_id)."""
     body = request.get_json(silent=True) or {}
@@ -209,7 +210,7 @@ def fetch_stats_batch():
     season = body.get("season", CURRENT_SEASON)
     refresh = bool(body.get("refresh", False))
 
-    draft_id = _get_draft_id()
+    draft_id = g.draft_id
     scope = "player" if player_ids else "bulk"
 
     try:
@@ -231,40 +232,6 @@ def fetch_stats_batch():
     thread.start()
 
     return _ok({"run_id": run_id})
-
-
-# ---------------------------------------------------------------------------
-# GET /api/pipeline/runs/<run_id>
-# (replaces legacy GET /api/pipeline/job-status/<job_id>)
-# ---------------------------------------------------------------------------
-
-
-@pipeline_bp.route("/pipeline/runs/<run_id>", methods=["GET"])
-@require_admin
-def get_run(run_id: str):
-    """Return current state of a specific pipeline run.
-
-    Admin-only: the error_tail field may contain internal stack traces.
-    """
-    try:
-        supabase = get_supabase()
-        result = run_query(
-            lambda: supabase.table("pipeline_runs")
-            .select("*")
-            .eq("id", run_id)
-            .single()
-            .execute()
-        )
-        return _ok(result.data)
-    except Exception:
-        return _err(f"Run not found: {run_id}", 404)
-
-
-# Legacy job-status route for backward compat with existing frontend polls
-@pipeline_bp.route("/pipeline/job-status/<job_id>", methods=["GET"])
-def job_status_legacy(job_id: str):
-    """Legacy endpoint; delegates to /pipeline/runs/<job_id>."""
-    return get_run(job_id)
 
 
 # ---------------------------------------------------------------------------
@@ -293,9 +260,10 @@ def _run_salary_scrape_job(run_id: str, player_id: str | None) -> None:
 
 @pipeline_bp.route("/pipeline/salary-scrape", methods=["POST"])
 @require_admin
+@require_open_draft
 def salary_scrape_bulk():
     """Kick off a bulk salary scrape."""
-    draft_id = _get_draft_id()
+    draft_id = g.draft_id
     try:
         run_id = runs_repo.start_run("salary_scrape", "bulk", snapshot_release_id=draft_id)
     except Exception:
@@ -312,9 +280,10 @@ def salary_scrape_bulk():
 
 @pipeline_bp.route("/pipeline/salary-scrape/<player_id>", methods=["POST"])
 @require_admin
+@require_open_draft
 def salary_scrape_player(player_id: str):
     """Kick off a per-player salary scrape."""
-    draft_id = _get_draft_id()
+    draft_id = g.draft_id
     try:
         run_id = runs_repo.start_run(
             "salary_scrape", "player",
@@ -356,11 +325,12 @@ def _run_bio_team_sync_job(run_id: str, player_id: str | None, season: str) -> N
 
 @pipeline_bp.route("/pipeline/bio-team-sync", methods=["POST"])
 @require_admin
+@require_open_draft
 def bio_team_sync_bulk():
     """Kick off a bulk bio/team sync."""
     body = request.get_json(silent=True) or {}
     season = body.get("season", CURRENT_SEASON)
-    draft_id = _get_draft_id()
+    draft_id = g.draft_id
 
     try:
         run_id = runs_repo.start_run("bio_team_sync", "bulk", snapshot_release_id=draft_id)
@@ -376,13 +346,97 @@ def bio_team_sync_bulk():
     return _ok({"run_id": run_id})
 
 
+@pipeline_bp.route("/pipeline/skill-evaluation", methods=["POST"])
+@require_admin
+@require_open_draft
+def skill_evaluation_batch():
+    """Kick off a background skill-evaluation run scoped to the current open draft.
+
+    Request body (all optional):
+      {
+        "player_ids": ["<uuid>", ...],  // empty = all qualifying players
+        "season": "2025-26",
+        "skill_filter": ["Scorer", "Playmaker"]  // omit = all 21 skills
+      }
+
+    Side effect: spawns a background worker that reads existing player_stats,
+    evaluates each player against draft thresholds, stages results in
+    pipeline_run_results, then marks the run success.
+
+    Returns: { "run_id": "<uuid>", "status": "running" }
+    """
+    from flask import g
+    from services.skill_engine.evaluation_only import evaluate_skills_for_run
+    from services.skills import ALL_SKILLS
+
+    body = request.get_json(silent=True) or {}
+    player_ids: list[str] = body.get("player_ids") or []
+    season: str = body.get("season", CURRENT_SEASON)
+    skill_filter: list[str] | None = body.get("skill_filter") or None
+
+    # Validate skill_filter entries against the canonical 21-skill taxonomy.
+    if skill_filter:
+        unknown = [s for s in skill_filter if s not in ALL_SKILLS]
+        if unknown:
+            return _err(f"unknown_skill: {unknown[0]}", 400)
+
+    draft_id = g.draft_id
+
+    # Check for a pending-commit run before starting a new one
+    try:
+        run_id = runs_repo.start_run(
+            name="skill_evaluation",
+            scope="player" if player_ids else "bulk",
+            snapshot_release_id=draft_id,
+            player_id=player_ids[0] if len(player_ids) == 1 else None,
+        )
+    except Exception as exc:
+        err_msg = str(exc).lower()
+        if "unique" in err_msg or "duplicate" in err_msg:
+            return _err("pending_commit_run_exists — commit or discard the current run first", 409)
+        logger.exception("Failed to start skill-evaluation run")
+        return _err("Failed to start skill-evaluation run", 500)
+
+    def _worker():
+        try:
+            # Resolve player_ids if empty
+            resolved_ids = player_ids
+            if not resolved_ids:
+                supabase = get_supabase()
+                result = run_query(
+                    lambda: supabase.table("players")
+                    .select("id")
+                    .eq("season", season)
+                    .gte("minutes_per_game", DEFAULT_MIN_MPG)
+                    .execute()
+                )
+                resolved_ids = [r["id"] for r in (result.data or [])]
+                logger.info("skill-evaluation [%s]: %d qualifying players", run_id, len(resolved_ids))
+
+            evaluate_skills_for_run(
+                run_id=run_id,
+                player_ids=resolved_ids,
+                season=season,
+                skill_filter=skill_filter,
+            )
+            runs_repo.complete_run(run_id, rows_processed=len(resolved_ids))
+        except Exception as exc:
+            logger.exception("skill-evaluation [%s]: fatal error", run_id)
+            runs_repo.complete_run(run_id, rows_processed=0, error=str(exc))
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+    return _ok({"run_id": run_id, "status": "running"})
+
+
 @pipeline_bp.route("/pipeline/bio-team-sync/<player_id>", methods=["POST"])
 @require_admin
+@require_open_draft
 def bio_team_sync_player(player_id: str):
     """Kick off a per-player bio/team sync."""
     body = request.get_json(silent=True) or {}
     season = body.get("season", CURRENT_SEASON)
-    draft_id = _get_draft_id()
+    draft_id = g.draft_id
 
     try:
         run_id = runs_repo.start_run(

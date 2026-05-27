@@ -23,9 +23,12 @@ npm run lint    # ESLint
 
 ### Database
 ```bash
-supabase db push   # Apply pending migrations to linked project
+supabase db push                              # Apply pending migrations to linked project
 # New migrations: add a timestamped .sql file to supabase/migrations/, then push
+python backend/scripts/lint_migrations.py     # Lint SECURITY DEFINER lockdown
+pre-commit install                            # One-time: auto-run linter on staged migrations
 ```
+Migration conventions live in `docs/agents/migration-conventions.md`.
 
 ---
 
@@ -176,6 +179,7 @@ frontend/
 - **Admin write endpoints require `@require_admin`** — decorator in `api/auth.py` verifies Supabase JWT and checks `user_roles` table. Grant admin via Supabase dashboard (`user_roles` table, `role = 'admin'`).
 - **`NEXT_PUBLIC_CALIBRATION_API_KEY`** — required in frontend `.env.local` for calibration write endpoints.
 - **Evaluation versions are immutable snapshots** — cohesion weights + composites get published as a version via `evaluation_versions/`. Saved teams reference a specific version. Active version loaded at startup (`_warm_cohesion_distributions`).
+- **SECURITY DEFINER RPCs must be locked down** — REVOKE `EXECUTE` from `PUBLIC`, `anon`, and `authenticated`; GRANT only to `service_role`. The migration linter (`backend/scripts/lint_migrations.py`, wired into `.pre-commit-config.yaml`) enforces this. See `docs/agents/migration-conventions.md`.
 
 ---
 

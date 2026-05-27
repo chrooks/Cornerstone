@@ -16,6 +16,7 @@ ALTER TABLE public.snapshot_releases
   ADD COLUMN IF NOT EXISTS data_cutoff_at timestamptz;
 
 -- Re-create publish_snapshot_draft with data_cutoff_at set (HIGH-1)
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.publish_snapshot_draft(
   p_draft_id UUID,
   p_label TEXT,
@@ -115,6 +116,7 @@ $$;
 -- would be unrecoverable without re-running the stat fetch pipeline. Admins who
 -- want fresh stats rows should trigger stat fetch explicitly after a reset.
 -- 'claude' and 'manual' rows are left intact in both the old and new implementation.
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.reset_working_state_from_active()
 RETURNS void
 LANGUAGE plpgsql

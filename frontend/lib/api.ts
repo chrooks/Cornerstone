@@ -982,7 +982,7 @@ export function reactivateSnapshotRelease(id: string): Promise<ApiResponse<Snaps
 }
 
 export function getPipelineRun(runId: string): Promise<ApiResponse<PipelineRun>> {
-  return apiFetch<PipelineRun>(`/api/pipeline/runs/${runId}`);
+  return apiFetch<PipelineRun>(`/api/pipeline-runs/${runId}`);
 }
 
 export function triggerStatFetch(opts?: {
