@@ -278,6 +278,27 @@ def upsert_threshold(skill_name: str):
         # Bust the in-memory threshold cache so the next evaluation uses the new rules
         get_thresholds(supabase, refresh=True)
 
+        # Audit: record a synchronous pipeline_run row for traceability.
+        # snapshot_release_id=None — intentional. ?force=true writes directly to
+        # draft_skill_thresholds outside any draft lifecycle. The audit row documents
+        # the emergency write even when no Snapshot Release draft is open.
+        try:
+            from services.pipeline_runs import repo as runs_repo
+            from dataclasses import asdict
+            from services.pipeline_runs.repo import ThresholdEditParams
+            audit_params = asdict(ThresholdEditParams(skill_name=skill_name, thresholds=body))
+            runs_repo.record_force_audit(
+                pipeline_name="threshold_edit",
+                params=audit_params,
+                snapshot_release_id=None,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to record force-audit pipeline_run for skill '%s' — "
+                "write already succeeded; audit failure is non-fatal",
+                skill_name,
+            )
+
         logger.info("Upserted threshold for skill '%s' and refreshed cache", skill_name)
         return _ok({"skill_name": skill_name, "message": "Threshold saved and cache refreshed"})
 

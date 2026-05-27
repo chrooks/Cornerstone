@@ -218,3 +218,51 @@ def list_recent(
         query = query.eq("pipeline_name", name)
     result = run_query(lambda: query.execute())
     return result.data or []
+
+
+def record_force_audit(
+    pipeline_name: PipelineName,
+    params: dict,
+    snapshot_release_id: Optional[str] = None,
+    client=None,
+) -> str:
+    """Insert a synchronous audit-only pipeline_run row for ?force=true writes.
+
+    This is NOT a real Pipeline run — no background worker is spawned and no
+    staging rows are created. It is a write-audit record so admins can trace
+    emergency direct writes to draft_skill_thresholds that bypass the normal
+    draft lifecycle.
+
+    Row shape:
+      - pipeline_name: passed through (typically 'threshold_edit')
+      - status: 'success' (the write already happened; this is the audit)
+      - committed_at: now() (already realized; not staged)
+      - started_at / finished_at: now() (synchronous — no async duration)
+      - rows_processed: 0 (audit only; no profile rows staged)
+      - snapshot_release_id: None for out-of-lifecycle writes, or an explicit
+        release id if the caller wants to associate this with an active release.
+        Intentionally NOT the current draft — ?force=true writes go directly to
+        draft_skill_thresholds and bypass the draft lifecycle entirely.
+      - params: caller-provided metadata (skill_name, thresholds for threshold_edit)
+
+    Returns the new run_id string.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    c = client or _get_client()
+    payload: dict = {
+        "pipeline_name": pipeline_name,
+        "scope": "bulk",
+        "status": "success",
+        "committed_at": now_iso,
+        "started_at": now_iso,
+        "finished_at": now_iso,
+        "rows_processed": 0,
+        "params": params,
+    }
+    if snapshot_release_id is not None:
+        payload["snapshot_release_id"] = snapshot_release_id
+
+    result = run_query(
+        lambda: c.table("pipeline_runs").insert(payload).execute()
+    )
+    return str(result.data[0]["id"])

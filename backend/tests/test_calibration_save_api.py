@@ -202,3 +202,118 @@ def test_save_threshold_edit_accepts_known_skill(admin_client):
     assert resp.status_code != 400 or resp.get_json()["error"] != "unknown_skill"
     if resp.status_code == 200:
         mock_start.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Slice 4: ?force=true must record an audit pipeline_runs row
+# ---------------------------------------------------------------------------
+
+
+def _make_force_true_setup(monkeypatch):
+    """Common setup for ?force=true audit tests: admin auth, cal key, no draft."""
+    import api.auth as auth_mod
+    import api.calibration as cal_mod
+
+    monkeypatch.setattr(auth_mod, "_verify_jwt", lambda _token: {"sub": "test-admin-user"})
+    mock_role_result = MagicMock()
+    mock_role_result.data = {"role": "admin"}
+    mock_auth_client = MagicMock()
+    (
+        mock_auth_client
+        .table.return_value
+        .select.return_value
+        .eq.return_value
+        .maybe_single.return_value
+        .execute.return_value
+    ) = mock_role_result
+    monkeypatch.setattr(auth_mod, "get_supabase", lambda: mock_auth_client)
+    monkeypatch.setattr(cal_mod, "_CALIBRATION_API_KEY", _TEST_CAL_KEY)
+    # No open draft — this is the emergency escape Seam
+    monkeypatch.setattr(auth_mod.snap_repo, "get_draft", lambda client=None: None)
+
+    app = create_app()
+    app.config["TESTING"] = True
+    return app
+
+
+_VALID_THRESHOLD_BODY = {
+    "tiers": {
+        "Elite": {"logic": "AND", "conditions": []},
+        "Proficient": {"logic": "AND", "conditions": []},
+        "Capable": {"logic": "AND", "conditions": []},
+    }
+}
+
+_FORCE_HEADERS = {
+    "Authorization": "Bearer fake-admin-token",
+    "X-Calibration-Key": _TEST_CAL_KEY,
+}
+
+
+def test_put_thresholds_force_true_records_audit_pipeline_run(monkeypatch):
+    """PUT /api/skills/thresholds/<skill>?force=true must create an audit pipeline_run row.
+
+    Locked Contract (Slice 4): each ?force=true write must produce a
+    pipeline_runs row with:
+      - pipeline_name='threshold_edit'
+      - status='success'
+      - committed_at set (not NULL)
+      - params containing skill_name and thresholds
+      - snapshot_release_id=NULL (intentional — this is an out-of-lifecycle write)
+
+    This audit trail allows admins to trace emergency direct writes even when
+    no Snapshot Release draft is open.
+    """
+    app = _make_force_true_setup(monkeypatch)
+
+    mock_sb = MagicMock()
+    mock_sb.table.return_value.upsert.return_value.execute.return_value = MagicMock(data=[])
+
+    with patch("api.calibration.get_supabase", return_value=mock_sb):
+        with patch("api.calibration.get_thresholds", return_value={}):
+            with patch("services.pipeline_runs.repo.record_force_audit") as mock_audit:
+                with app.test_client() as c:
+                    resp = c.put(
+                        "/api/skills/thresholds/Scorer?force=true",
+                        json=_VALID_THRESHOLD_BODY,
+                        headers=_FORCE_HEADERS,
+                    )
+
+    assert resp.status_code == 200, (
+        f"Expected 200 from ?force=true, got {resp.status_code}: {resp.get_json()}"
+    )
+    # Audit record must have been created exactly once
+    mock_audit.assert_called_once()
+    call_kwargs = mock_audit.call_args.kwargs
+    assert call_kwargs["pipeline_name"] == "threshold_edit"
+    assert call_kwargs["params"]["skill_name"] == "Scorer"
+    assert "thresholds" in call_kwargs["params"]
+    # snapshot_release_id must be explicitly None (out-of-lifecycle write)
+    assert call_kwargs.get("snapshot_release_id") is None
+
+
+def test_put_thresholds_force_true_audit_records_even_with_no_open_draft(monkeypatch):
+    """Audit row is created even when no Snapshot Release is in draft/review.
+
+    The whole point of ?force=true is to work outside the normal lifecycle.
+    The audit trail must be created regardless of whether a draft exists — it
+    documents the emergency write, not a lifecycle event.
+    """
+    app = _make_force_true_setup(monkeypatch)
+
+    mock_sb = MagicMock()
+    mock_sb.table.return_value.upsert.return_value.execute.return_value = MagicMock(data=[])
+
+    with patch("api.calibration.get_supabase", return_value=mock_sb):
+        with patch("api.calibration.get_thresholds", return_value={}):
+            with patch("services.pipeline_runs.repo.record_force_audit") as mock_audit:
+                with app.test_client() as c:
+                    resp = c.put(
+                        "/api/skills/thresholds/Scorer?force=true",
+                        json=_VALID_THRESHOLD_BODY,
+                        headers=_FORCE_HEADERS,
+                    )
+
+    assert resp.status_code == 200
+    # Audit must fire regardless of draft state
+    mock_audit.assert_called_once()
