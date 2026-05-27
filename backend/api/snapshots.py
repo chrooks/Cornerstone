@@ -268,6 +268,8 @@ def publish_draft(draft_id: str):
         code = str(exc)
         if "pipeline_runs_in_flight" in code:
             return _err(code, 409)
+        if "pending_commits_exist" in code:
+            return _err(code, 409)
         if "missing_composite_not_acknowledged" in code:
             return _err(code, 422)
         if "open_flags_not_acknowledged" in code:

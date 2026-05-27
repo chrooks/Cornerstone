@@ -126,6 +126,34 @@ def any_running(snapshot_release_id: Optional[str], client=None) -> bool:
     return bool(result.data)
 
 
+def any_pending_commit(snapshot_release_id: Optional[str], client=None) -> bool:
+    """Return True if any Pipeline run has status='success', committed_at=NULL,
+    and snapshot_release_id matches the given draft.
+
+    A pending-commit run holds staged results that have not yet been committed
+    into the draft working tables. Publishing while pending-commit runs exist
+    would silently discard those staged results. The caller (publish_draft) must
+    raise ValueError('pending_commits_exist') when this returns True so the admin
+    can commit or discard the run before publishing.
+
+    When snapshot_release_id is None, returns False immediately — no draft means
+    no pending-commit Invariant to enforce.
+    """
+    if snapshot_release_id is None:
+        return False
+
+    c = client or _get_client()
+    query = (
+        c.table("pipeline_runs")
+        .select("id")
+        .eq("status", "success")
+        .is_("committed_at", "null")
+        .eq("snapshot_release_id", snapshot_release_id)
+    )
+    result = run_query(lambda: query.limit(1).execute())
+    return bool(result.data)
+
+
 def get_run(run_id: str, client=None) -> Optional[dict]:
     """Return a single pipeline_run row by id, or None if not found.
 

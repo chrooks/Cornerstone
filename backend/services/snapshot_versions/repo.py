@@ -220,6 +220,9 @@ def publish_draft(
     if runs_repo.any_running(draft_id):
         raise ValueError("pipeline_runs_in_flight")
 
+    if runs_repo.any_pending_commit(draft_id):
+        raise ValueError("pending_commits_exist")
+
     # Preflight in Python so the API layer's except ValueError catches it.
     # The RPC retains its own hard backstop for defense-in-depth.
     if not allow_missing_composite:

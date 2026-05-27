@@ -299,6 +299,34 @@ class TestPublishDraftEndpoint:
         assert resp.status_code == 400
         assert resp.get_json()["error"] == "invalid_allow_open_flags"
 
+    def test_publish_returns_409_pending_commits_exist(self, admin_client):
+        """POST publish returns 409 when pending_commits_exist ValueError is raised.
+
+        The publish guard blocks when a Pipeline run has status='success',
+        committed_at=NULL, and snapshot_release_id=draft_id. The admin must
+        commit or discard the run before publishing.
+        """
+        from services.snapshot_versions import repo
+
+        with patch.object(
+            repo,
+            "publish_draft",
+            side_effect=ValueError("pending_commits_exist"),
+        ):
+            resp = admin_client.post(
+                "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                json={"label": "Test", "allow_missing_composite": True},
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 409, (
+            f"Expected 409 for pending_commits_exist, got {resp.status_code}: "
+            f"{resp.get_json()}"
+        )
+        body = resp.get_json()
+        assert body["success"] is False
+        assert "pending_commits_exist" in body["error"]
+
 
 # ---------------------------------------------------------------------------
 # GET /api/snapshots/drafts/<id>/validation
