@@ -200,6 +200,14 @@ def test_normalize_composites_guards_zero_theoretical_max():
 
 
 def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
+    """After M3: build_distributions reads released_players.skill_profile_snapshot,
+    not draft_skill_profiles.profile. Patching snapshots_active so the active-release
+    guard succeeds without a live DB.
+    """
+    import services.snapshots_active as snapshots_active_mod
+
+    FAKE_RELEASE_ID = "fake-release-id"
+
     class FakeResult:
         def __init__(self, data):
             self.data = data
@@ -216,12 +224,13 @@ def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
             return self
 
         def execute(self):
+            # Return skill_profile_snapshot (released_players column, not profile)
             if self.filters.get("is_legend") is True:
                 return FakeResult(
-                    [{"profile": {"movement_shooter": {"final_tier": "Capable"}}}]
+                    [{"skill_profile_snapshot": {"movement_shooter": {"final_tier": "Capable"}}}]
                 )
             return FakeResult(
-                [{"profile": {"spot_up_shooter": {"final_tier": "Elite"}}}]
+                [{"skill_profile_snapshot": {"spot_up_shooter": {"final_tier": "Elite"}}}]
             )
 
     class FakeClient:
@@ -230,6 +239,12 @@ def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
 
     monkeypatch.setattr(composites, "_get_supabase_client", lambda: FakeClient())
     monkeypatch.setattr(composites, "_run_query", lambda query: query())
+    # Patch the active-release lookup so the guard passes without a live DB
+    monkeypatch.setattr(
+        snapshots_active_mod,
+        "_query_active_release_id",
+        lambda client=None: FAKE_RELEASE_ID,
+    )
 
     distributions = composites.build_distributions("2025-26", VALUES)
 

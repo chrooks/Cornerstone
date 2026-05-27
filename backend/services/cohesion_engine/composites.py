@@ -355,35 +355,56 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
     """
     Build and cache raw composite distributions for current players + legends.
 
+    After M3: reads from released_players (active Snapshot Release) instead of
+    draft_skill_profiles. Both regular-player and legend profiles are sourced from
+    skill_profile_snapshot column. If no active release exists, logs and degrades
+    gracefully to an empty distribution (existing MIN_DISTRIBUTION_SIZE fallback
+    handles the theoretical-max path).
+
     If fewer than MIN_DISTRIBUTION_SIZE player profiles exist, callers will still
     receive the small distribution, but normalization falls back to theoretical
     maxima until the cache has enough population data.
     """
+    from services.snapshots_active import get_active_release_id, ActiveReleaseMissingError
+
     client = _get_supabase_client()
     all_raw: dict[str, list[float]] = {name: [] for name in COMPOSITE_NAMES}
 
+    try:
+        active_release_id = get_active_release_id(client=client)
+    except ActiveReleaseMissingError:
+        logger.warning(
+            "build_distributions: no active Snapshot Release — "
+            "returning empty distributions (theoretical fallback will be used)"
+        )
+        distributions: dict[str, list[float]] = {name: [] for name in COMPOSITE_NAMES}
+        set_distributions(distributions)
+        return distributions
+
+    # Regular players — source_player_id is non-null, is_legend=false
     profiles = _run_query(
-        lambda: client.table("draft_skill_profiles")
-        .select("profile")
-        .eq("season", season)
-        .eq("source", "composite")
+        lambda: client.table("released_players")
+        .select("skill_profile_snapshot")
+        .eq("snapshot_release_id", active_release_id)
+        .eq("is_legend", False)
         .execute()
     )
     for row in profiles.data:
-        skills = _with_default_skills(_extract_skills(row["profile"]))
+        skills = _with_default_skills(_extract_skills(row["skill_profile_snapshot"] or {}))
         raw = compute_raw_composites(skills, values)
         for name, value in raw.items():
             all_raw[name].append(value)
 
+    # Legends — is_legend=true; composite already frozen at publish
     legend_profiles = _run_query(
-        lambda: client.table("draft_skill_profiles")
-        .select("profile")
-        .eq("source", "manual")
+        lambda: client.table("released_players")
+        .select("skill_profile_snapshot")
+        .eq("snapshot_release_id", active_release_id)
         .eq("is_legend", True)
         .execute()
     )
     for row in legend_profiles.data:
-        skills = _with_default_skills(_extract_skills(row["profile"]))
+        skills = _with_default_skills(_extract_skills(row["skill_profile_snapshot"] or {}))
         raw = compute_raw_composites(skills, values)
         for name, value in raw.items():
             all_raw[name].append(value)

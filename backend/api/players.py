@@ -451,6 +451,97 @@ def remove_manual_include(player_id: str):
 _LEGEND_SALARY = 54_000_000  # Supermax per project_document.md Rule 1
 
 
+def _fetch_released_profiles(
+    supabase,
+    active_release_id: str,
+    *,
+    source_player_ids: list[str] | None = None,
+    legend_nba_api_ids: list[int] | None = None,
+) -> dict[str, dict]:
+    """Return {source_player_id_or_legend_nba_api_id: skill_profile_snapshot} from released_players.
+
+    Args:
+        supabase: Supabase client.
+        active_release_id: id of the active Snapshot Release.
+        source_player_ids: when set, fetch regular-player rows by source_player_id.
+        legend_nba_api_ids: when set, fetch legend rows (is_legend=true) joined via
+            canonical_players.nba_api_id so callers can match by legend.nba_api_id.
+
+    Returns a plain dict keyed by source_player_id (for players) or nba_api_id cast to
+    str (for legends), mapping to the skill_profile_snapshot dict.
+
+    Raises ValueError if neither or both of source_player_ids/legend_nba_api_ids
+    are provided — the function is a one-mode Surface, not a dispatcher.
+    """
+    if (source_player_ids is None) == (legend_nba_api_ids is None):
+        raise ValueError(
+            "_fetch_released_profiles requires exactly one of "
+            "source_player_ids or legend_nba_api_ids"
+        )
+
+    if source_player_ids is not None:
+        _BATCH = 100
+        result: dict[str, dict] = {}
+        for i in range(0, len(source_player_ids), _BATCH):
+            batch = source_player_ids[i : i + _BATCH]
+            rows = (
+                supabase.table("released_players")
+                .select("source_player_id, skill_profile_snapshot")
+                .eq("snapshot_release_id", active_release_id)
+                .eq("is_legend", False)
+                .in_("source_player_id", batch)
+                # +1 leaves headroom for a future overflow guard to detect
+                # over-full batches; today every batch is bounded by _BATCH.
+                .limit(_BATCH + 1)
+                .execute()
+            )
+            for row in (rows.data or []):
+                pid = row.get("source_player_id")
+                if pid:
+                    result[str(pid)] = row.get("skill_profile_snapshot") or {}
+        return result
+
+    if legend_nba_api_ids is not None:
+        # Legends: released_players.canonical_player_id → canonical_players.nba_api_id
+        # We select canonical_player_id from released_players, then resolve nba_api_id
+        # via a second query on canonical_players.
+        rows = (
+            supabase.table("released_players")
+            .select("canonical_player_id, skill_profile_snapshot")
+            .eq("snapshot_release_id", active_release_id)
+            .eq("is_legend", True)
+            .execute()
+        )
+        released_rows = rows.data or []
+        if not released_rows:
+            return {}
+
+        canonical_ids = [r["canonical_player_id"] for r in released_rows if r.get("canonical_player_id")]
+        if not canonical_ids:
+            return {}
+
+        cp_rows = (
+            supabase.table("canonical_players")
+            .select("id, nba_api_id")
+            .in_("id", canonical_ids)
+            .execute()
+        )
+        canonical_by_id = {
+            row["id"]: row["nba_api_id"]
+            for row in (cp_rows.data or [])
+        }
+
+        result = {}
+        for row in released_rows:
+            cid = row.get("canonical_player_id")
+            nba_api_id = canonical_by_id.get(cid)
+            if nba_api_id is not None:
+                result[str(nba_api_id)] = row.get("skill_profile_snapshot") or {}
+        return result
+
+    return {}
+
+
 def _has_any_rated_skill(profile: dict) -> bool:
     """Return True if the legend profile has at least one non-null skill rating."""
     return any(v is not None for v in profile.values())
@@ -460,11 +551,17 @@ def _fetch_legends_for_bulk() -> list:
     """
     Return legends that have at least one rated skill, shaped as PlayerWithSkills dicts.
 
-    Legends are identified by is_legend=True, source='manual' in draft_skill_profiles.
+    After M3: reads skill_profile_snapshot from released_players (active Snapshot Release)
+    instead of draft_skill_profiles. flag_summary is always {0, 0} on the Lab path.
     Skills are condensed to { skill_name: tier_string } — same shape as current players.
     Nulls (unrated skills) are omitted; 'None' tiers are kept to match current-player parity.
     """
+    from services.snapshots_active import get_active_release_id, ActiveReleaseMissingError
+
     supabase = get_supabase()
+
+    # Resolve active release — raises ActiveReleaseMissingError if none exists.
+    active_release_id = get_active_release_id()
 
     # Fetch all legends with their physical attributes
     legends_res = (
@@ -477,27 +574,19 @@ def _fetch_legends_for_bulk() -> list:
     if not legends:
         return []
 
-    legend_ids = [lg["id"] for lg in legends]
+    legend_nba_api_ids = [lg["nba_api_id"] for lg in legends if lg.get("nba_api_id") is not None]
 
-    # Fetch manual skill profiles for all legends in one query
-    profiles_res = (
-        supabase.table("draft_skill_profiles")
-        .select("legend_id, profile")
-        .in_("legend_id", legend_ids)
-        .eq("is_legend", True)
-        .eq("source", "manual")
-        .execute()
+    # Read from released_players (active Snapshot Release) — not draft_skill_profiles
+    profile_by_nba_api_id = _fetch_released_profiles(
+        supabase,
+        active_release_id,
+        legend_nba_api_ids=legend_nba_api_ids,
     )
-    profile_by_legend: dict = {
-        row["legend_id"]: row.get("profile") or {}
-        for row in (profiles_res.data or [])
-        if row.get("legend_id")
-    }
 
     result = []
     for legend in legends:
-        lid = legend["id"]
-        raw_profile = profile_by_legend.get(lid, {})
+        nba_api_id = legend.get("nba_api_id")
+        raw_profile = profile_by_nba_api_id.get(str(nba_api_id), {}) if nba_api_id else {}
 
         # Skip legends with no rated skills
         if not _has_any_rated_skill(raw_profile):
@@ -505,13 +594,13 @@ def _fetch_legends_for_bulk() -> list:
 
         # Condense profile: omit null (unrated) keys, keep deliberate 'None' tier values
         skills = {
-            skill: tier
-            for skill, tier in raw_profile.items()
-            if tier is not None
+            skill: (details.get("final_tier") if isinstance(details, dict) else details)
+            for skill, details in raw_profile.items()
+            if (details.get("final_tier") if isinstance(details, dict) else details) is not None
         }
 
         result.append({
-            "id":               lid,
+            "id":               legend["id"],
             "name":             legend["name"],
             "team":             legend.get("team"),
             "position":         legend.get("position"),
@@ -524,7 +613,7 @@ def _fetch_legends_for_bulk() -> list:
             "season":           "Legends",
             "is_legend":        True,
             "peak_year":        legend.get("peak_year"),
-            "nba_api_id":       legend.get("nba_api_id"),
+            "nba_api_id":       nba_api_id,
             "skills":           skills,
             "flag_summary":     {"total": 0, "unresolved": 0},
         })
@@ -534,14 +623,21 @@ def _fetch_legends_for_bulk() -> list:
 
 def _fetch_bulk_players(season: str, min_mpg: float) -> list:
     """
-    Execute all three Supabase queries needed for the bulk players response
-    (players → draft_skill_profiles → draft_skill_flags) and join them in Python.
+    Execute the queries needed for the bulk players response
+    (players → released_players for active Snapshot Release) and join them in Python.
+
+    After M3: reads composite profiles from released_players (active Snapshot Release)
+    instead of draft_skill_profiles + draft_skill_flags. flag_summary is always
+    {total: 0, unresolved: 0} on the Lab path — flags are admin/draft-only.
 
     Isolated into a standalone function so the route handler can retry the
     entire sequence on an HTTP/2 connection reset (RemoteProtocolError) by
     simply calling get_supabase() again for a fresh connection pool.
     """
+    from services.snapshots_active import get_active_release_id
+
     supabase = get_supabase()
+    active_release_id = get_active_release_id()
 
     # 1. Fetch all qualifying players for this season.
     # Include players that meet the MPG threshold OR were manually added
@@ -564,83 +660,31 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
 
     player_ids = [p["id"] for p in players_data]
 
-    # 2. Fetch composite skill profiles — chunked in batches of 100 to stay
-    #    within PostgREST URL length limits (~8 KB default in most proxies).
-    _BATCH = 100
-    profiles_data: list = []
-    for i in range(0, len(player_ids), _BATCH):
-        batch = player_ids[i : i + _BATCH]
-        rows = (
-            supabase.table("draft_skill_profiles")
-            .select("id, player_id, profile")
-            .in_("player_id", batch)
-            .eq("season", season)
-            .eq("source", "composite")
-            .limit(_BATCH + 1)  # +1 lets us detect unexpected overflow
-            .execute()
-        )
-        profiles_data.extend(rows.data or [])
+    # 2. Fetch composite skill profiles from released_players (active Snapshot Release).
+    #    flag_summary is always {0, 0} — flags are admin/draft-only after M3.
+    profiles_by_player = _fetch_released_profiles(
+        supabase,
+        active_release_id,
+        source_player_ids=player_ids,
+    )
 
-    # Index profiles by player_id for O(1) lookup
-    profiles_by_player: dict = {}
-    profile_id_to_player_id: dict = {}
-    for row in profiles_data:
-        profiles_by_player[row["player_id"]] = row
-        profile_id_to_player_id[row["id"]] = row["player_id"]
-
-    # 3. Fetch flag counts — chunked by the same batch size.
-    #    Counts are accumulated in Python; we log a warning if any batch hits
-    #    the limit, which would signal silent truncation of flag counts.
-    profile_ids = list(profile_id_to_player_id.keys())
-    flags_by_profile_id: dict = {}
-    _FLAG_BATCH_LIMIT = 1000  # per-batch row ceiling
-    if profile_ids:
-        for i in range(0, len(profile_ids), _BATCH):
-            batch = profile_ids[i : i + _BATCH]
-            flags_rows = (
-                supabase.table("draft_skill_flags")
-                .select("skill_profile_id, resolution")
-                .in_("skill_profile_id", batch)
-                .limit(_FLAG_BATCH_LIMIT)
-                .execute()
-            )
-            flags_batch = flags_rows.data or []
-            if len(flags_batch) >= _FLAG_BATCH_LIMIT:
-                logger.warning(
-                    "Flag batch hit row limit (%d) — flag counts may be understated. "
-                    "Consider aggregating via an RPC instead.",
-                    _FLAG_BATCH_LIMIT,
-                )
-            for flag in flags_batch:
-                pid = flag["skill_profile_id"]
-                if pid not in flags_by_profile_id:
-                    flags_by_profile_id[pid] = {"total": 0, "unresolved": 0}
-                flags_by_profile_id[pid]["total"] += 1
-                if flag.get("resolution") is None:
-                    flags_by_profile_id[pid]["unresolved"] += 1
-
-    # 4. Join everything and build the response list
+    # 3. Join and build the response list
     result = []
     for player in players_data:
-        profile_row = profiles_by_player.get(player["id"])
+        raw_profile = profiles_by_player.get(player["id"])
         skills = None
-        flag_summary = {"total": 0, "unresolved": 0}
 
-        if profile_row:
-            raw_profile = profile_row.get("profile") or {}
+        if raw_profile is not None:
             # Condense to just final_tier per skill — keeps payload light
             skills = {
                 skill: (details.get("final_tier") if isinstance(details, dict) else details)
                 for skill, details in raw_profile.items()
             }
-            flag_summary = flags_by_profile_id.get(
-                profile_row["id"], {"total": 0, "unresolved": 0}
-            )
 
         result.append({
             **player,
             "skills": skills,
-            "flag_summary": flag_summary,
+            "flag_summary": {"total": 0, "unresolved": 0},
             "is_rookie_deal": (
                 player.get("draft_round") == 1
                 and (player.get("season_exp") or 99) <= 3
@@ -684,11 +728,16 @@ def list_players_bulk():
     except (ValueError, TypeError):
         return _err("'min_mpg' must be a number", status=400)
 
+    from services.snapshots_active import ActiveReleaseMissingError
+
     try:
         result = _fetch_bulk_players(season, min_mpg)
         if include_legends:
             result = result + _fetch_legends_for_bulk()
         return _ok(result)
+    except ActiveReleaseMissingError:
+        logger.warning("No active Snapshot Release — cannot serve /api/players/bulk")
+        return jsonify({"success": False, "data": None, "error": "no_active_release"}), 503
     except (httpx.ReadError, httpx.RemoteProtocolError) as exc:
         # Supabase PostgREST closes HTTP/2 connections after ~34 streams
         # (GOAWAY frame). Reset the singleton so the retry gets a fresh pool.
@@ -703,6 +752,11 @@ def list_players_bulk():
             if include_legends:
                 result = result + _fetch_legends_for_bulk()
             return _ok(result)
+        except ActiveReleaseMissingError:
+            logger.warning(
+                "No active Snapshot Release on retry — cannot serve /api/players/bulk"
+            )
+            return jsonify({"success": False, "data": None, "error": "no_active_release"}), 503
         except Exception as retry_exc:
             logger.exception("Error in GET /api/players/bulk (retry also failed)")
             return _err(str(retry_exc))
@@ -945,39 +999,25 @@ def player_profile(player_id: str):
             return _err(f"Player {player_id} not found for season {season}", status=404)
         player = player_row.data[0]
 
-        # Fetch composite skill profile (if it exists)
-        profile_row = (
-            supabase.table("draft_skill_profiles")
-            .select("id, profile")
-            .eq("player_id", player_id)
-            .eq("season", season)
-            .eq("source", "composite")
-            .limit(1)
-            .execute()
+        # Fetch composite skill profile from released_players (active Snapshot Release).
+        # After M3: draft_skill_profiles is admin-only; Lab reads use released_players.
+        # flag_summary is always {0, 0} on Lab path — flags are admin/draft-only.
+        from services.snapshots_active import get_active_release_id, ActiveReleaseMissingError
+
+        try:
+            active_release_id = get_active_release_id()
+        except ActiveReleaseMissingError:
+            return jsonify({"success": False, "data": None, "error": "no_active_release"}), 503
+
+        profiles = _fetch_released_profiles(
+            supabase,
+            active_release_id,
+            source_player_ids=[player_id],
         )
+        raw_profile = profiles.get(player_id)
 
-        skills_data = None
+        skills_data = raw_profile if raw_profile else None
         flag_summary = {"total": 0, "unresolved": 0}
-        composite_profile_id = None
-
-        if profile_row.data:
-            composite_profile_id = profile_row.data[0]["id"]
-            raw_profile = profile_row.data[0]["profile"] or {}
-            # Return the full composite result dict per skill so the UI can show
-            # stat_tier, claude_tier, source, and flagged state
-            skills_data = raw_profile
-
-            # Fetch flag summary counts
-            flag_rows = (
-                supabase.table("draft_skill_flags")
-                .select("id, resolution")
-                .eq("skill_profile_id", composite_profile_id)
-                .execute()
-            )
-            all_flags     = flag_rows.data or []
-            total_flags   = len(all_flags)
-            unresolved    = sum(1 for f in all_flags if f.get("resolution") is None)
-            flag_summary  = {"total": total_flags, "unresolved": unresolved}
 
         return _ok({
             "player":       player,
