@@ -277,6 +277,23 @@ def test_legacy_pipeline_runs_route_removed(admin_client, monkeypatch):
     )
 
 
+def test_discard_run_returns_409_for_already_discarded_run(admin_client):
+    """POST discard returns 409 run_already_discarded if run is already discarded.
+
+    Discarding twice must be idempotent at the API level (safe for retry UI),
+    but the second call should signal the caller clearly rather than silently
+    re-issuing a no-op discard against the DB.
+    """
+    already_discarded_run = _mock_run("run-already-discarded", status="discarded")
+    with patch("services.pipeline_runs.repo.get_run", return_value=already_discarded_run):
+        resp = admin_client.post("/api/pipeline-runs/run-already-discarded/discard", headers=AUTH)
+
+    assert resp.status_code == 409
+    body = resp.get_json()
+    assert body["success"] is False
+    assert "run_already_discarded" in body["error"]
+
+
 def test_discard_errored_run_succeeds(admin_client):
     """Discard of an errored run (cleanup path) must succeed."""
     error_run = _mock_run("run-err", status="error")

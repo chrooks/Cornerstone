@@ -104,6 +104,9 @@ def discard_pipeline_run(run_id: str):
     if run.get("committed_at"):
         return _err("already_committed — cannot discard an already-committed run", 409)
 
+    if run.get("status") == "discarded":
+        return _err("run_already_discarded — run has already been discarded", 409)
+
     try:
         commit_module.discard_run(run_id)
         return _ok({"discarded": run_id})
