@@ -16,29 +16,26 @@ error message to verify the correct DB-level constraint fired.
 
 from __future__ import annotations
 
-import os
 import uuid
-from typing import Any
 
 import pytest
 
+# Live-DB helpers promoted to conftest.py.
+# sb and real_release_id fixtures are injected by pytest from conftest.py.
+# _insert_run and _delete_run are plain functions re-imported via importlib
+# so they can be called directly inside test bodies.
 
-# ---------------------------------------------------------------------------
-# Live-DB fixture
-# ---------------------------------------------------------------------------
+import importlib.util as _ilu
+from pathlib import Path as _Path
 
+_conftest_path = _Path(__file__).parent / "conftest.py"
+_conftest_spec = _ilu.spec_from_file_location("_tests_conftest", _conftest_path)
+_conftest_mod = _ilu.module_from_spec(_conftest_spec)
+_conftest_spec.loader.exec_module(_conftest_mod)
 
-def _needs_live_db():
-    """Return True if environment has real Supabase credentials."""
-    # Load .env first so env vars are present at module evaluation time
-    from pathlib import Path
-    from dotenv import load_dotenv
-    env_file = Path(__file__).resolve().parents[1] / ".env"
-    if env_file.exists():
-        load_dotenv(env_file)
-    return bool(os.environ.get("SUPABASE_URL")) and bool(
-        os.environ.get("SUPABASE_SERVICE_KEY")
-    )
+_needs_live_db = _conftest_mod._needs_live_db
+_insert_run = _conftest_mod._insert_run
+_delete_run = _conftest_mod._delete_run
 
 
 pytestmark = pytest.mark.skipif(
@@ -47,35 +44,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
-def sb():
-    """Return a live Supabase service-role client for M1 invariant assertions."""
-    from services.supabase_client import get_supabase
-    return get_supabase()
-
-
 def _gen_uuid() -> str:
     return str(uuid.uuid4())
-
-
-def _insert_run(sb, *, pipeline_name: str = "skill_evaluation", status: str = "running",
-                snapshot_release_id: str | None = None) -> str:
-    """Insert a pipeline_run row and return its id. Caller responsible for cleanup."""
-    payload: dict[str, Any] = {
-        "pipeline_name": pipeline_name,
-        "scope": "bulk",
-        "status": status,
-    }
-    if snapshot_release_id:
-        payload["snapshot_release_id"] = snapshot_release_id
-
-    result = sb.table("pipeline_runs").insert(payload).execute()
-    return str(result.data[0]["id"])
-
-
-def _delete_run(sb, run_id: str) -> None:
-    """Delete a test pipeline_run row (and its staged rows via cascade)."""
-    sb.table("pipeline_runs").delete().eq("id", run_id).execute()
 
 
 # ---------------------------------------------------------------------------
@@ -279,18 +249,7 @@ def test_pipeline_runs_rejects_unknown_status(sb):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def real_release_id(sb):
-    """Return a real snapshot_release_id from the DB for FK-compliant partial index tests.
-
-    Uses the active release (is_active=true) so we don't need to create/delete
-    snapshot_releases rows. All inserted pipeline_run test rows reference this
-    existing release and are cleaned up by each test.
-    """
-    result = sb.table("snapshot_releases").select("id").eq("is_active", True).limit(1).execute()
-    if not result.data:
-        pytest.skip("No active snapshot_release found — cannot test partial unique index")
-    return str(result.data[0]["id"])
+# real_release_id fixture is provided by conftest.py.
 
 
 def test_partial_unique_idx_blocks_second_pending_commit_run_for_same_release(sb, real_release_id):
