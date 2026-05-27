@@ -104,7 +104,14 @@ def any_running(snapshot_release_id: Optional[str], client=None) -> bool:
 
 
 def get_run(run_id: str, client=None) -> Optional[dict]:
-    """Return a single pipeline_run row by id, or None if not found."""
+    """Return a single pipeline_run row by id, or None if not found.
+
+    Catches only postgrest PGRST116 (no rows found) and returns None.
+    All other errors (transient DB errors, auth failures, etc.) propagate so
+    callers surface a real 500 instead of a misleading 404.
+    """
+    import postgrest.exceptions
+
     c = client or _get_client()
     try:
         result = run_query(
@@ -115,8 +122,10 @@ def get_run(run_id: str, client=None) -> Optional[dict]:
             .execute()
         )
         return result.data
-    except Exception:
-        return None
+    except postgrest.exceptions.APIError as exc:
+        if exc.code == "PGRST116":
+            return None
+        raise
 
 
 def mark_committed(run_id: str, committed_at: str, client=None) -> None:

@@ -89,6 +89,45 @@ class TestCompleteRun:
         assert updated["error_tail"] == "Timeout"
 
 
+class TestGetRun:
+    def test_get_run_returns_none_for_not_found(self):
+        """get_run() returns None when the DB responds with PGRST116 (no rows)."""
+        import postgrest.exceptions
+
+        from services.pipeline_runs import repo
+
+        client = MagicMock()
+        err = postgrest.exceptions.APIError({"code": "PGRST116", "message": "no rows", "hint": None, "details": None})
+        client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.side_effect = err
+
+        with patch.object(repo, "_get_client", return_value=client):
+            result = repo.get_run("run-not-found")
+
+        assert result is None
+
+    def test_get_run_propagates_non_not_found_errors(self):
+        """get_run() must re-raise errors that are NOT PGRST116 (not-found).
+
+        Swallowing transient DB errors (connection timeout, auth failure, etc.)
+        causes 404 responses to callers who should instead see 500. The exception
+        must propagate so Flask's error handling can surface the real issue.
+        """
+        import postgrest.exceptions
+
+        from services.pipeline_runs import repo
+
+        client = MagicMock()
+        # A non-PGRST116 API error (e.g., auth failure, connection reset)
+        transient_err = postgrest.exceptions.APIError(
+            {"code": "28P01", "message": "password authentication failed", "hint": None, "details": None}
+        )
+        client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.side_effect = transient_err
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with pytest.raises(postgrest.exceptions.APIError):
+                repo.get_run("run-any-id")
+
+
 class TestAnyRunning:
     def test_any_running_returns_true_for_matching_snapshot(self):
         """any_running() returns True when a running row exists for the snapshot."""
