@@ -174,3 +174,57 @@ def test_bio_team_sync_player_calls_get_draft_once(monkeypatch, app_client):
         monkeypatch, app_client,
         "POST", "/api/pipeline/bio-team-sync/aaaaaaaa-0000-0000-0000-000000000001"
     )
+
+
+# ---------------------------------------------------------------------------
+# Concern 6: skill_filter ALL_SKILLS allowlist
+# ---------------------------------------------------------------------------
+
+
+def test_skill_evaluation_returns_400_for_unknown_skill_in_filter(monkeypatch, app_client):
+    """POST /api/pipeline/skill-evaluation with skill_filter containing unknown skill → 400.
+
+    The allowlist check mirrors the one in /save: unknown skill_names in
+    skill_filter must be rejected before any pipeline_runs row is created.
+    """
+    import api.auth as auth_mod
+
+    monkeypatch.setattr(auth_mod.snap_repo, "get_draft", lambda client=None: _DRAFT)
+    _stub_start_run(monkeypatch)
+
+    resp = app_client.post(
+        "/api/pipeline/skill-evaluation",
+        json={"skill_filter": ["MadeUpSkill", "AnotherFakeSkill"]},
+        headers=AUTH,
+    )
+
+    assert resp.status_code == 400, (
+        f"Expected 400 for unknown skill in filter, got {resp.status_code}: "
+        f"{resp.get_json()}"
+    )
+    body = resp.get_json()
+    assert body["success"] is False
+    assert "unknown_skill" in body["error"]
+
+
+def test_skill_evaluation_accepts_known_skills_in_filter(monkeypatch, app_client):
+    """POST skill-evaluation with a valid skill in skill_filter proceeds past allowlist check."""
+    import threading
+    import api.auth as auth_mod
+    from services.skills import ALL_SKILLS
+
+    monkeypatch.setattr(auth_mod.snap_repo, "get_draft", lambda client=None: _DRAFT)
+    _stub_start_run(monkeypatch)
+    monkeypatch.setattr(threading.Thread, "start", lambda self: None)
+
+    resp = app_client.post(
+        "/api/pipeline/skill-evaluation",
+        json={"skill_filter": [ALL_SKILLS[0]]},
+        headers=AUTH,
+    )
+
+    # Any non-400-unknown_skill response means the allowlist passed
+    body = resp.get_json()
+    assert not (resp.status_code == 400 and "unknown_skill" in (body or {}).get("error", "")), (
+        f"Known skill {ALL_SKILLS[0]!r} was incorrectly rejected by allowlist"
+    )

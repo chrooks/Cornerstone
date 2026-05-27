@@ -367,11 +367,18 @@ def skill_evaluation_batch():
     """
     from flask import g
     from services.skill_engine.evaluation_only import evaluate_skills_for_run
+    from services.skills import ALL_SKILLS
 
     body = request.get_json(silent=True) or {}
     player_ids: list[str] = body.get("player_ids") or []
     season: str = body.get("season", CURRENT_SEASON)
     skill_filter: list[str] | None = body.get("skill_filter") or None
+
+    # Validate skill_filter entries against the canonical 21-skill taxonomy.
+    if skill_filter:
+        unknown = [s for s in skill_filter if s not in ALL_SKILLS]
+        if unknown:
+            return _err(f"unknown_skill: {unknown[0]}", 400)
 
     draft_id = g.draft_id
 
