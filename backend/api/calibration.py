@@ -333,7 +333,9 @@ def save_threshold_edit(skill_name: str):
 
     draft_id = g.draft_id
 
+    from dataclasses import asdict
     from services.pipeline_runs import repo as runs_repo
+    from services.pipeline_runs.repo import ThresholdEditParams
     from services.skill_engine.evaluation_only import evaluate_skills_for_run
 
     try:
@@ -341,7 +343,7 @@ def save_threshold_edit(skill_name: str):
             name="threshold_edit",
             scope="bulk",
             snapshot_release_id=draft_id,
-            params={"skill_name": skill_name, "thresholds": body},
+            params=asdict(ThresholdEditParams(skill_name=skill_name, thresholds=body)),
         )
     except Exception as exc:
         err_msg = str(exc).lower()

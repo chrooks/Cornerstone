@@ -3,11 +3,17 @@ Database access for pipeline_runs table.
 
 Persists start/complete/error for stat_fetch, salary_scrape, and bio_team_sync
 pipeline invocations. Only writes at start, complete, and error per A-4.
+
+Per-pipeline_name params shape:
+  - threshold_edit: use ThresholdEditParams — serialized as
+      {"skill_name": str, "thresholds": dict}
+    The commit_pipeline_run RPC reads params->>'skill_name' and params->'thresholds'.
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
@@ -16,6 +22,23 @@ from services.supabase_client import get_supabase, run_query
 logger = logging.getLogger(__name__)
 
 PipelineName = Literal["stat_fetch", "salary_scrape", "bio_team_sync", "skill_evaluation", "threshold_edit"]
+
+
+@dataclass(frozen=True)
+class ThresholdEditParams:
+    """Typed params blob for pipeline_name='threshold_edit' pipeline runs.
+
+    The commit_pipeline_run RPC reads:
+      - params->>'skill_name'  to know which draft_skill_thresholds row to upsert
+      - params->'thresholds'   for the proposed JSONB threshold rule
+
+    Always pass asdict(ThresholdEditParams(...)) as the params= argument to
+    start_run() for threshold_edit runs so the shape stays synchronized with
+    this dataclass definition.
+    """
+
+    skill_name: str
+    thresholds: dict
 PipelineScope = Literal["bulk", "player"]
 
 
