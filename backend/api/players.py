@@ -22,6 +22,14 @@ from flask import Blueprint, jsonify, request
 from services.supabase_client import get_supabase, reset_client
 from services import players_service, nba_api_client
 from services.players_service import CURRENT_SEASON
+from services.snapshots_active import (
+    ActiveReleaseMissingError,
+    get_active_release_id,
+)
+from services.snapshot_versions.released_repo import (
+    fetch_legend_profiles_by_nba_api_ids,
+    fetch_profiles_by_source_player_ids,
+)
 from api.auth import require_admin, require_open_draft
 
 
@@ -451,97 +459,6 @@ def remove_manual_include(player_id: str):
 _LEGEND_SALARY = 54_000_000  # Supermax per project_document.md Rule 1
 
 
-def _fetch_released_profiles(
-    supabase,
-    active_release_id: str,
-    *,
-    source_player_ids: list[str] | None = None,
-    legend_nba_api_ids: list[int] | None = None,
-) -> dict[str, dict]:
-    """Return {source_player_id_or_legend_nba_api_id: skill_profile_snapshot} from released_players.
-
-    Args:
-        supabase: Supabase client.
-        active_release_id: id of the active Snapshot Release.
-        source_player_ids: when set, fetch regular-player rows by source_player_id.
-        legend_nba_api_ids: when set, fetch legend rows (is_legend=true) joined via
-            canonical_players.nba_api_id so callers can match by legend.nba_api_id.
-
-    Returns a plain dict keyed by source_player_id (for players) or nba_api_id cast to
-    str (for legends), mapping to the skill_profile_snapshot dict.
-
-    Raises ValueError if neither or both of source_player_ids/legend_nba_api_ids
-    are provided — the function is a one-mode Surface, not a dispatcher.
-    """
-    if (source_player_ids is None) == (legend_nba_api_ids is None):
-        raise ValueError(
-            "_fetch_released_profiles requires exactly one of "
-            "source_player_ids or legend_nba_api_ids"
-        )
-
-    if source_player_ids is not None:
-        _BATCH = 100
-        result: dict[str, dict] = {}
-        for i in range(0, len(source_player_ids), _BATCH):
-            batch = source_player_ids[i : i + _BATCH]
-            rows = (
-                supabase.table("released_players")
-                .select("source_player_id, skill_profile_snapshot")
-                .eq("snapshot_release_id", active_release_id)
-                .eq("is_legend", False)
-                .in_("source_player_id", batch)
-                # +1 leaves headroom for a future overflow guard to detect
-                # over-full batches; today every batch is bounded by _BATCH.
-                .limit(_BATCH + 1)
-                .execute()
-            )
-            for row in (rows.data or []):
-                pid = row.get("source_player_id")
-                if pid:
-                    result[str(pid)] = row.get("skill_profile_snapshot") or {}
-        return result
-
-    if legend_nba_api_ids is not None:
-        # Legends: released_players.canonical_player_id → canonical_players.nba_api_id
-        # We select canonical_player_id from released_players, then resolve nba_api_id
-        # via a second query on canonical_players.
-        rows = (
-            supabase.table("released_players")
-            .select("canonical_player_id, skill_profile_snapshot")
-            .eq("snapshot_release_id", active_release_id)
-            .eq("is_legend", True)
-            .execute()
-        )
-        released_rows = rows.data or []
-        if not released_rows:
-            return {}
-
-        canonical_ids = [r["canonical_player_id"] for r in released_rows if r.get("canonical_player_id")]
-        if not canonical_ids:
-            return {}
-
-        cp_rows = (
-            supabase.table("canonical_players")
-            .select("id, nba_api_id")
-            .in_("id", canonical_ids)
-            .execute()
-        )
-        canonical_by_id = {
-            row["id"]: row["nba_api_id"]
-            for row in (cp_rows.data or [])
-        }
-
-        result = {}
-        for row in released_rows:
-            cid = row.get("canonical_player_id")
-            nba_api_id = canonical_by_id.get(cid)
-            if nba_api_id is not None:
-                result[str(nba_api_id)] = row.get("skill_profile_snapshot") or {}
-        return result
-
-    return {}
-
-
 def _has_any_rated_skill(profile: dict) -> bool:
     """Return True if the legend profile has at least one non-null skill rating."""
     return any(v is not None for v in profile.values())
@@ -555,9 +472,9 @@ def _fetch_legends_for_bulk() -> list:
     instead of draft_skill_profiles. flag_summary is always {0, 0} on the Lab path.
     Skills are condensed to { skill_name: tier_string } — same shape as current players.
     Nulls (unrated skills) are omitted; 'None' tiers are kept to match current-player parity.
-    """
-    from services.snapshots_active import get_active_release_id, ActiveReleaseMissingError
 
+    Raises ActiveReleaseMissingError; the route-level handler translates to 503.
+    """
     supabase = get_supabase()
 
     # Resolve active release — raises ActiveReleaseMissingError if none exists.
@@ -577,10 +494,10 @@ def _fetch_legends_for_bulk() -> list:
     legend_nba_api_ids = [lg["nba_api_id"] for lg in legends if lg.get("nba_api_id") is not None]
 
     # Read from released_players (active Snapshot Release) — not draft_skill_profiles
-    profile_by_nba_api_id = _fetch_released_profiles(
-        supabase,
+    profile_by_nba_api_id = fetch_legend_profiles_by_nba_api_ids(
+        legend_nba_api_ids,
         active_release_id,
-        legend_nba_api_ids=legend_nba_api_ids,
+        client=supabase,
     )
 
     result = []
@@ -633,9 +550,9 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
     Isolated into a standalone function so the route handler can retry the
     entire sequence on an HTTP/2 connection reset (RemoteProtocolError) by
     simply calling get_supabase() again for a fresh connection pool.
-    """
-    from services.snapshots_active import get_active_release_id
 
+    Raises ActiveReleaseMissingError; the route-level handler translates to 503.
+    """
     supabase = get_supabase()
     active_release_id = get_active_release_id()
 
@@ -662,10 +579,10 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
 
     # 2. Fetch composite skill profiles from released_players (active Snapshot Release).
     #    flag_summary is always {0, 0} — flags are admin/draft-only after M3.
-    profiles_by_player = _fetch_released_profiles(
-        supabase,
+    profiles_by_player = fetch_profiles_by_source_player_ids(
+        player_ids,
         active_release_id,
-        source_player_ids=player_ids,
+        client=supabase,
     )
 
     # 3. Join and build the response list
@@ -727,8 +644,6 @@ def list_players_bulk():
         min_mpg = float(request.args.get("min_mpg", players_service.DEFAULT_MIN_MPG))
     except (ValueError, TypeError):
         return _err("'min_mpg' must be a number", status=400)
-
-    from services.snapshots_active import ActiveReleaseMissingError
 
     try:
         result = _fetch_bulk_players(season, min_mpg)
@@ -1002,17 +917,15 @@ def player_profile(player_id: str):
         # Fetch composite skill profile from released_players (active Snapshot Release).
         # After M3: draft_skill_profiles is admin-only; Lab reads use released_players.
         # flag_summary is always {0, 0} on Lab path — flags are admin/draft-only.
-        from services.snapshots_active import get_active_release_id, ActiveReleaseMissingError
-
         try:
             active_release_id = get_active_release_id()
         except ActiveReleaseMissingError:
             return jsonify({"success": False, "data": None, "error": "no_active_release"}), 503
 
-        profiles = _fetch_released_profiles(
-            supabase,
+        profiles = fetch_profiles_by_source_player_ids(
+            [player_id],
             active_release_id,
-            source_player_ids=[player_id],
+            client=supabase,
         )
         raw_profile = profiles.get(player_id)
 

@@ -52,15 +52,28 @@ def get_active_release_id(client=None) -> str:
 
 
 def _query_active_release_id(client=None) -> str:
-    """Execute the DB query — one level of indirection so tests can patch cheaply."""
+    """Execute the DB query — one level of indirection so tests can patch cheaply.
+
+    Only translates the no-active-release path into ActiveReleaseMissingError.
+    Unexpected exceptions (network timeouts, auth failures, config errors)
+    propagate so operators see a 500 with a real stack trace instead of being
+    misdiagnosed as a missing release.
+    """
+    from postgrest.exceptions import APIError
+
     from services.snapshot_versions.repo import get_active_release
 
     try:
         release = get_active_release(client)
-    except Exception as exc:
-        raise ActiveReleaseMissingError(
-            "No active Snapshot Release found — cannot serve Lab reads"
-        ) from exc
+    except APIError as exc:
+        # PostgREST returns PGRST116 when `.single()` finds zero rows. That is
+        # the canonical "no active release" signal. Other APIError codes
+        # (auth, schema, syntax) propagate untouched.
+        if getattr(exc, "code", None) == "PGRST116" or "PGRST116" in str(exc):
+            raise ActiveReleaseMissingError(
+                "No active Snapshot Release found — cannot serve Lab reads"
+            ) from exc
+        raise
 
     if not release or not release.id:
         raise ActiveReleaseMissingError(

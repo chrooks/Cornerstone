@@ -206,7 +206,10 @@ export default function LegendEditorPage() {
   // Load legend data + all legends for navigation
   useEffect(() => {
     setLoading(true);
-    Promise.all([getLegend(legendId), listLegends()]).then(([legendRes, listRes]) => {
+    Promise.all([
+      getLegend(legendId, { source: "draft" }),
+      listLegends({ source: "draft" }),
+    ]).then(([legendRes, listRes]) => {
       if (legendRes.success && legendRes.data) {
         setLegend(legendRes.data);
         setProfile(legendRes.data.profile);

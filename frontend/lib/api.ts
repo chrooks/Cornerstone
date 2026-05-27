@@ -533,9 +533,18 @@ export async function searchPlayers(
 // Legends (Prompt 8)
 // ---------------------------------------------------------------------------
 
-/** Get all 36 legends with completion counts (lightweight — no full profiles). */
-export async function listLegends(): Promise<ApiResponse<LegendSummary[]>> {
-  return apiFetch<LegendSummary[]>("/api/legends");
+/**
+ * Get all legends with completion counts (lightweight — no full profiles).
+ *
+ * Default source is the active Snapshot Release (Lab Contract — frozen
+ * ratings, invisible to in-progress admin edits). Admin pages MUST pass
+ * `source: "draft"` to see in-progress draft ratings.
+ */
+export async function listLegends(
+  options?: { source?: "released" | "draft" }
+): Promise<ApiResponse<LegendSummary[]>> {
+  const source = options?.source ?? "released";
+  return apiFetch<LegendSummary[]>(`/api/legends?source=${source}`);
 }
 
 /**
@@ -546,9 +555,21 @@ export async function listActivePlayersWithSkills(): Promise<ApiResponse<PlayerW
   return apiFetch<PlayerWithSkills[]>("/api/players/bulk?include_legends=false");
 }
 
-/** Get a single legend with its full skill profile. */
-export async function getLegend(legendId: string): Promise<ApiResponse<LegendDetail>> {
-  return apiFetch<LegendDetail>(`/api/legends/${encodeURIComponent(legendId)}`);
+/**
+ * Get a single legend with its full skill profile.
+ *
+ * Default source is the active Snapshot Release (Lab Contract — frozen
+ * ratings, invisible to in-progress admin edits). Admin pages MUST pass
+ * `source: "draft"` to see in-progress draft ratings.
+ */
+export async function getLegend(
+  legendId: string,
+  options?: { source?: "released" | "draft" }
+): Promise<ApiResponse<LegendDetail>> {
+  const source = options?.source ?? "released";
+  return apiFetch<LegendDetail>(
+    `/api/legends/${encodeURIComponent(legendId)}?source=${source}`
+  );
 }
 
 /**

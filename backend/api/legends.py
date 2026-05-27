@@ -29,7 +29,35 @@ from services.skills import (
     ALL_SKILLS as _ALL_SKILLS_FROM_MODULE,
     SKILL_DEFINITIONS as _SKILL_DEFINITIONS_FROM_MODULE,
 )
+from services.snapshots_active import (
+    ActiveReleaseMissingError,
+    get_active_release_id,
+)
+from services.snapshot_versions.released_repo import (
+    fetch_legend_profiles_by_nba_api_ids,
+)
 from services.supabase_client import get_supabase
+
+# ---------------------------------------------------------------------------
+# Source-mode Boundary for legend reads (M3 follow-up)
+# ---------------------------------------------------------------------------
+#
+# Legend GET routes serve BOTH the Lab user-facing picker and the /admin/legends
+# editor. Lab MUST see frozen ratings from the active Snapshot Release;
+# admin MUST see in-progress draft ratings. The default is the safe Lab mode
+# (released); admin pages opt in to draft via ?source=draft.
+
+_SOURCE_RELEASED = "released"
+_SOURCE_DRAFT = "draft"
+_VALID_SOURCES = {_SOURCE_RELEASED, _SOURCE_DRAFT}
+
+
+def _resolve_source() -> str:
+    """Return the requested source mode, defaulting to released (safe Lab default)."""
+    raw = (request.args.get("source") or _SOURCE_RELEASED).strip().lower()
+    if raw not in _VALID_SOURCES:
+        return _SOURCE_RELEASED
+    return raw
 
 logger = logging.getLogger(__name__)
 
@@ -111,11 +139,20 @@ def _empty_profile() -> dict:
 @legends_bp.route("/legends", methods=["GET"])
 def list_legends():
     """
-    Return all 36 legends sorted alphabetically, each with completion counts.
+    Return all legends sorted alphabetically, each with completion counts.
+
+    Query params:
+      ?source=released (default) — frozen ratings from the active Snapshot
+        Release. Lab Surface — served from released_players. Returns 503
+        no_active_release when no release is published.
+      ?source=draft — in-progress ratings from draft_skill_profiles. Admin
+        Surface — used by /admin/legends editor.
 
     Response data: list of {id, name, peak_era, notes, completion, completion_pct}
     where completion is how many of the 20 skills have been rated.
     """
+    source = _resolve_source()
+
     try:
         supabase = get_supabase()
 
@@ -131,21 +168,47 @@ def list_legends():
         if not legends:
             return _ok([])
 
-        # Fetch all legend skill profiles in one query (is_legend=true, source=manual)
-        # We only need legend_id and the profile JSONB for completion counting
-        profiles_res = (
-            supabase.table("draft_skill_profiles")
-            .select("legend_id, profile")
-            .eq("is_legend", True)
-            .eq("source", "manual")
-            .execute()
-        )
-        # Build lookup: legend_id → profile dict
-        profile_map: dict[str, dict] = {}
-        for row in (profiles_res.data or []):
-            lid = row.get("legend_id")
-            if lid:
-                profile_map[lid] = row.get("profile") or {}
+        # Resolve profile_map: legend_id -> profile dict, from either released
+        # or draft tables based on the requested source.
+        if source == _SOURCE_RELEASED:
+            try:
+                active_release_id = get_active_release_id()
+            except ActiveReleaseMissingError:
+                logger.warning("No active Snapshot Release — cannot serve /api/legends")
+                return jsonify(
+                    {"success": False, "data": None, "error": "no_active_release"}
+                ), 503
+
+            legend_nba_api_ids = [
+                lg["nba_api_id"] for lg in legends if lg.get("nba_api_id") is not None
+            ]
+            profile_by_nba_api_id = fetch_legend_profiles_by_nba_api_ids(
+                legend_nba_api_ids,
+                active_release_id,
+                client=supabase,
+            )
+            # Re-key by legend_id so the completion loop below stays uniform.
+            profile_map: dict[str, dict] = {}
+            for lg in legends:
+                nba_api_id = lg.get("nba_api_id")
+                if nba_api_id is not None:
+                    profile = profile_by_nba_api_id.get(str(nba_api_id))
+                    if profile:
+                        profile_map[lg["id"]] = profile
+        else:
+            # Admin draft path — read from draft_skill_profiles directly.
+            profiles_res = (
+                supabase.table("draft_skill_profiles")
+                .select("legend_id, profile")
+                .eq("is_legend", True)
+                .eq("source", "manual")
+                .execute()
+            )
+            profile_map = {}
+            for row in (profiles_res.data or []):
+                lid = row.get("legend_id")
+                if lid:
+                    profile_map[lid] = row.get("profile") or {}
 
         # Assemble response rows
         result = []
@@ -186,6 +249,13 @@ def get_legend(legend_id: str):
     """
     Return a single legend with full skill profile.
 
+    Query params:
+      ?source=released (default) — frozen ratings from the active Snapshot
+        Release. Lab Surface — served from released_players. Returns 503
+        no_active_release when no release is published.
+      ?source=draft — in-progress ratings from draft_skill_profiles. Admin
+        Surface — used by /admin/legends editor.
+
     If no skill profile exists yet, returns the legend metadata with an empty profile
     (all 20 skills as null — distinct from 'None' which is a deliberate rating).
 
@@ -193,6 +263,8 @@ def get_legend(legend_id: str):
     """
     if not _validate_uuid(legend_id):
         return _err("Invalid legend_id — must be a UUID", status=400)
+
+    source = _resolve_source()
 
     try:
         supabase = get_supabase()
@@ -209,24 +281,46 @@ def get_legend(legend_id: str):
             return _err(f"Legend {legend_id} not found", status=404)
         legend = legend_res.data[0]
 
-        # Fetch skill profile (manual legend profile)
-        profile_res = (
-            supabase.table("draft_skill_profiles")
-            .select("id, profile")
-            .eq("legend_id", legend_id)
-            .eq("is_legend", True)
-            .eq("source", "manual")
-            .limit(1)
-            .execute()
-        )
+        # Resolve the skill profile from either released or draft based on source.
+        if source == _SOURCE_RELEASED:
+            try:
+                active_release_id = get_active_release_id()
+            except ActiveReleaseMissingError:
+                logger.warning(
+                    "No active Snapshot Release — cannot serve /api/legends/%s",
+                    legend_id,
+                )
+                return jsonify(
+                    {"success": False, "data": None, "error": "no_active_release"}
+                ), 503
 
-        if profile_res.data:
-            # Merge stored profile with empty template to ensure all 20 skills are present
-            stored = profile_res.data[0].get("profile") or {}
+            nba_api_id = legend.get("nba_api_id")
+            if nba_api_id is None:
+                stored: dict = {}
+            else:
+                profile_by_nba_api_id = fetch_legend_profiles_by_nba_api_ids(
+                    [nba_api_id],
+                    active_release_id,
+                    client=supabase,
+                )
+                stored = profile_by_nba_api_id.get(str(nba_api_id)) or {}
             profile = {**_empty_profile(), **stored}
         else:
-            # No profile yet — all skills are null (unrated)
-            profile = _empty_profile()
+            # Admin draft path — read from draft_skill_profiles directly.
+            profile_res = (
+                supabase.table("draft_skill_profiles")
+                .select("id, profile")
+                .eq("legend_id", legend_id)
+                .eq("is_legend", True)
+                .eq("source", "manual")
+                .limit(1)
+                .execute()
+            )
+            if profile_res.data:
+                stored = profile_res.data[0].get("profile") or {}
+                profile = {**_empty_profile(), **stored}
+            else:
+                profile = _empty_profile()
 
         rated = _count_rated(profile)
         return _ok({

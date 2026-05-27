@@ -228,7 +228,7 @@ def test_draft_edit_does_not_leak_to_lab_player_detail(app):
     with (
         patch("api.players.get_supabase", return_value=supabase),
         patch(
-            "services.snapshots_active.get_active_release_id",
+            "api.players.get_active_release_id",
             return_value=ACTIVE_RELEASE_ID,
         ),
     ):
@@ -339,7 +339,7 @@ def test_draft_edit_does_not_leak_to_bulk_players_list(app):
     with (
         patch("api.players.get_supabase", return_value=supabase),
         patch(
-            "services.snapshots_active.get_active_release_id",
+            "api.players.get_active_release_id",
             return_value=ACTIVE_RELEASE_ID,
         ),
     ):
@@ -384,7 +384,7 @@ def test_draft_edit_does_not_leak_to_legends_listing(app):
     with (
         patch("api.players.get_supabase", return_value=supabase),
         patch(
-            "services.snapshots_active.get_active_release_id",
+            "api.players.get_active_release_id",
             return_value=ACTIVE_RELEASE_ID,
         ),
     ):
@@ -526,7 +526,7 @@ def test_player_detail_returns_503_when_no_active_release(app):
     with (
         patch("api.players.get_supabase", return_value=supabase),
         patch(
-            "services.snapshots_active.get_active_release_id",
+            "api.players.get_active_release_id",
             side_effect=ActiveReleaseMissingError("no active release"),
         ),
     ):
@@ -535,6 +535,211 @@ def test_player_detail_returns_503_when_no_active_release(app):
                 f"/api/players/{PLAYER_ID}/profile",
                 query_string={"season": SEASON},
             )
+
+    assert resp.status_code == 503
+    body = resp.get_json()
+    assert body["success"] is False
+    assert "no_active_release" in body["error"]
+
+
+# ---------------------------------------------------------------------------
+# /api/legends Lab Surface — released by default, ?source=draft for admin
+# ---------------------------------------------------------------------------
+
+
+def _make_supabase_for_legends_route(
+    legend_released_profile: dict,
+    legend_draft_profile: dict,
+) -> MagicMock:
+    """Build a Supabase mock that serves the /api/legends list and detail routes.
+
+    Both released_players (Lab path) and draft_skill_profiles (admin path)
+    return populated profiles with DISTINCT tier values so a leak is caught
+    immediately by the assertion.
+    """
+    supabase = MagicMock()
+
+    def table_side_effect(name: str):
+        q = MagicMock()
+        q.select.return_value = q
+        q.eq.return_value = q
+        q.in_.return_value = q
+        q.or_.return_value = q
+        q.order.return_value = q
+        q.limit.return_value = q
+        q.single.return_value = q
+
+        if name == "legends":
+            q.execute.return_value = _FakeResult([{
+                "id": LEGEND_ID,
+                "name": "Hakeem Olajuwon",
+                "peak_era": "1990s",
+                "notes": None,
+                "team": None,
+                "position": "C",
+                "age": None,
+                "height": 84,
+                "weight": 255,
+                "peak_year": 1994,
+                "nba_api_id": NBA_API_ID,
+            }])
+        elif name == "released_players":
+            q.execute.return_value = _FakeResult([{
+                "canonical_player_id": CANONICAL_PLAYER_ID,
+                "skill_profile_snapshot": legend_released_profile,
+            }])
+        elif name == "canonical_players":
+            q.execute.return_value = _FakeResult([{
+                "id": CANONICAL_PLAYER_ID,
+                "nba_api_id": NBA_API_ID,
+            }])
+        elif name == "draft_skill_profiles":
+            q.execute.return_value = _FakeResult([{
+                "id": "dsp-legend-001",
+                "legend_id": LEGEND_ID,
+                "is_legend": True,
+                "source": "manual",
+                "profile": legend_draft_profile,
+            }])
+        else:
+            q.execute.return_value = _FakeResult([])
+
+        return q
+
+    supabase.table.side_effect = table_side_effect
+    return supabase
+
+
+def test_lab_legends_list_does_not_leak_draft_edits(app):
+    """GET /api/legends (no source param) defaults to released — draft edits invisible."""
+    supabase = _make_supabase_for_legends_route(
+        legend_released_profile=RELEASED_LEGEND_PROFILE,
+        legend_draft_profile=DRAFT_MUTATED_LEGEND_PROFILE,
+    )
+
+    with (
+        patch("api.legends.get_supabase", return_value=supabase),
+        patch(
+            "api.legends.get_active_release_id",
+            return_value=ACTIVE_RELEASE_ID,
+        ),
+    ):
+        with app.test_client() as client:
+            resp = client.get("/api/legends")
+
+    assert resp.status_code == 200, resp.get_json()
+    body = resp.get_json()
+    assert body["success"] is True
+
+    # Completion count derives from the profile contents — released profile has
+    # 2 rated skills, draft mutated has 2 rated. Both equal here, so check the
+    # `released_players` table was consulted and `draft_skill_profiles` was not.
+    table_calls = [c.args[0] for c in supabase.table.call_args_list]
+    assert "released_players" in table_calls, (
+        f"/api/legends did NOT read released_players — table_calls={table_calls}"
+    )
+    assert "draft_skill_profiles" not in table_calls, (
+        "/api/legends leaked into draft_skill_profiles when source defaulted to released "
+        f"— table_calls={table_calls}"
+    )
+
+
+def test_lab_legends_detail_does_not_leak_draft_edits(app):
+    """GET /api/legends/<id> (no source param) defaults to released — draft edits invisible."""
+    supabase = _make_supabase_for_legends_route(
+        legend_released_profile=RELEASED_LEGEND_PROFILE,
+        legend_draft_profile=DRAFT_MUTATED_LEGEND_PROFILE,
+    )
+
+    with (
+        patch("api.legends.get_supabase", return_value=supabase),
+        patch(
+            "api.legends.get_active_release_id",
+            return_value=ACTIVE_RELEASE_ID,
+        ),
+    ):
+        with app.test_client() as client:
+            resp = client.get(f"/api/legends/{LEGEND_ID}")
+
+    assert resp.status_code == 200, resp.get_json()
+    body = resp.get_json()
+    assert body["success"] is True
+
+    # Scorer must reflect released "Elite", not draft mutated "Capable".
+    profile = body["data"]["profile"]
+    assert profile.get("Scorer") == "Elite", (
+        f"Expected released Scorer=Elite, got {profile.get('Scorer')!r} — draft leak detected"
+    )
+
+    table_calls = [c.args[0] for c in supabase.table.call_args_list]
+    assert "draft_skill_profiles" not in table_calls, (
+        f"/api/legends/{LEGEND_ID} leaked into draft_skill_profiles — table_calls={table_calls}"
+    )
+
+
+def test_admin_legends_list_reads_draft_when_source_draft(app):
+    """GET /api/legends?source=draft reads draft_skill_profiles (admin Surface)."""
+    supabase = _make_supabase_for_legends_route(
+        legend_released_profile=RELEASED_LEGEND_PROFILE,
+        legend_draft_profile=DRAFT_MUTATED_LEGEND_PROFILE,
+    )
+
+    with patch("api.legends.get_supabase", return_value=supabase):
+        with app.test_client() as client:
+            resp = client.get("/api/legends?source=draft")
+
+    assert resp.status_code == 200, resp.get_json()
+
+    table_calls = [c.args[0] for c in supabase.table.call_args_list]
+    assert "draft_skill_profiles" in table_calls, (
+        f"/api/legends?source=draft did NOT read draft tables — table_calls={table_calls}"
+    )
+    assert "released_players" not in table_calls, (
+        f"/api/legends?source=draft leaked into released_players — table_calls={table_calls}"
+    )
+
+
+def test_admin_legends_detail_reads_draft_when_source_draft(app):
+    """GET /api/legends/<id>?source=draft reads draft_skill_profiles."""
+    supabase = _make_supabase_for_legends_route(
+        legend_released_profile=RELEASED_LEGEND_PROFILE,
+        legend_draft_profile=DRAFT_MUTATED_LEGEND_PROFILE,
+    )
+
+    with patch("api.legends.get_supabase", return_value=supabase):
+        with app.test_client() as client:
+            resp = client.get(f"/api/legends/{LEGEND_ID}?source=draft")
+
+    assert resp.status_code == 200, resp.get_json()
+    body = resp.get_json()
+    profile = body["data"]["profile"]
+    assert profile.get("Scorer") == "Capable", (
+        f"Admin draft source should return draft Scorer=Capable, got {profile.get('Scorer')!r}"
+    )
+
+    table_calls = [c.args[0] for c in supabase.table.call_args_list]
+    assert "draft_skill_profiles" in table_calls
+    assert "released_players" not in table_calls
+
+
+def test_lab_legends_list_returns_503_when_no_active_release(app):
+    """GET /api/legends with no active release returns 503 no_active_release."""
+    from services.snapshots_active import ActiveReleaseMissingError
+
+    supabase = _make_supabase_for_legends_route(
+        legend_released_profile=RELEASED_LEGEND_PROFILE,
+        legend_draft_profile=DRAFT_MUTATED_LEGEND_PROFILE,
+    )
+
+    with (
+        patch("api.legends.get_supabase", return_value=supabase),
+        patch(
+            "api.legends.get_active_release_id",
+            side_effect=ActiveReleaseMissingError("no active release"),
+        ),
+    ):
+        with app.test_client() as client:
+            resp = client.get("/api/legends")
 
     assert resp.status_code == 503
     body = resp.get_json()
