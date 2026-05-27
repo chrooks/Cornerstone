@@ -303,3 +303,68 @@ def test_discard_errored_run_succeeds(admin_client):
 
     assert resp.status_code == 200
     mock_discard.assert_called_once_with("run-err")
+
+
+# ---------------------------------------------------------------------------
+# Slice 2: status='success' guard — commit RPC rejects non-success runs
+# ---------------------------------------------------------------------------
+
+
+def test_commit_rpc_rejects_run_not_in_success_state(admin_client):
+    """POST /commit returns 409 run_not_in_success_state when RPC rejects a running run.
+
+    Migration 20260527000009 adds a status='success' guard inside the RPC.
+    A run with status='running' must raise a Postgres exception whose message
+    contains 'run_not_in_success_state'. The route must translate this to 409,
+    not 500, so the frontend can surface a clear error.
+    """
+    running_run = _mock_run("run-still-running", status="running")
+
+    with patch("services.pipeline_runs.repo.get_run", return_value=running_run):
+        with patch(
+            "services.pipeline_run_results.commit.commit_run",
+            side_effect=Exception(
+                "{'message': 'run_not_in_success_state: run run-still-running has status=running', "
+                "'code': 'P0001', 'hint': None, 'details': None}"
+            ),
+        ):
+            resp = admin_client.post(
+                "/api/pipeline-runs/run-still-running/commit", headers=AUTH
+            )
+
+    assert resp.status_code == 409, (
+        f"Expected 409 for run_not_in_success_state, got {resp.status_code}: "
+        f"{resp.get_json()}"
+    )
+    body = resp.get_json()
+    assert body["success"] is False
+    assert "run_not_in_success_state" in body["error"]
+
+
+def test_commit_rpc_rejects_discarded_run(admin_client):
+    """POST /commit returns 409 run_not_in_success_state when RPC rejects a discarded run.
+
+    A discarded run also fails the status='success' guard in the RPC. The route
+    translates the Postgres error to a 409 with the same error code.
+    """
+    discarded_run = _mock_run("run-discarded", status="discarded")
+
+    with patch("services.pipeline_runs.repo.get_run", return_value=discarded_run):
+        with patch(
+            "services.pipeline_run_results.commit.commit_run",
+            side_effect=Exception(
+                "{'message': 'run_not_in_success_state: run run-discarded has status=discarded', "
+                "'code': 'P0001', 'hint': None, 'details': None}"
+            ),
+        ):
+            resp = admin_client.post(
+                "/api/pipeline-runs/run-discarded/commit", headers=AUTH
+            )
+
+    assert resp.status_code == 409, (
+        f"Expected 409 for run_not_in_success_state on discarded run, got {resp.status_code}: "
+        f"{resp.get_json()}"
+    )
+    body = resp.get_json()
+    assert body["success"] is False
+    assert "run_not_in_success_state" in body["error"]

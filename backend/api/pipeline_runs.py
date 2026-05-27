@@ -83,7 +83,10 @@ def commit_pipeline_run(run_id: str):
     try:
         committed_at = commit_module.commit_run(run_id)
         return _ok({"committed_at": committed_at})
-    except Exception:
+    except Exception as exc:
+        exc_str = str(exc).lower()
+        if "run_not_in_success_state" in exc_str:
+            return _err("run_not_in_success_state — run must have status=success to commit", 409)
         logger.exception("Error committing run %s", run_id)
         return _err("Failed to commit run", 500)
 
