@@ -1016,9 +1016,9 @@ export function ThresholdEditorPanel({
         if (onStagedEdit) {
           onStagedEdit(runId);
         } else {
-          onToast(`Threshold edit staged — run ${runId.slice(0, 8)}…`, "success");
+          onToast(`Threshold edit staged: run ${runId.slice(0, 8)}…`, "success");
         }
-      } else if (!res.success && res.error === "pending_commit_run_exists") {
+      } else if (!res.success && res.error?.startsWith("pending_commit_run_exists")) {
         onToast(
           "Commit or discard the current threshold_edit run before staging a new one.",
           "error"

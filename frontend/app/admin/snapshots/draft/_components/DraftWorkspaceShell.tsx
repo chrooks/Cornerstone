@@ -74,14 +74,26 @@ export function DraftWorkspaceShell() {
   const focusRunId = searchParams.get("run");
   const activeTab = resolveActiveTab(tabParam, gateContext);
 
-  // If the URL has a gated/invalid tab, rewrite it immediately
+  // If the URL has a gated/invalid tab, rewrite it.
+  // Skipped during initial draft load so that ?tab=thresholds on a real draft
+  // isn't silently rewritten to overview before the fetch resolves.
   useEffect(() => {
+    if (pageState === "loading") return;
     if (tabParam && tabParam !== activeTab) {
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", activeTab);
       router.replace(`?${params.toString()}`);
     }
-  }, [tabParam, activeTab, router, searchParams]);
+  }, [pageState, tabParam, activeTab, router, searchParams]);
+
+  // Safety: close PublishModal if status flips away from review while it's open
+  // (e.g., another admin clicks "Back to draft" in a different window). Without
+  // this, a submit from the open modal would publish a non-review draft.
+  useEffect(() => {
+    if (publishModalOpen && draft && draft.status !== "review") {
+      setPublishModalOpen(false);
+    }
+  }, [draft, publishModalOpen]);
 
   const handleTabChange = useCallback(
     (slug: TabSlug) => {

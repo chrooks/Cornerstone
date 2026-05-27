@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * /admin/calibration — standalone Threshold Calibration shell.
+ * /admin/calibration: standalone Threshold Calibration shell.
  *
- * Power-user deep-link preserved for direct navigation and `[skill_name]` hash
- * anchor compatibility (e.g. `/admin/calibration#spot_up_shooter`).
+ * Power-user deep-link preserved for direct navigation. The workspace content
+ * lives in CalibrationWorkspace so it can be embedded inside the draft
+ * workspace ThresholdsTab without layout duplication.
  *
- * The workspace content is now in CalibrationWorkspace so it can be embedded
- * inside the draft workspace ThresholdsTab without layout duplication.
+ * Per-skill deep-link (`?skill=` or `#skill_name`) is not yet wired — selection
+ * always opens to CalibrationWorkspace's DEFAULT_SKILL. Tracked as a follow-up.
  */
 
 import { Toaster } from "sonner";

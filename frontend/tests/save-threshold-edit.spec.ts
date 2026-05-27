@@ -47,13 +47,26 @@ test("saveThresholdEdit run_id is a string", () => {
   expect(typeof res.data?.run_id).toBe("string");
 });
 
-test("409 pending_commit_run_exists passes through as error", () => {
-  const res = mockConflict("pending_commit_run_exists");
+// Backend emits the full sentence, not the bare code, so consumers must use a
+// prefix match. See backend/api/calibration.py:372.
+const REAL_PENDING_COMMIT_ERROR =
+  "pending_commit_run_exists — commit or discard the current run first";
+
+test("409 pending_commit_run_exists passes through with full backend sentence", () => {
+  const res = mockConflict(REAL_PENDING_COMMIT_ERROR);
   expect(res.success).toBe(false);
-  expect(res.error).toBe("pending_commit_run_exists");
+  expect(res.error).toBe(REAL_PENDING_COMMIT_ERROR);
 });
 
-test("409 no_open_draft passes through as error", () => {
+test("consumers must use startsWith to detect pending_commit_run_exists", () => {
+  const res = mockConflict(REAL_PENDING_COMMIT_ERROR);
+  // Exact equality fails — would silently fall through to generic error branch.
+  expect(res.error === "pending_commit_run_exists").toBe(false);
+  // startsWith is the supported detection pattern.
+  expect(res.error?.startsWith("pending_commit_run_exists")).toBe(true);
+});
+
+test("409 no_open_draft is a bare code (exact equality is fine)", () => {
   const res = mockConflict("no_open_draft");
   expect(res.success).toBe(false);
   expect(res.error).toBe("no_open_draft");
