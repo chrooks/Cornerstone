@@ -60,6 +60,7 @@ COMMENT ON TABLE public.pipeline_run_flag_results IS
 --    Full function body copied from 20260527000003 with the two ORDER BY
 --    clauses extended. No other change.
 -- ---------------------------------------------------------------------------
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.publish_snapshot_draft(
   p_draft_id                UUID,
   p_label                   TEXT,

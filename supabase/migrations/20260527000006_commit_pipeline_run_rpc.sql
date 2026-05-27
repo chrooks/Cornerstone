@@ -7,6 +7,7 @@
 --   4. Sets pipeline_runs.committed_at = now()
 --   5. Deletes staged rows from both staging tables
 
+-- secdef-lint: allow-public reason=hardened-in-20260527000007_commit_pipeline_run_rpc_hardening
 CREATE OR REPLACE FUNCTION public.commit_pipeline_run(p_run_id UUID)
 RETURNS void
 LANGUAGE plpgsql

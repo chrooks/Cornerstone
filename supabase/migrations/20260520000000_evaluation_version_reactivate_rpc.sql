@@ -3,6 +3,7 @@
 -- Switches the active published Version to a different published Version
 -- =============================================================================
 
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.reactivate_evaluation_version(
   p_version_id uuid
 )

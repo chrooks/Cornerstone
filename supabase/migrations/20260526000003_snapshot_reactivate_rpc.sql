@@ -11,6 +11,7 @@
 --   * published_at is bumped to now() (the re-publish moment)
 -- =============================================================================
 
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.reactivate_snapshot_release(
   p_release_id UUID
 )

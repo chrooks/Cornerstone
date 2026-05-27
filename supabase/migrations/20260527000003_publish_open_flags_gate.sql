@@ -29,6 +29,7 @@
 --   legends (which have no row in public.players) are correctly excluded.
 -- =============================================================================
 
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.publish_snapshot_draft(
   p_draft_id                UUID,
   p_label                   TEXT,

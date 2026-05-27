@@ -3,6 +3,7 @@
 -- Fixes: non-atomic two-step publish that could leave zero active Versions
 -- =============================================================================
 
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.publish_evaluation_version(
   p_draft_id uuid,
   p_slug text,

@@ -124,6 +124,7 @@ END $$;
 -- Bodies copied from 20260526000002_snapshot_publish_rpc_fix.sql with table
 -- references swapped to the new names. No behavior change.
 -- ---------------------------------------------------------------------------
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.publish_snapshot_draft(
   p_draft_id UUID,
   p_label TEXT,
@@ -208,6 +209,7 @@ BEGIN
 END;
 $$;
 
+-- secdef-lint: allow-public reason=hardened-in-20260527000010_secdef_rpc_lockdown
 CREATE OR REPLACE FUNCTION public.reset_working_state_from_active()
 RETURNS void
 LANGUAGE plpgsql
