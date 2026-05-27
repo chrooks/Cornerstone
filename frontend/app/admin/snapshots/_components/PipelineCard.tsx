@@ -78,7 +78,7 @@ export function PipelineCard({
           setCardState("error");
           toast.error(`${title} status check failed: ${res.error ?? "unknown"}`);
         }
-      } catch (err) {
+      } catch {
         clearInterval(timer);
         timerRef.current = null;
         setCardState("error");

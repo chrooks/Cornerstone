@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
-import { saveThreshold, testThresholds } from "@/lib/api";
+import { saveThresholdEdit, testThresholds } from "@/lib/api";
 import { SKILL_CATEGORIES, formatSkillName } from "@/lib/skills";
 import { ALL_STAT_KEYS, getStatLabel } from "@/lib/stat-keys";
 import type {
@@ -38,6 +38,11 @@ interface ThresholdEditorPanelProps {
   onSkillSelect: (skillName: string) => void;
   /** Called after a successful save so the parent can clear the unsaved-edit flag */
   onSaved: (skillName: string, savedRule: Record<string, unknown>) => void;
+  /**
+   * Optional: called after a threshold edit is staged (M2 POST /save flow).
+   * Receives the run_id so the caller can deep-link to the Pipeline tab.
+   */
+  onStagedEdit?: (runId: string) => void;
   onToast: (message: string, type: "success" | "error") => void;
   leagueAverages: Record<string, number>;
 }
@@ -886,6 +891,7 @@ export function ThresholdEditorPanel({
   onReEvaluatePlayer,
   onSkillSelect,
   onSaved,
+  onStagedEdit,
   onToast,
   leagueAverages,
 }: ThresholdEditorPanelProps) {
@@ -1001,16 +1007,29 @@ export function ThresholdEditorPanel({
       // Strip pending-delete markers before sending to the API — _deleted items
       // must never reach the backend. stripDeleted is the sole gatekeeper.
       const cleanRule = stripDeleted(currentRule) as ThresholdRule;
-      const res = await saveThreshold(selectedSkill, cleanRule);
-      if (res.success) {
-        onToast("Threshold saved", "success");
+      const res = await saveThresholdEdit(selectedSkill, cleanRule);
+      if (res.success && res.data) {
+        const runId = res.data.run_id;
         // Clear the unsaved-edit flag for this skill in the parent (use clean rule)
         onSaved(selectedSkill, cleanRule as Record<string, unknown>);
+        // Notify the parent so it can deep-link to the Pipeline tab
+        if (onStagedEdit) {
+          onStagedEdit(runId);
+        } else {
+          onToast(`Threshold edit staged — run ${runId.slice(0, 8)}…`, "success");
+        }
+      } else if (!res.success && res.error === "pending_commit_run_exists") {
+        onToast(
+          "Commit or discard the current threshold_edit run before staging a new one.",
+          "error"
+        );
+      } else if (!res.success && res.error === "no_open_draft") {
+        onToast("No open draft — open a draft before editing thresholds.", "error");
       } else {
-        onToast(res.error ?? "Failed to save", "error");
+        onToast(res.error ?? "Failed to stage threshold edit", "error");
       }
     } catch {
-      onToast("Failed to save", "error");
+      onToast("Failed to stage threshold edit", "error");
     } finally {
       setSaving(false);
     }

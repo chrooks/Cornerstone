@@ -253,6 +253,30 @@ export async function saveThreshold(
   });
 }
 
+export interface SaveThresholdEditResponse {
+  run_id: string;
+}
+
+/**
+ * Stage a threshold edit as a draft Pipeline run.
+ * Returns `{ run_id }` — the caller should toast with the run_id and
+ * deep-link to `?tab=pipeline&run=<id>`.
+ *
+ * 409 codes: "pending_commit_run_exists" | "no_open_draft"
+ */
+export async function saveThresholdEdit(
+  skillName: string,
+  rule: ThresholdRule
+): Promise<ApiResponse<SaveThresholdEditResponse>> {
+  return apiFetch<SaveThresholdEditResponse>(
+    `/api/skills/thresholds/${encodeURIComponent(skillName)}/save`,
+    {
+      method: "POST",
+      body: JSON.stringify(rule),
+    }
+  );
+}
+
 /**
  * Test a skill's threshold rule against its anchor players.
  * Pass overrideThresholds to test unsaved edits before committing.
@@ -1029,4 +1053,17 @@ export function triggerBioTeamSync(player_id?: string): Promise<ApiResponse<{ ru
     ? `/api/pipeline/bio-team-sync/${player_id}`
     : "/api/pipeline/bio-team-sync";
   return apiFetch<{ run_id: string }>(path, { method: "POST" });
+}
+
+/**
+ * List pipeline runs for a draft snapshot. Sorted by started_at desc.
+ * Backend route: GET /api/snapshots/drafts/<id>/pipeline-runs
+ * M4 stub: returns an empty list until the route ships.
+ */
+export function getDraftPipelineRuns(
+  draftId: string
+): Promise<ApiResponse<PipelineRun[]>> {
+  return apiFetch<PipelineRun[]>(
+    `/api/snapshots/drafts/${encodeURIComponent(draftId)}/pipeline-runs`
+  );
 }
