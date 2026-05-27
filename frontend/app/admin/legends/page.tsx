@@ -108,7 +108,7 @@ export default function LegendsPage() {
 
   useEffect(() => {
     setLoading(true);
-    listLegends()
+    listLegends({ source: "draft" })
       .then((res) => {
         if (res.success && res.data) {
           setLegends(res.data);
