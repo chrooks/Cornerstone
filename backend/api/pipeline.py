@@ -235,40 +235,6 @@ def fetch_stats_batch():
 
 
 # ---------------------------------------------------------------------------
-# GET /api/pipeline/runs/<run_id>
-# (replaces legacy GET /api/pipeline/job-status/<job_id>)
-# ---------------------------------------------------------------------------
-
-
-@pipeline_bp.route("/pipeline/runs/<run_id>", methods=["GET"])
-@require_admin
-def get_run(run_id: str):
-    """Return current state of a specific pipeline run.
-
-    Admin-only: the error_tail field may contain internal stack traces.
-    """
-    try:
-        supabase = get_supabase()
-        result = run_query(
-            lambda: supabase.table("pipeline_runs")
-            .select("*")
-            .eq("id", run_id)
-            .single()
-            .execute()
-        )
-        return _ok(result.data)
-    except Exception:
-        return _err(f"Run not found: {run_id}", 404)
-
-
-# Legacy job-status route for backward compat with existing frontend polls
-@pipeline_bp.route("/pipeline/job-status/<job_id>", methods=["GET"])
-def job_status_legacy(job_id: str):
-    """Legacy endpoint; delegates to /pipeline/runs/<job_id>."""
-    return get_run(job_id)
-
-
-# ---------------------------------------------------------------------------
 # POST /api/pipeline/salary-scrape
 # ---------------------------------------------------------------------------
 

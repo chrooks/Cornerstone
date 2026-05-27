@@ -242,6 +242,41 @@ def test_discard_pipeline_run_409_when_already_committed(admin_client):
     assert resp.status_code == 409
 
 
+# ---------------------------------------------------------------------------
+# Concern 4: duplicate GET /api/pipeline/runs/<id> route removed
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_pipeline_runs_route_removed(admin_client, monkeypatch):
+    """GET /api/pipeline/runs/<id> must 404 at the routing layer — route deleted.
+
+    We stub out the Supabase table().select().eq().single().execute() chain so
+    the surviving route handler (if any) would return 200. If the route has been
+    deleted, Flask returns a 404 with no JSON envelope.
+    """
+    from flask import current_app
+    import api.pipeline as pipeline_mod
+
+    # Stub run_query so any surviving handler sees a "found" run and 200s
+    mock_result = MagicMock()
+    mock_result.data = _mock_run("aaaaaaaa-0000-0000-0000-000000000001")
+    monkeypatch.setattr(pipeline_mod, "run_query", lambda fn: mock_result)
+
+    resp = admin_client.get(
+        "/api/pipeline/runs/aaaaaaaa-0000-0000-0000-000000000001",
+        headers=AUTH,
+    )
+    assert resp.status_code == 404, (
+        f"Legacy /api/pipeline/runs/<id> route still registered — got {resp.status_code}. "
+        "DELETE the route from api/pipeline.py and update frontend getPipelineRun()."
+    )
+    # Flask routing 404 returns HTML, not our JSON envelope
+    body = resp.get_json(silent=True)
+    assert body is None or not body.get("success"), (
+        "Route handler returned success — the route was NOT deleted."
+    )
+
+
 def test_discard_errored_run_succeeds(admin_client):
     """Discard of an errored run (cleanup path) must succeed."""
     error_run = _mock_run("run-err", status="error")
