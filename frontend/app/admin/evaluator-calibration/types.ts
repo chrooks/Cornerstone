@@ -1,5 +1,5 @@
 /**
- * types.ts — Shared type definitions for the cohesion calibration page and its components.
+ * types.ts: Shared type definitions for the evaluator calibration page and its components.
  */
 
 import type { CohesionLineupCombination, CohesionLineupSummary, CohesionPlayerComposites, Player } from "@/lib/types";
@@ -8,7 +8,7 @@ import type { CohesionLineupCombination, CohesionLineupSummary, CohesionPlayerCo
 // API response shapes
 // ---------------------------------------------------------------------------
 
-/** Composite data for one player, fetched from GET /api/cohesion/player/<id>/composites. */
+/** Composite data for one player, fetched from GET /api/evaluator/player/<id>/composites. */
 export interface PlayerCompositeData {
   player_id: string;
   name: string;
@@ -26,7 +26,7 @@ export interface PlayerCompositeData {
   };
 }
 
-/** Bell curve data for one player, fetched from GET /api/cohesion/bell-curve/<id>. */
+/** Bell curve data for one player, fetched from GET /api/evaluator/bell-curve/<id>. */
 export interface BellCurveData {
   player_id: string;
   name: string;
@@ -62,7 +62,7 @@ export interface LineupSlot {
   replacing: boolean;
 }
 
-/** Lineup test result from POST /api/cohesion/lineup/evaluate. */
+/** Lineup test result from POST /api/evaluator/lineup/evaluate. */
 export interface LineupTestResult {
   id: string;
   timestamp: number;
@@ -145,14 +145,14 @@ export interface ReferencePlayer {
   composites_raw: Record<string, number>;
 }
 
-/** Histogram bin from POST /api/cohesion/distribution-preview. */
+/** Histogram bin from POST /api/evaluator/distribution-preview. */
 export interface DistributionBin {
   min: number;
   max: number;
   count: number;
 }
 
-/** Response from POST /api/cohesion/distribution-preview. */
+/** Response from POST /api/evaluator/distribution-preview. */
 export interface DistributionPreviewData {
   bins: DistributionBin[];
   total_players: number;

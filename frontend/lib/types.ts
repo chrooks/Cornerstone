@@ -805,7 +805,7 @@ export interface CohesionLineupCombination extends CohesionLineupData {
   is_starting_lineup: boolean;
 }
 
-/** Full deterministic result from POST /api/cohesion/rotation/evaluate. */
+/** Full deterministic result from POST /api/evaluator/rotation/evaluate. */
 export interface CohesionRotationEvaluation extends RosterEvaluation {
   lineup_combinations: CohesionLineupCombination[];
 }
@@ -905,6 +905,8 @@ export interface PipelineRun {
   error_tail: string | null;
   started_at: string;
   finished_at: string | null;
+  /** Run-specific metadata. `total` is set by loop-based workers for a determinate progress bar. */
+  params?: { total?: number } | null;
 }
 
 /** A single Player surfaced in the missing-composite disclosure. */

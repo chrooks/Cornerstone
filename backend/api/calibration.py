@@ -359,6 +359,15 @@ def save_threshold_edit(skill_name: str):
     from services.pipeline_runs.repo import ThresholdEditParams
     from services.skill_engine.evaluation_only import evaluate_skills_for_run
 
+    # Pre-check: a staged run flips to success only at completion, so the
+    # one-pending-commit unique index would otherwise fire in the worker and
+    # surface as a raw 23505. Reject up front with a friendly code instead.
+    if runs_repo.any_pending_commit(draft_id):
+        return _err(
+            "pending_commit_run_exists — commit or discard the current staged run first",
+            409,
+        )
+
     try:
         run_id = runs_repo.start_run(
             name="threshold_edit",

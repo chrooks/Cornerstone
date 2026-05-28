@@ -22,6 +22,8 @@ interface PlayerExplorerPanelProps {
   onSkillsLoaded: (skills: PlayerSkills) => void;
   onAnchorsChanged: () => void;
   onToast: (message: string, type: "success" | "error") => void;
+  /** When provided, renders a collapse control in the panel header. */
+  onCollapse?: () => void;
 }
 
 /** Inline anchor form that appears when "Set as Anchor" is clicked */
@@ -103,6 +105,7 @@ export function PlayerExplorerPanel({
   onSkillsLoaded,
   onAnchorsChanged,
   onToast,
+  onCollapse,
 }: PlayerExplorerPanelProps) {
   const [showStabilized, setShowStabilized] = useState(true);
   const [showAnchorForm, setShowAnchorForm] = useState(false);
@@ -207,10 +210,23 @@ export function PlayerExplorerPanel({
   };
 
   return (
-    <aside className="flex flex-col h-full overflow-hidden border-r border-border bg-background">
+    <aside className="flex flex-col h-full overflow-hidden bg-background">
       {/* Panel header */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-border">
-        <h2 className="text-sm font-semibold mb-2">Player Explorer</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold">Player Explorer</h2>
+          {onCollapse && (
+            <button
+              id="calibration-collapse-left"
+              type="button"
+              onClick={onCollapse}
+              title="Collapse player panel"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer leading-none"
+            >
+              ◂
+            </button>
+          )}
+        </div>
         <PlayerSearchCombobox
           onSelect={handlePlayerSelect}
           placeholder="Search players by name…"
@@ -220,8 +236,12 @@ export function PlayerExplorerPanel({
       {/* Panel body — scrollable */}
       <div className="flex-1 overflow-y-auto">
         {!selectedPlayer ? (
-          <div className="flex flex-col items-center justify-center h-40 text-sm text-muted-foreground px-4 text-center">
-            Search for a player to see their stats and skill profile.
+          <div className="flex flex-col items-center justify-center h-full min-h-[200px] gap-2 text-sm text-muted-foreground px-6 text-center">
+            <span className="text-2xl text-muted-foreground/30" aria-hidden>⌕</span>
+            <p>Search for a player to see their stats and skill profile.</p>
+            <p className="text-xs text-muted-foreground/60">
+              Or click an anchor in the right panel to jump to that player.
+            </p>
           </div>
         ) : (
           <>

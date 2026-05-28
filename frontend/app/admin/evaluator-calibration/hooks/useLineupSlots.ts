@@ -10,7 +10,7 @@ import type { Player } from "@/lib/types";
 import type { LineupSlot } from "../types";
 import { emptyLineupSlot } from "../components/LineupTester";
 
-const LINEUP_STORAGE_KEY = "cohesion-calibration-lineup-player-ids";
+const LINEUP_STORAGE_KEY = "evaluator-calibration-lineup-player-ids";
 
 const EMPTY_LINEUP: LineupSlot[] = Array.from({ length: MAX_ROSTER_SLOTS }, () => emptyLineupSlot());
 

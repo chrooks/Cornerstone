@@ -180,6 +180,10 @@ def _run_fetch_stats_job(run_id: str, player_ids: list[str], season: str, refres
             logger.info("fetch-stats [%s]: %d qualifying players", run_id, len(player_ids))
 
         total = len(player_ids)
+        # Seed total up front so the card shows "0 / N" immediately, then update
+        # the running count periodically (throttled to ~40 writes max).
+        runs_repo.update_progress(run_id, 0, total)
+        step = max(1, total // 40)
 
         for idx, pid in enumerate(player_ids, start=1):
             try:
@@ -191,6 +195,8 @@ def _run_fetch_stats_job(run_id: str, player_ids: list[str], season: str, refres
             except Exception:
                 logger.exception("fetch-stats [%s]: error player %s", run_id, pid)
                 errors += 1
+            if idx % step == 0 or idx == total:
+                runs_repo.update_progress(run_id, idx, total)
 
         logger.info("fetch-stats [%s] complete: %d/%d fetched", run_id, fetched, total)
         runs_repo.complete_run(run_id, rows_processed=fetched)

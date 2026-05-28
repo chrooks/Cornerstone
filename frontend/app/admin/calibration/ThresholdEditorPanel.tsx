@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
-import { saveThreshold, testThresholds } from "@/lib/api";
-import { SKILL_CATEGORIES, formatSkillName } from "@/lib/skills";
+import { saveThresholdEdit, testThresholds } from "@/lib/api";
+import { formatSkillName } from "@/lib/skills";
+import { SkillPickerBar } from "./SkillPickerBar";
 import { ALL_STAT_KEYS, getStatLabel } from "@/lib/stat-keys";
 import type {
   ThresholdRow,
@@ -38,6 +39,11 @@ interface ThresholdEditorPanelProps {
   onSkillSelect: (skillName: string) => void;
   /** Called after a successful save so the parent can clear the unsaved-edit flag */
   onSaved: (skillName: string, savedRule: Record<string, unknown>) => void;
+  /**
+   * Optional: called after a threshold edit is staged (M2 POST /save flow).
+   * Receives the run_id so the caller can deep-link to the Pipeline tab.
+   */
+  onStagedEdit?: (runId: string) => void;
   onToast: (message: string, type: "success" | "error") => void;
   leagueAverages: Record<string, number>;
 }
@@ -886,6 +892,7 @@ export function ThresholdEditorPanel({
   onReEvaluatePlayer,
   onSkillSelect,
   onSaved,
+  onStagedEdit,
   onToast,
   leagueAverages,
 }: ThresholdEditorPanelProps) {
@@ -1001,16 +1008,29 @@ export function ThresholdEditorPanel({
       // Strip pending-delete markers before sending to the API — _deleted items
       // must never reach the backend. stripDeleted is the sole gatekeeper.
       const cleanRule = stripDeleted(currentRule) as ThresholdRule;
-      const res = await saveThreshold(selectedSkill, cleanRule);
-      if (res.success) {
-        onToast("Threshold saved", "success");
+      const res = await saveThresholdEdit(selectedSkill, cleanRule);
+      if (res.success && res.data) {
+        const runId = res.data.run_id;
         // Clear the unsaved-edit flag for this skill in the parent (use clean rule)
         onSaved(selectedSkill, cleanRule as Record<string, unknown>);
+        // Notify the parent so it can deep-link to the Pipeline tab
+        if (onStagedEdit) {
+          onStagedEdit(runId);
+        } else {
+          onToast(`Threshold edit staged: run ${runId.slice(0, 8)}…`, "success");
+        }
+      } else if (!res.success && res.error?.startsWith("pending_commit_run_exists")) {
+        onToast(
+          "Commit or discard the current threshold_edit run before staging a new one.",
+          "error"
+        );
+      } else if (!res.success && res.error === "no_open_draft") {
+        onToast("No open draft — open a draft before editing thresholds.", "error");
       } else {
-        onToast(res.error ?? "Failed to save", "error");
+        onToast(res.error ?? "Failed to stage threshold edit", "error");
       }
     } catch {
-      onToast("Failed to save", "error");
+      onToast("Failed to stage threshold edit", "error");
     } finally {
       setSaving(false);
     }
@@ -1110,75 +1130,32 @@ export function ThresholdEditorPanel({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Skill selector tabs */}
-      <div className="flex-shrink-0 border-b border-border bg-background">
-        <div>
-          {Object.entries(SKILL_CATEGORIES).map(([category, skills]) => (
-            <div key={category} className="px-3 pt-2">
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1 px-1">
-                {category}
-              </div>
-              <div className="flex gap-0.5 flex-wrap pb-1">
-                {skills.map((skill) => {
-                  const row = thresholds.find((t) => t.skill_name === skill);
-                  const badgeLabel = anchorCountBySkill[skill];
-                  const isSelected = skill === selectedSkill;
-                  const tr = testResultBySkill[skill];
-                  const allPass = tr && tr.anchors_tested > 0 && tr.failed === 0;
-                  const anyFail = tr && tr.failed > 0;
-                  // Skills without a DB row are shown but disabled until a rule is created
-                  const hasRule = !!row;
-                  return (
-                    <button
-                      key={skill}
-                      type="button"
-                      disabled={!hasRule}
-                      title={!hasRule ? "No threshold rule configured yet" : undefined}
-                      onClick={() => {
-                        if (!hasRule) return;
-                        // Ensure edits are initialized before switching skills
-                        if (!editedThresholds[skill]) {
-                          onThresholdChange(skill, row.thresholds as Record<string, unknown>);
-                        }
-                        // Notify parent to update selectedSkill via the proper prop callback
-                        onSkillSelect(skill);
-                      }}
-                      className={cn(
-                        "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs whitespace-nowrap transition-colors",
-                        isSelected
-                          ? "bg-primary text-primary-foreground"
-                          : hasRule
-                            ? "hover:bg-muted text-muted-foreground hover:text-foreground"
-                            : "text-muted-foreground/40 cursor-not-allowed",
-                        hasRule && anyFail && !isSelected && "text-red-600",
-                        hasRule && allPass && !isSelected && "text-emerald-600"
-                      )}
-                    >
-                      {formatSkillName(skill)}
-                      {badgeLabel && (
-                        <span
-                          className={cn(
-                            "text-[9px] px-1 rounded-full",
-                            isSelected
-                              ? "bg-primary-foreground/20 text-primary-foreground"
-                              : anyFail
-                                ? "bg-red-100 text-red-700"
-                                : allPass
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-muted-foreground/20"
-                          )}
-                        >
-                          {badgeLabel}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Skill selector — dense, collapsible */}
+      <SkillPickerBar
+        selectedSkill={selectedSkill}
+        hasRule={(skill) => thresholds.some((t) => t.skill_name === skill)}
+        onSelect={(skill) => {
+          const row = thresholds.find((t) => t.skill_name === skill);
+          if (!row) return;
+          // Ensure edits are initialized before switching skills
+          if (!editedThresholds[skill]) {
+            onThresholdChange(skill, row.thresholds as Record<string, unknown>);
+          }
+          onSkillSelect(skill);
+        }}
+        getBadge={(skill) => {
+          const label = anchorCountBySkill[skill];
+          if (!label) return null;
+          const tr = testResultBySkill[skill];
+          const tone =
+            tr && tr.anchors_tested > 0
+              ? tr.failed > 0
+                ? "fail"
+                : "pass"
+              : "neutral";
+          return { label, tone };
+        }}
+      />
 
       {/* Editor header */}
       <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-border bg-background">

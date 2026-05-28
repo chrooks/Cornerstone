@@ -368,3 +368,29 @@ def get_summary(draft_id: str):
     except Exception:
         logger.exception("Failed to summarize draft %s", draft_id)
         return _err("Failed to summarize draft", 500)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/snapshots/drafts/<draft_id>/pipeline-runs
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/drafts/<draft_id>/pipeline-runs", methods=["GET"])
+@require_admin
+def list_draft_pipeline_runs(draft_id: str):
+    """Return all pipeline runs scoped to this draft, newest first.
+
+    Read-only history for the draft workspace Pipeline tab. Runs are triggered
+    from the ingestion Surfaces (stat fetch / salary scrape / bio-team sync) and
+    the threshold_edit staging Surface; this only lists them.
+    """
+    uuid_err = _validate_uuid(draft_id, "draft_id")
+    if uuid_err:
+        return _err(uuid_err, 400)
+    try:
+        from services.pipeline_runs import repo as runs_repo
+        runs = runs_repo.list_for_draft(draft_id)
+        return _ok(runs)
+    except Exception:
+        logger.exception("Failed to list pipeline runs for draft %s", draft_id)
+        return _err("Failed to list pipeline runs", 500)

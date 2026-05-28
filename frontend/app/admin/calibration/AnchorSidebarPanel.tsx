@@ -16,6 +16,8 @@ interface AnchorSidebarPanelProps {
   onAnchorClick: (anchor: Anchor) => void;
   onAnchorRemoved: () => void;
   onToast: (message: string, type: "success" | "error") => void;
+  /** When provided, renders a collapse control in the panel header. */
+  onCollapse?: () => void;
 }
 
 // SKILL_TIERS imported from @/lib/tiers
@@ -49,6 +51,7 @@ export function AnchorSidebarPanel({
   onAnchorClick,
   onAnchorRemoved,
   onToast,
+  onCollapse,
 }: AnchorSidebarPanelProps) {
   // Inline anchor form state — lives in the sidebar so it's always visible
   const [showAnchorForm, setShowAnchorForm] = useState(false);
@@ -121,7 +124,20 @@ export function AnchorSidebarPanel({
     <aside className="flex flex-col h-full overflow-hidden">
       {/* Anchor summary header */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-border">
-        <h2 className="text-sm font-semibold mb-2">Anchors</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold">Anchors</h2>
+          {onCollapse && (
+            <button
+              id="calibration-collapse-right"
+              type="button"
+              onClick={onCollapse}
+              title="Collapse anchors panel"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer leading-none"
+            >
+              ▸
+            </button>
+          )}
+        </div>
         {totalAnchors === 0 ? (
           <p className="text-xs text-muted-foreground">No anchors set for this skill.</p>
         ) : passRate !== null ? (
@@ -139,7 +155,7 @@ export function AnchorSidebarPanel({
           </div>
         ) : (
           <div className="text-xs text-muted-foreground">
-            {totalAnchors} anchor{totalAnchors !== 1 ? "s" : ""} — run Test to see results
+            {totalAnchors} anchor{totalAnchors !== 1 ? "s" : ""}, run Test to see results
           </div>
         )}
       </div>

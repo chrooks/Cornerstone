@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Cohesion Calibration Page — Admin tool for inspecting and tuning the cohesion engine.
+ * Evaluator Calibration Page: admin tool for inspecting and tuning the cohesion engine.
  *
  * Three-panel layout (mirrors existing /admin/calibration pattern):
  *   Left (~380px):  PlayerCompositePanel — search + composite bars + bell curve overlay
@@ -41,7 +41,7 @@ import { DraftBanner } from "./components/DraftBanner";
 import { DiffDrawer } from "./components/DiffDrawer";
 import { PublishDialog } from "./components/PublishDialog";
 import { FormulaHandlerPicker } from "./components/FormulaHandlerPicker";
-import { PanelResizeHandle } from "./components/PanelResizeHandle";
+import { PanelResizeHandle } from "@/components/PanelResizeHandle";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -418,7 +418,7 @@ export default function CohesionCalibrationPage() {
             </a>
             <span className="text-muted-foreground/30">/</span>
             <h1 id="cohesion-cal-title" className="text-sm font-semibold text-foreground">
-              Cohesion Calibration
+              Evaluator Calibration
             </h1>
           </div>
           <EvaluationVersionHeader

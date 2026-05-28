@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback } from "react";
 import { MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import type { LineupTestResult } from "../types";
 
-const TEST_HISTORY_STORAGE_KEY = "cohesion-calibration-test-history";
+const TEST_HISTORY_STORAGE_KEY = "evaluator-calibration-test-history";
 
 /** Validate and reconstruct a LineupTestResult from localStorage JSON. */
 function resultFromStorage(value: unknown): LineupTestResult | null {
