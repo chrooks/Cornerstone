@@ -11,7 +11,7 @@
  * parent container controls the height.
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getAllThresholds, getAnchors, getPlayerSkills } from "@/lib/api";
@@ -19,6 +19,7 @@ import { PlayerExplorerPanel } from "./PlayerExplorerPanel";
 import { ThresholdEditorPanel } from "./ThresholdEditorPanel";
 import { AnchorSidebarPanel } from "./AnchorSidebarPanel";
 import { StatLeadersPanel } from "./StatLeadersPanel";
+import { PanelResizeHandle } from "@/components/PanelResizeHandle";
 import type {
   Player,
   PlayerSkills,
@@ -59,6 +60,39 @@ export function CalibrationWorkspace({
   const [showStatLeaders, setShowStatLeaders] = useState(false);
   const [loadingThresholds, setLoadingThresholds] = useState(true);
   const [loadingAnchors, setLoadingAnchors] = useState(true);
+
+  // --- Panel layout state (resizable + collapsible side panels) ---
+  const [leftPanelWidth, setLeftPanelWidth] = useState(360);
+  const [rightPanelWidth, setRightPanelWidth] = useState(300);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const leftWidthBeforeCollapse = useRef(360);
+  const rightWidthBeforeCollapse = useRef(300);
+
+  const handleLeftResize = useCallback((deltaX: number) => {
+    setLeftPanelWidth((prev) => Math.max(220, Math.min(560, prev + deltaX)));
+  }, []);
+
+  const handleRightResize = useCallback((deltaX: number) => {
+    // Right panel grows when dragged left (negative delta).
+    setRightPanelWidth((prev) => Math.max(220, Math.min(480, prev - deltaX)));
+  }, []);
+
+  const toggleLeftCollapsed = useCallback(() => {
+    setLeftCollapsed((prev) => {
+      if (!prev) leftWidthBeforeCollapse.current = leftPanelWidth;
+      else setLeftPanelWidth(leftWidthBeforeCollapse.current);
+      return !prev;
+    });
+  }, [leftPanelWidth]);
+
+  const toggleRightCollapsed = useCallback(() => {
+    setRightCollapsed((prev) => {
+      if (!prev) rightWidthBeforeCollapse.current = rightPanelWidth;
+      else setRightPanelWidth(rightWidthBeforeCollapse.current);
+      return !prev;
+    });
+  }, [rightPanelWidth]);
 
   useEffect(() => {
     getAllThresholds()
@@ -282,9 +316,17 @@ export function CalibrationWorkspace({
         </div>
       </header>
 
-      {/* Three-panel layout */}
-      <div id="calibration-workspace-panels" className="flex-1 overflow-hidden flex">
-        <div id="calibration-workspace-left-panel" className="w-[380px] flex-shrink-0 overflow-hidden">
+      {/* Three-panel layout — resizable + collapsible side panels */}
+      <div id="calibration-workspace-panels" className="flex-1 min-h-0 overflow-hidden flex">
+        {/* ── Left panel: Player Explorer ── */}
+        <div
+          id="calibration-workspace-left-panel"
+          className={cn(
+            "flex-shrink-0 overflow-hidden transition-[width] duration-150",
+            leftCollapsed && "!w-0",
+          )}
+          style={{ width: leftCollapsed ? 0 : leftPanelWidth }}
+        >
           <PlayerExplorerPanel
             selectedPlayer={selectedPlayer}
             playerSkills={playerSkills}
@@ -297,10 +339,27 @@ export function CalibrationWorkspace({
             onSkillsLoaded={handleSkillsLoaded}
             onAnchorsChanged={handleAnchorsChanged}
             onToast={handleToast}
+            onCollapse={toggleLeftCollapsed}
           />
         </div>
 
-        <div id="calibration-workspace-center-panel" className="flex-1 min-w-0 overflow-hidden border-r border-border">
+        {/* Left resize handle, or restore rail when collapsed */}
+        {leftCollapsed ? (
+          <button
+            id="calibration-restore-left"
+            type="button"
+            onClick={toggleLeftCollapsed}
+            title="Show player panel"
+            className="flex-shrink-0 w-6 flex items-center justify-center border-r border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-[10px] text-muted-foreground"
+          >
+            ▸
+          </button>
+        ) : (
+          <PanelResizeHandle id="calibration-left-resize" onResize={handleLeftResize} />
+        )}
+
+        {/* ── Center panel: editor / stat leaders ── */}
+        <div id="calibration-workspace-center-panel" className="flex-1 min-w-0 overflow-hidden">
           {showStatLeaders ? (
             <StatLeadersPanel
               thresholds={thresholds}
@@ -329,7 +388,30 @@ export function CalibrationWorkspace({
           )}
         </div>
 
-        <div id="calibration-workspace-right-panel" className="w-[300px] flex-shrink-0 overflow-hidden">
+        {/* Right resize handle, or restore rail when collapsed */}
+        {rightCollapsed ? (
+          <button
+            id="calibration-restore-right"
+            type="button"
+            onClick={toggleRightCollapsed}
+            title="Show anchors panel"
+            className="flex-shrink-0 w-6 flex items-center justify-center border-l border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-[10px] text-muted-foreground"
+          >
+            ◂
+          </button>
+        ) : (
+          <PanelResizeHandle id="calibration-right-resize" onResize={handleRightResize} />
+        )}
+
+        {/* ── Right panel: Anchors ── */}
+        <div
+          id="calibration-workspace-right-panel"
+          className={cn(
+            "flex-shrink-0 overflow-hidden transition-[width] duration-150",
+            rightCollapsed && "!w-0",
+          )}
+          style={{ width: rightCollapsed ? 0 : rightPanelWidth }}
+        >
           <AnchorSidebarPanel
             selectedSkill={selectedSkill}
             anchors={anchors}
@@ -338,6 +420,7 @@ export function CalibrationWorkspace({
             onAnchorClick={handleAnchorClick}
             onAnchorRemoved={handleAnchorsChanged}
             onToast={handleToast}
+            onCollapse={toggleRightCollapsed}
           />
         </div>
       </div>

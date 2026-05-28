@@ -41,7 +41,7 @@ import { DraftBanner } from "./components/DraftBanner";
 import { DiffDrawer } from "./components/DiffDrawer";
 import { PublishDialog } from "./components/PublishDialog";
 import { FormulaHandlerPicker } from "./components/FormulaHandlerPicker";
-import { PanelResizeHandle } from "./components/PanelResizeHandle";
+import { PanelResizeHandle } from "@/components/PanelResizeHandle";
 
 // ---------------------------------------------------------------------------
 // Constants
