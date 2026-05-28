@@ -104,13 +104,23 @@ export function PipelineTab({ draft, focusRunId }: PipelineTabProps) {
         </button>
       </div>
 
-      {error && (
-        <p id="pipeline-tab-error" className="text-sm text-red-600 mb-4">
-          {error}
-        </p>
+      {!loading && error && (
+        <div
+          id="pipeline-tab-error"
+          className="rounded-[6px] border border-red-200 bg-red-50 px-6 py-8 text-center"
+        >
+          <p className="text-sm font-medium text-red-700">{error}</p>
+          <button
+            type="button"
+            onClick={loadRuns}
+            className="text-xs text-red-600 underline mt-2 hover:text-red-700"
+          >
+            Try again
+          </button>
+        </div>
       )}
 
-      {!loading && runs.length === 0 && (
+      {!loading && !error && runs.length === 0 && (
         <div
           id="pipeline-tab-empty"
           className="rounded-[6px] border border-[#d9d0c9] px-6 py-8 text-center"
@@ -118,12 +128,13 @@ export function PipelineTab({ draft, focusRunId }: PipelineTabProps) {
         >
           <p className="text-sm text-neutral-500">No pipeline runs yet for this draft.</p>
           <p className="text-xs text-neutral-400 mt-1">
-            Trigger a run from the Overview tab to see activity here.
+            Trigger a run from the Overview tab (Stat Fetch, Salary Scrape, or
+            Bio / Team Sync) to see activity here.
           </p>
         </div>
       )}
 
-      {runs.length > 0 && (
+      {!error && runs.length > 0 && (
         <div id="pipeline-tab-run-list" className="space-y-3">
           {runs.map((run) => {
             const isFocused = focusRunId === run.id;

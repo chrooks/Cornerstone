@@ -220,6 +220,23 @@ def list_recent(
     return result.data or []
 
 
+def list_for_draft(snapshot_release_id: str, client=None) -> list[dict]:
+    """Return all pipeline runs scoped to a draft, newest first.
+
+    Powers the draft workspace Pipeline tab. Columns map 1:1 to the frontend
+    PipelineRun type, so the route can return rows as-is.
+    """
+    c = client or _get_client()
+    query = (
+        c.table("pipeline_runs")
+        .select("*")
+        .eq("snapshot_release_id", snapshot_release_id)
+        .order("started_at", desc=True)
+    )
+    result = run_query(lambda: query.execute())
+    return result.data or []
+
+
 def record_force_audit(
     pipeline_name: PipelineName,
     params: dict,
