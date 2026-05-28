@@ -896,15 +896,22 @@ export interface SnapshotDraftSummary extends SnapshotRelease {
 /** A single pipeline run row from pipeline_runs. */
 export interface PipelineRun {
   id: string;
-  pipeline_name: "stat_fetch" | "salary_scrape" | "bio_team_sync";
+  pipeline_name:
+    | "stat_fetch"
+    | "salary_scrape"
+    | "bio_team_sync"
+    | "skill_evaluation"
+    | "threshold_edit";
   scope: "bulk" | "player";
   player_id: string | null;
   snapshot_release_id: string | null;
-  status: "running" | "success" | "error";
+  status: "running" | "success" | "error" | "discarded";
   rows_processed: number;
   error_tail: string | null;
   started_at: string;
   finished_at: string | null;
+  /** Set when the run's staged changes have been committed to the working tables. */
+  committed_at: string | null;
   /** Run-specific metadata. `total` is set by loop-based workers for a determinate progress bar. */
   params?: { total?: number } | null;
 }
@@ -934,4 +941,48 @@ export interface SnapshotCountSummary {
   thresholds_changed: number;
   /** manual draft_skill_profiles updated after the active snapshot's published_at. */
   manual_overrides_since_active: number;
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline Run Diff types
+// ---------------------------------------------------------------------------
+
+export type DiffChangeType = "promotion" | "demotion" | "new";
+
+export interface RunDiffChange {
+  player_id: string;
+  /** Display name resolved server-side. Null for legends (no players row). */
+  player_name: string | null;
+  season: string;
+  source: string;
+  skill_name: string;
+  old_tier: string | null;
+  new_tier: string;
+  change_type: DiffChangeType;
+}
+
+export interface RunDiffPerSkill {
+  promotions: number;
+  demotions: number;
+  new: number;
+  unchanged: number;
+}
+
+export interface RunDiffSummary {
+  per_skill: Record<string, RunDiffPerSkill>;
+  total_changed: number;
+}
+
+export interface RunDiff {
+  run_id: string;
+  summary: RunDiffSummary;
+  changes: RunDiffChange[];
+}
+
+export interface CommitRunResult {
+  committed_at: string;
+}
+
+export interface DiscardRunResult {
+  discarded: string;
 }

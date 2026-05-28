@@ -966,6 +966,9 @@ import type {
   SnapshotDraftSummary,
   PipelineRun,
   SnapshotPublishValidation,
+  RunDiff,
+  CommitRunResult,
+  DiscardRunResult,
   SnapshotCountSummary,
 } from "./types";
 
@@ -1028,6 +1031,24 @@ export function reactivateSnapshotRelease(id: string): Promise<ApiResponse<Snaps
 
 export function getPipelineRun(runId: string): Promise<ApiResponse<PipelineRun>> {
   return apiFetch<PipelineRun>(`/api/pipeline-runs/${runId}`);
+}
+
+export function getRunDiff(runId: string): Promise<ApiResponse<RunDiff>> {
+  return apiFetch<RunDiff>(`/api/pipeline-runs/${encodeURIComponent(runId)}/diff`);
+}
+
+export function commitPipelineRun(runId: string): Promise<ApiResponse<CommitRunResult>> {
+  return apiFetch<CommitRunResult>(
+    `/api/pipeline-runs/${encodeURIComponent(runId)}/commit`,
+    { method: "POST" }
+  );
+}
+
+export function discardPipelineRun(runId: string): Promise<ApiResponse<DiscardRunResult>> {
+  return apiFetch<DiscardRunResult>(
+    `/api/pipeline-runs/${encodeURIComponent(runId)}/discard`,
+    { method: "POST" }
+  );
 }
 
 export function triggerStatFetch(opts?: {

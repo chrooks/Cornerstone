@@ -4,15 +4,24 @@
  * PipelineTab — run history list for the draft workspace.
  *
  * - Shows pipeline runs scoped to the current draft.
- * - Highlights a specific run when `focusRunId` is set (from `?run=<id>` URL param).
- * - The PipelineCards (trigger controls) live in OverviewTab; this tab is read-only history.
+ * - When focusRunId resolves to a staged run, swaps the list for RunDiffPreview.
+ * - "Review changes" button on reviewable runs pushes ?tab=pipeline&run=<id>.
+ * - "View changes" muted link on terminal staged runs for read-only audit.
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getDraftPipelineRuns } from "@/lib/api";
-import type { SnapshotDraftSummary, SnapshotCountSummary, SnapshotPublishValidation, PipelineRun } from "@/lib/types";
+import type {
+  SnapshotDraftSummary,
+  SnapshotCountSummary,
+  SnapshotPublishValidation,
+  PipelineRun,
+} from "@/lib/types";
 import type { TabSlug } from "../_lib/tabRouting";
+import { isReviewableRun, isTerminalRun, isStagedRun } from "../_lib/runReview";
+import { RunDiffPreview } from "../_components/RunDiffPreview";
 
 export interface PipelineTabProps {
   draft: SnapshotDraftSummary;
@@ -28,6 +37,7 @@ const PIPELINE_LABELS: Record<string, string> = {
   stat_fetch: "Stat Fetch",
   salary_scrape: "Salary Scrape",
   bio_team_sync: "Bio / Team Sync",
+  skill_evaluation: "Skill Evaluation",
   threshold_edit: "Threshold Edit",
 };
 
@@ -36,11 +46,13 @@ function RunStatusBadge({ status }: { status: PipelineRun["status"] }) {
     running: "bg-[#ffa05c]/20 text-[#fe6d34] border border-[#ffa05c]/40",
     success: "bg-green-50 text-green-700 border border-green-200",
     error: "bg-red-50 text-red-700 border border-red-200",
+    discarded: "bg-slate-50 text-slate-500 border border-slate-200",
   };
   const labels: Record<PipelineRun["status"], string> = {
     running: "Running",
     success: "Success",
     error: "Error",
+    discarded: "Discarded",
   };
   return (
     <span
@@ -57,7 +69,9 @@ function RunStatusBadge({ status }: { status: PipelineRun["status"] }) {
   );
 }
 
-export function PipelineTab({ draft, focusRunId }: PipelineTabProps) {
+export function PipelineTab({ draft, focusRunId, reload }: PipelineTabProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [runs, setRuns] = useState<PipelineRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +84,6 @@ export function PipelineTab({ draft, focusRunId }: PipelineTabProps) {
       if (res.success && res.data) {
         setRuns(res.data);
       } else {
-        // Route not yet deployed — treat as empty list, not an error
         setRuns([]);
       }
     } catch {
@@ -83,6 +96,51 @@ export function PipelineTab({ draft, focusRunId }: PipelineTabProps) {
   useEffect(() => {
     loadRuns();
   }, [loadRuns]);
+
+  function navigateToRun(runId: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("run", runId);
+    router.replace(`?${params.toString()}`);
+  }
+
+  function clearRunFocus() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("run");
+    router.replace(`?${params.toString()}`);
+  }
+
+  // Check if focusRunId resolves to a staged run
+  const focusedRun = focusRunId ? runs.find((r) => r.id === focusRunId) ?? null : null;
+  const showDiffPreview =
+    focusRunId != null && (focusedRun === null || isStagedRun(focusedRun ?? ({} as PipelineRun)));
+
+  // When loading is done and focusRunId is set to an ingestion run, ignore it
+  const effectiveShowDiffPreview =
+    showDiffPreview && !loading && !(focusedRun && !isStagedRun(focusedRun));
+
+  if (effectiveShowDiffPreview && focusRunId) {
+    return (
+      <div id="pipeline-tab-content">
+        <RunDiffPreview
+          runId={focusRunId}
+          run={focusedRun}
+          onBack={() => {
+            clearRunFocus();
+          }}
+          onCommitted={() => {
+            clearRunFocus();
+            reload();
+            loadRuns();
+          }}
+          onDiscarded={() => {
+            clearRunFocus();
+            reload();
+            loadRuns();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div id="pipeline-tab-content">
@@ -100,7 +158,7 @@ export function PipelineTab({ draft, focusRunId }: PipelineTabProps) {
           disabled={loading}
           className="text-xs text-neutral-500 hover:text-[#0e0907] underline disabled:opacity-50 transition-colors"
         >
-          {loading ? "Loading…" : "Refresh"}
+          {loading ? "Loading..." : "Refresh"}
         </button>
       </div>
 
@@ -138,6 +196,8 @@ export function PipelineTab({ draft, focusRunId }: PipelineTabProps) {
         <div id="pipeline-tab-run-list" className="space-y-3">
           {runs.map((run) => {
             const isFocused = focusRunId === run.id;
+            const reviewable = isReviewableRun(run);
+            const terminal = isTerminalRun(run) && isStagedRun(run);
             return (
               <article
                 key={run.id}
@@ -163,7 +223,33 @@ export function PipelineTab({ draft, focusRunId }: PipelineTabProps) {
                       {run.id}
                     </p>
                   </div>
-                  <RunStatusBadge status={run.status} />
+                  <div className="flex items-center gap-2">
+                    <RunStatusBadge status={run.status} />
+                    {reviewable && (
+                      <button
+                        id={`pipeline-run-${run.id}-review-btn`}
+                        type="button"
+                        onClick={() => navigateToRun(run.id)}
+                        className={cn(
+                          "text-[11px] font-semibold px-2.5 py-0.5 rounded transition-colors",
+                          "bg-[#ffa05c]/20 text-[#fe6d34] border border-[#ffa05c]/40",
+                          "hover:bg-[#ffa05c]/40"
+                        )}
+                      >
+                        Review changes
+                      </button>
+                    )}
+                    {terminal && !reviewable && (
+                      <button
+                        id={`pipeline-run-${run.id}-view-btn`}
+                        type="button"
+                        onClick={() => navigateToRun(run.id)}
+                        className="text-[11px] text-neutral-400 underline hover:text-neutral-600"
+                      >
+                        View changes
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-4 mt-3 text-xs text-neutral-500">
@@ -173,6 +259,11 @@ export function PipelineTab({ draft, focusRunId }: PipelineTabProps) {
                   {run.finished_at && (
                     <span>
                       Finished: {new Date(run.finished_at).toLocaleString()}
+                    </span>
+                  )}
+                  {run.committed_at && (
+                    <span className="text-green-700">
+                      Committed: {new Date(run.committed_at).toLocaleString()}
                     </span>
                   )}
                   {run.rows_processed > 0 && (

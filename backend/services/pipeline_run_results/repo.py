@@ -36,6 +36,26 @@ def _tier_rank(tier: Optional[str]) -> int:
         return len(_TIER_ORDER)
 
 
+def _extract_tier(skill_data) -> Optional[str]:
+    """Pull a tier from either profile shape.
+
+    Staged rows (pipeline_run_results.profile) nest per-skill metadata:
+    {"tier": "Capable", ...}. Committed rows (draft_skill_profiles.profile)
+    store the bare tier string: "Capable". The literal "None" / "" means the
+    skill has no tier, so normalize those to Python None for consistent
+    promotion/demotion/new classification on both sides.
+    """
+    if isinstance(skill_data, dict):
+        tier = skill_data.get("tier")
+    elif isinstance(skill_data, str):
+        tier = skill_data
+    else:
+        tier = None
+    if tier in (None, "", "None"):
+        return None
+    return tier
+
+
 # ---------------------------------------------------------------------------
 # Dataclasses — frozen (immutable) per coding-style Invariant
 # ---------------------------------------------------------------------------
@@ -161,6 +181,7 @@ def get_diff(run_id: str) -> dict:
             "changes": [
                 {
                     "player_id": str,
+                    "player_name": str | null,  # null for legends (no players row)
                     "season": str,
                     "source": str,
                     "skill_name": str,
@@ -221,9 +242,9 @@ def get_diff(run_id: str) -> dict:
 
         # Walk all skills present in the new profile
         for skill_name, new_skill_data in new_profile.items():
-            new_tier = new_skill_data.get("tier") if isinstance(new_skill_data, dict) else None
+            new_tier = _extract_tier(new_skill_data)
             old_skill_data = old_profile.get(skill_name)
-            old_tier = old_skill_data.get("tier") if isinstance(old_skill_data, dict) else None
+            old_tier = _extract_tier(old_skill_data)
 
             # Classify the change
             if old_tier is None and new_tier is not None:
@@ -266,6 +287,20 @@ def get_diff(run_id: str) -> dict:
         s["promotions"] + s["demotions"] + s["new"]
         for s in per_skill.values()
     )
+
+    # Resolve player names for the changed rows. UUIDs are unreadable in the UI,
+    # so attach the display name (null for legends, which have no players row).
+    changed_player_ids = list({c["player_id"] for c in changes})
+    if changed_player_ids:
+        names_result = run_query(
+            lambda: client.table("players")
+            .select("id, name")
+            .in_("id", changed_player_ids)
+            .execute()
+        )
+        name_lookup = {row["id"]: row.get("name") for row in (names_result.data or [])}
+        for change in changes:
+            change["player_name"] = name_lookup.get(change["player_id"])
 
     return {
         "run_id": run_id,

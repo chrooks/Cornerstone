@@ -236,6 +236,99 @@ def test_get_diff_counts_promotion_correctly(mock_supabase):
 
 
 # ---------------------------------------------------------------------------
+# Case 3b: flat (committed) vs nested (staged) profile shapes.
+#
+# Staged rows nest per-skill metadata ({"tier": ...}); committed
+# draft_skill_profiles store the bare tier string. get_diff must classify
+# correctly across the shape mismatch, otherwise every change looks like "new".
+# ---------------------------------------------------------------------------
+
+
+def _diff_with(staged_profile, current_profile, mock_supabase):
+    staged_rows = [
+        {
+            "run_id": "run-shape",
+            "player_id": "p1",
+            "season": "2025-26",
+            "source": "stats",
+            "profile": staged_profile,
+        }
+    ]
+    current_rows = [
+        {
+            "player_id": "p1",
+            "season": "2025-26",
+            "source": "stats",
+            "profile": current_profile,
+        }
+    ]
+
+    def table_router(name):
+        mock = MagicMock()
+        if name == "pipeline_run_results":
+            mock.select.return_value.eq.return_value.execute.return_value = MagicMock(data=staged_rows)
+        elif name == "draft_skill_profiles":
+            mock.select.return_value.in_.return_value.execute.return_value = MagicMock(data=current_rows)
+        return mock
+
+    mock_supabase.table.side_effect = table_router
+    with patch("services.pipeline_run_results.repo._get_client", return_value=mock_supabase):
+        return get_diff("run-shape")
+
+
+def test_get_diff_detects_promotion_against_flat_committed_profile(mock_supabase):
+    """Staged nested Elite vs committed flat 'Proficient' is a promotion, not 'new'."""
+    result = _diff_with(
+        {"spot_up_shooter": {"tier": "Elite"}},
+        {"spot_up_shooter": "Proficient"},
+        mock_supabase,
+    )
+    stats = result["summary"]["per_skill"]["spot_up_shooter"]
+    assert stats["promotions"] == 1
+    assert stats["new"] == 0
+    assert result["changes"][0]["change_type"] == "promotion"
+    assert result["changes"][0]["old_tier"] == "Proficient"
+
+
+def test_get_diff_detects_demotion_against_flat_committed_profile(mock_supabase):
+    """Staged nested Capable vs committed flat 'Proficient' is a demotion."""
+    result = _diff_with(
+        {"spot_up_shooter": {"tier": "Capable"}},
+        {"spot_up_shooter": "Proficient"},
+        mock_supabase,
+    )
+    stats = result["summary"]["per_skill"]["spot_up_shooter"]
+    assert stats["demotions"] == 1
+    assert result["changes"][0]["change_type"] == "demotion"
+
+
+def test_get_diff_treats_committed_none_string_as_new(mock_supabase):
+    """The literal 'None' tier means no prior tier, so a real tier reads as 'new'."""
+    result = _diff_with(
+        {"spot_up_shooter": {"tier": "Capable"}},
+        {"spot_up_shooter": "None"},
+        mock_supabase,
+    )
+    stats = result["summary"]["per_skill"]["spot_up_shooter"]
+    assert stats["new"] == 1
+    assert result["changes"][0]["change_type"] == "new"
+    assert result["changes"][0]["old_tier"] is None
+
+
+def test_get_diff_treats_matching_none_strings_as_unchanged(mock_supabase):
+    """'None' staged vs 'None' committed is unchanged, not a spurious change."""
+    result = _diff_with(
+        {"spot_up_shooter": {"tier": "None"}},
+        {"spot_up_shooter": "None"},
+        mock_supabase,
+    )
+    stats = result["summary"]["per_skill"]["spot_up_shooter"]
+    assert stats["unchanged"] == 1
+    assert result["summary"]["total_changed"] == 0
+    assert result["changes"] == []
+
+
+# ---------------------------------------------------------------------------
 # Case 4: discard_staged_rows deletes from both staging tables
 # ---------------------------------------------------------------------------
 
