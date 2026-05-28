@@ -247,7 +247,7 @@ export function DraftWorkspaceShell() {
   }
 
   return (
-    <main id="snapshot-draft-page" className="max-w-[1180px] mx-auto px-4 pt-4 pb-16">
+    <main id="snapshot-draft-page" className="max-w-[1180px] mx-auto px-4 pt-4 pb-4">
       <Toaster position="top-right" richColors />
 
       {/* Header strip — compact: eyebrow (with created date) + title row on two lines */}

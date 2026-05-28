@@ -5,9 +5,16 @@
  *
  * When a threshold edit is staged, shows a toast with a "View in Pipeline" link
  * and rewrites the URL to `?tab=pipeline&run=<id>`.
+ *
+ * Layout: the tool is sized to the viewport below the sticky 48px navbar
+ * (100dvh - 3rem). The draft header + tab strip sit above it in normal flow,
+ * so the page scrolls them away — scroll down once and the tool fills the
+ * screen with no header chrome and no forced bottom gap. The 1180px shell cap
+ * is broken out to near-full width (dense 3-pane data tool, not a reading
+ * column).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CalibrationWorkspace } from "@/app/admin/calibration/CalibrationWorkspace";
@@ -26,30 +33,8 @@ export interface ThresholdsTabProps {
   onTabChange: (slug: TabSlug) => void;
 }
 
-// Bottom clearance below the tool: just enough to clear the floating
-// "Move to review" action bar (bottom-6 + button height). Kept tight so the
-// tool reclaims the previously-wasted bottom gap. Pairs with the shell's pb-16.
-const BOTTOM_CLEARANCE = 72;
-
 export function ThresholdsTab({ onTabChange }: ThresholdsTabProps) {
   const router = useRouter();
-
-  // Fill from the tool's top to the viewport bottom instead of a guessed
-  // calc(). Robust to whatever chrome (shell header, tab strip) sits above.
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState<number>();
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const compute = () => {
-      const top = el.getBoundingClientRect().top;
-      setHeight(Math.max(440, window.innerHeight - top - BOTTOM_CLEARANCE));
-    };
-    compute();
-    window.addEventListener("resize", compute);
-    return () => window.removeEventListener("resize", compute);
-  }, []);
 
   const handleStagedEdit = useCallback(
     (runId: string) => {
@@ -74,13 +59,8 @@ export function ThresholdsTab({ onTabChange }: ThresholdsTabProps) {
 
   return (
     <div
-      ref={containerRef}
       id="thresholds-tab-content"
-      // Break out of the shell's max-w-[1180px] cap: this is a dense 3-pane
-      // data tool that wants the full viewport width, not a reading column.
-      // mx-[calc(50%-50vw+1rem)] extends to 1rem from each viewport edge.
-      className="h-[calc(100vh-240px)] overflow-hidden mx-[calc(50%-50vw+1rem)]"
-      style={height ? { height } : undefined}
+      className="h-[calc(100dvh-3rem)] overflow-hidden mx-[calc(50%-50vw+1rem)]"
     >
       <CalibrationWorkspace embedded onStagedEdit={handleStagedEdit} />
     </div>
