@@ -149,6 +149,10 @@ def any_pending_commit(snapshot_release_id: Optional[str], client=None) -> bool:
         .eq("status", "success")
         .is_("committed_at", "null")
         .eq("snapshot_release_id", snapshot_release_id)
+        # Only staged pipelines produce commit-pending results. Ingestion runs
+        # (stat_fetch / salary_scrape / bio_team_sync) write directly and never
+        # commit. Kept in sync with idx_pipeline_runs_one_pending_commit.
+        .in_("pipeline_name", ["skill_evaluation", "threshold_edit"])
     )
     result = run_query(lambda: query.limit(1).execute())
     return bool(result.data)
