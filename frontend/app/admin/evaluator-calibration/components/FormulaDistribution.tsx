@@ -3,7 +3,7 @@
 /**
  * FormulaDistribution — CSS bar chart showing raw composite value distribution.
  *
- * Calls POST /api/cohesion/distribution-preview with optional formula override.
+ * Calls POST /api/evaluator/distribution-preview with optional formula override.
  * Debounced at 500ms to avoid hammering the server during rapid edits.
  */
 

@@ -1,7 +1,7 @@
 """
 api/cohesion_calibration.py — Admin endpoints for cohesion engine calibration.
 
-Blueprint prefix: /api/cohesion
+Blueprint prefix: /api/evaluator (previously /api/cohesion; renamed for UI parity)
 All endpoints require @require_admin.
 
 Endpoints:
@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 cohesion_calibration_bp = Blueprint(
     "cohesion_calibration",
     __name__,
-    url_prefix="/api/cohesion",
+    url_prefix="/api/evaluator",
 )
 
 # ---------------------------------------------------------------------------

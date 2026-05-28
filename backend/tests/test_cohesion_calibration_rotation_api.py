@@ -1,5 +1,5 @@
 """
-Integration tests for POST /api/cohesion/rotation/evaluate.
+Integration tests for POST /api/evaluator/rotation/evaluate.
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def balanced_player(name: str, slot: int) -> dict:
 
 def post_rotation(client, players: list[dict]) -> tuple:
     resp = client.post(
-        "/api/cohesion/rotation/evaluate",
+        "/api/evaluator/rotation/evaluate",
         data=json.dumps({"players": players}),
         content_type="application/json",
         headers={"Authorization": "Bearer test-token"},
@@ -81,7 +81,7 @@ def post_rotation(client, players: list[dict]) -> tuple:
 
 def post_lineup(client, players: list[dict]) -> tuple:
     resp = client.post(
-        "/api/cohesion/lineup/evaluate",
+        "/api/evaluator/lineup/evaluate",
         data=json.dumps({"players": players}),
         content_type="application/json",
         headers={"Authorization": "Bearer test-token"},

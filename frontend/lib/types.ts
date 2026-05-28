@@ -805,7 +805,7 @@ export interface CohesionLineupCombination extends CohesionLineupData {
   is_starting_lineup: boolean;
 }
 
-/** Full deterministic result from POST /api/cohesion/rotation/evaluate. */
+/** Full deterministic result from POST /api/evaluator/rotation/evaluate. */
 export interface CohesionRotationEvaluation extends RosterEvaluation {
   lineup_combinations: CohesionLineupCombination[];
 }

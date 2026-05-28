@@ -30,7 +30,7 @@ export function teamLabelForSize(size: number): string {
 }
 
 // Re-export under old names for consumers that haven't migrated yet
-// (admin cohesion-calibration, tests)
+// (admin evaluator-calibration, tests)
 export const SALARY_CAP = DEFAULT_SALARY_CAP;
 export const LEGEND_SALARY = DEFAULT_LEGEND_SALARY;
 export const MAX_ROSTER_SLOTS = DEFAULT_MAX_ROSTER_SLOTS;

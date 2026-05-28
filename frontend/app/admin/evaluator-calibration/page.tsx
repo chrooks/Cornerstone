@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Cohesion Calibration Page — Admin tool for inspecting and tuning the cohesion engine.
+ * Evaluator Calibration Page: admin tool for inspecting and tuning the cohesion engine.
  *
  * Three-panel layout (mirrors existing /admin/calibration pattern):
  *   Left (~380px):  PlayerCompositePanel — search + composite bars + bell curve overlay

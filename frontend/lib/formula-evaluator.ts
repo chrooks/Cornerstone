@@ -5,7 +5,7 @@
  * in the formula editor. No API round-trip needed per coefficient change.
  */
 
-import type { CompositeFormula, FormulaAmplifier } from "@/app/admin/cohesion-calibration/types";
+import type { CompositeFormula, FormulaAmplifier } from "@/app/admin/evaluator-calibration/types";
 
 function topologicalSort(formulas: Record<string, CompositeFormula>): string[] {
   const visited = new Set<string>();

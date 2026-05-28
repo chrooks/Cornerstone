@@ -72,7 +72,7 @@ export async function apiFetch<T>(
   };
 
   // Attach the Supabase JWT on all requests when running in the browser.
-  // Admin-only GET endpoints (e.g. /api/cohesion/*) need the token too.
+  // Admin-only GET endpoints (e.g. /api/evaluator/*) need the token too.
   // Public endpoints simply ignore the Authorization header.
   if (typeof window !== "undefined") {
     try {
@@ -823,7 +823,7 @@ export async function fetchPlayerComposites(
   composites_normalized: Record<string, number>;
   bell_curve: { amplitude: number; peak: number; range_down: number; range_up: number; flat_down: number; flat_up: number };
 }>> {
-  return apiFetch(`/api/cohesion/player/${encodeURIComponent(playerId)}/composites`);
+  return apiFetch(`/api/evaluator/player/${encodeURIComponent(playerId)}/composites`);
 }
 
 /** Fetch bell curve params + pre-computed curve array for chart rendering. */
@@ -835,7 +835,7 @@ export async function fetchBellCurve(
   params: Record<string, number>;
   curve: { height: number; height_display: string; value: number }[];
 }>> {
-  return apiFetch(`/api/cohesion/bell-curve/${encodeURIComponent(playerId)}`);
+  return apiFetch(`/api/evaluator/bell-curve/${encodeURIComponent(playerId)}`);
 }
 
 /** Evaluate a 5-player lineup via the cohesion engine. */
@@ -866,7 +866,7 @@ export async function evaluateLineup(
     effective_pd_value: number;
   }[];
 }>> {
-  return apiFetch("/api/cohesion/lineup/evaluate", {
+  return apiFetch("/api/evaluator/lineup/evaluate", {
     method: "POST",
     body: JSON.stringify({ players }),
   });
@@ -876,7 +876,7 @@ export async function evaluateLineup(
 export async function evaluateRotation(
   players: { id?: string; name: string; slot: number; height: string | null; skills: Record<string, string> }[],
 ): Promise<ApiResponse<CohesionRotationEvaluation>> {
-  return apiFetch<CohesionRotationEvaluation>("/api/cohesion/rotation/evaluate", {
+  return apiFetch<CohesionRotationEvaluation>("/api/evaluator/rotation/evaluate", {
     method: "POST",
     body: JSON.stringify({ players }),
   });
@@ -884,14 +884,14 @@ export async function evaluateRotation(
 
 /** Fetch all cohesion engine weight constants (merged with any runtime overrides). */
 export async function fetchCohesionWeights(): Promise<ApiResponse<Record<string, unknown>>> {
-  return apiFetch<Record<string, unknown>>("/api/cohesion/weights");
+  return apiFetch<Record<string, unknown>>("/api/evaluator/weights");
 }
 
 /** Apply partial weight overrides (in-memory, resets on server restart). */
 export async function updateCohesionWeights(
   overrides: Record<string, unknown>,
 ): Promise<ApiResponse<Record<string, unknown>>> {
-  return apiFetch<Record<string, unknown>>("/api/cohesion/weights", {
+  return apiFetch<Record<string, unknown>>("/api/evaluator/weights", {
     method: "PUT",
     body: JSON.stringify(overrides),
   });
@@ -906,7 +906,7 @@ export async function fetchCompositeFormulas(): Promise<ApiResponse<{
   formulas: Record<string, { factors: unknown[]; amplifiers: unknown[]; depends_on: string[] }>;
   source: "draft" | "active";
 }>> {
-  return apiFetch("/api/cohesion/formulas");
+  return apiFetch("/api/evaluator/formulas");
 }
 
 /** Fetch distribution histogram for a composite with optional formula override. */
@@ -920,7 +920,7 @@ export async function fetchDistributionPreview(
   median: number;
   p90: number;
 }>> {
-  return apiFetch("/api/cohesion/distribution-preview", {
+  return apiFetch("/api/evaluator/distribution-preview", {
     method: "POST",
     body: JSON.stringify({
       composite_key: compositeKey,

@@ -440,8 +440,8 @@ export default function AdminHubPage() {
             hint={ruleSetsHint}
           />
           <AdminSurfaceCard
-            id="admin-hub-card-cohesion-calibration"
-            href="/admin/cohesion-calibration"
+            id="admin-hub-card-evaluator-calibration"
+            href="/admin/evaluator-calibration"
             title="Evaluator Calibration"
             description="Tune the active Evaluation Version: weights, formulas, composites."
             glyph="E"
