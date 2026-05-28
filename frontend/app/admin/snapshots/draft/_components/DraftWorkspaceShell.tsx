@@ -247,18 +247,23 @@ export function DraftWorkspaceShell() {
   }
 
   return (
-    <main id="snapshot-draft-page" className="max-w-[1180px] mx-auto px-4 py-8 pb-16">
+    <main id="snapshot-draft-page" className="max-w-[1180px] mx-auto px-4 pt-4 pb-16">
       <Toaster position="top-right" richColors />
 
-      {/* Header strip */}
-      <header id="snapshot-draft-header" className="flex items-start justify-between gap-4 mb-6">
+      {/* Header strip — compact: eyebrow (with created date) + title row on two lines */}
+      <header id="snapshot-draft-header" className="flex items-start justify-between gap-4 mb-3">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.18em] font-semibold text-neutral-400 mb-1">
+          <p className="text-[11px] uppercase tracking-[0.18em] font-semibold text-neutral-400 mb-0.5">
             Admin · Snapshots · Draft
+            {draft && (
+              <span className="normal-case tracking-normal text-neutral-400/80">
+                {" · "}Created {new Date(draft.created_at).toLocaleDateString()}
+              </span>
+            )}
           </p>
           {draft ? (
             <div id="snapshot-draft-header-inner" className="flex items-center gap-3">
-              <h1 id="snapshot-draft-title" className="text-2xl font-bold text-[#0e0907]">
+              <h1 id="snapshot-draft-title" className="text-lg font-bold text-[#0e0907]">
                 {draft.label}
               </h1>
               <StateChip
@@ -276,14 +281,9 @@ export function DraftWorkspaceShell() {
               )}
             </div>
           ) : (
-            <h1 id="snapshot-draft-title-empty" className="text-2xl font-bold text-[#0e0907]">
+            <h1 id="snapshot-draft-title-empty" className="text-lg font-bold text-[#0e0907]">
               Draft Workspace
             </h1>
-          )}
-          {draft && (
-            <p id="snapshot-draft-date" className="text-xs text-neutral-500 mt-1">
-              Created {new Date(draft.created_at).toLocaleDateString()}
-            </p>
           )}
         </div>
       </header>

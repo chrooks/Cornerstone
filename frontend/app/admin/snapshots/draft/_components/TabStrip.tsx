@@ -39,7 +39,7 @@ export function TabStrip({
     <nav
       id={id}
       aria-label="Draft workspace tabs"
-      className="border-b border-[#d9d0c9] flex gap-5 mb-8"
+      className="border-b border-[#d9d0c9] flex gap-5 mb-4"
     >
       {ALL_TABS.map((slug) => {
         const disabled = isTabDisabled(slug, gateContext);
@@ -59,7 +59,7 @@ export function TabStrip({
               if (!disabled) onTabChange(slug);
             }}
             className={cn(
-              "text-[14px] py-4 border-b-2 -mb-px whitespace-nowrap transition-none",
+              "text-[14px] py-2.5 border-b-2 -mb-px whitespace-nowrap transition-none",
               isActive
                 ? "border-[#fe6d34] font-semibold text-[#0e0907]"
                 : "border-transparent font-normal",
