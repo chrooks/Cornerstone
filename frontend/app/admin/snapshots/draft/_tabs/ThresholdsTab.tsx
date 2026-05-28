@@ -26,9 +26,10 @@ export interface ThresholdsTabProps {
   onTabChange: (slug: TabSlug) => void;
 }
 
-// Bottom clearance below the tool: the shell's pb-28 (112px) plus breathing
-// room so the floating "Move to review" action bar never overlaps the tool.
-const BOTTOM_CLEARANCE = 128;
+// Bottom clearance below the tool: just enough to clear the floating
+// "Move to review" action bar (bottom-6 + button height). Kept tight so the
+// tool reclaims the previously-wasted bottom gap. Pairs with the shell's pb-16.
+const BOTTOM_CLEARANCE = 72;
 
 export function ThresholdsTab({ onTabChange }: ThresholdsTabProps) {
   const router = useRouter();

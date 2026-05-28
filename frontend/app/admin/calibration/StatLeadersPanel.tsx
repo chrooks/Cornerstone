@@ -19,7 +19,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { listPlayersStatsBulk } from "@/lib/api";
-import { SKILL_CATEGORIES, formatSkillName } from "@/lib/skills";
+import { SkillPickerBar } from "./SkillPickerBar";
 import { StatLeadersTable, type ThresholdMap, type StatSortKey, type ComputedStatDef } from "./StatLeadersTable";
 import type { ThresholdRow, PlayerStatRow, ConditionItem } from "@/lib/types";
 
@@ -384,47 +384,13 @@ export function StatLeadersPanel({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* ─── Skill selector tabs + Raw/Stabilized toggle ─── */}
-      <div className="flex-shrink-0 border-b border-border bg-background">
-        <div className="flex items-start justify-between">
-          {/* Skill pill tabs — identical structure to ThresholdEditorPanel */}
-          <div className="flex-1 min-w-0">
-            {Object.entries(SKILL_CATEGORIES).map(([category, skills]) => (
-              <div key={category} className="px-3 pt-2">
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1 px-1">
-                  {category}
-                </div>
-                <div className="flex gap-0.5 flex-wrap pb-1">
-                  {skills.map((skill) => {
-                    const isActive = skill === activeSkill;
-                    const hasRule = thresholds.some((t) => t.skill_name === skill);
-                    return (
-                      <button
-                        key={skill}
-                        type="button"
-                        disabled={!hasRule}
-                        title={!hasRule ? "No threshold rule configured yet" : undefined}
-                        onClick={() => hasRule && handleSkillClick(skill)}
-                        className={cn(
-                          "inline-flex items-center px-2 py-0.5 rounded text-xs whitespace-nowrap transition-colors",
-                          isActive
-                            ? "bg-primary text-primary-foreground"
-                            : hasRule
-                            ? "hover:bg-muted text-muted-foreground hover:text-foreground"
-                            : "text-muted-foreground/40 cursor-not-allowed",
-                        )}
-                      >
-                        {formatSkillName(skill)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Raw / Stabilized toggle — pinned to the right of the tab area */}
-          <div className="flex-shrink-0 flex flex-col items-end justify-end pr-3 pb-2 pt-2 gap-1">
+      {/* ─── Skill selector (dense, collapsible) + Raw/Stabilized toggle ─── */}
+      <SkillPickerBar
+        selectedSkill={activeSkill}
+        hasRule={(skill) => thresholds.some((t) => t.skill_name === skill)}
+        onSelect={handleSkillClick}
+        rightSlot={
+          <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
               Values
             </span>
@@ -455,8 +421,8 @@ export function StatLeadersPanel({
               </button>
             </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* ─── Table area ─── */}
       <div className="flex-1 overflow-hidden">

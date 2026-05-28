@@ -247,7 +247,7 @@ export function DraftWorkspaceShell() {
   }
 
   return (
-    <main id="snapshot-draft-page" className="max-w-[1180px] mx-auto px-4 py-8 pb-28">
+    <main id="snapshot-draft-page" className="max-w-[1180px] mx-auto px-4 py-8 pb-16">
       <Toaster position="top-right" richColors />
 
       {/* Header strip */}

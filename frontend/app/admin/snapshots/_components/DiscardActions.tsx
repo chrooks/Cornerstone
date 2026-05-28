@@ -85,8 +85,8 @@ export function DiscardActions({ id, draftId, onDiscarded }: DiscardActionsProps
         id={`${id}-trigger`}
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
-        className="text-xs font-medium text-neutral-500 hover:text-[#0e0907] transition-colors
-          border border-[#d9d0c9] rounded-[4px] px-3 py-1.5"
+        className="text-xs font-medium text-[#0e0907] bg-white hover:bg-neutral-50 transition-colors
+          border border-[#d9d0c9] rounded-[4px] px-3 py-1.5 shadow-sm"
       >
         Other actions ▾
       </button>
