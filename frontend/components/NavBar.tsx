@@ -12,7 +12,7 @@ import { getBrowserSupabase } from "@/lib/supabase/client";
 // thin wrappers for legacy deep-links.
 const ADMIN_LINKS = [
   { href: "/admin/snapshots/draft",       label: "Snapshots"   },
-  { href: "/admin/cohesion-calibration",  label: "Cohesion"    },
+  { href: "/admin/cohesion-calibration",  label: "Evaluator"   },
   { href: "/admin/rulesets",              label: "RuleSets"    },
   { href: "/admin/legends",               label: "Legends"     },
 ];
