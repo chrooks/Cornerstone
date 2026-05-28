@@ -22,6 +22,13 @@ import type { Player, PipelineRun } from "@/lib/types";
 
 type PipelineCardState = "idle" | "running" | "error" | "frozen";
 
+/** Format elapsed milliseconds as m:ss. */
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  return `${minutes}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
+
 interface PipelineCardProps {
   id: string;
   title: string;
@@ -49,10 +56,25 @@ export function PipelineCard({
   const [currentRun, setCurrentRun] = useState<PipelineRun | null>(lastRun ?? null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Elapsed-time ticker — gives "it's alive" feedback even when the run has no
+  // determinate total (salary/bio bulk jobs). Started locally at trigger time
+  // so it counts from 0 without waiting for the first 2s poll.
+  const runStartRef = useRef<number | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+
   // Cleanup on unmount only. Refs avoid re-render cascade that was killing the timer.
   useEffect(() => () => {
     if (timerRef.current) clearInterval(timerRef.current);
   }, []);
+
+  // Tick the elapsed clock once per second while a run is in flight.
+  useEffect(() => {
+    if (cardState !== "running") return;
+    const tick = setInterval(() => {
+      if (runStartRef.current != null) setElapsedMs(Date.now() - runStartRef.current);
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [cardState]);
 
   const startPolling = useCallback((runId: string) => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -91,6 +113,8 @@ export function PipelineCard({
   const handleBulkRun = useCallback(async () => {
     if (cardState !== "idle") return;
     setCardState("running");
+    runStartRef.current = Date.now();
+    setElapsedMs(0);
     try {
       const runId = await onBulkRun();
       startPolling(runId);
@@ -104,6 +128,8 @@ export function PipelineCard({
   const handlePlayerSelect = useCallback(async (player: Player) => {
     if (cardState !== "idle") return;
     setCardState("running");
+    runStartRef.current = Date.now();
+    setElapsedMs(0);
     try {
       const runId = await onPlayerRun(player.id);
       startPolling(runId);
@@ -152,15 +178,37 @@ export function PipelineCard({
       {/* Bulk action */}
       <div id={`${id}-bulk-area`} className="mb-4">
         {isRunning ? (
-          <div id={`${id}-progress`} className="space-y-2">
-            <div className="flex items-center gap-2 text-xs text-neutral-500">
-              <span className="inline-block w-3 h-3 border-2 border-[#ffa05c] border-t-transparent rounded-full animate-spin" />
-              <span>Running…{currentRun ? ` ${currentRun.rows_processed} processed` : ""}</span>
-            </div>
-            <div className="h-1 w-full rounded-full bg-neutral-200 overflow-hidden">
-              <div className="h-full bg-[#ffa05c] animate-pulse w-2/3 rounded-full" />
-            </div>
-          </div>
+          (() => {
+            const total = currentRun?.params?.total ?? null;
+            const processed = currentRun?.rows_processed ?? 0;
+            const hasTotal = total != null && total > 0;
+            const pct = hasTotal ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+            return (
+              <div id={`${id}-progress`} className="space-y-2">
+                <div className="flex items-center justify-between gap-2 text-xs text-neutral-500">
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 border-2 border-[#ffa05c] border-t-transparent rounded-full animate-spin" />
+                    <span>
+                      {hasTotal ? `${processed} / ${total} players` : "Running…"}
+                    </span>
+                  </span>
+                  <span className="font-mono tabular-nums text-neutral-400">
+                    {formatElapsed(elapsedMs)}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-neutral-200 overflow-hidden">
+                  {hasTotal ? (
+                    <div
+                      className="h-full bg-[#ffa05c] rounded-full transition-[width] duration-500 ease-out"
+                      style={{ width: `${pct}%` }}
+                    />
+                  ) : (
+                    <div className="h-full bg-[#ffa05c]/60 rounded-full animate-pulse w-full" />
+                  )}
+                </div>
+              </div>
+            );
+          })()
         ) : (
           <button
             id={`${id}-bulk-btn`}

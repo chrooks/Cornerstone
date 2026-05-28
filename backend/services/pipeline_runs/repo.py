@@ -220,6 +220,23 @@ def list_recent(
     return result.data or []
 
 
+def update_progress(run_id: str, processed: int, total: int, client=None) -> None:
+    """Live-update a running job's progress for the UI poller.
+
+    Writes the running count to rows_processed and the denominator to
+    params.total so the card can render a determinate bar (processed/total).
+    complete_run overwrites rows_processed with the final count at the end.
+    Only called from loop-based workers that have no other params payload.
+    """
+    c = client or _get_client()
+    run_query(
+        lambda: c.table("pipeline_runs")
+        .update({"rows_processed": processed, "params": {"total": total}})
+        .eq("id", run_id)
+        .execute()
+    )
+
+
 def list_for_draft(snapshot_release_id: str, client=None) -> list[dict]:
     """Return all pipeline runs scoped to a draft, newest first.
 
