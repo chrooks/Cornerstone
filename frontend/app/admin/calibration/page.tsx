@@ -7,12 +7,31 @@
  * lives in CalibrationWorkspace so it can be embedded inside the draft
  * workspace ThresholdsTab without layout duplication.
  *
- * Per-skill deep-link (`?skill=` or `#skill_name`) is not yet wired — selection
- * always opens to CalibrationWorkspace's DEFAULT_SKILL. Tracked as a follow-up.
+ * Per-skill deep-link: `?skill=<skill_name>` (or `#<skill_name>`) opens the
+ * workspace on that skill. Validated against the taxonomy in CalibrationWorkspace.
  */
 
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Toaster } from "sonner";
 import { CalibrationWorkspace } from "./CalibrationWorkspace";
+
+/** Reads the deep-link skill from the query param or URL hash, then renders the workspace. */
+function CalibrationShell() {
+  const params = useSearchParams();
+  const fromQuery = params.get("skill");
+  const fromHash =
+    typeof window !== "undefined"
+      ? decodeURIComponent(window.location.hash.replace(/^#/, ""))
+      : "";
+  const initialSkill = fromQuery ?? (fromHash || undefined);
+
+  return (
+    <div className="flex-1 overflow-hidden">
+      <CalibrationWorkspace embedded initialSkill={initialSkill} />
+    </div>
+  );
+}
 
 export default function CalibrationPage() {
   return (
@@ -41,9 +60,9 @@ export default function CalibrationPage() {
             Threshold Calibration
           </span>
         </header>
-        <div className="flex-1 overflow-hidden">
-          <CalibrationWorkspace embedded />
-        </div>
+        <Suspense fallback={<div className="flex-1" />}>
+          <CalibrationShell />
+        </Suspense>
       </div>
     </>
   );

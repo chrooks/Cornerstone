@@ -20,6 +20,7 @@ import { ThresholdEditorPanel } from "./ThresholdEditorPanel";
 import { AnchorSidebarPanel } from "./AnchorSidebarPanel";
 import { StatLeadersPanel } from "./StatLeadersPanel";
 import { PanelResizeHandle } from "@/components/PanelResizeHandle";
+import { ALL_SKILL_NAMES } from "@/lib/skills";
 import type {
   Player,
   PlayerSkills,
@@ -42,14 +43,22 @@ export interface CalibrationWorkspaceProps {
    * Receives run_id so the caller can deep-link to the Pipeline tab.
    */
   onStagedEdit?: (runId: string) => void;
+  /**
+   * Skill to open on first render (power-user deep-link, e.g. ?skill=spot_up_shooter).
+   * Ignored if it is not a known skill in the taxonomy.
+   */
+  initialSkill?: string;
 }
 
 export function CalibrationWorkspace({
   embedded = false,
   onStagedEdit,
+  initialSkill,
 }: CalibrationWorkspaceProps) {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [selectedSkill, setSelectedSkill] = useState<string>(DEFAULT_SKILL);
+  const [selectedSkill, setSelectedSkill] = useState<string>(
+    initialSkill && ALL_SKILL_NAMES.includes(initialSkill) ? initialSkill : DEFAULT_SKILL
+  );
   const [thresholds, setThresholds] = useState<ThresholdRow[]>([]);
   const [anchors, setAnchors] = useState<AnchorsBySkill>({});
   const [playerSkills, setPlayerSkills] = useState<PlayerSkills | null>(null);
