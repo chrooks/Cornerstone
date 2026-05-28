@@ -418,7 +418,7 @@ export default function CohesionCalibrationPage() {
             </a>
             <span className="text-muted-foreground/30">/</span>
             <h1 id="cohesion-cal-title" className="text-sm font-semibold text-foreground">
-              Cohesion Calibration
+              Evaluator Calibration
             </h1>
           </div>
           <EvaluationVersionHeader

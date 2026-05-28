@@ -442,9 +442,9 @@ export default function AdminHubPage() {
           <AdminSurfaceCard
             id="admin-hub-card-cohesion-calibration"
             href="/admin/cohesion-calibration"
-            title="Cohesion Calibration"
+            title="Evaluator Calibration"
             description="Tune the active Evaluation Version: weights, formulas, composites."
-            glyph="C"
+            glyph="E"
             hint={cohesionHint}
           />
           <AdminSurfaceCard
