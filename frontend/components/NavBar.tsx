@@ -7,11 +7,11 @@ import { cn } from "@/lib/utils";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 
-// Admin dropdown items
+// Admin dropdown items. Pipeline/Review/Calibration consolidated into the
+// Snapshots draft workspace (M4); their standalone routes still resolve as
+// thin wrappers for legacy deep-links.
 const ADMIN_LINKS = [
-  { href: "/admin/pipeline",              label: "Pipeline"    },
-  { href: "/admin/review",                label: "Review"      },
-  { href: "/admin/calibration",           label: "Calibration" },
+  { href: "/admin/snapshots/draft",       label: "Snapshots"   },
   { href: "/admin/cohesion-calibration",  label: "Cohesion"    },
   { href: "/admin/rulesets",              label: "RuleSets"    },
   { href: "/admin/legends",               label: "Legends"     },
