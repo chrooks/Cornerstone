@@ -17,6 +17,7 @@ error message to verify the correct DB-level constraint fired.
 from __future__ import annotations
 
 import uuid
+import warnings
 
 import pytest
 
@@ -394,10 +395,10 @@ def test_publish_rpc_raises_open_flags_not_acknowledged_when_flags_exist(sb):
 
     This test is a structural check only — we verify the RPC signature accepts
     p_allow_open_flags as a parameter by calling it with a non-existent draft_id
-    (which will fail with draft_not_found_or_not_in_draft_state before reaching
-    the flags check). The actual open-flags behavior is tested end-to-end in M7.
+    (which fails with draft_not_in_review_state — issue #67 — before reaching the
+    flags check). The actual open-flags behavior is tested end-to-end in M7.
     """
-    with pytest.raises(Exception, match=r"draft_not_found|not_in_draft"):
+    with pytest.raises(Exception, match=r"draft_not_in_review|draft_not_found|not_in_draft"):
         sb.rpc(
             "publish_snapshot_draft",
             {
@@ -411,7 +412,7 @@ def test_publish_rpc_raises_open_flags_not_acknowledged_when_flags_exist(sb):
 
 def test_publish_rpc_proceeds_with_open_flags_when_override_true(sb):
     """publish_snapshot_draft accepts p_allow_open_flags=true parameter without a signature error."""
-    with pytest.raises(Exception, match=r"draft_not_found|not_in_draft"):
+    with pytest.raises(Exception, match=r"draft_not_in_review|draft_not_found|not_in_draft"):
         sb.rpc(
             "publish_snapshot_draft",
             {
@@ -425,9 +426,10 @@ def test_publish_rpc_proceeds_with_open_flags_when_override_true(sb):
 
 def test_publish_rpc_raises_when_legend_missing_canonical_player(sb):
     """publish_snapshot_draft signature accepts p_allow_open_flags (structural check)."""
-    # Same structural verification — the RPC raises draft_not_found before reaching
-    # the legends_missing_canonical_player check for a random draft_id.
-    with pytest.raises(Exception, match=r"draft_not_found|not_in_draft|legends_missing"):
+    # Same structural verification — the RPC raises draft_not_in_review_state
+    # (issue #67) before reaching the legends_missing_canonical_player check for a
+    # random draft_id.
+    with pytest.raises(Exception, match=r"draft_not_in_review|draft_not_found|not_in_draft|legends_missing"):
         sb.rpc(
             "publish_snapshot_draft",
             {
@@ -468,3 +470,110 @@ def test_publish_rpc_no_released_player_row_has_null_is_legend(sb):
         .execute()
     )
     assert len(result.data or []) == 0
+
+
+# ---------------------------------------------------------------------------
+# publish_snapshot_draft RPC — issue #67: publish only from review state
+# ---------------------------------------------------------------------------
+
+
+def test_publish_rpc_rejects_publish_from_draft_status(sb):
+    """A draft-state Snapshot Release cannot be published.
+
+    Issue #67: the RPC must reject status='draft' with draft_not_in_review_state
+    so the review step cannot be skipped, and it must do so BEFORE any freeze or
+    is_active swap. This exercises the real Invariant (an existing draft row),
+    not just the not-found path the structural tests above cover.
+
+    Safety: the status guard is the first thing the RPC checks after the advisory
+    lock, so a draft-state row raises and rolls back before released_players is
+    touched. We still assert no side effects leaked.
+    """
+    # Find any currently-open draft/review row.
+    open_rows = (
+        sb.table("snapshot_releases")
+        .select("id, status, season, is_active")
+        .in_("status", ["draft", "review"])
+        .execute()
+    ).data or []
+
+    created_id: str | None = None
+    if open_rows:
+        existing = open_rows[0]
+        if existing["status"] != "draft":
+            # Surface the skip loudly: this is the ONLY test exercising the #67
+            # guard, so a silent no-op would mean green CI with zero coverage.
+            warnings.warn(
+                "test_publish_rpc_rejects_publish_from_draft_status skipped — an "
+                "open draft is in 'review' state, so seeding a second draft is "
+                "unsafe (one-open-draft unique index). #67 guard NOT exercised "
+                "this run.",
+                stacklevel=2,
+            )
+            pytest.skip(
+                "An open draft is already in 'review' state; cannot safely seed a "
+                "second draft (one-open-draft unique index) without risking a real "
+                "publish. Re-run when no review-state draft is open."
+            )
+        draft_id = str(existing["id"])
+    else:
+        # No open draft — seed a minimal draft-state row, inheriting the active
+        # release's season. is_active stays false so nothing user-facing changes.
+        active = (
+            sb.table("snapshot_releases")
+            .select("season")
+            .eq("is_active", True)
+            .single()
+            .execute()
+        ).data
+        season = (active or {}).get("season") or "2025-26"
+        inserted = (
+            sb.table("snapshot_releases")
+            .insert(
+                {
+                    "season": season,
+                    "label": f"test-67-{_gen_uuid()[:8]}",
+                    "status": "draft",
+                    "is_active": False,
+                }
+            )
+            .execute()
+        ).data
+        created_id = str(inserted[0]["id"])
+        draft_id = created_id
+
+    try:
+        with pytest.raises(Exception, match=r"draft_not_in_review_state"):
+            sb.rpc(
+                "publish_snapshot_draft",
+                {
+                    "p_draft_id": draft_id,
+                    "p_label": "test-67-should-not-publish",
+                    "p_allow_missing_composite": True,
+                    "p_allow_open_flags": True,
+                },
+            ).execute()
+
+        # No side effects: the row stays draft + inactive, and nothing was frozen
+        # into released_players under this draft id.
+        after = (
+            sb.table("snapshot_releases")
+            .select("status, is_active")
+            .eq("id", draft_id)
+            .single()
+            .execute()
+        ).data
+        assert after["status"] == "draft"
+        assert after["is_active"] is False
+
+        frozen = (
+            sb.table("released_players")
+            .select("id")
+            .eq("snapshot_release_id", draft_id)
+            .limit(1)
+            .execute()
+        ).data or []
+        assert frozen == [], "Rejected publish must not freeze released_players rows"
+    finally:
+        if created_id is not None:
+            sb.table("snapshot_releases").delete().eq("id", created_id).execute()

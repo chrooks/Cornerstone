@@ -295,6 +295,10 @@ def publish_draft(draft_id: str):
             return _err(code, 409)
         if "pending_commits_exist" in code:
             return _err(code, 409)
+        # Issue #67: publishing a non-review-state release is a state conflict,
+        # not a malformed request — map to 409 so clients can distinguish it.
+        if "draft_not_in_review_state" in code:
+            return _err(code, 409)
         if "missing_composite_not_acknowledged" in code:
             return _err(code, 422)
         if "open_flags_not_acknowledged" in code:

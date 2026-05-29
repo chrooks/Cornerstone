@@ -251,7 +251,10 @@ def publish_draft(
         for code in (
             "open_flags_not_acknowledged",
             "missing_composite_not_acknowledged",
-            "draft_not_found_or_not_in_draft_state",
+            # Issue #67: the RPC rejects a non-review-state row with this code.
+            # (Replaced draft_not_found_or_not_in_draft_state — the looser guard's
+            # message — which the live function no longer raises.)
+            "draft_not_in_review_state",
             "legends_missing_canonical_player",
         ):
             if code in msg:

@@ -203,6 +203,25 @@ class TestPublishDraftEndpoint:
         assert resp.status_code == 409
         assert resp.get_json()["error"] == "pipeline_runs_in_flight"
 
+    def test_post_publish_from_draft_state_returns_409(self, admin_client):
+        """Issue #67: the RPC rejects a non-review-state row with
+        draft_not_in_review_state. That is a state conflict, so the HTTP Surface
+        must map it to 409, not the generic 400 fallthrough.
+        """
+        from services.snapshot_versions import repo
+
+        with patch.object(
+            repo, "publish_draft", side_effect=ValueError("draft_not_in_review_state")
+        ):
+            resp = admin_client.post(
+                "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                json={"label": "Test", "allow_missing_composite": True},
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 409
+        assert resp.get_json()["error"] == "draft_not_in_review_state"
+
     def test_post_publish_with_missing_composite_unacknowledged_returns_422(self, admin_client):
         from services.snapshot_versions import repo
 
