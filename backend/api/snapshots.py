@@ -11,7 +11,7 @@ import dataclasses
 import logging
 from uuid import UUID
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from api.auth import require_admin
 from services.snapshot_versions import repo, validator, summary
@@ -255,6 +255,31 @@ def publish_draft(draft_id: str):
 
     if not label:
         return _err("label_required", 400)
+
+    # Audit trail: publishing with allow_open_flags bypasses required review and
+    # freezes an immutable Snapshot Release with unresolved open flags. Record the
+    # actor and the in-scope open-flags count (current-season composite, matching
+    # the RPC gate). The count is a best-effort preflight read: it can race flag
+    # writes between here and the RPC commit, so it is advisory, not authoritative
+    # (count-pinning the override is a tracked follow-up). An audit lookup failure
+    # must never block the publish itself, but it is logged loudly so a missing
+    # count on a destructive override is not silent.
+    if allow_open_flags:
+        try:
+            open_flags = validator.validate_publishable(draft_id).get("open_flags", "unknown")
+        except Exception:
+            open_flags = "unknown"
+            logger.error(
+                "publish_draft: audit open-flags count unavailable for draft_id=%s "
+                "(override proceeding without a recorded count)",
+                draft_id,
+            )
+        logger.warning(
+            "publish_draft: open-flags gate bypassed by admin user_id=%s draft_id=%s open_flags=%s",
+            getattr(g, "user_id", "unknown"),
+            draft_id,
+            open_flags,
+        )
 
     try:
         published = repo.publish_draft(

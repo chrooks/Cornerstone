@@ -1000,10 +1000,11 @@ export function publishDraft(
   id: string,
   label: string,
   allow_missing_composite: boolean,
+  allow_open_flags: boolean,
 ): Promise<ApiResponse<SnapshotRelease>> {
   return apiFetch<SnapshotRelease>(`/api/snapshots/drafts/${id}/publish`, {
     method: "POST",
-    body: JSON.stringify({ label, allow_missing_composite }),
+    body: JSON.stringify({ label, allow_missing_composite, allow_open_flags }),
   });
 }
 

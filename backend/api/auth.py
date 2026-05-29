@@ -172,6 +172,10 @@ def require_admin(f: F) -> F:
             logger.debug("Access denied for user %s — no admin role", user_id)
             return jsonify({"success": False, "error": "Forbidden — admin role required"}), 403
 
+        # Expose the verified admin's id for routes that need to attribute
+        # privileged actions (e.g. audit logging an open-flags publish override).
+        g.user_id = user_id
+
         return f(*args, **kwargs)
 
     return decorated  # type: ignore[return-value]

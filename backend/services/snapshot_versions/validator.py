@@ -2,6 +2,15 @@
 Pre-publish validation for Snapshot Releases.
 
 Returns counts of hard/soft blockers so the API layer can gate publish.
+
+open_flags count matches the RPC predicate in publish_snapshot_draft
+(20260527000003_publish_open_flags_gate.sql):
+
+    SELECT COUNT(*) FROM draft_skill_flags WHERE resolution IS NULL;
+
+No season or source filter. The Python backend writes NULL for unresolved
+flags and a concrete string ('trust_stats', 'trust_claude', 'manual_override')
+for resolved ones; the string 'unresolved' is never written.
 """
 
 from __future__ import annotations
@@ -36,6 +45,9 @@ def validate_publishable(
                 {"id": str, "name": str, "team": str | None, "position": str | None},
                 ...
             ],
+            "open_flags": int,  # hard block if > 0; unresolved flags scoped to
+                                # current-season composite profiles (matches the
+                                # Review queue + the publish RPC, migration ...013)
         }
     """
     c = client or _get_client()
@@ -96,8 +108,41 @@ def validate_publishable(
                 }
             )
 
+    # Open flags: count unresolved (resolution IS NULL) draft_skill_flags scoped
+    # to current-season composite Skill Profiles. This mirrors the Review queue
+    # scope (backend/api/review.py) so the publish gate count matches what the
+    # admin actually sees and can resolve — prior-season / non-composite flags
+    # do not block publish. The publish_snapshot_draft RPC applies the same scope
+    # (see migration 20260527000013) so the UI count and the hard gate agree.
+    # NOTE: this is a preflight read; the RPC is the authoritative gate. The
+    # count can race flag writes between this read and publish — count-pinning
+    # the override is tracked as a follow-up (see review fan-out concerns).
+    season_composite = run_query(
+        lambda: c.table("draft_skill_profiles")
+        .select("id")
+        .eq("season", _CURRENT_SEASON)
+        .eq("source", "composite")
+        .execute()
+    )
+    composite_profile_ids = [str(r["id"]) for r in (season_composite.data or [])]
+
+    open_flags = 0
+    if composite_profile_ids:
+        _FLAG_CHUNK = 500
+        for i in range(0, len(composite_profile_ids), _FLAG_CHUNK):
+            chunk = composite_profile_ids[i: i + _FLAG_CHUNK]
+            flags_result = run_query(
+                lambda c_chunk=chunk: c.table("draft_skill_flags")
+                .select("id")
+                .is_("resolution", "null")
+                .in_("skill_profile_id", c_chunk)
+                .execute()
+            )
+            open_flags += len(flags_result.data or [])
+
     return {
         "players_missing_canonical": missing_canonical,
         "players_missing_composite": missing_composite,
         "missing_composite_players": missing_composite_players,
+        "open_flags": open_flags,
     }

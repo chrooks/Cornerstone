@@ -8,6 +8,10 @@
  * The shell owns publish state and the PublishModal so that the sticky-bar
  * Publish button and this tab's Publish CTA cannot fire two concurrent
  * publish requests. This tab is display-only.
+ *
+ * Publish gates surfaced here:
+ *   - players_missing_canonical > 0 (hard — disables the CTA; no canonical link)
+ *   - open_flags > 0 (banner only — the modal enforces the block + override flow)
  */
 
 import { CountSummary } from "../../_components/CountSummary";
@@ -36,7 +40,14 @@ export function PublishTab({
 }: PublishTabProps) {
   const missingComposite = validation?.players_missing_composite ?? 0;
   const missingCanonical = validation?.players_missing_canonical ?? 0;
-  const canPublish = missingCanonical === 0;
+  const openFlags = validation?.open_flags ?? 0;
+
+  const hasOpenFlagsGate = openFlags > 0;
+
+  const flagsBannerText =
+    openFlags === 1
+      ? "Cannot publish: 1 open flag must be resolved. Resolve it in Review, or override in the publish dialog."
+      : `Cannot publish: ${openFlags} open flags must be resolved. Resolve them in Review, or override in the publish dialog.`;
 
   return (
     <div id="publish-tab-content" className="max-w-2xl">
@@ -63,7 +74,7 @@ export function PublishTab({
         />
       )}
 
-      {!canPublish && (
+      {missingCanonical > 0 && (
         <div
           id="publish-tab-blocked"
           className="rounded-[6px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 mb-6"
@@ -74,12 +85,21 @@ export function PublishTab({
         </div>
       )}
 
+      {hasOpenFlagsGate && (
+        <div
+          id="publish-tab-open-flags-blocked"
+          className="rounded-[6px] border border-[#fe6d34] bg-[#fef0ea] px-5 py-4 text-sm text-[#0e0907] mb-6"
+        >
+          {flagsBannerText}
+        </div>
+      )}
+
       <div id="publish-tab-cta">
         <button
           id="publish-tab-publish-btn"
           type="button"
           onClick={onOpenPublishModal}
-          disabled={!canPublish || isPublishing}
+          disabled={missingCanonical > 0 || isPublishing}
           className="text-sm font-semibold px-6 py-2.5 rounded-[4px]
             bg-[#ffa05c] text-[#0e0907] hover:bg-[#fe6d34]
             focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-2
@@ -90,7 +110,7 @@ export function PublishTab({
         {missingComposite > 0 && (
           <p className="text-xs text-neutral-500 mt-2">
             {missingComposite} player{missingComposite !== 1 ? "s" : ""} missing composite
-            profiles. You can still publish and acknowledge.
+            Skill Profiles. You can still publish and acknowledge.
           </p>
         )}
       </div>

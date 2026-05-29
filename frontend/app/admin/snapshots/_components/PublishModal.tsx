@@ -1,22 +1,37 @@
 "use client";
 
 /**
- * PublishModal — publish dialog with label input + acknowledge checkbox.
+ * PublishModal — publish dialog with label input, soft composite gate,
+ * and hard open-flags gate with override + inline confirm panel.
  *
  * Publish button is disabled until:
  *   1. Label is non-empty
- *   2. If players_missing_composite > 0, the acknowledge checkbox is checked
+ *   2. If players_missing_composite > 0, the acknowledge checkbox is checked (soft)
+ *   3. If open_flags > 0, the override is armed via the inline confirm flow (hard)
+ *
+ * State machine:
+ *   - idle (openFlags === 0): publish enabled when label + composite ok
+ *   - blocked (openFlags > 0, overrideOpenFlags false): publish DISABLED
+ *   - confirmingOverride (checkbox checked, waiting for confirm): still DISABLED
+ *   - armed (overrideOpenFlags true): publish enabled when all other gates ok
+ *
+ * Reset: all local state resets when `open` flips false.
  */
 
-import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { usePublishGate } from "./usePublishGate";
 
 interface PublishModalProps {
   id: string;
   open: boolean;
   onClose: () => void;
-  onPublish: (label: string, allowMissingComposite: boolean) => Promise<void>;
+  onPublish: (
+    label: string,
+    allowMissingComposite: boolean,
+    allowOpenFlags: boolean,
+  ) => Promise<void>;
   playersMissingComposite: number;
+  openFlags: number;
   isPublishing: boolean;
 }
 
@@ -26,21 +41,39 @@ export function PublishModal({
   onClose,
   onPublish,
   playersMissingComposite,
+  openFlags,
   isPublishing,
 }: PublishModalProps) {
-  const [label, setLabel] = useState("");
-  const [acknowledged, setAcknowledged] = useState(false);
-
-  const requiresAcknowledge = playersMissingComposite > 0;
-  const canPublish =
-    label.trim().length > 0 &&
-    (!requiresAcknowledge || acknowledged);
+  const {
+    label,
+    setLabel,
+    acknowledgedComposite,
+    setAcknowledgedComposite,
+    overrideOpenFlags,
+    confirmingOverride,
+    requiresCompositeAck,
+    hasOpenFlagsGate,
+    canPublish,
+    onOverrideCheckboxChange,
+    onConfirmOverride,
+    onCancelOverride,
+  } = usePublishGate({ open, playersMissingComposite, openFlags });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canPublish) return;
-    await onPublish(label.trim(), acknowledged);
+    await onPublish(label.trim(), acknowledgedComposite, overrideOpenFlags);
   };
+
+  const flagsText =
+    openFlags === 1
+      ? "1 open flag must be resolved before publish."
+      : `${openFlags} open flags must be resolved before publish.`;
+
+  const confirmBodyText =
+    openFlags === 1
+      ? `This bypasses required review. The Snapshot Release will freeze with 1 unresolved open flag. This cannot be undone.`
+      : `This bypasses required review. The Snapshot Release will freeze with ${openFlags} unresolved open flags. This cannot be undone.`;
 
   return (
     <Modal id={id} open={open} onClose={onClose} maxWidthClass="max-w-md">
@@ -73,8 +106,8 @@ export function PublishModal({
           />
         </div>
 
-        {/* Missing composite warning + acknowledge */}
-        {requiresAcknowledge && (
+        {/* Soft gate: Missing composite warning + acknowledge */}
+        {requiresCompositeAck && (
           <div
             id={`${id}-missing-composite-section`}
             className="mb-4 rounded border border-amber-300 bg-amber-50 p-3"
@@ -83,7 +116,7 @@ export function PublishModal({
               id={`${id}-missing-composite-text`}
               className="text-xs text-amber-800 mb-2"
             >
-              <strong>{playersMissingComposite} player(s)</strong> have no composite profile.
+              <strong>{playersMissingComposite} player(s)</strong> have no composite Skill Profile.
               They will be frozen with an empty skill profile.
             </p>
             <label
@@ -94,12 +127,82 @@ export function PublishModal({
               <input
                 id={`${id}-acknowledge-checkbox`}
                 type="checkbox"
-                checked={acknowledged}
-                onChange={(e) => setAcknowledged(e.target.checked)}
+                checked={acknowledgedComposite}
+                onChange={(e) => setAcknowledgedComposite(e.target.checked)}
                 className="mt-0.5 rounded accent-amber-600"
               />
               I understand and want to publish anyway
             </label>
+          </div>
+        )}
+
+        {/* Hard gate: Open flags gate — closest to actions */}
+        {hasOpenFlagsGate && (
+          <div
+            id={`${id}-open-flags-section`}
+            className="mb-4 rounded border border-[#fe6d34] bg-[#fef0ea] p-3"
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#fe6d34]">
+                Blocked
+              </span>
+            </div>
+            <p
+              id={`${id}-open-flags-text`}
+              className="text-xs text-[#0e0907] mb-2"
+            >
+              {flagsText}
+            </p>
+            <label
+              id={`${id}-override-label`}
+              htmlFor={`${id}-override-checkbox`}
+              className="flex items-start gap-2 text-xs text-[#0e0907] cursor-pointer"
+            >
+              <input
+                id={`${id}-override-checkbox`}
+                type="checkbox"
+                checked={confirmingOverride || overrideOpenFlags}
+                onChange={(e) => onOverrideCheckboxChange(e.target.checked)}
+                className="mt-0.5 rounded accent-[#fe6d34]"
+              />
+              Override and publish with unresolved open flags
+            </label>
+
+            {/* Inline confirm sub-panel */}
+            {confirmingOverride && (
+              <div
+                id={`${id}-override-confirm`}
+                className="mt-3 rounded border border-[#fe6d34]/30 bg-[#fde3d8] p-3"
+              >
+                <p
+                  id={`${id}-override-confirm-text`}
+                  className="text-xs text-[#0e0907] mb-3"
+                >
+                  {confirmBodyText}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    id={`${id}-override-confirm-btn`}
+                    type="button"
+                    onClick={onConfirmOverride}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-[4px]
+                      bg-[#fe6d34] text-[#fef9f5] hover:bg-[#e55c24]
+                      focus:outline-none focus:ring-2 focus:ring-[#fe6d34] focus:ring-offset-1
+                      transition-colors"
+                  >
+                    Confirm override
+                  </button>
+                  <button
+                    id={`${id}-override-cancel-btn`}
+                    type="button"
+                    onClick={onCancelOverride}
+                    className="text-xs font-medium text-neutral-600 hover:text-[#0e0907] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

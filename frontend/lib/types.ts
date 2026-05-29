@@ -930,6 +930,8 @@ export interface SnapshotPublishValidation {
   players_missing_composite: number;
   /** Full list of Players lacking a composite Skill Profile. */
   missing_composite_players: MissingCompositePlayer[];
+  /** Count of open flags (draft_skill_flags WHERE resolution IS NULL). Hard gate. */
+  open_flags: number;
 }
 
 /** Count summary for the review-state Surface. */

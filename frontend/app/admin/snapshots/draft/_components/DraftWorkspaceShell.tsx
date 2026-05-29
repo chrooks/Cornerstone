@@ -181,17 +181,21 @@ export function DraftWorkspaceShell() {
   }, [draft, reload]);
 
   const handlePublish = useCallback(
-    async (label: string, allowMissing: boolean) => {
+    async (label: string, allowMissing: boolean, allowOpenFlags: boolean) => {
       if (!draft) return;
       setIsPublishing(true);
       try {
-        const res = await publishDraft(draft.id, label, allowMissing);
+        const res = await publishDraft(draft.id, label, allowMissing, allowOpenFlags);
         if (res.success && res.data) {
           toast.success(`Published as "${res.data.label}"`);
           setPublishModalOpen(false);
           router.replace(`/admin/snapshots/${res.data.id}`);
         } else {
-          toast.error(res.error ?? "Failed to publish");
+          if (res.error?.includes("open_flags_not_acknowledged")) {
+            toast.error("Open flags are unresolved. Check the override to publish anyway.");
+          } else {
+            toast.error(res.error ?? "Failed to publish");
+          }
         }
       } catch {
         toast.error("Failed to publish");
@@ -393,6 +397,7 @@ export function DraftWorkspaceShell() {
           onClose={() => setPublishModalOpen(false)}
           onPublish={handlePublish}
           playersMissingComposite={validation?.players_missing_composite ?? 0}
+          openFlags={validation?.open_flags ?? 0}
           isPublishing={isPublishing}
         />
       )}

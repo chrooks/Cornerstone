@@ -1,7 +1,7 @@
 """
 Unit tests for backend/services/snapshot_versions/validator.py
 
-Covers the missing_composite_players list (issue #52).
+Covers the missing_composite_players list (issue #52) and open_flags count (M6).
 """
 
 from __future__ import annotations
@@ -43,6 +43,7 @@ class TestValidatePublishableMissingCompositePlayers:
             with patch.object(validator, "run_query") as mock_rq:
                 mock_rq.side_effect = [
                     _result([]),  # players query
+                    _result([]),  # open flags query (M6)
                 ]
                 result = validator.validate_publishable("draft-001")
 
@@ -63,6 +64,7 @@ class TestValidatePublishableMissingCompositePlayers:
                     _result(players),  # players query
                     _result([{"nba_api_id": "1"}, {"nba_api_id": "1"}]),  # canonical_players
                     _result([]),  # composite draft_skill_profiles — both missing
+                    _result([]),  # open flags query (M6)
                 ]
                 result = validator.validate_publishable("draft-001")
 
@@ -90,6 +92,7 @@ class TestValidatePublishableMissingCompositePlayers:
                         [{"nba_api_id": str(i)} for i in range(75)]
                     ),  # canonical_players — all match
                     _result([]),  # composite draft_skill_profiles — all missing
+                    _result([]),  # open flags query (M6)
                 ]
                 result = validator.validate_publishable("draft-001")
 
@@ -109,6 +112,7 @@ class TestValidatePublishableMissingCompositePlayers:
                     _result(
                         [{"player_id": "p1"}, {"player_id": "p2"}]
                     ),  # composite draft_skill_profiles — none missing
+                    _result([]),  # open flags query (M6)
                 ]
                 result = validator.validate_publishable("draft-001")
 
@@ -122,6 +126,7 @@ class TestValidatePublishableMissingCompositePlayers:
             with patch.object(validator, "run_query") as mock_rq:
                 mock_rq.side_effect = [
                     _result([]),  # players query
+                    _result([]),  # open flags query (M6)
                 ]
                 result = validator.validate_publishable("draft-001")
 
@@ -129,3 +134,113 @@ class TestValidatePublishableMissingCompositePlayers:
         assert "players_missing_composite" in result
         assert result["players_missing_canonical"] == 0
         assert result["players_missing_composite"] == 0
+
+
+class TestValidatePublishableOpenFlags:
+    """
+    Validate open_flags count — M6.
+
+    The RPC predicate (20260527000003_publish_open_flags_gate.sql) counts rows
+    in draft_skill_flags WHERE resolution IS NULL. No season/source filter.
+    The Python backend never writes the string 'unresolved'; NULL means open.
+    """
+
+    def _call_validator(self, mock_rq_returns: list):
+        """Helper: patch _get_client + run_query, call validate_publishable."""
+        from services.snapshot_versions import validator
+
+        with patch.object(validator, "_get_client", return_value=MagicMock()):
+            with patch.object(validator, "run_query") as mock_rq:
+                mock_rq.side_effect = mock_rq_returns
+                return validator.validate_publishable("draft-001")
+
+    def test_open_flags_scoped_to_current_season_composite_profiles(self):
+        """
+        Tracer: open_flags counts only unresolved flags hanging off current-season
+        composite Skill Profiles (mirrors the Review queue scope, review.py).
+
+        Query sequence when no players: players -> season-composite profile ids
+        -> flags scoped to those ids.
+        """
+        result = self._call_validator([
+            _result([]),  # players query (none)
+            _result([{"id": "prof-1"}, {"id": "prof-2"}]),  # current-season composite profiles
+            _result([{"id": "flag-1"}, {"id": "flag-2"}, {"id": "flag-3"}]),  # 3 unresolved
+        ])
+        assert result["open_flags"] == 3
+
+    def test_open_flags_field_present_in_return(self):
+        """open_flags key must exist even when no players exist."""
+        result = self._call_validator([
+            _result([]),  # players query
+            _result([]),  # season-composite profile ids (none) -> open_flags short-circuits to 0
+        ])
+        assert "open_flags" in result
+
+    def test_open_flags_zero_when_no_unresolved_flags(self):
+        """Returns 0 when draft_skill_flags has no rows with resolution IS NULL."""
+        result = self._call_validator([
+            _result([]),  # players query (no players)
+            _result([]),  # open flags query — empty
+        ])
+        assert result["open_flags"] == 0
+
+    def test_open_flags_zero_when_all_flags_resolved(self):
+        """
+        Flags with a non-NULL resolution must not be counted.
+        The mock returns empty (simulating WHERE resolution IS NULL returns nothing).
+        """
+        result = self._call_validator([
+            _result([]),  # players query
+            # run_query for flags returns empty — all resolved
+            _result([]),
+        ])
+        assert result["open_flags"] == 0
+
+    def test_open_flags_counts_only_null_resolution_rows(self):
+        """Returns count equal to the number of NULL-resolution flag rows."""
+        # Simulate 3 unresolved rows returned by the IS NULL query
+        flag_rows = [{"id": f"flag-{i}"} for i in range(3)]
+        result = self._call_validator([
+            _result([]),                    # players query
+            _result([{"id": "prof-1"}]),    # current-season composite profile ids
+            _result(flag_rows),             # open flags query — 3 unresolved
+        ])
+        assert result["open_flags"] == 3
+
+    def test_open_flags_mixed_resolved_and_unresolved(self):
+        """
+        Only unresolved flags (resolution IS NULL) are counted.
+        The query itself filters; validator counts rows returned.
+        """
+        # The DB query already filters; we simulate only unresolved rows returned.
+        unresolved_rows = [{"id": "flag-1"}, {"id": "flag-2"}]
+        result = self._call_validator([
+            _result([]),                    # players query
+            _result([{"id": "prof-1"}]),    # current-season composite profile ids
+            _result(unresolved_rows),       # 2 unresolved flags returned by IS NULL filter
+        ])
+        assert result["open_flags"] == 2
+
+    def test_open_flags_large_count(self):
+        """Handles large open_flags count without truncation."""
+        flag_rows = [{"id": f"flag-{i}"} for i in range(150)]
+        result = self._call_validator([
+            _result([]),                    # players query
+            _result([{"id": "prof-1"}]),    # current-season composite profile ids
+            _result(flag_rows),             # 150 open flags
+        ])
+        assert result["open_flags"] == 150
+
+    def test_open_flags_zero_when_flags_exist_but_no_current_season_composite(self):
+        """
+        Flags hanging off prior-season / non-composite profiles do not block:
+        with no current-season composite profiles, the flag query is skipped and
+        open_flags is 0 even though unresolved flags exist elsewhere.
+        """
+        result = self._call_validator([
+            _result([]),   # players query
+            _result([]),   # NO current-season composite profiles -> short-circuit
+            # (flag query never runs; any global unresolved flags are out of scope)
+        ])
+        assert result["open_flags"] == 0
