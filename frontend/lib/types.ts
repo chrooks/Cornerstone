@@ -886,6 +886,9 @@ export interface SnapshotRelease {
   is_active: boolean;
   published_at: string | null;
   created_at: string;
+  /** Issue #71: authoritative count of open flags this Release froze with.
+   *  null for legacy rows; 0 when none were bypassed. */
+  published_with_open_flags?: number | null;
 }
 
 /** A draft/review Snapshot Release augmented with live-run state. */

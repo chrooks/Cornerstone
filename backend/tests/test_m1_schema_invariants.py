@@ -472,6 +472,28 @@ def test_publish_rpc_no_released_player_row_has_null_is_legend(sb):
     assert len(result.data or []) == 0
 
 
+def test_publish_rpc_accepts_acknowledged_open_flags_param(sb):
+    """Issue #71: the RPC's 5-arg signature accepts p_acknowledged_open_flags.
+
+    Structural check — a random draft_id hits draft_not_in_review_state (issue
+    #67) before the count-pin logic, but the call only resolves if the new
+    parameter exists on the function (proves the migration applied and the old
+    4-arg overload was dropped cleanly). The count-pin BEHAVIOR is exercised
+    end-to-end in M7.
+    """
+    with pytest.raises(Exception, match=r"draft_not_in_review_state"):
+        sb.rpc(
+            "publish_snapshot_draft",
+            {
+                "p_draft_id": _gen_uuid(),
+                "p_label": "test-label",
+                "p_allow_missing_composite": True,
+                "p_allow_open_flags": True,
+                "p_acknowledged_open_flags": 1,
+            },
+        ).execute()
+
+
 # ---------------------------------------------------------------------------
 # publish_snapshot_draft RPC — issue #67: publish only from review state
 # ---------------------------------------------------------------------------

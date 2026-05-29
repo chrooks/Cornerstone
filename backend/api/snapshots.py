@@ -35,6 +35,7 @@ def _release_dict(r) -> dict:
         "is_active": r.is_active,
         "published_at": r.published_at,
         "created_at": r.created_at,
+        "published_with_open_flags": getattr(r, "published_with_open_flags", None),
     }
 
 
@@ -253,33 +254,26 @@ def publish_draft(draft_id: str):
         return _err("invalid_allow_open_flags", 400)
     allow_open_flags = raw_allow_open_flags
 
+    # Issue #71: the open-flags count the admin acknowledged when arming the
+    # override. Optional (direct callers may omit it → unbounded), but when
+    # present it must be a non-negative int. bool is an int subclass, so reject
+    # it explicitly.
+    raw_ack = body.get("acknowledged_open_flags", None)
+    acknowledged_open_flags: int | None = None
+    if raw_ack is not None:
+        if isinstance(raw_ack, bool) or not isinstance(raw_ack, int) or raw_ack < 0:
+            return _err("invalid_acknowledged_open_flags", 400)
+        acknowledged_open_flags = raw_ack
+
+    # Issue #71: arming the override REQUIRES an acknowledged count. Without this
+    # the RPC's NULL path is an unbounded blanket bypass (the pre-#71 behavior),
+    # reachable by any direct caller. The HTTP Surface must not expose that — the
+    # count is what binds the bypass to what the admin reviewed.
+    if allow_open_flags and acknowledged_open_flags is None:
+        return _err("acknowledged_open_flags_required", 400)
+
     if not label:
         return _err("label_required", 400)
-
-    # Audit trail: publishing with allow_open_flags bypasses required review and
-    # freezes an immutable Snapshot Release with unresolved open flags. Record the
-    # actor and the in-scope open-flags count (current-season composite, matching
-    # the RPC gate). The count is a best-effort preflight read: it can race flag
-    # writes between here and the RPC commit, so it is advisory, not authoritative
-    # (count-pinning the override is a tracked follow-up). An audit lookup failure
-    # must never block the publish itself, but it is logged loudly so a missing
-    # count on a destructive override is not silent.
-    if allow_open_flags:
-        try:
-            open_flags = validator.validate_publishable(draft_id).get("open_flags", "unknown")
-        except Exception:
-            open_flags = "unknown"
-            logger.error(
-                "publish_draft: audit open-flags count unavailable for draft_id=%s "
-                "(override proceeding without a recorded count)",
-                draft_id,
-            )
-        logger.warning(
-            "publish_draft: open-flags gate bypassed by admin user_id=%s draft_id=%s open_flags=%s",
-            getattr(g, "user_id", "unknown"),
-            draft_id,
-            open_flags,
-        )
 
     try:
         published = repo.publish_draft(
@@ -287,7 +281,23 @@ def publish_draft(draft_id: str):
             label=label,
             allow_missing_composite=allow_missing_composite,
             allow_open_flags=allow_open_flags,
+            acknowledged_open_flags=acknowledged_open_flags,
         )
+        # Audit trail (issue #71): record the override only AFTER it succeeds, and
+        # log the RPC's own authoritative count (frozen on the Release row), not a
+        # separate pre-read or the admin's acknowledged number. This keeps the
+        # durable audit and the durable column in agreement, and avoids logging
+        # phantom overrides for attempts the RPC refused (open_flags_changed).
+        bypassed = getattr(published, "published_with_open_flags", None)
+        if allow_open_flags and bypassed:
+            logger.warning(
+                "publish_draft: open-flags override by admin user_id=%s draft_id=%s "
+                "bypassed=%s acknowledged=%s",
+                getattr(g, "user_id", "unknown"),
+                draft_id,
+                bypassed,
+                acknowledged_open_flags,
+            )
         return _ok(_release_dict(published))
     except ValueError as exc:
         code = str(exc)
@@ -298,6 +308,10 @@ def publish_draft(draft_id: str):
         # Issue #67: publishing a non-review-state release is a state conflict,
         # not a malformed request — map to 409 so clients can distinguish it.
         if "draft_not_in_review_state" in code:
+            return _err(code, 409)
+        # Issue #71: the override count-pin tripped — open flags changed under the
+        # admin. State conflict; the admin must re-confirm against the new count.
+        if "open_flags_changed" in code:
             return _err(code, 409)
         if "missing_composite_not_acknowledged" in code:
             return _err(code, 422)

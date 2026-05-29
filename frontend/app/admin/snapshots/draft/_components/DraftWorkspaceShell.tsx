@@ -62,6 +62,11 @@ export function DraftWorkspaceShell() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
+  // Issue #71: count-pin override Error State. publishCountChanged is true after a
+  // publish was refused because open flags changed under the admin;
+  // publishResetNonce disarms the override in the modal so they must re-confirm.
+  const [publishCountChanged, setPublishCountChanged] = useState(false);
+  const [publishResetNonce, setPublishResetNonce] = useState(0);
 
   // Derive gate context from current draft state
   const gateContext: TabGateContext = {
@@ -134,6 +139,15 @@ export function DraftWorkspaceShell() {
     if (d) await loadSummaryAndValidation(d.id);
   }, [loadDraft, loadSummaryAndValidation]);
 
+  const openPublishModal = useCallback(() => {
+    setPublishCountChanged(false);
+    setPublishModalOpen(true);
+    // Issue #71: refresh the open-flags count at open so the acknowledged number
+    // is current — shrinks the stale-count window and keeps the Error State copy
+    // honest if the count moved before the dialog opened.
+    if (draft) void loadSummaryAndValidation(draft.id);
+  }, [draft, loadSummaryAndValidation]);
+
   useEffect(() => {
     reload();
   }, [reload]);
@@ -185,17 +199,44 @@ export function DraftWorkspaceShell() {
       if (!draft) return;
       setIsPublishing(true);
       try {
-        const res = await publishDraft(draft.id, label, allowMissing, allowOpenFlags);
+        // Issue #71: when overriding, send the open-flags count the admin saw so
+        // the RPC can refuse if more flags appeared since.
+        const acknowledgedOpenFlags = allowOpenFlags
+          ? validation?.open_flags ?? 0
+          : undefined;
+        const res = await publishDraft(
+          draft.id,
+          label,
+          allowMissing,
+          allowOpenFlags,
+          acknowledgedOpenFlags,
+        );
         if (res.success && res.data) {
-          toast.success(`Published as "${res.data.label}"`);
+          // Issue #71: reflect the authoritative count actually bypassed, not the
+          // acknowledged number, so the confirmation is honest.
+          const bypassed = res.data.published_with_open_flags ?? 0;
+          toast.success(
+            bypassed > 0
+              ? `Published as "${res.data.label}" — bypassed ${bypassed} open flag${bypassed === 1 ? "" : "s"}`
+              : `Published as "${res.data.label}"`,
+          );
+          setPublishCountChanged(false);
           setPublishModalOpen(false);
           router.replace(`/admin/snapshots/${res.data.id}`);
+        } else if (res.error?.includes("open_flags_changed")) {
+          // Issue #71: the count moved under the admin. Refresh the validation
+          // count, disarm the override, and keep the modal open so they re-confirm
+          // against the new number.
+          await reload();
+          setPublishCountChanged(true);
+          setPublishResetNonce((n) => n + 1);
+          toast.error(
+            "Open flags changed since you opened this dialog. Review the new count and confirm again.",
+          );
+        } else if (res.error?.includes("open_flags_not_acknowledged")) {
+          toast.error("Open flags are unresolved. Check the override to publish anyway.");
         } else {
-          if (res.error?.includes("open_flags_not_acknowledged")) {
-            toast.error("Open flags are unresolved. Check the override to publish anyway.");
-          } else {
-            toast.error(res.error ?? "Failed to publish");
-          }
+          toast.error(res.error ?? "Failed to publish");
         }
       } catch {
         toast.error("Failed to publish");
@@ -203,7 +244,7 @@ export function DraftWorkspaceShell() {
         setIsPublishing(false);
       }
     },
-    [draft, router]
+    [draft, router, reload, validation]
   );
 
   const handleDiscarded = useCallback(() => {
@@ -321,7 +362,7 @@ export function DraftWorkspaceShell() {
           {activeTab === "publish" && (
             <PublishTab
               {...tabProps}
-              onOpenPublishModal={() => setPublishModalOpen(true)}
+              onOpenPublishModal={openPublishModal}
               isPublishing={isPublishing}
             />
           )}
@@ -356,7 +397,7 @@ export function DraftWorkspaceShell() {
               <button
                 id="snapshot-draft-publish-btn"
                 type="button"
-                onClick={() => setPublishModalOpen(true)}
+                onClick={openPublishModal}
                 disabled={isTransitioning || isPublishing}
                 className="text-xs font-semibold px-5 py-2 rounded-[4px] transition-colors
                   bg-[#ffa05c] text-[#0e0907] hover:bg-[#fe6d34]
@@ -399,6 +440,8 @@ export function DraftWorkspaceShell() {
           playersMissingComposite={validation?.players_missing_composite ?? 0}
           openFlags={validation?.open_flags ?? 0}
           isPublishing={isPublishing}
+          resetSignal={publishResetNonce}
+          countChanged={publishCountChanged}
         />
       )}
     </main>

@@ -30,6 +30,9 @@ class SnapshotRelease:
     is_active: bool
     published_at: Optional[str]
     created_at: str
+    # Issue #71: authoritative count of open flags this Release froze with.
+    # None for legacy rows / non-published drafts.
+    published_with_open_flags: Optional[int] = None
 
 
 def _row_to_release(row: dict) -> SnapshotRelease:
@@ -41,6 +44,7 @@ def _row_to_release(row: dict) -> SnapshotRelease:
         is_active=bool(row.get("is_active", False)),
         published_at=row.get("published_at"),
         created_at=row["created_at"],
+        published_with_open_flags=row.get("published_with_open_flags"),
     )
 
 
@@ -198,6 +202,7 @@ def publish_draft(
     label: str,
     allow_missing_composite: bool = False,
     allow_open_flags: bool = False,
+    acknowledged_open_flags: int | None = None,
     client=None,
 ) -> SnapshotRelease:
     """Atomically publish a draft via the Postgres RPC, then rewarm the distribution cache.
@@ -213,6 +218,11 @@ def publish_draft(
         allow_open_flags: bypass the open-flags Draft gate. The RPC's
             p_allow_open_flags parameter is the source of truth; we just
             forward the caller's intent.
+        acknowledged_open_flags: issue #71 — the open-flags count the admin saw
+            and acknowledged when arming the override. The RPC re-counts under its
+            lock and raises open_flags_changed if more flags exist now, so the
+            bypass is bound to what was actually reviewed. None means "unbounded"
+            (only direct callers omit it; the API always sends a count).
     """
     from services.pipeline_runs import repo as runs_repo
     from services.snapshot_versions import validator
@@ -241,6 +251,7 @@ def publish_draft(
                     "p_label": label,
                     "p_allow_missing_composite": allow_missing_composite,
                     "p_allow_open_flags": allow_open_flags,
+                    "p_acknowledged_open_flags": acknowledged_open_flags,
                 },
             ).execute()
         )
@@ -250,6 +261,9 @@ def publish_draft(
         # API layer's existing ValueError handler maps them to 422/409.
         for code in (
             "open_flags_not_acknowledged",
+            # Issue #71: override count-pin tripped — more open flags exist than
+            # the admin acknowledged; they must re-confirm against the new count.
+            "open_flags_changed",
             "missing_composite_not_acknowledged",
             # Issue #67: the RPC rejects a non-review-state row with this code.
             # (Replaced draft_not_found_or_not_in_draft_state — the looser guard's

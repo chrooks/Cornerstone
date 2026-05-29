@@ -21,6 +21,13 @@ export interface UsePublishGateParams {
   open: boolean;
   playersMissingComposite: number;
   openFlags: number;
+  /**
+   * Issue #71: bump this to force the open-flags override to disarm without
+   * closing the modal. Used when the publish attempt is refused because the live
+   * open-flags count changed under the admin — they must re-confirm against the
+   * new count. The label is preserved so the admin doesn't retype it.
+   */
+  resetSignal?: number;
 }
 
 export interface PublishGate {
@@ -42,6 +49,7 @@ export function usePublishGate({
   open,
   playersMissingComposite,
   openFlags,
+  resetSignal = 0,
 }: UsePublishGateParams): PublishGate {
   const [label, setLabel] = useState("");
   const [acknowledgedComposite, setAcknowledgedComposite] = useState(false);
@@ -57,6 +65,15 @@ export function usePublishGate({
       setConfirmingOverride(false);
     }
   }, [open]);
+
+  // Issue #71: when resetSignal changes (count moved under the admin), disarm the
+  // override so they must re-acknowledge the new count. Skip the initial mount
+  // (resetSignal === 0) and never touch the label.
+  useEffect(() => {
+    if (resetSignal === 0) return;
+    setOverrideOpenFlags(false);
+    setConfirmingOverride(false);
+  }, [resetSignal]);
 
   const requiresCompositeAck = playersMissingComposite > 0;
   const hasOpenFlagsGate = openFlags > 0;

@@ -33,6 +33,16 @@ interface PublishModalProps {
   playersMissingComposite: number;
   openFlags: number;
   isPublishing: boolean;
+  /**
+   * Issue #71: bump to disarm the override after a publish was refused because
+   * the open-flags count changed under the admin (see usePublishGate).
+   */
+  resetSignal?: number;
+  /**
+   * Issue #71: true when the last publish attempt was refused with
+   * open_flags_changed. Surfaces the count-changed Error State.
+   */
+  countChanged?: boolean;
 }
 
 export function PublishModal({
@@ -43,6 +53,8 @@ export function PublishModal({
   playersMissingComposite,
   openFlags,
   isPublishing,
+  resetSignal = 0,
+  countChanged = false,
 }: PublishModalProps) {
   const {
     label,
@@ -57,7 +69,7 @@ export function PublishModal({
     onOverrideCheckboxChange,
     onConfirmOverride,
     onCancelOverride,
-  } = usePublishGate({ open, playersMissingComposite, openFlags });
+  } = usePublishGate({ open, playersMissingComposite, openFlags, resetSignal });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +165,20 @@ export function PublishModal({
             >
               {flagsText}
             </p>
+
+            {/* Issue #71: count-changed Error State — the override was refused
+                because more flags appeared since the dialog opened. */}
+            {countChanged && (
+              <p
+                id={`${id}-open-flags-changed`}
+                role="alert"
+                className="text-xs font-semibold text-[#fe6d34] mb-2"
+              >
+                The open-flags count changed to {openFlags} while this dialog was
+                open. Review the new count and confirm the override again.
+              </p>
+            )}
+
             <label
               id={`${id}-override-label`}
               htmlFor={`${id}-override-checkbox`}

@@ -1001,10 +1001,21 @@ export function publishDraft(
   label: string,
   allow_missing_composite: boolean,
   allow_open_flags: boolean,
+  // Issue #71: the open-flags count the admin acknowledged when arming the
+  // override. The backend RPC refuses (open_flags_changed) if more flags exist
+  // now than this, so the override is bound to what was actually reviewed.
+  acknowledged_open_flags?: number,
 ): Promise<ApiResponse<SnapshotRelease>> {
   return apiFetch<SnapshotRelease>(`/api/snapshots/drafts/${id}/publish`, {
     method: "POST",
-    body: JSON.stringify({ label, allow_missing_composite, allow_open_flags }),
+    body: JSON.stringify({
+      label,
+      allow_missing_composite,
+      allow_open_flags,
+      ...(acknowledged_open_flags !== undefined
+        ? { acknowledged_open_flags }
+        : {}),
+    }),
   });
 }
 

@@ -286,6 +286,67 @@ class TestPublishDraft:
         assert rpc_call[1]["params"]["p_label"] == label
         assert result.label == label
 
+    def test_publish_draft_forwards_acknowledged_open_flags(self):
+        """Issue #71: the acknowledged open-flags count is forwarded to the RPC
+        as p_acknowledged_open_flags so the DB can count-pin the override."""
+        from services.snapshot_versions import repo
+
+        draft_id = "aaaaaaaa-0000-0000-0000-000000000001"
+        published_row = _make_published_row(id=draft_id, label="L")
+
+        client = MagicMock()
+        client.rpc.return_value.execute.return_value = _result(None)
+        (
+            client
+            .table.return_value
+            .select.return_value
+            .eq.return_value
+            .single.return_value
+            .execute.return_value
+        ) = _result(published_row)
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with patch("services.cohesion_engine.composites._force_clear_distributions"):
+                with patch("services.cohesion_engine.composites.ensure_distributions"):
+                    with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                        from services.cohesion_engine.engine import EvaluationVersion
+                        mock_active.return_value = EvaluationVersion(
+                            id="ev-1", slug="cohesion-v1", status="published",
+                            payload={"values": {}}
+                        )
+                        repo.publish_draft(
+                            draft_id,
+                            "L",
+                            allow_missing_composite=True,
+                            allow_open_flags=True,
+                            acknowledged_open_flags=3,
+                        )
+
+        params = client.rpc.call_args[1]["params"]
+        assert params["p_allow_open_flags"] is True
+        assert params["p_acknowledged_open_flags"] == 3
+
+    def test_publish_draft_translates_open_flags_changed_to_value_error(self):
+        """Issue #71: the RPC's open_flags_changed exception becomes a ValueError
+        so the API layer maps it to 409."""
+        from services.snapshot_versions import repo
+
+        draft_id = "aaaaaaaa-0000-0000-0000-000000000001"
+        client = MagicMock()
+        client.rpc.return_value.execute.side_effect = Exception(
+            "open_flags_changed: live=5 acknowledged=2"
+        )
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with pytest.raises(ValueError, match="open_flags_changed"):
+                repo.publish_draft(
+                    draft_id,
+                    "L",
+                    allow_missing_composite=True,
+                    allow_open_flags=True,
+                    acknowledged_open_flags=2,
+                )
+
     def test_publish_draft_clears_and_rewarms_cache(self):
         """publish_draft() calls clear_distributions then ensure_distributions."""
         from services.snapshot_versions import repo

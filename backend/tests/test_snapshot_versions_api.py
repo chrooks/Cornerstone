@@ -56,7 +56,7 @@ def anon_client():
         yield c
 
 
-def _fake_release(status="published", is_active=True):
+def _fake_release(status="published", is_active=True, published_with_open_flags=0):
     return MagicMock(
         id="bbbbbbbb-0000-0000-0000-000000000002",
         label="2025-26 Current",
@@ -65,6 +65,7 @@ def _fake_release(status="published", is_active=True):
         is_active=is_active,
         published_at="2026-05-01T00:00:00Z",
         created_at="2026-05-01T00:00:00Z",
+        published_with_open_flags=published_with_open_flags,
     )
 
 
@@ -77,6 +78,7 @@ def _fake_draft(status="draft"):
         is_active=False,
         published_at=None,
         created_at="2026-05-26T00:00:00Z",
+        published_with_open_flags=None,
     )
 
 
@@ -222,6 +224,72 @@ class TestPublishDraftEndpoint:
         assert resp.status_code == 409
         assert resp.get_json()["error"] == "draft_not_in_review_state"
 
+    def test_post_publish_open_flags_changed_returns_409(self, admin_client):
+        """Issue #71: when the override count-pin trips (more open flags exist than
+        acknowledged), the RPC raises open_flags_changed — a state conflict (409),
+        not a 422 or the generic 400 fallthrough."""
+        from services.snapshot_versions import repo
+
+        with patch.object(
+            repo,
+            "publish_draft",
+            side_effect=ValueError("open_flags_changed: live=5 acknowledged=2"),
+        ):
+            resp = admin_client.post(
+                "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                json={
+                    "label": "Test",
+                    "allow_missing_composite": True,
+                    "allow_open_flags": True,
+                    "acknowledged_open_flags": 2,
+                },
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 409
+        assert "open_flags_changed" in resp.get_json()["error"]
+
+    def test_post_publish_forwards_acknowledged_open_flags(self, admin_client):
+        """Issue #71: the acknowledged count from the body reaches repo.publish_draft."""
+        from services.snapshot_versions import repo
+
+        published = _fake_release(status="published", is_active=True)
+        with patch.object(repo, "publish_draft", return_value=published) as mocked:
+            resp = admin_client.post(
+                "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                json={
+                    "label": "Test",
+                    "allow_missing_composite": True,
+                    "allow_open_flags": True,
+                    "acknowledged_open_flags": 4,
+                },
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 200
+        assert mocked.call_args.kwargs["acknowledged_open_flags"] == 4
+
+    def test_post_publish_rejects_invalid_acknowledged_open_flags(self, admin_client):
+        """Issue #71: a negative or non-int acknowledged count is a malformed
+        request (400). bool is rejected too (it is an int subclass)."""
+        from services.snapshot_versions import repo
+
+        for bad in (-1, "two", True):
+            with patch.object(repo, "publish_draft") as mocked:
+                resp = admin_client.post(
+                    "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                    json={
+                        "label": "Test",
+                        "allow_missing_composite": True,
+                        "allow_open_flags": True,
+                        "acknowledged_open_flags": bad,
+                    },
+                    headers=admin_client.auth_header,
+                )
+            assert resp.status_code == 400, f"value {bad!r} should be rejected"
+            assert resp.get_json()["error"] == "invalid_acknowledged_open_flags"
+            mocked.assert_not_called()
+
     def test_post_publish_with_missing_composite_unacknowledged_returns_422(self, admin_client):
         from services.snapshot_versions import repo
 
@@ -281,7 +349,8 @@ class TestPublishDraftEndpoint:
         assert mocked.call_args.kwargs["allow_open_flags"] is False
 
     def test_publish_allow_open_flags_true_bypasses_gate(self, admin_client):
-        """allow_open_flags=True in the body is forwarded to repo.publish_draft."""
+        """allow_open_flags=True (with the now-required acknowledged count) is
+        forwarded to repo.publish_draft."""
         from services.snapshot_versions import repo
 
         published = _fake_release(status="published", is_active=True)
@@ -292,12 +361,34 @@ class TestPublishDraftEndpoint:
                     "label": "Test",
                     "allow_missing_composite": True,
                     "allow_open_flags": True,
+                    "acknowledged_open_flags": 3,
                 },
                 headers=admin_client.auth_header,
             )
 
         assert resp.status_code == 200
         assert mocked.call_args.kwargs["allow_open_flags"] is True
+
+    def test_publish_override_without_acknowledged_count_returns_400(self, admin_client):
+        """Issue #71: arming the override without an acknowledged count is rejected
+        (400) so the unbounded blanket-bypass path is not reachable from HTTP."""
+        from services.snapshot_versions import repo
+
+        with patch.object(repo, "publish_draft") as mocked:
+            resp = admin_client.post(
+                "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                json={
+                    "label": "Test",
+                    "allow_missing_composite": True,
+                    "allow_open_flags": True,
+                    # acknowledged_open_flags intentionally omitted
+                },
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 400
+        assert resp.get_json()["error"] == "acknowledged_open_flags_required"
+        mocked.assert_not_called()
 
     def test_publish_invalid_allow_open_flags_returns_400(self, admin_client):
         """Non-bool values for allow_open_flags must be rejected, not coerced.
