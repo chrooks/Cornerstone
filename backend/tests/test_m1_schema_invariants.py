@@ -599,3 +599,139 @@ def test_publish_rpc_rejects_publish_from_draft_status(sb):
     finally:
         if created_id is not None:
             sb.table("snapshot_releases").delete().eq("id", created_id).execute()
+
+
+def test_publish_rpc_count_pin_refuses_when_live_exceeds_acknowledged(sb):
+    """Issue #71: a review-state draft with open flags + an override acknowledging
+    FEWER flags than exist must be refused with open_flags_changed.
+
+    Exercises the count-pin BEHAVIOR end-to-end against the live RPC. Safe because:
+      - The refusal raises BEFORE any freeze / is_active swap.
+      - As a hard guard, we never call publish until we've confirmed (via the same
+        scope the RPC uses, validator.validate_publishable) that open flags exist —
+        so with acknowledged=0 the count-pin is guaranteed to fire.
+    All seeded working-state rows (a throwaway review draft + one open flag) are
+    removed in finally, so global working state is restored.
+    """
+    from services.snapshot_versions import validator
+
+    # Can't seed a second open draft (one-open-draft unique index).
+    open_rows = (
+        sb.table("snapshot_releases")
+        .select("id, status")
+        .in_("status", ["draft", "review"])
+        .execute()
+    ).data or []
+    if open_rows:
+        warnings.warn(
+            "test_publish_rpc_count_pin_refuses_when_live_exceeds_acknowledged "
+            "skipped — an open draft already exists, so a throwaway review draft "
+            "can't be seeded. #71 count-pin behavior NOT exercised this run.",
+            stacklevel=2,
+        )
+        pytest.skip("An open draft already exists; cannot seed a throwaway review draft.")
+
+    # Need a current-season composite profile to hang an open flag on.
+    profile = (
+        sb.table("draft_skill_profiles")
+        .select("id")
+        .eq("season", "2025-26")
+        .eq("source", "composite")
+        .limit(1)
+        .execute()
+    ).data
+    if not profile:
+        pytest.skip("No current-season composite profile to attach an open flag to.")
+    profile_id = str(profile[0]["id"])
+
+    active = (
+        sb.table("snapshot_releases")
+        .select("season")
+        .eq("is_active", True)
+        .single()
+        .execute()
+    ).data
+    season = (active or {}).get("season") or "2025-26"
+
+    draft_id: str | None = None
+    flag_id: str | None = None
+    try:
+        # Throwaway review-state draft (status='review' directly; the RPC only
+        # gates on status='review', and the one-open-draft index is satisfied
+        # because we checked there's no other open draft above).
+        draft = (
+            sb.table("snapshot_releases")
+            .insert(
+                {
+                    "season": season,
+                    "label": f"test-71-{_gen_uuid()[:8]}",
+                    "status": "review",
+                    "is_active": False,
+                }
+            )
+            .execute()
+        ).data
+        draft_id = str(draft[0]["id"])
+
+        # One unresolved (open) flag on a current-season composite profile.
+        flag = (
+            sb.table("draft_skill_flags")
+            .insert(
+                {
+                    "skill_profile_id": profile_id,
+                    "skill_name": "Scorer",
+                    "stat_rating": "Elite",
+                    "claude_rating": "Capable",
+                    "flag_reason": "test-71-count-pin",
+                }
+            )
+            .execute()
+        ).data
+        flag_id = str(flag[0]["id"])
+
+        # HARD SAFETY GUARD: confirm open flags exist in the RPC's scope before we
+        # ever call publish. With live >= 1 and acknowledged = 0, the count-pin MUST
+        # refuse, so publish can never freeze/swap.
+        open_flags = validator.validate_publishable(draft_id, client=sb).get("open_flags", 0)
+        assert open_flags >= 1, (
+            "seed did not register an open flag in the gate scope; refusing to call "
+            "publish without a confirmed refusal condition"
+        )
+
+        # acknowledged (0) < live (>= 1) -> open_flags_changed; no publish.
+        with pytest.raises(Exception, match=r"open_flags_changed"):
+            sb.rpc(
+                "publish_snapshot_draft",
+                {
+                    "p_draft_id": draft_id,
+                    "p_label": "test-71-should-not-publish",
+                    "p_allow_missing_composite": True,
+                    "p_allow_open_flags": True,
+                    "p_acknowledged_open_flags": 0,
+                },
+            ).execute()
+
+        # No publish happened: the draft stays review + inactive, nothing frozen.
+        after = (
+            sb.table("snapshot_releases")
+            .select("status, is_active")
+            .eq("id", draft_id)
+            .single()
+            .execute()
+        ).data
+        assert after["status"] == "review"
+        assert after["is_active"] is False
+
+        frozen = (
+            sb.table("released_players")
+            .select("id")
+            .eq("snapshot_release_id", draft_id)
+            .limit(1)
+            .execute()
+        ).data or []
+        assert frozen == [], "count-pin refusal must not freeze released_players rows"
+    finally:
+        if flag_id is not None:
+            sb.table("draft_skill_flags").delete().eq("id", flag_id).execute()
+        if draft_id is not None:
+            sb.table("snapshot_releases").delete().eq("id", draft_id).execute()
