@@ -26,6 +26,7 @@ if _BACKEND_DIR not in sys.path:
 # ---------------------------------------------------------------------------
 
 from nba_api.stats.static import players as nba_static_players  # noqa: E402
+from services.legend_canonical import ensure_canonical_player  # noqa: E402
 from services.supabase_client import get_supabase  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
@@ -70,6 +71,10 @@ def main(dry_run: bool = False) -> None:
             matched.append((name, nba_api_id))
             if not dry_run:
                 supabase.table("legends").update({"nba_api_id": nba_api_id}).eq("id", lid).execute()
+                # Assigning nba_api_id is the Legend-save Seam: keep canonical
+                # linkage in lockstep so this Legend can never trip the publish
+                # RPC's legends_missing_canonical_player gate (issue #75).
+                ensure_canonical_player(nba_api_id, name, client=supabase)
             logger.info("  MATCHED  %-30s → %s", name, nba_api_id)
         else:
             unmatched.append(name)
