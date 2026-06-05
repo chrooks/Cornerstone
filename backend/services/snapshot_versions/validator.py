@@ -40,6 +40,10 @@ def validate_publishable(
 
         {
             "players_missing_canonical": int,  # hard block if > 0
+            "legends_missing_canonical": int,  # hard block if > 0; legends whose
+                                               # nba_api_id has no canonical_players row
+                                               # (mirrors the publish RPC predicate
+                                               # legends_missing_canonical_player)
             "players_missing_composite": int,  # soft warning
             "missing_composite_players": [    # full list — Player identities for the disclosure
                 {"id": str, "name": str, "team": str | None, "position": str | None},
@@ -73,6 +77,36 @@ def validate_publishable(
         )
         matched_ids = {str(r["nba_api_id"]) for r in (canonical_rows.data or [])}
         missing_canonical = sum(1 for nba_id in player_nba_ids if nba_id not in matched_ids)
+
+    # Legends missing a canonical_players row. The publish RPC hard-blocks with
+    # legends_missing_canonical_player when a Legend's nba_api_id has no
+    # canonical_players row (it can't be frozen into released_players). Mirror the
+    # RPC's exact predicate here so the publish modal surfaces the block up front:
+    #
+    #   SELECT COUNT(*) FROM legends l
+    #   LEFT JOIN canonical_players cp ON cp.nba_api_id = l.nba_api_id
+    #   WHERE cp.id IS NULL
+    all_legends = run_query(
+        lambda: c.table("legends").select("nba_api_id").execute()
+    )
+    legend_nba_ids = [
+        str(l["nba_api_id"]) for l in (all_legends.data or []) if l.get("nba_api_id")
+    ]
+
+    legends_missing_canonical = 0
+    if legend_nba_ids:
+        legend_canonical_rows = run_query(
+            lambda: c.table("canonical_players")
+            .select("nba_api_id")
+            .in_("nba_api_id", legend_nba_ids)
+            .execute()
+        )
+        legend_matched_ids = {
+            str(r["nba_api_id"]) for r in (legend_canonical_rows.data or [])
+        }
+        legends_missing_canonical = sum(
+            1 for nba_id in legend_nba_ids if nba_id not in legend_matched_ids
+        )
 
     # Players in the current season missing a composite profile
     player_ids = [str(p["id"]) for p in players]
@@ -142,6 +176,7 @@ def validate_publishable(
 
     return {
         "players_missing_canonical": missing_canonical,
+        "legends_missing_canonical": legends_missing_canonical,
         "players_missing_composite": missing_composite,
         "missing_composite_players": missing_composite_players,
         "open_flags": open_flags,

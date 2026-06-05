@@ -930,6 +930,8 @@ export interface MissingCompositePlayer {
 /** Validation counts returned before publish. */
 export interface SnapshotPublishValidation {
   players_missing_canonical: number;
+  /** Count of Legends whose nba_api_id has no canonical_players row. Hard gate. */
+  legends_missing_canonical: number;
   players_missing_composite: number;
   /** Full list of Players lacking a composite Skill Profile. */
   missing_composite_players: MissingCompositePlayer[];

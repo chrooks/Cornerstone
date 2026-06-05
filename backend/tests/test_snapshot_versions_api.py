@@ -249,6 +249,29 @@ class TestPublishDraftEndpoint:
         assert resp.status_code == 409
         assert "open_flags_changed" in resp.get_json()["error"]
 
+    def test_post_publish_legends_missing_canonical_returns_409(self, admin_client):
+        """Issue #74: when a Legend has no canonical_players row, the RPC raises
+        legends_missing_canonical_player — a state conflict (409), not the generic
+        400 fallthrough. The code must appear in the response body."""
+        from services.snapshot_versions import repo
+
+        with patch.object(
+            repo,
+            "publish_draft",
+            side_effect=ValueError("legends_missing_canonical_player: count=26"),
+        ):
+            resp = admin_client.post(
+                "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                json={
+                    "label": "Test",
+                    "allow_missing_composite": True,
+                },
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 409
+        assert "legends_missing_canonical_player" in resp.get_json()["error"]
+
     def test_post_publish_forwards_acknowledged_open_flags(self, admin_client):
         """Issue #71: the acknowledged count from the body reaches repo.publish_draft."""
         from services.snapshot_versions import repo

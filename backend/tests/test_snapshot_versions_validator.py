@@ -43,6 +43,7 @@ class TestValidatePublishableMissingCompositePlayers:
             with patch.object(validator, "run_query") as mock_rq:
                 mock_rq.side_effect = [
                     _result([]),  # players query
+                    _result([]),  # legends query (#74) — no legends
                     _result([]),  # open flags query (M6)
                 ]
                 result = validator.validate_publishable("draft-001")
@@ -63,6 +64,7 @@ class TestValidatePublishableMissingCompositePlayers:
                 mock_rq.side_effect = [
                     _result(players),  # players query
                     _result([{"nba_api_id": "1"}, {"nba_api_id": "1"}]),  # canonical_players
+                    _result([]),  # legends query (#74) — no legends
                     _result([]),  # composite draft_skill_profiles — both missing
                     _result([]),  # open flags query (M6)
                 ]
@@ -91,6 +93,7 @@ class TestValidatePublishableMissingCompositePlayers:
                     _result(
                         [{"nba_api_id": str(i)} for i in range(75)]
                     ),  # canonical_players — all match
+                    _result([]),  # legends query (#74) — no legends
                     _result([]),  # composite draft_skill_profiles — all missing
                     _result([]),  # open flags query (M6)
                 ]
@@ -109,6 +112,7 @@ class TestValidatePublishableMissingCompositePlayers:
                 mock_rq.side_effect = [
                     _result(players),  # players query
                     _result([{"nba_api_id": "1"}]),  # canonical_players
+                    _result([]),  # legends query (#74) — no legends
                     _result(
                         [{"player_id": "p1"}, {"player_id": "p2"}]
                     ),  # composite draft_skill_profiles — none missing
@@ -126,13 +130,16 @@ class TestValidatePublishableMissingCompositePlayers:
             with patch.object(validator, "run_query") as mock_rq:
                 mock_rq.side_effect = [
                     _result([]),  # players query
+                    _result([]),  # legends query (#74) — no legends
                     _result([]),  # open flags query (M6)
                 ]
                 result = validator.validate_publishable("draft-001")
 
         assert "players_missing_canonical" in result
+        assert "legends_missing_canonical" in result
         assert "players_missing_composite" in result
         assert result["players_missing_canonical"] == 0
+        assert result["legends_missing_canonical"] == 0
         assert result["players_missing_composite"] == 0
 
 
@@ -164,6 +171,7 @@ class TestValidatePublishableOpenFlags:
         """
         result = self._call_validator([
             _result([]),  # players query (none)
+            _result([]),  # legends query (#74) — no legends
             _result([{"id": "prof-1"}, {"id": "prof-2"}]),  # current-season composite profiles
             _result([{"id": "flag-1"}, {"id": "flag-2"}, {"id": "flag-3"}]),  # 3 unresolved
         ])
@@ -173,6 +181,7 @@ class TestValidatePublishableOpenFlags:
         """open_flags key must exist even when no players exist."""
         result = self._call_validator([
             _result([]),  # players query
+            _result([]),  # legends query (#74) — no legends
             _result([]),  # season-composite profile ids (none) -> open_flags short-circuits to 0
         ])
         assert "open_flags" in result
@@ -181,6 +190,7 @@ class TestValidatePublishableOpenFlags:
         """Returns 0 when draft_skill_flags has no rows with resolution IS NULL."""
         result = self._call_validator([
             _result([]),  # players query (no players)
+            _result([]),  # legends query (#74) — no legends
             _result([]),  # open flags query — empty
         ])
         assert result["open_flags"] == 0
@@ -192,6 +202,7 @@ class TestValidatePublishableOpenFlags:
         """
         result = self._call_validator([
             _result([]),  # players query
+            _result([]),  # legends query (#74) — no legends
             # run_query for flags returns empty — all resolved
             _result([]),
         ])
@@ -203,6 +214,7 @@ class TestValidatePublishableOpenFlags:
         flag_rows = [{"id": f"flag-{i}"} for i in range(3)]
         result = self._call_validator([
             _result([]),                    # players query
+            _result([]),                    # legends query (#74) — no legends
             _result([{"id": "prof-1"}]),    # current-season composite profile ids
             _result(flag_rows),             # open flags query — 3 unresolved
         ])
@@ -217,6 +229,7 @@ class TestValidatePublishableOpenFlags:
         unresolved_rows = [{"id": "flag-1"}, {"id": "flag-2"}]
         result = self._call_validator([
             _result([]),                    # players query
+            _result([]),                    # legends query (#74) — no legends
             _result([{"id": "prof-1"}]),    # current-season composite profile ids
             _result(unresolved_rows),       # 2 unresolved flags returned by IS NULL filter
         ])
@@ -227,6 +240,7 @@ class TestValidatePublishableOpenFlags:
         flag_rows = [{"id": f"flag-{i}"} for i in range(150)]
         result = self._call_validator([
             _result([]),                    # players query
+            _result([]),                    # legends query (#74) — no legends
             _result([{"id": "prof-1"}]),    # current-season composite profile ids
             _result(flag_rows),             # 150 open flags
         ])
@@ -240,7 +254,99 @@ class TestValidatePublishableOpenFlags:
         """
         result = self._call_validator([
             _result([]),   # players query
+            _result([]),   # legends query (#74) — no legends
             _result([]),   # NO current-season composite profiles -> short-circuit
             # (flag query never runs; any global unresolved flags are out of scope)
         ])
         assert result["open_flags"] == 0
+
+
+class TestValidatePublishableLegendsMissingCanonical:
+    """
+    Validate legends_missing_canonical count — issue #74.
+
+    The publish RPC hard-blocks with legends_missing_canonical_player when a
+    Legend's nba_api_id has no canonical_players row. validate_publishable mirrors
+    the RPC's predicate so the publish modal surfaces the block up front:
+
+        SELECT COUNT(*) FROM legends l
+        LEFT JOIN canonical_players cp ON cp.nba_api_id = l.nba_api_id
+        WHERE cp.id IS NULL
+
+    Query sequence with no current-season players: players (none) -> legends ->
+    legend canonical_players (only when legends exist) -> season-composite -> flags.
+    """
+
+    def _call_validator(self, mock_rq_returns: list):
+        from services.snapshot_versions import validator
+
+        with patch.object(validator, "_get_client", return_value=MagicMock()):
+            with patch.object(validator, "run_query") as mock_rq:
+                mock_rq.side_effect = mock_rq_returns
+                return validator.validate_publishable("draft-001")
+
+    def test_field_present_when_no_legends(self):
+        """legends_missing_canonical key exists and is 0 when there are no legends."""
+        result = self._call_validator([
+            _result([]),  # players query (none)
+            _result([]),  # legends query — none (legend-canonical query skipped)
+            _result([]),  # season-composite profile ids (none) -> open_flags 0
+        ])
+        assert "legends_missing_canonical" in result
+        assert result["legends_missing_canonical"] == 0
+
+    def test_counts_unlinked_legends(self):
+        """
+        Counts only the legends whose nba_api_id has no canonical_players row.
+        Three legends, two linked -> one missing.
+        """
+        legends = [
+            {"nba_api_id": 100},
+            {"nba_api_id": 200},
+            {"nba_api_id": 300},
+        ]
+        result = self._call_validator([
+            _result([]),       # players query (none)
+            _result(legends),  # legends query — 3 legends
+            _result([{"nba_api_id": "100"}, {"nba_api_id": "200"}]),  # canonical_players — 2 linked
+            _result([]),       # season-composite profile ids (none) -> open_flags 0
+        ])
+        assert result["legends_missing_canonical"] == 1
+
+    def test_zero_when_all_legends_linked(self):
+        """Returns 0 when every legend nba_api_id has a canonical_players row."""
+        legends = [{"nba_api_id": 100}, {"nba_api_id": 200}]
+        result = self._call_validator([
+            _result([]),       # players query (none)
+            _result(legends),  # legends query — 2 legends
+            _result([{"nba_api_id": "100"}, {"nba_api_id": "200"}]),  # both linked
+            _result([]),       # season-composite profile ids (none) -> open_flags 0
+        ])
+        assert result["legends_missing_canonical"] == 0
+
+    def test_counts_all_when_none_linked(self):
+        """Every legend missing a canonical row counts toward the block."""
+        legends = [{"nba_api_id": i} for i in range(1, 6)]
+        result = self._call_validator([
+            _result([]),       # players query (none)
+            _result(legends),  # legends query — 5 legends
+            _result([]),       # canonical_players — none linked
+            _result([]),       # season-composite profile ids (none) -> open_flags 0
+        ])
+        assert result["legends_missing_canonical"] == 5
+
+    def test_ignores_legends_without_nba_api_id(self):
+        """Legends with a null/missing nba_api_id are not counted as missing."""
+        legends = [
+            {"nba_api_id": 100},
+            {"nba_api_id": None},
+            {},
+        ]
+        result = self._call_validator([
+            _result([]),       # players query (none)
+            _result(legends),  # legends query — only one has an nba_api_id
+            _result([]),       # canonical_players — 100 not linked
+            _result([]),       # season-composite profile ids (none) -> open_flags 0
+        ])
+        # Only the one legend with an nba_api_id (100) is unlinked.
+        assert result["legends_missing_canonical"] == 1

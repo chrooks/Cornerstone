@@ -313,6 +313,11 @@ def publish_draft(draft_id: str):
         # admin. State conflict; the admin must re-confirm against the new count.
         if "open_flags_changed" in code:
             return _err(code, 409)
+        # Issue #74: a Legend has no canonical_players row and can't be frozen into
+        # released_players. State conflict (409), not a malformed request — the
+        # validation Surface surfaces this up front via legends_missing_canonical.
+        if "legends_missing_canonical_player" in code:
+            return _err(code, 409)
         if "missing_composite_not_acknowledged" in code:
             return _err(code, 422)
         if "open_flags_not_acknowledged" in code:

@@ -11,6 +11,8 @@
  *
  * Publish gates surfaced here:
  *   - players_missing_canonical > 0 (hard — disables the CTA; no canonical link)
+ *   - legends_missing_canonical > 0 (hard — disables the CTA; the publish RPC
+ *     hard-blocks with legends_missing_canonical_player otherwise)
  *   - open_flags > 0 (banner only — the modal enforces the block + override flow)
  */
 
@@ -40,9 +42,11 @@ export function PublishTab({
 }: PublishTabProps) {
   const missingComposite = validation?.players_missing_composite ?? 0;
   const missingCanonical = validation?.players_missing_canonical ?? 0;
+  const legendsMissingCanonical = validation?.legends_missing_canonical ?? 0;
   const openFlags = validation?.open_flags ?? 0;
 
   const hasOpenFlagsGate = openFlags > 0;
+  const isCanonicalBlocked = missingCanonical > 0 || legendsMissingCanonical > 0;
 
   const flagsBannerText =
     openFlags === 1
@@ -85,6 +89,17 @@ export function PublishTab({
         </div>
       )}
 
+      {legendsMissingCanonical > 0 && (
+        <div
+          id="publish-tab-legends-blocked"
+          className="rounded-[6px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 mb-6"
+        >
+          <strong>Cannot publish:</strong> {legendsMissingCanonical} legend
+          {legendsMissingCanonical !== 1 ? "s" : ""} missing a canonical link.
+          Each Legend needs a canonical_players row before the snapshot can be frozen.
+        </div>
+      )}
+
       {hasOpenFlagsGate && (
         <div
           id="publish-tab-open-flags-blocked"
@@ -99,7 +114,7 @@ export function PublishTab({
           id="publish-tab-publish-btn"
           type="button"
           onClick={onOpenPublishModal}
-          disabled={missingCanonical > 0 || isPublishing}
+          disabled={isCanonicalBlocked || isPublishing}
           className="text-sm font-semibold px-6 py-2.5 rounded-[4px]
             bg-[#ffa05c] text-[#0e0907] hover:bg-[#fe6d34]
             focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-2
