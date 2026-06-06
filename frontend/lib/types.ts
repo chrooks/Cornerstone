@@ -919,6 +919,18 @@ export interface PipelineRun {
   params?: { total?: number } | null;
 }
 
+/**
+ * Request body for POST /api/pipeline/skill-evaluation.
+ * Both axes are optional:
+ *  - player_ids omitted/empty → all qualifying players
+ *  - skill_filter omitted/empty → all 21 Skills
+ */
+export interface SkillEvaluationRequest {
+  player_ids?: string[];
+  season?: string;
+  skill_filter?: string[];
+}
+
 /** A single Player surfaced in the missing-composite disclosure. */
 export interface MissingCompositePlayer {
   id: string;
