@@ -385,9 +385,17 @@ def save_threshold_edit(skill_name: str):
     def _worker():
         try:
             supabase = get_supabase()
-            # Fetch all qualifying players for this season
-            from services.players_service import CURRENT_SEASON, DEFAULT_MIN_MPG
-            result = supabase.table("players").select("id").eq("season", CURRENT_SEASON).gte("minutes_per_game", DEFAULT_MIN_MPG).execute()
+            # Issue #72: scope this threshold-edit run to the draft's own season
+            # (snapshot_releases.season for draft_id), not a hardcoded 2025-26, so
+            # re-evaluation matches the Players the publish RPC will freeze. Falls
+            # back to the active Release season if the draft row is unreadable.
+            from services.players_service import DEFAULT_MIN_MPG
+            from services.snapshot_versions import repo as _sv_repo
+            try:
+                season = _sv_repo.get_release(draft_id).season
+            except Exception:
+                season = _sv_repo.get_working_season()
+            result = supabase.table("players").select("id").eq("season", season).gte("minutes_per_game", DEFAULT_MIN_MPG).execute()
             player_ids = [r["id"] for r in (result.data or [])]
 
             # Use override thresholds so draft_skill_thresholds is NOT modified yet
@@ -395,7 +403,7 @@ def save_threshold_edit(skill_name: str):
             evaluate_skills_for_run(
                 run_id=run_id,
                 player_ids=player_ids,
-                season=CURRENT_SEASON,
+                season=season,
                 skill_filter=[skill_name],
                 thresholds_override=override,
             )

@@ -98,6 +98,21 @@ def get_release(release_id: str, client=None) -> SnapshotRelease:
     return _row_to_release(result.data)
 
 
+def get_working_season(client=None) -> str:
+    """Return the season the editable working set belongs to (issue #72).
+
+    Admin tooling that reads or re-evaluates the live working tables (calibration,
+    cohesion calibration) should scope to the open draft's season when a draft is
+    open, falling back to the active Release's season otherwise. This keeps those
+    reads aligned with the season the publish RPC will freeze, instead of a
+    hardcoded ``2025-26``.
+    """
+    draft = get_draft(client)
+    if draft is not None:
+        return draft.season
+    return get_active_release(client).season
+
+
 def list_releases(limit: int = 20, client=None) -> list[SnapshotRelease]:
     """Return recent published Snapshot Releases, newest first."""
     c = client or _get_client()
@@ -142,6 +157,29 @@ def create_draft(client=None) -> SnapshotRelease:
         })
         .execute()
     )
+    return _row_to_release(result.data[0])
+
+
+def update_draft_season(draft_id: str, season: str, client=None) -> SnapshotRelease:
+    """Persist an edited season onto an open draft/review row (issue #72).
+
+    The publish dialog lets the admin correct the draft's season inline; this
+    writes it back so the draft owns the one season the freeze + gates derive
+    from. Callers MUST validate the format first (services.season.validate_nba_season)
+    so the column the publish RPC trusts is never set to a malformed value.
+
+    Raises ValueError('draft_not_found_or_not_open') if no open row matches.
+    """
+    c = client or _get_client()
+    result = run_query(
+        lambda: c.table("snapshot_releases")
+        .update({"season": season})
+        .eq("id", draft_id)
+        .in_("status", list(_OPEN_STATUSES))
+        .execute()
+    )
+    if not result.data:
+        raise ValueError("draft_not_found_or_not_open")
     return _row_to_release(result.data[0])
 
 
@@ -270,30 +308,36 @@ def publish_draft(
             # message — which the live function no longer raises.)
             "draft_not_in_review_state",
             "legends_missing_canonical_player",
+            # Issue #72: the draft's season column was NULL/blank — the RPC
+            # refuses rather than freezing an empty set.
+            "season_missing",
         ):
             if code in msg:
                 raise ValueError(code) from exc
         raise
 
-    # Rewarm distribution cache against the freshly published snapshot
+    published = get_release(draft_id, client=c)
+
+    # Rewarm distribution cache against the freshly published snapshot.
+    # Issue #72: warm against the published Release's own season, not the
+    # hardcoded CURRENT_SEASON, so the cache key matches the freeze scope.
     try:
         from services.cohesion_engine.composites import (
             _force_clear_distributions,
             ensure_distributions,
         )
         from services.evaluation_versions.repo import get_active
-        from services.players_service import CURRENT_SEASON
 
         # _force_clear_distributions bypasses the draft-pin guard (A-1)
         _force_clear_distributions()
         active_version = get_active()
-        ensure_distributions(CURRENT_SEASON, active_version.payload.get("values", {}), force=True)
+        ensure_distributions(published.season, active_version.payload.get("values", {}), force=True)
     except Exception:
         logger.exception(
             "Cache rewarm after publish failed — next evaluation will retry lazily"
         )
 
-    return get_release(draft_id, client=c)
+    return published
 
 
 def reset_working_state_from_active(client=None) -> None:
@@ -337,20 +381,23 @@ def reactivate_release(release_id: str, client=None) -> SnapshotRelease:
             raise ValueError("draft_in_flight") from exc
         raise
 
+    reactivated = get_release(release_id, client=c)
+
     # Rewarm distribution cache against the freshly reactivated snapshot.
-    # _force_clear_distributions bypasses the draft-pin guard (mirrors publish).
+    # Issue #72: warm against the reactivated Release's own season, not the
+    # hardcoded CURRENT_SEASON. _force_clear_distributions bypasses the
+    # draft-pin guard (mirrors publish).
     try:
         from services.cohesion_engine.composites import (
             _force_clear_distributions,
             ensure_distributions,
         )
         from services.evaluation_versions.repo import get_active
-        from services.players_service import CURRENT_SEASON
 
         _force_clear_distributions()
         active_version = get_active()
         ensure_distributions(
-            CURRENT_SEASON,
+            reactivated.season,
             active_version.payload.get("values", {}),
             force=True,
         )
@@ -359,4 +406,4 @@ def reactivate_release(release_id: str, client=None) -> SnapshotRelease:
             "Cache rewarm after reactivate failed — next evaluation will retry lazily"
         )
 
-    return get_release(release_id, client=c)
+    return reactivated

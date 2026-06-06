@@ -12,11 +12,26 @@ from services.supabase_client import get_supabase, run_query
 
 logger = logging.getLogger(__name__)
 
-_CURRENT_SEASON = "2025-26"
-
 
 def _get_client():
     return get_supabase()
+
+
+def _draft_season(draft_id: str, client) -> str:
+    """Return the season stored on the draft being summarized (issue #72).
+
+    The summary counts scope to the draft's own ``snapshot_releases.season`` so
+    they describe the same Player set the publish RPC will freeze, rather than a
+    hardcoded ``2025-26``.
+    """
+    row = (
+        client.table("snapshot_releases")
+        .select("season")
+        .eq("id", draft_id)
+        .single()
+        .execute()
+    )
+    return (row.data or {}).get("season")
 
 
 def count_summary(draft_id: str, client=None) -> dict:
@@ -34,12 +49,13 @@ def count_summary(draft_id: str, client=None) -> dict:
         }
     """
     c = client or _get_client()
+    season = _draft_season(draft_id, c)
 
-    # Total qualifying players in the current season
+    # Total qualifying players in the draft's season
     all_players = run_query(
         lambda: c.table("players")
         .select("id")
-        .eq("season", _CURRENT_SEASON)
+        .eq("season", season)
         .execute()
     )
     player_ids = [str(r["id"]) for r in (all_players.data or [])]
@@ -81,7 +97,7 @@ def count_summary(draft_id: str, client=None) -> dict:
                     lambda: c.table("draft_skill_profiles")
                     .select("player_id")
                     .eq("source", "composite")
-                    .eq("season", _CURRENT_SEASON)
+                    .eq("season", season)
                     .gt("updated_at", active_published_at)
                     .execute()
                 )
@@ -95,7 +111,7 @@ def count_summary(draft_id: str, client=None) -> dict:
                     lambda: c.table("draft_skill_profiles")
                     .select("player_id")
                     .eq("source", "manual")
-                    .eq("season", _CURRENT_SEASON)
+                    .eq("season", season)
                     .gt("updated_at", active_published_at)
                     .execute()
                 )

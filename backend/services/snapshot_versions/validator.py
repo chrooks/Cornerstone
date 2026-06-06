@@ -22,11 +22,27 @@ from services.supabase_client import get_supabase, run_query
 
 logger = logging.getLogger(__name__)
 
-_CURRENT_SEASON = "2025-26"
-
 
 def _get_client():
     return get_supabase()
+
+
+def _draft_season(draft_id: str, client) -> str:
+    """Return the season stored on the draft/release being validated (issue #72).
+
+    The preflight counts must scope to the SAME season the publish RPC freezes
+    and gates against — which is the draft's own ``snapshot_releases.season`` —
+    so the UI count and the hard gate stay equal by construction instead of both
+    hardcoding ``2025-26``.
+    """
+    row = (
+        client.table("snapshot_releases")
+        .select("season")
+        .eq("id", draft_id)
+        .single()
+        .execute()
+    )
+    return (row.data or {}).get("season")
 
 
 def validate_publishable(
@@ -55,13 +71,14 @@ def validate_publishable(
         }
     """
     c = client or _get_client()
+    season = _draft_season(draft_id, c)
 
-    # Players in the current season — pull display fields up front so we can
+    # Players in the draft's season — pull display fields up front so we can
     # surface missing-composite Player identities without a second round-trip.
     all_players = run_query(
         lambda: c.table("players")
         .select("id, nba_api_id, name, team, position")
-        .eq("season", _CURRENT_SEASON)
+        .eq("season", season)
         .execute()
     )
     players = all_players.data or []
@@ -154,7 +171,7 @@ def validate_publishable(
     season_composite = run_query(
         lambda: c.table("draft_skill_profiles")
         .select("id")
-        .eq("season", _CURRENT_SEASON)
+        .eq("season", season)
         .eq("source", "composite")
         .execute()
     )

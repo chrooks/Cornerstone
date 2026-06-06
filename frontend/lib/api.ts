@@ -1005,6 +1005,10 @@ export function publishDraft(
   // override. The backend RPC refuses (open_flags_changed) if more flags exist
   // now than this, so the override is bound to what was actually reviewed.
   acknowledged_open_flags?: number,
+  // Issue #72: the NBA season the release freezes and gates against. Sent when
+  // the admin sets/corrects it in the publish dialog; the backend validates the
+  // YYYY-YY format and persists it to the draft before the freeze.
+  season?: string,
 ): Promise<ApiResponse<SnapshotRelease>> {
   return apiFetch<SnapshotRelease>(`/api/snapshots/drafts/${id}/publish`, {
     method: "POST",
@@ -1015,6 +1019,7 @@ export function publishDraft(
       ...(acknowledged_open_flags !== undefined
         ? { acknowledged_open_flags }
         : {}),
+      ...(season !== undefined ? { season } : {}),
     }),
   });
 }

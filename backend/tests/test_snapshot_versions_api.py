@@ -460,6 +460,59 @@ class TestPublishDraftEndpoint:
         assert body["success"] is False
         assert "pending_commits_exist" in body["error"]
 
+    # -- Issue #72: season at the publish Boundary -------------------------
+
+    def test_post_publish_malformed_season_returns_400(self, admin_client):
+        """A non-YYYY-YY season is rejected at the API Boundary BEFORE any
+        publish work — publish_draft is never reached."""
+        from services.snapshot_versions import repo
+
+        with patch.object(repo, "publish_draft") as mock_pub:
+            with patch.object(repo, "update_draft_season") as mock_upd:
+                resp = admin_client.post(
+                    "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                    json={"label": "Test", "season": "2025-27", "allow_missing_composite": True},
+                    headers=admin_client.auth_header,
+                )
+
+        assert resp.status_code == 400
+        mock_pub.assert_not_called()
+        mock_upd.assert_not_called()
+
+    def test_post_publish_valid_season_persists_then_publishes(self, admin_client):
+        """A valid season is persisted to the draft, then publish proceeds."""
+        from services.snapshot_versions import repo
+
+        with patch.object(repo, "update_draft_season") as mock_upd:
+            with patch.object(repo, "publish_draft", return_value=_fake_release()) as mock_pub:
+                resp = admin_client.post(
+                    "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                    json={"label": "Test", "season": "2026-27", "allow_missing_composite": True},
+                    headers=admin_client.auth_header,
+                )
+
+        assert resp.status_code == 200
+        mock_upd.assert_called_once()
+        assert mock_upd.call_args[0][1] == "2026-27"
+        mock_pub.assert_called_once()
+
+    def test_post_publish_season_missing_returns_409(self, admin_client):
+        """The RPC backstop raises season_missing (NULL/blank draft season);
+        the API maps it to 409."""
+        from services.snapshot_versions import repo
+
+        with patch.object(
+            repo, "publish_draft", side_effect=ValueError("season_missing")
+        ):
+            resp = admin_client.post(
+                "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                json={"label": "Test", "allow_missing_composite": True},
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 409
+        assert resp.get_json()["error"] == "season_missing"
+
 
 # ---------------------------------------------------------------------------
 # GET /api/snapshots/drafts/<id>/validation

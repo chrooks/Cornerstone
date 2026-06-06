@@ -774,3 +774,159 @@ class TestReactivateRelease:
                 repo.reactivate_release(self._RELEASE_ID)
 
         assert str(exc_info.value) == expected_code
+
+
+# ---------------------------------------------------------------------------
+# Tests: issue #72 — season-from-draft
+# ---------------------------------------------------------------------------
+
+
+class TestPublishDraftSeasonMissing:
+    """The RPC raises season_missing when the draft's season is NULL/blank;
+    repo.publish_draft translates it to a ValueError so the API maps it to 409.
+    Safe against production: the RPC raises before any freeze."""
+
+    _DRAFT_ID = "aaaaaaaa-0000-0000-0000-000000000001"
+
+    def test_season_missing_translates_to_value_error(self):
+        from services.snapshot_versions import repo
+
+        client = MagicMock()
+        client.rpc.return_value.execute.side_effect = Exception(
+            "season_missing"
+        )
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with patch("services.pipeline_runs.repo.any_running", return_value=False):
+                with patch("services.pipeline_runs.repo.any_pending_commit", return_value=False):
+                    with pytest.raises(ValueError, match="season_missing"):
+                        repo.publish_draft(
+                            self._DRAFT_ID,
+                            "L",
+                            allow_missing_composite=True,
+                        )
+
+        # No cache rewarm path reached — the RPC raised first.
+        client.rpc.assert_called_once()
+
+
+class TestUpdateDraftSeason:
+    """repo.update_draft_season persists an edited season onto an open draft."""
+
+    _DRAFT_ID = "aaaaaaaa-0000-0000-0000-000000000001"
+
+    def test_update_draft_season_writes_and_returns_row(self):
+        from services.snapshot_versions import repo
+
+        updated_row = _make_draft_row(id=self._DRAFT_ID, season="2026-27")
+        client = MagicMock()
+        (
+            client.table.return_value
+            .update.return_value
+            .eq.return_value
+            .in_.return_value
+            .execute.return_value
+        ) = _result([updated_row])
+
+        with patch.object(repo, "_get_client", return_value=client):
+            result = repo.update_draft_season(self._DRAFT_ID, "2026-27")
+
+        assert result.season == "2026-27"
+
+    def test_update_draft_season_raises_when_no_open_row(self):
+        from services.snapshot_versions import repo
+
+        client = MagicMock()
+        (
+            client.table.return_value
+            .update.return_value
+            .eq.return_value
+            .in_.return_value
+            .execute.return_value
+        ) = _result([])
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with pytest.raises(ValueError, match="draft_not_found_or_not_open"):
+                repo.update_draft_season(self._DRAFT_ID, "2026-27")
+
+
+class TestPublishCacheWarmSeason:
+    """Issue #72/M5: the publish cache-warm passes the published Release's own
+    season to ensure_distributions, NOT the hardcoded CURRENT_SEASON."""
+
+    _DRAFT_ID = "aaaaaaaa-0000-0000-0000-000000000001"
+
+    def test_publish_warms_with_release_season(self):
+        from services.snapshot_versions import repo
+
+        published_row = _make_published_row(id=self._DRAFT_ID, season="2030-31")
+        client = MagicMock()
+        client.rpc.return_value.execute.return_value = _result(None)
+        (
+            client.table.return_value
+            .select.return_value
+            .eq.return_value
+            .single.return_value
+            .execute.return_value
+        ) = _result(published_row)
+
+        captured = {}
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with patch("services.pipeline_runs.repo.any_running", return_value=False):
+                with patch("services.pipeline_runs.repo.any_pending_commit", return_value=False):
+                    with patch("services.cohesion_engine.composites._force_clear_distributions"):
+                        with patch(
+                            "services.cohesion_engine.composites.ensure_distributions",
+                            side_effect=lambda season, *a, **kw: captured.update(season=season),
+                        ):
+                            with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                                from services.cohesion_engine.engine import EvaluationVersion
+                                mock_active.return_value = EvaluationVersion(
+                                    id="ev-1", slug="cohesion-v1", status="published",
+                                    payload={"values": {}}
+                                )
+                                repo.publish_draft(
+                                    self._DRAFT_ID, "L", allow_missing_composite=True
+                                )
+
+        assert captured["season"] == "2030-31"
+
+
+class TestReactivateCacheWarmSeason:
+    """Issue #72/M5: reactivate cache-warm passes the reactivated Release's own
+    season to ensure_distributions, NOT the hardcoded CURRENT_SEASON."""
+
+    _RELEASE_ID = "bbbbbbbb-0000-0000-0000-000000000002"
+
+    def test_reactivate_warms_with_release_season(self):
+        from services.snapshot_versions import repo
+
+        reactivated_row = _make_published_row(id=self._RELEASE_ID, season="2027-28")
+        client = MagicMock()
+        client.rpc.return_value.execute.return_value = _result(None)
+        (
+            client.table.return_value
+            .select.return_value
+            .eq.return_value
+            .single.return_value
+            .execute.return_value
+        ) = _result(reactivated_row)
+
+        captured = {}
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with patch("services.cohesion_engine.composites._force_clear_distributions"):
+                with patch(
+                    "services.cohesion_engine.composites.ensure_distributions",
+                    side_effect=lambda season, *a, **kw: captured.update(season=season),
+                ):
+                    with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                        from services.cohesion_engine.engine import EvaluationVersion
+                        mock_active.return_value = EvaluationVersion(
+                            id="ev-1", slug="cohesion-v1", status="published",
+                            payload={"values": {}}
+                        )
+                        repo.reactivate_release(self._RELEASE_ID)
+
+        assert captured["season"] == "2027-28"
