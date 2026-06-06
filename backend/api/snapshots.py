@@ -15,6 +15,7 @@ from flask import Blueprint, g, jsonify, request
 
 from api.auth import require_admin
 from services.snapshot_versions import repo, validator, summary
+from services.season import SEASON_FORMAT_MESSAGE, validate_nba_season
 
 logger = logging.getLogger(__name__)
 
@@ -275,6 +276,24 @@ def publish_draft(draft_id: str):
     if not label:
         return _err("label_required", 400)
 
+    # Issue #72: the draft owns its NBA season; the publish dialog may correct it
+    # inline. When a season is sent, validate the YYYY-YY format at this Boundary
+    # and persist it back to the draft BEFORE the freeze, so the RPC reads a
+    # trusted column. The publish RPC still hard-refuses a NULL/blank season.
+    raw_season = body.get("season", None)
+    if raw_season is not None:
+        if not isinstance(raw_season, str):
+            return _err(SEASON_FORMAT_MESSAGE, 400)
+        season = raw_season.strip()
+        try:
+            validate_nba_season(season)
+        except ValueError:
+            return _err(SEASON_FORMAT_MESSAGE, 400)
+        try:
+            repo.update_draft_season(draft_id, season)
+        except ValueError:
+            return _err("draft_not_found", 404)
+
     try:
         published = repo.publish_draft(
             draft_id,
@@ -317,6 +336,12 @@ def publish_draft(draft_id: str):
         # released_players. State conflict (409), not a malformed request — the
         # validation Surface surfaces this up front via legends_missing_canonical.
         if "legends_missing_canonical_player" in code:
+            return _err(code, 409)
+        # Issue #72: the draft's season is NULL/blank — a state conflict (the
+        # draft is not publishable until a season is set), not a malformed
+        # request. The API now persists a validated season before publish, so
+        # this is the backstop for direct callers / drafts created without one.
+        if "season_missing" in code:
             return _err(code, 409)
         if "missing_composite_not_acknowledged" in code:
             return _err(code, 422)

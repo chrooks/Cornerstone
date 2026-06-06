@@ -17,10 +17,18 @@
 
 import { useEffect, useState } from "react";
 
+import { isValidNbaSeason } from "@/lib/season";
+
 export interface UsePublishGateParams {
   open: boolean;
   playersMissingComposite: number;
   openFlags: number;
+  /**
+   * Issue #72: the draft's current season, used to pre-fill the editable Season
+   * field each time the dialog opens. The admin may correct it inline before
+   * publishing; the corrected value is persisted back to the draft.
+   */
+  initialSeason?: string;
   /**
    * Issue #71: bump this to force the open-flags override to disarm without
    * closing the modal. Used when the publish attempt is refused because the live
@@ -33,6 +41,10 @@ export interface UsePublishGateParams {
 export interface PublishGate {
   label: string;
   setLabel: (value: string) => void;
+  season: string;
+  setSeason: (value: string) => void;
+  /** True when the current season field is a valid YYYY-YY string. */
+  seasonOk: boolean;
   acknowledgedComposite: boolean;
   setAcknowledgedComposite: (value: boolean) => void;
   overrideOpenFlags: boolean;
@@ -49,22 +61,28 @@ export function usePublishGate({
   open,
   playersMissingComposite,
   openFlags,
+  initialSeason = "",
   resetSignal = 0,
 }: UsePublishGateParams): PublishGate {
   const [label, setLabel] = useState("");
+  const [season, setSeason] = useState(initialSeason);
   const [acknowledgedComposite, setAcknowledgedComposite] = useState(false);
   const [overrideOpenFlags, setOverrideOpenFlags] = useState(false);
   const [confirmingOverride, setConfirmingOverride] = useState(false);
 
-  // Reset all local state when the modal closes.
+  // Reset all local state when the modal closes. The season re-seeds from the
+  // draft's current value each time the dialog opens.
   useEffect(() => {
     if (!open) {
       setLabel("");
+      setSeason(initialSeason);
       setAcknowledgedComposite(false);
       setOverrideOpenFlags(false);
       setConfirmingOverride(false);
+    } else {
+      setSeason(initialSeason);
     }
-  }, [open]);
+  }, [open, initialSeason]);
 
   // Issue #71: when resetSignal changes (count moved under the admin), disarm the
   // override so they must re-acknowledge the new count. Skip the initial mount
@@ -79,9 +97,10 @@ export function usePublishGate({
   const hasOpenFlagsGate = openFlags > 0;
 
   const labelOk = label.trim().length > 0;
+  const seasonOk = isValidNbaSeason(season.trim());
   const compositeOk = !requiresCompositeAck || acknowledgedComposite;
   const openFlagsOk = !hasOpenFlagsGate || overrideOpenFlags;
-  const canPublish = labelOk && compositeOk && openFlagsOk;
+  const canPublish = labelOk && seasonOk && compositeOk && openFlagsOk;
 
   const onOverrideCheckboxChange = (checked: boolean) => {
     if (checked) {
@@ -107,6 +126,9 @@ export function usePublishGate({
   return {
     label,
     setLabel,
+    season,
+    setSeason,
+    seasonOk,
     acknowledgedComposite,
     setAcknowledgedComposite,
     overrideOpenFlags,

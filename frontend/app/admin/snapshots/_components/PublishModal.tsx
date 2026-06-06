@@ -19,6 +19,7 @@
  */
 
 import { Modal } from "@/components/ui/Modal";
+import { SEASON_FORMAT_MESSAGE } from "@/lib/season";
 import { usePublishGate } from "./usePublishGate";
 
 interface PublishModalProps {
@@ -27,11 +28,17 @@ interface PublishModalProps {
   onClose: () => void;
   onPublish: (
     label: string,
+    season: string,
     allowMissingComposite: boolean,
     allowOpenFlags: boolean,
   ) => Promise<void>;
   playersMissingComposite: number;
   openFlags: number;
+  /**
+   * Issue #72: the draft's current season, pre-filled into the editable Season
+   * field. Required and validated (YYYY-YY) before publish.
+   */
+  initialSeason: string;
   isPublishing: boolean;
   /**
    * Issue #71: bump to disarm the override after a publish was refused because
@@ -52,6 +59,7 @@ export function PublishModal({
   onPublish,
   playersMissingComposite,
   openFlags,
+  initialSeason,
   isPublishing,
   resetSignal = 0,
   countChanged = false,
@@ -59,6 +67,9 @@ export function PublishModal({
   const {
     label,
     setLabel,
+    season,
+    setSeason,
+    seasonOk,
     acknowledgedComposite,
     setAcknowledgedComposite,
     overrideOpenFlags,
@@ -69,12 +80,25 @@ export function PublishModal({
     onOverrideCheckboxChange,
     onConfirmOverride,
     onCancelOverride,
-  } = usePublishGate({ open, playersMissingComposite, openFlags, resetSignal });
+  } = usePublishGate({
+    open,
+    playersMissingComposite,
+    openFlags,
+    initialSeason,
+    resetSignal,
+  });
+
+  const showSeasonError = season.trim().length > 0 && !seasonOk;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canPublish) return;
-    await onPublish(label.trim(), acknowledgedComposite, overrideOpenFlags);
+    await onPublish(
+      label.trim(),
+      season.trim(),
+      acknowledgedComposite,
+      overrideOpenFlags,
+    );
   };
 
   const flagsText =
@@ -116,6 +140,41 @@ export function PublishModal({
             className="w-full rounded border border-[#d9d0c9] bg-white px-3 py-2 text-sm text-[#0e0907]
               placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1"
           />
+        </div>
+
+        {/* Issue #72: Season — required, editable, validated YYYY-YY. Pre-filled
+            from the draft; the freeze + gates scope to this value. */}
+        <div id={`${id}-season-group`} className="mb-4">
+          <label
+            id={`${id}-season-label`}
+            htmlFor={`${id}-season-input`}
+            className="block text-xs font-semibold text-[#0e0907] mb-1"
+          >
+            Season <span className="text-red-500">*</span>
+          </label>
+          <input
+            id={`${id}-season-input`}
+            type="text"
+            value={season}
+            onChange={(e) => setSeason(e.target.value)}
+            placeholder="e.g. 2025-26"
+            aria-invalid={showSeasonError}
+            className="w-full rounded border border-[#d9d0c9] bg-white px-3 py-2 text-sm text-[#0e0907]
+              placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1"
+          />
+          {showSeasonError ? (
+            <p
+              id={`${id}-season-error`}
+              role="alert"
+              className="text-xs text-[#fe6d34] mt-1"
+            >
+              {SEASON_FORMAT_MESSAGE}
+            </p>
+          ) : (
+            <p id={`${id}-season-hint`} className="text-xs text-neutral-500 mt-1">
+              The NBA season this release freezes and gates against.
+            </p>
+          )}
         </div>
 
         {/* Soft gate: Missing composite warning + acknowledge */}

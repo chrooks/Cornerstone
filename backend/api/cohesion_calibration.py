@@ -872,10 +872,16 @@ def distribution_preview() -> tuple:
     client = get_supabase()
     raw_values: list[float] = []
 
+    # Issue #72: scope composite profiles to the working draft's season (or the
+    # active Release's season when no draft is open), not a hardcoded 2025-26, so
+    # this calibration read tracks the same Player set the publish RPC freezes.
+    from services.snapshot_versions import repo as _sv_repo
+    working_season = _sv_repo.get_working_season()
+
     for source_query in [
         lambda: client.table("draft_skill_profiles")
             .select("profile")
-            .eq("season", CURRENT_SEASON)
+            .eq("season", working_season)
             .eq("source", "composite")
             .execute(),
         lambda: client.table("draft_skill_profiles")

@@ -195,7 +195,12 @@ export function DraftWorkspaceShell() {
   }, [draft, reload]);
 
   const handlePublish = useCallback(
-    async (label: string, allowMissing: boolean, allowOpenFlags: boolean) => {
+    async (
+      label: string,
+      season: string,
+      allowMissing: boolean,
+      allowOpenFlags: boolean,
+    ) => {
       if (!draft) return;
       setIsPublishing(true);
       try {
@@ -204,12 +209,15 @@ export function DraftWorkspaceShell() {
         const acknowledgedOpenFlags = allowOpenFlags
           ? validation?.open_flags ?? 0
           : undefined;
+        // Issue #72: send the (validated) season so the backend persists it to
+        // the draft and the freeze + gates scope to it.
         const res = await publishDraft(
           draft.id,
           label,
           allowMissing,
           allowOpenFlags,
           acknowledgedOpenFlags,
+          season,
         );
         if (res.success && res.data) {
           // Issue #71: reflect the authoritative count actually bypassed, not the
@@ -439,6 +447,7 @@ export function DraftWorkspaceShell() {
           onPublish={handlePublish}
           playersMissingComposite={validation?.players_missing_composite ?? 0}
           openFlags={validation?.open_flags ?? 0}
+          initialSeason={draft.season}
           isPublishing={isPublishing}
           resetSignal={publishResetNonce}
           countChanged={publishCountChanged}
