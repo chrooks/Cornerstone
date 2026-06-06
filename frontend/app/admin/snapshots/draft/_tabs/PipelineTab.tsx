@@ -22,6 +22,7 @@ import type {
 import type { TabSlug } from "../_lib/tabRouting";
 import { isReviewableRun, isTerminalRun, isStagedRun } from "../_lib/runReview";
 import { RunDiffPreview } from "../_components/RunDiffPreview";
+import { SkillEvaluationRunner } from "../_components/SkillEvaluationRunner";
 
 export interface PipelineTabProps {
   draft: SnapshotDraftSummary;
@@ -109,6 +110,19 @@ export function PipelineTab({ draft, focusRunId, reload }: PipelineTabProps) {
     router.replace(`?${params.toString()}`);
   }
 
+  // A staged skill-evaluation run reuses the same deep-link as threshold edits:
+  // refresh the list so the new run resolves, then focus it to swap in the
+  // RunDiffPreview for commit/discard.
+  const handleStagedRun = useCallback(
+    async (runId: string) => {
+      await loadRuns();
+      navigateToRun(runId);
+    },
+    // navigateToRun reads the latest searchParams via closure each call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loadRuns]
+  );
+
   // Check if focusRunId resolves to a staged run
   const focusedRun = focusRunId ? runs.find((r) => r.id === focusRunId) ?? null : null;
   const showDiffPreview =
@@ -161,6 +175,11 @@ export function PipelineTab({ draft, focusRunId, reload }: PipelineTabProps) {
           {loading ? "Loading..." : "Refresh"}
         </button>
       </div>
+
+      <SkillEvaluationRunner
+        disabled={draft.status === "review"}
+        onStaged={handleStagedRun}
+      />
 
       {!loading && error && (
         <div

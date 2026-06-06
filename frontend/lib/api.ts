@@ -40,6 +40,7 @@ import type {
   UserProfile,
   CommunityStatsMap,
   CommunityTeamsResponse,
+  SkillEvaluationRequest,
 } from "./types";
 
 // Points to the Flask dev server by default; override via env var in production.
@@ -1091,6 +1092,28 @@ export function triggerBioTeamSync(player_id?: string): Promise<ApiResponse<{ ru
     ? `/api/pipeline/bio-team-sync/${player_id}`
     : "/api/pipeline/bio-team-sync";
   return apiFetch<{ run_id: string }>(path, { method: "POST" });
+}
+
+/**
+ * Trigger a skill-evaluation run scoped to the current open draft.
+ *
+ * Both axes of `opts` are optional:
+ *  - player_ids omitted/empty → all qualifying players
+ *  - skill_filter omitted/empty → all 21 Skills
+ *
+ * Returns the run_id on success; on a 409 the backend surfaces
+ * `pending_commit_run_exists` in the `error` field of the envelope.
+ */
+export function triggerSkillEvaluation(
+  opts?: SkillEvaluationRequest
+): Promise<ApiResponse<{ run_id: string; status: string }>> {
+  return apiFetch<{ run_id: string; status: string }>(
+    "/api/pipeline/skill-evaluation",
+    {
+      method: "POST",
+      body: JSON.stringify(opts ?? {}),
+    }
+  );
 }
 
 /**
