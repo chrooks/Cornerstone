@@ -15,7 +15,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, useParams, usePathname } from "next/navigation";
-import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam, listRuleSets } from "@/lib/api";
+import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam, listRuleSets, NO_ACTIVE_RELEASE_ERROR } from "@/lib/api";
+import { NoActiveReleaseError } from "@/components/lab/NoActiveReleaseError";
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { readSlotsFromParams, buildPlayerPayload } from "@/lib/roster-utils";
@@ -263,6 +264,7 @@ export function EvaluatePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedTeam, setSavedTeam] = useState<SavedTeamSummary | null>(null);
   const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
 
   // Capture searchParams at mount — stable ref avoids closure staleness
   const paramsRef = useRef(searchParams.toString());
@@ -303,12 +305,20 @@ export function EvaluatePage() {
         setEvalState("evaluating");
       })
       .catch((err: unknown) => {
+        /* Loading always terminates — evalState leaves "loading" on every path (#62) */
         setErrorMsg(err instanceof Error ? err.message : "Failed to load data");
         setEvalState("error");
       });
-  // Mount only — paramsRef captures the snapshot
+  // Mount + explicit retry only — paramsRef captures the snapshot
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [retryToken]);
+
+  /* Retry after a no_active_release Error State (#62) */
+  const handleNoReleaseRetry = () => {
+    setErrorMsg(null);
+    setEvalState("loading");
+    setRetryToken((token) => token + 1);
+  };
 
   // Phase 2: evaluate once data AND admin status are both resolved
   useEffect(() => {
@@ -550,8 +560,12 @@ export function EvaluatePage() {
         <TeamDescriptionCard description={null} isLoading={true} />
       )}
 
-      {/* Error */}
-      {evalState === "error" && (
+      {/* Error — no_active_release gets the shared Lab Error State (#62);
+          generic errors keep their existing handling */}
+      {evalState === "error" && errorMsg === NO_ACTIVE_RELEASE_ERROR && (
+        <NoActiveReleaseError onRetry={handleNoReleaseRetry} />
+      )}
+      {evalState === "error" && errorMsg !== NO_ACTIVE_RELEASE_ERROR && (
         <p id="eval-error" className="text-sm text-destructive">{errorMsg ?? "Something went wrong."}</p>
       )}
 

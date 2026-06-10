@@ -11,8 +11,9 @@
 import Link from "next/link";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { listLegends, getLegend, listPlayersWithSkills, listRuleSets } from "@/lib/api";
+import { listLegends, getLegend, listPlayersWithSkills, listRuleSets, isNoActiveRelease } from "@/lib/api";
 import { resolveRuleSetRules } from "@/lib/rulesets";
+import { NoActiveReleaseError } from "@/components/lab/NoActiveReleaseError";
 import { PlayerPoolBrowser, type PlayerPoolBrowserCounts, type PlayerPoolViewMode } from "@/components/players/PlayerPoolBrowser";
 import { RandomPlayerButton } from "@/components/players/RandomPlayerButton";
 import { PlayerViewSizeToggle } from "@/components/players/PlayerView";
@@ -105,6 +106,8 @@ export default function LegendsPage() {
   const [details, setDetails] = useState<Record<string, LegendDetail>>({});
   const [allPlayers, setAllPlayers] = useState<PlayerWithSkills[]>([]);
   const [loading, setLoading] = useState(true);
+  const [noActiveRelease, setNoActiveRelease] = useState(false);
+  const [retryToken, setRetryToken] = useState(0);
 
   /* ── PlayerWithSkills projection for filter/sort infra ── */
   const playersProjection = useMemo(() => {
@@ -138,30 +141,45 @@ export default function LegendsPage() {
     let cancelled = false;
 
     async function loadAllPlayers() {
-      const res = await listPlayersWithSkills();
-      if (!cancelled && res.success && res.data) {
-        setAllPlayers(res.data);
-        setLoading(false);
+      try {
+        const res = await listPlayersWithSkills();
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setAllPlayers(res.data);
+        } else if (isNoActiveRelease(res)) {
+          setNoActiveRelease(true);
+        }
+      } finally {
+        /* Loading must terminate on every path — no infinite spinner (#62) */
+        if (!cancelled) setLoading(false);
       }
     }
 
     async function loadLegendsOnly() {
-      const res = await listLegends();
-      if (!cancelled && res.success && res.data) {
-        setLegends(res.data);
-        setLoading(false);
+      try {
+        const res = await listLegends();
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setLegends(res.data);
+          setLoading(false);
 
-        /* Fetch full profiles in parallel */
-        const detailResults = await Promise.all(
-          res.data.map((l) => getLegend(l.id))
-        );
-        if (!cancelled) {
-          const detailMap: Record<string, LegendDetail> = {};
-          detailResults.forEach((r) => {
-            if (r.success && r.data) detailMap[r.data.id] = r.data;
-          });
-          setDetails(detailMap);
+          /* Fetch full profiles in parallel */
+          const detailResults = await Promise.all(
+            res.data.map((l) => getLegend(l.id))
+          );
+          if (!cancelled) {
+            const detailMap: Record<string, LegendDetail> = {};
+            detailResults.forEach((r) => {
+              if (r.success && r.data) detailMap[r.data.id] = r.data;
+            });
+            setDetails(detailMap);
+          }
+        } else if (isNoActiveRelease(res)) {
+          setNoActiveRelease(true);
         }
+      } finally {
+        /* Loading must terminate on every path — no infinite spinner (#62) */
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -172,7 +190,14 @@ export default function LegendsPage() {
     }
 
     return () => { cancelled = true; };
-  }, [resolvedRuleSet, cornerstoneSource]);
+  }, [resolvedRuleSet, cornerstoneSource, retryToken]);
+
+  /* ── Retry after a no_active_release Error State ── */
+  const handleRetry = useCallback(() => {
+    setNoActiveRelease(false);
+    setLoading(true);
+    setRetryToken((token) => token + 1);
+  }, []);
 
   /* ── Row click in table → navigate to build with this cornerstone ── */
   const handleRowClick = useCallback(
@@ -205,7 +230,7 @@ export default function LegendsPage() {
             >
               Pick Your Cornerstone
             </h1>
-            {!loading && (
+            {!loading && !noActiveRelease && (
               <p className="text-[0.8125rem] text-[#0e0907]/45 mt-1">
                 {browserCounts.filteredCount === browserCounts.totalCount
                   ? `${browserCounts.totalCount} ${cornerstoneSource === "all" ? "players" : "legends"}`
@@ -213,7 +238,7 @@ export default function LegendsPage() {
               </p>
             )}
           </div>
-          {!loading && (
+          {!loading && !noActiveRelease && (
             <RandomPlayerButton
               id="legends-random-cornerstone-btn"
               players={visibleLegendPlayers}
@@ -234,7 +259,12 @@ export default function LegendsPage() {
         </div>
       )}
 
-      {!loading && (
+      {/* ── Error State: no active Snapshot Release (#62) ── */}
+      {!loading && noActiveRelease && (
+        <NoActiveReleaseError onRetry={handleRetry} />
+      )}
+
+      {!loading && !noActiveRelease && (
         <div className="max-w-screen-xl mx-auto px-6 pb-16 md:pb-24 space-y-4">
           <PlayerPoolBrowser
             id="legends-pool-browser"

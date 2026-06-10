@@ -14,7 +14,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { listPlayersWithSkills, getLegend, listRuleSets } from "@/lib/api";
+import { listPlayersWithSkills, getLegend, listRuleSets, NO_ACTIVE_RELEASE_ERROR } from "@/lib/api";
+import { NoActiveReleaseError } from "@/components/lab/NoActiveReleaseError";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { useRosterSlots } from "@/lib/hooks/useRosterSlots";
 import { useBuilderSalary } from "@/lib/hooks/useBuilderSalary";
@@ -49,6 +50,7 @@ export function BuilderPage() {
   const [activeRows, setActiveRows] = useState<PlayerWithSkills[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     setDataLoading(true);
@@ -63,6 +65,13 @@ export function BuilderPage() {
       })
       .catch(() => setDataError("Failed to load data"))
       .finally(() => setDataLoading(false));
+  }, [retryToken]);
+
+  /* Retry after a no_active_release Error State (#62) */
+  const handleDataRetry = useCallback(() => {
+    setDataError(null);
+    setDataLoading(true);
+    setRetryToken((token) => token + 1);
   }, []);
 
   // ── Cornerstone — derived from URL + all player rows ───────────────────────
@@ -319,6 +328,16 @@ export function BuilderPage() {
           <div className="w-[35%] bg-[#0e0907]/[0.04] rounded-lg h-[60vh]" />
         </div>
       </div>
+    );
+  }
+
+  /* Specific Error State: no Snapshot Release is active (#62). Generic
+     errors below keep their existing handling. */
+  if (dataError === NO_ACTIVE_RELEASE_ERROR) {
+    return (
+      <main id="builder-no-active-release" className="min-h-[calc(100vh-3rem)]">
+        <NoActiveReleaseError onRetry={handleDataRetry} />
+      </main>
     );
   }
 

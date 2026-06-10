@@ -107,6 +107,18 @@ export async function apiFetch<T>(
   }
 }
 
+/**
+ * Backend error code returned (with HTTP 503) by Lab routes when no Snapshot
+ * Release is active. Lab pages detect this to show the shared
+ * NoActiveReleaseError Error State instead of generic error handling (#62).
+ */
+export const NO_ACTIVE_RELEASE_ERROR = "no_active_release";
+
+/** True when a response failed specifically because no Snapshot Release is active. */
+export function isNoActiveRelease<T>(res: ApiResponse<T>): boolean {
+  return !res.success && res.error === NO_ACTIVE_RELEASE_ERROR;
+}
+
 /** Check backend health — used on the homepage to confirm connectivity. */
 export async function checkHealth(): Promise<{ status: string; message: string }> {
   const res = await fetch(`${API_BASE_URL}/api/health`);
