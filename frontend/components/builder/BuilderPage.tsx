@@ -53,9 +53,11 @@ export function BuilderPage() {
   const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     setDataLoading(true);
     listPlayersWithSkills()
       .then((res) => {
+        if (cancelled) return;
         if (res.success && res.data) {
           setLegendRows(res.data.filter((p) => p.is_legend === true));
           setActiveRows(res.data.filter((p) => !p.is_legend));
@@ -63,8 +65,15 @@ export function BuilderPage() {
           setDataError(res.error ?? "Failed to load data");
         }
       })
-      .catch(() => setDataError("Failed to load data"))
-      .finally(() => setDataLoading(false));
+      .catch(() => {
+        if (!cancelled) setDataError("Failed to load data");
+      })
+      .finally(() => {
+        if (!cancelled) setDataLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [retryToken]);
 
   /* Retry after a no_active_release Error State (#62) */

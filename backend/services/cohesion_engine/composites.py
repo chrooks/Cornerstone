@@ -448,8 +448,11 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
             all_raw[name].append(value)
 
     distributions = {name: sorted(vals) for name, vals in all_raw.items()}
-    set_distributions(distributions)
+    # Key must be written before the distributions become visible: a concurrent
+    # reader that sees distributions_ready() == True must never compare against
+    # the previous (or None) key, or it triggers a redundant rebuild.
     _DISTRIBUTION_KEY = (season, active_release_id)
+    set_distributions(distributions)
     return distributions
 
 

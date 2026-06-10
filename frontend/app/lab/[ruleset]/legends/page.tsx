@@ -161,6 +161,8 @@ export default function LegendsPage() {
         if (cancelled) return;
         if (res.success && res.data) {
           setLegends(res.data);
+          /* Early clear is deliberate: show the grid while detail profiles
+             stream in below — the finally below is only the safety net. */
           setLoading(false);
 
           /* Fetch full profiles in parallel */

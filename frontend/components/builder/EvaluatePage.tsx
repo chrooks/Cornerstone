@@ -12,7 +12,7 @@
  *                 supporting  → slot=index+1 (allSlots[0] = slot 1), is_cornerstone=false
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, useParams, usePathname } from "next/navigation";
 import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam, listRuleSets, NO_ACTIVE_RELEASE_ERROR } from "@/lib/api";
@@ -266,17 +266,23 @@ export function EvaluatePage() {
   const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
   const [retryToken, setRetryToken] = useState(0);
 
-  // Capture searchParams at mount — stable ref avoids closure staleness
+  // Ref keeps the latest searchParams without re-triggering the load effect —
+  // the load runs on mount + explicit retry only, but always reads fresh params.
   const paramsRef = useRef(searchParams.toString());
+  useEffect(() => {
+    paramsRef.current = searchParams.toString();
+  }, [searchParams]);
 
   // Phase 1: load players + legend (legend fetch conditional on cornerstone type)
   useEffect(() => {
+    let cancelled = false;
     // FFA RuleSets have no cornerstone param — slots are encoded as s1..sN
     const hasSlotParams = new URLSearchParams(paramsRef.current).has("s1");
     if (!cornerstoneId && !hasSlotParams) { router.replace(buildPath); return; }
 
     Promise.all([listPlayersWithSkills(), listRuleSets()])
       .then(async ([playersRes, rulesetsRes]) => {
+        if (cancelled) return;
         if (!playersRes.success || !playersRes.data) throw new Error(playersRes.error ?? "Failed to load players");
 
         // Resolve RuleSet Version for the current Lab RuleSet slug
@@ -301,24 +307,29 @@ export function EvaluatePage() {
           }
         }
 
+        if (cancelled) return;
         setDataReady({ slots, legend });
         setEvalState("evaluating");
       })
       .catch((err: unknown) => {
+        if (cancelled) return;
         /* Loading always terminates — evalState leaves "loading" on every path (#62) */
         setErrorMsg(err instanceof Error ? err.message : "Failed to load data");
         setEvalState("error");
       });
-  // Mount + explicit retry only — paramsRef captures the snapshot
+    return () => {
+      cancelled = true;
+    };
+  // Mount + explicit retry only — paramsRef keeps params fresh without re-running
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryToken]);
 
   /* Retry after a no_active_release Error State (#62) */
-  const handleNoReleaseRetry = () => {
+  const handleNoReleaseRetry = useCallback(() => {
     setErrorMsg(null);
     setEvalState("loading");
     setRetryToken((token) => token + 1);
-  };
+  }, []);
 
   // Phase 2: evaluate once data AND admin status are both resolved
   useEffect(() => {
