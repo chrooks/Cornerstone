@@ -446,6 +446,36 @@ def get_summary(draft_id: str):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/snapshots/diff (#8)
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/diff", methods=["GET"])
+@require_admin
+def get_release_diff():
+    """Diff the open draft against the active published Snapshot Release.
+
+    Read-only pre-publish review Surface: players added/removed, per-Player
+    skill tier deltas, and contract/bio deltas. Mirrors the publish RPC's
+    freeze selection so the diff predicts the publish truthfully.
+    """
+    try:
+        from services.snapshot_versions import release_diff
+        data = release_diff.compute_release_diff()
+        return _ok(data)
+    except ValueError as exc:
+        code = str(exc)
+        # State conflicts (no open draft / no active release), not malformed
+        # requests — map to 409 per this file's error-mapping convention.
+        if code in ("no_open_draft", "no_active_release"):
+            return _err(code, 409)
+        return _err(code, 400)
+    except Exception:
+        logger.exception("Failed to compute draft-vs-published diff")
+        return _err("Failed to compute draft-vs-published diff", 500)
+
+
+# ---------------------------------------------------------------------------
 # GET /api/snapshots/drafts/<draft_id>/pipeline-runs
 # ---------------------------------------------------------------------------
 

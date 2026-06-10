@@ -1140,3 +1140,63 @@ export function getDraftPipelineRuns(
     `/api/snapshots/drafts/${encodeURIComponent(draftId)}/pipeline-runs`
   );
 }
+
+// ---------------------------------------------------------------------------
+// #8 diff view — draft vs active published Snapshot Release
+// ---------------------------------------------------------------------------
+
+import type { ReleaseDiff } from "./types";
+
+/**
+ * Diff the open draft against the active published Snapshot Release.
+ * Backend route: GET /api/snapshots/diff (read-only).
+ * 409 envelope errors: no_open_draft | no_active_release.
+ */
+export function getSnapshotDiff(): Promise<ApiResponse<ReleaseDiff>> {
+  return apiFetch<ReleaseDiff>("/api/snapshots/diff");
+}
+
+// ---------------------------------------------------------------------------
+// #76 subset pipeline
+// ---------------------------------------------------------------------------
+
+/**
+ * Kick off a salary-scrape run, optionally scoped to a Player subset.
+ * Empty/omitted player_ids = full-league scrape, same convention as fetch-stats.
+ */
+export function triggerSalaryScrapeRun(opts?: {
+  player_ids?: string[];
+}): Promise<ApiResponse<{ run_id: string }>> {
+  return apiFetch<{ run_id: string }>("/api/pipeline/salary-scrape", {
+    method: "POST",
+    body: JSON.stringify(opts ?? {}),
+  });
+}
+
+/**
+ * Kick off a bio/team-sync run, optionally scoped to a Player subset.
+ * Empty/omitted player_ids = all qualifying Players.
+ */
+export function triggerBioTeamSyncRun(opts?: {
+  player_ids?: string[];
+  season?: string;
+}): Promise<ApiResponse<{ run_id: string }>> {
+  return apiFetch<{ run_id: string }>("/api/pipeline/bio-team-sync", {
+    method: "POST",
+    body: JSON.stringify(opts ?? {}),
+  });
+}
+
+/**
+ * Run the compositing pipeline for a Player subset (synchronous request).
+ * Empty/omitted player_ids = all qualifying Players.
+ */
+export function runCompositeBatchScoped(opts?: {
+  player_ids?: string[];
+  season?: string;
+}): Promise<ApiResponse<import("./types").CompositeBatchResult>> {
+  return apiFetch<import("./types").CompositeBatchResult>("/api/composite/batch", {
+    method: "POST",
+    body: JSON.stringify(opts ?? {}),
+  });
+}

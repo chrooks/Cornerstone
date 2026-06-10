@@ -5,7 +5,13 @@
  * unit-tested independently of React components.
  */
 
-export type TabSlug = "overview" | "pipeline" | "thresholds" | "review" | "publish";
+export type TabSlug =
+  | "overview"
+  | "pipeline"
+  | "thresholds"
+  | "review"
+  | "diff"
+  | "publish";
 
 export const DEFAULT_TAB: TabSlug = "overview";
 
@@ -14,6 +20,7 @@ export const ALL_TABS: readonly TabSlug[] = [
   "pipeline",
   "thresholds",
   "review",
+  "diff",
   "publish",
 ] as const;
 
@@ -22,6 +29,7 @@ export const TAB_LABELS: Record<TabSlug, string> = {
   pipeline: "Pipeline",
   thresholds: "Thresholds",
   review: "Review",
+  diff: "Diff",
   publish: "Publish",
 };
 

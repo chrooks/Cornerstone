@@ -37,6 +37,7 @@ export interface PublishTabProps {
 export function PublishTab({
   summary,
   validation,
+  onTabChange,
   onOpenPublishModal,
   isPublishing,
 }: PublishTabProps) {
@@ -60,6 +61,27 @@ export function PublishTab({
         <p className="text-xs text-neutral-500 mt-0.5">
           Review the counts below, then publish to make this snapshot the active release.
         </p>
+      </div>
+
+      {/* #8: pre-publish review Affordance — the Diff tab shows exactly what
+          this publish will change vs the active release. */}
+      <div
+        id="publish-tab-diff-link-card"
+        className="rounded-[6px] border border-[#d9d0c9] px-5 py-3.5 mb-6 flex items-center justify-between gap-4"
+        style={{ backgroundColor: "#fef9f5" }}
+      >
+        <p className="text-xs text-neutral-600">
+          Publishing replaces the active release. Review the diff to see
+          exactly what changes.
+        </p>
+        <button
+          id="publish-tab-diff-link"
+          type="button"
+          onClick={() => onTabChange("diff")}
+          className="text-xs font-semibold text-[#fe6d34] hover:text-[#0e0907] transition-colors whitespace-nowrap"
+        >
+          Review the diff &rarr;
+        </button>
       </div>
 
       {summary ? (

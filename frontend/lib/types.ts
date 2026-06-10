@@ -1020,3 +1020,73 @@ export interface CommitRunResult {
 export interface DiscardRunResult {
   discarded: string;
 }
+
+// ---------------------------------------------------------------------------
+// #8 diff view — draft vs active published Snapshot Release
+// ---------------------------------------------------------------------------
+
+/** A Player row in the added/removed lists of the release diff. */
+export interface ReleaseDiffEntity {
+  canonical_player_id: string;
+  name: string;
+  team: string | null;
+  position: string | null;
+  salary: number;
+  is_legend: boolean;
+}
+
+/** One skill tier delta. null tier = the skill key is absent on that side. */
+export interface ReleaseDiffSkillChange {
+  skill: string;
+  old_tier: string | null;
+  new_tier: string | null;
+}
+
+/** One contract/bio delta (name, team, position, or salary). */
+export interface ReleaseDiffContractChange {
+  field: "name" | "team" | "position" | "salary";
+  old: string | number | null;
+  new: string | number | null;
+}
+
+/** A Player present on both sides with at least one delta. */
+export interface ReleaseDiffChangedPlayer {
+  canonical_player_id: string;
+  name: string;
+  is_legend: boolean;
+  team: string | null;
+  position: string | null;
+  skill_changes: ReleaseDiffSkillChange[];
+  contract_changes: ReleaseDiffContractChange[];
+}
+
+/** GET /api/snapshots/diff — open draft vs active published release. */
+export interface ReleaseDiff {
+  draft: { id: string; label: string; season: string; status: string };
+  active_release: {
+    id: string;
+    label: string;
+    season: string;
+    published_at: string | null;
+  };
+  summary: { added: number; removed: number; changed: number; unchanged: number };
+  players_added: ReleaseDiffEntity[];
+  players_removed: ReleaseDiffEntity[];
+  players_changed: ReleaseDiffChangedPlayer[];
+}
+
+// ---------------------------------------------------------------------------
+// #76 subset pipeline
+// ---------------------------------------------------------------------------
+
+/** Result envelope of POST /api/composite/batch (subset or full run). */
+export interface CompositeBatchResult {
+  total: number;
+  processed: number;
+  claude_calls_made: number;
+  claude_calls_skipped: number;
+  auto_accepted: number;
+  flagged_for_review: number;
+  errors: number;
+  estimated_cost_usd: number;
+}
