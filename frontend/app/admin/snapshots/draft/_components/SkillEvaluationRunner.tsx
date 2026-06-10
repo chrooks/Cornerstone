@@ -5,7 +5,7 @@
  *
  * Lets an admin kick off a `skill_evaluation` run scoped to:
  *  - an optional Skill subset (multi-select over the canonical 21-skill taxonomy)
- *  - an optional player subset (name search → chip list)
+ *  - an optional player subset (shared PlayerSubsetPicker — name search → chip list)
  * Either axis empty means "all" (all 21 Skills / all qualifying players).
  *
  * On success it hands the new run_id back to the parent so the Pipeline tab
@@ -13,13 +13,11 @@
  * edits use. A pending-commit run surfaces as a friendly inline message.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
-import { triggerSkillEvaluation, searchPlayers } from "@/lib/api";
+import { triggerSkillEvaluation } from "@/lib/api";
 import { ALL_SKILL_NAMES, SKILL_LABELS, TOTAL_SKILLS } from "@/lib/skills";
-import type { Player } from "@/lib/types";
-
-type PlayerLite = Pick<Player, "id" | "name" | "team" | "position">;
+import { PlayerSubsetPicker, type PlayerLite } from "./PlayerSubsetPicker";
 
 interface SkillEvaluationRunnerProps {
   /** Disabled when the draft is frozen (review state) — runs can't be staged. */
@@ -28,8 +26,6 @@ interface SkillEvaluationRunnerProps {
   onStaged: (runId: string) => void;
 }
 
-const SEARCH_DEBOUNCE_MS = 250;
-
 export function SkillEvaluationRunner({
   disabled = false,
   onStaged,
@@ -37,38 +33,8 @@ export function SkillEvaluationRunner({
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [selectedPlayers, setSelectedPlayers] = useState<PlayerLite[]>([]);
 
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<PlayerLite[]>([]);
-  const [searching, setSearching] = useState(false);
-
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Debounced player name search.
-  useEffect(() => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
-    searchTimer.current = setTimeout(async () => {
-      const res = await searchPlayers(trimmed);
-      if (res.success && res.data) {
-        setResults(res.data);
-      } else {
-        setResults([]);
-      }
-      setSearching(false);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => {
-      if (searchTimer.current) clearTimeout(searchTimer.current);
-    };
-  }, [query]);
 
   const toggleSkill = useCallback((skill: string) => {
     setSelectedSkills((prev) => {
@@ -77,18 +43,6 @@ export function SkillEvaluationRunner({
       else next.add(skill);
       return next;
     });
-  }, []);
-
-  const addPlayer = useCallback((player: PlayerLite) => {
-    setSelectedPlayers((prev) =>
-      prev.some((p) => p.id === player.id) ? prev : [...prev, player]
-    );
-    setQuery("");
-    setResults([]);
-  }, []);
-
-  const removePlayer = useCallback((playerId: string) => {
-    setSelectedPlayers((prev) => prev.filter((p) => p.id !== playerId));
   }, []);
 
   const selectAllSkills = useCallback(() => {
@@ -215,74 +169,13 @@ export function SkillEvaluationRunner({
         </div>
       </div>
 
-      {/* Player subset */}
-      <div id="skill-eval-player-picker" className="mb-5">
-        <span className="block text-[11px] uppercase tracking-wider font-semibold text-neutral-400 mb-2">
-          Players
-        </span>
-        <div className="relative">
-          <input
-            id="skill-eval-player-search-input"
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            disabled={disabled}
-            placeholder="Search players by name to add a subset…"
-            className="w-full text-sm border border-[#d9d0c9] rounded-[6px] px-3 py-2 focus:outline-none focus:border-[#ffa05c] disabled:opacity-50"
-          />
-          {(searching || results.length > 0) && query.trim().length >= 2 && (
-            <ul
-              id="skill-eval-player-results"
-              className="absolute z-10 mt-1 w-full max-h-56 overflow-auto rounded-[6px] border border-[#d9d0c9] bg-white shadow-sm"
-            >
-              {searching && (
-                <li className="px-3 py-2 text-xs text-neutral-400">Searching…</li>
-              )}
-              {!searching && results.length === 0 && (
-                <li className="px-3 py-2 text-xs text-neutral-400">No matches.</li>
-              )}
-              {results.map((p) => (
-                <li key={p.id}>
-                  <button
-                    id={`skill-eval-player-result-${p.id}`}
-                    type="button"
-                    onClick={() => addPlayer(p)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-[#fff8f4] flex items-center justify-between gap-2"
-                  >
-                    <span className="text-[#0e0907]">{p.name}</span>
-                    <span className="text-[11px] text-neutral-400">
-                      {[p.team, p.position].filter(Boolean).join(" · ")}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {selectedPlayers.length > 0 && (
-          <div id="skill-eval-selected-players" className="flex flex-wrap gap-2 mt-3">
-            {selectedPlayers.map((p) => (
-              <span
-                key={p.id}
-                id={`skill-eval-selected-player-${p.id}`}
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded border border-[#ffa05c]/50 bg-[#ffa05c]/20 text-[#fe6d34]"
-              >
-                {p.name}
-                <button
-                  id={`skill-eval-remove-player-${p.id}`}
-                  type="button"
-                  onClick={() => removePlayer(p.id)}
-                  aria-label={`Remove ${p.name}`}
-                  className="text-[#fe6d34] hover:text-[#0e0907] leading-none"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Player subset — shared picker (#76) */}
+      <PlayerSubsetPicker
+        idPrefix="skill-eval-player"
+        selected={selectedPlayers}
+        onChange={setSelectedPlayers}
+        disabled={disabled}
+      />
 
       {error && (
         <div

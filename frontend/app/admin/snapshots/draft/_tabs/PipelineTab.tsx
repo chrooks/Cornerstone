@@ -23,6 +23,7 @@ import type { TabSlug } from "../_lib/tabRouting";
 import { isReviewableRun, isTerminalRun, isStagedRun } from "../_lib/runReview";
 import { RunDiffPreview } from "../_components/RunDiffPreview";
 import { SkillEvaluationRunner } from "../_components/SkillEvaluationRunner";
+import { StageSubsetRunner } from "../_components/StageSubsetRunner";
 
 export interface PipelineTabProps {
   draft: SnapshotDraftSummary;
@@ -179,6 +180,25 @@ export function PipelineTab({ draft, focusRunId, reload }: PipelineTabProps) {
       <SkillEvaluationRunner
         disabled={draft.status === "review"}
         onStaged={handleStagedRun}
+      />
+
+      {/* Subset runners for the remaining stages (#76) — pick any subset of
+          Players (empty = whole league) and run that one stage. Salary/Bio
+          kick off runs that surface in the list below; Compositing runs
+          synchronously and links into the scoped review queue. */}
+      <StageSubsetRunner
+        stage="salary_scrape"
+        disabled={draft.status === "review"}
+        onStaged={handleStagedRun}
+      />
+      <StageSubsetRunner
+        stage="bio_team_sync"
+        disabled={draft.status === "review"}
+        onStaged={handleStagedRun}
+      />
+      <StageSubsetRunner
+        stage="composite"
+        disabled={draft.status === "review"}
       />
 
       {!loading && error && (

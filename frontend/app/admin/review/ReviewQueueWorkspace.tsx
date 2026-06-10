@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getReviewQueue } from "@/lib/api";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
@@ -50,6 +50,21 @@ function FlagReasonBadge({ reason }: { reason: string }) {
 
 export function ReviewQueueWorkspace() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  /* Scope the queue to a Player subset when arriving from a subset pipeline
+     run (#76): /admin/review?players=id,id,id. Empty/absent = full queue. */
+  const playerScope = searchParams.get("players");
+  const scopedIds = playerScope
+    ? new Set(playerScope.split(",").map((s) => s.trim()).filter(Boolean))
+    : null;
+
+  const clearPlayerScope = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("players");
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : "/admin/review");
+  }, [router, searchParams]);
   const [players, setPlayers]               = useState<FlaggedPlayerSummary[]>([]);
   const [allPlayers, setAllPlayers]         = useState<FlaggedPlayerSummary[]>([]);
   const [loading, setLoading]               = useState(true);
@@ -121,6 +136,11 @@ export function ReviewQueueWorkspace() {
   const allReasons = Array.from(
     new Set(allPlayers.flatMap((p) => p.flag_reasons))
   ).sort();
+
+  /* Apply the subset scope on top of the server-side filters (#76). */
+  const visiblePlayers = scopedIds
+    ? players.filter((p) => scopedIds.has(p.player_id))
+    : players;
 
   return (
     <div id="review-queue-workspace" className="max-w-5xl space-y-6">
@@ -222,11 +242,31 @@ export function ReviewQueueWorkspace() {
         )}
       </form>
 
+      {scopedIds && (
+        <div
+          id="review-queue-scope-banner"
+          className="flex items-center justify-between gap-3 rounded-lg border border-[#ffa05c]/40 bg-[#fff8f4] px-3 py-2 text-xs text-[#0e0907]"
+        >
+          <span>
+            Scoped to <span className="font-semibold">{scopedIds.size}</span> Player
+            {scopedIds.size === 1 ? "" : "s"} from a subset run.
+          </span>
+          <button
+            id="review-queue-scope-clear-btn"
+            type="button"
+            onClick={clearPlayerScope}
+            className="font-semibold text-[#fe6d34] underline hover:text-[#e85c25]"
+          >
+            Show full queue
+          </button>
+        </div>
+      )}
+
       {!loading && !error && (
         <p id="review-queue-count" className="text-xs text-muted-foreground">
-          {players.length === 0
+          {visiblePlayers.length === 0
             ? "No players in queue."
-            : `${players.length} player${players.length !== 1 ? "s" : ""} in queue`}
+            : `${visiblePlayers.length} player${visiblePlayers.length !== 1 ? "s" : ""} in queue`}
         </p>
       )}
 
@@ -243,7 +283,7 @@ export function ReviewQueueWorkspace() {
         </div>
       )}
 
-      {!loading && !error && players.length > 0 && (
+      {!loading && !error && visiblePlayers.length > 0 && (
         <div id="review-player-table" className="rounded-lg border border-border overflow-hidden">
           <div id="review-player-table-header" className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-4 py-2 bg-muted/40 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             <span>Player</span>
@@ -254,7 +294,7 @@ export function ReviewQueueWorkspace() {
           </div>
 
           <div className="divide-y divide-border">
-            {players.map((player) => (
+            {visiblePlayers.map((player) => (
               <Link
                 key={player.player_id}
                 href={`/admin/review/${player.player_id}`}
