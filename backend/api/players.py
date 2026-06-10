@@ -587,6 +587,7 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
 
     # 3. Join and build the response list
     result = []
+    missing_from_release: list[str] = []
     for player in players_data:
         raw_profile = profiles_by_player.get(player["id"])
         skills = None
@@ -598,7 +599,7 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
                 for skill, details in raw_profile.items()
             }
 
-        result.append({
+        entry = {
             **player,
             "skills": skills,
             "flag_summary": {"total": 0, "unresolved": 0},
@@ -606,7 +607,24 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
                 player.get("draft_round") == 1
                 and (player.get("season_exp") or 99) <= 3
             ),
-        })
+        }
+        if skills is None:
+            # Issue #64: a Player with no row in the active Snapshot Release is
+            # not silent — flag it so the frontend (and logs) can tell "missing
+            # from release" apart from "rated with no skills".
+            entry["release_integrity"] = {"missing_from_release": True}
+            missing_from_release.append(player.get("name") or player["id"])
+        result.append(entry)
+
+    if missing_from_release:
+        logger.warning(
+            "missing_from_release: %d player(s) in season %s have no row in the "
+            "active Snapshot Release %s (sample: %s)",
+            len(missing_from_release),
+            season,
+            active_release_id,
+            ", ".join(missing_from_release[:5]),
+        )
 
     return result
 
@@ -932,11 +950,24 @@ def player_profile(player_id: str):
         skills_data = raw_profile if raw_profile else None
         flag_summary = {"total": 0, "unresolved": 0}
 
-        return _ok({
+        response_data = {
             "player":       player,
             "skills":       skills_data,
             "flag_summary": flag_summary,
-        })
+        }
+        if skills_data is None:
+            # Issue #64: keep the 200 + skills: null Contract, but signal the
+            # release gap explicitly instead of failing silently.
+            logger.warning(
+                "missing_from_release: player %s (%s) has no row in the active "
+                "Snapshot Release %s — returning skills: null",
+                player_id,
+                player.get("name"),
+                active_release_id,
+            )
+            response_data["release_integrity"] = {"missing_from_release": True}
+
+        return _ok(response_data)
 
     except Exception as exc:
         logger.exception("Error in GET /api/players/%s/profile", player_id)

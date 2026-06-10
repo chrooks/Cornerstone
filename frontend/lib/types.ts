@@ -310,6 +310,12 @@ export interface PlayerProfile {
   };
   skills: Record<string, CompositeSkillResult> | null;
   flag_summary: FlagSummary;
+  /**
+   * Present (with missing_from_release: true) when the player exists in
+   * `players` but has no row in the active Snapshot Release — skills is null
+   * for a release-integrity reason, not because the player is unrated (#64).
+   */
+  release_integrity?: { missing_from_release: boolean };
 }
 
 /** Valid resolution choices for a skill flag */
@@ -373,6 +379,12 @@ export interface PlayerWithSkills {
   skills: PlayerSkillMap | null;
   /** Aggregate flag status — used to surface review badges in the explorer. */
   flag_summary: { total: number; unresolved: number };
+  /**
+   * Present (with missing_from_release: true) when the player exists in
+   * `players` but has no row in the active Snapshot Release — skills is null
+   * for a release-integrity reason, not because the player is unrated (#64).
+   */
+  release_integrity?: { missing_from_release: boolean };
 }
 
 // ---------------------------------------------------------------------------

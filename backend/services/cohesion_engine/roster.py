@@ -8,6 +8,7 @@ composites for display without lineup-context synergies.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from itertools import combinations
 from statistics import median
@@ -20,6 +21,8 @@ from .engine import CohesionEngine
 from .notes import generate_notes
 from .team_description import generate_team_description
 from .types import LineupCohesion, PlayerComposites, RosterEvaluation
+
+logger = logging.getLogger(__name__)
 
 SUBSCORE_ARCHETYPES: dict[str, str] = {
     "spacing_creation_ratio": "offensive",
@@ -64,6 +67,32 @@ def _empty_lineup() -> LineupCohesion:
         accentuation_strength=0.0,
         accentuation_weakness=0.0,
     )
+
+
+def _normalize_player_skills(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return copies of player dicts with missing/None skills coerced to {} (#64).
+
+    A Player with no row in the active released_players reaches the builder
+    payload with skills: null. Scoring them as all-"None" is sometimes the
+    only option, but it must not be silent — log a WARN naming the player so
+    release gaps are visible, and coerce to an empty map so downstream
+    lineup/composite code never sees None. Player dicts are copied, never
+    mutated.
+    """
+    normalized: list[dict[str, Any]] = []
+    for index, player in enumerate(players):
+        skills = player.get("skills")
+        if skills:
+            normalized.append(player)
+            continue
+        logger.warning(
+            "missing_from_release: player %s has no skills in the roster "
+            "evaluation payload — scoring as unrated (likely missing from the "
+            "active Snapshot Release)",
+            player.get("name") or _player_id(player, index),
+        )
+        normalized.append({**player, "skills": {}})
+    return normalized
 
 
 def _compute_base_composites(
@@ -208,7 +237,7 @@ def evaluate_roster(
     """
     values = engine.version.values
     viable_threshold: float = values["viable_lineup_threshold"]
-    ordered_players = _sort_players_for_starting_lineup(list(players))
+    ordered_players = _sort_players_for_starting_lineup(_normalize_player_skills(list(players)))
     base_composites = _compute_base_composites(ordered_players, values)
 
     if len(ordered_players) < 5:
