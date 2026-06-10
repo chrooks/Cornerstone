@@ -21,7 +21,11 @@ from .weights import (
 )
 
 COMPOSITE_DISTRIBUTIONS: dict[str, list[float]] = {}
-_DISTRIBUTION_SEASON: str | None = None
+# Cache key: (season, active snapshot_release_id). Keying on the release id —
+# not season alone — means a publish or reactivate that flips the active
+# release invalidates the cache on the next ensure_distributions() call, even
+# without a Flask restart (#61). release_id is None when no release is active.
+_DISTRIBUTION_KEY: tuple[str, str | None] | None = None
 
 logger = logging.getLogger(__name__)
 
@@ -270,8 +274,8 @@ def clear_distributions() -> None:
             "clear_distributions skipped: draft in progress (distribution cache pinned)"
         )
         return
-    global _DISTRIBUTION_SEASON
-    _DISTRIBUTION_SEASON = None
+    global _DISTRIBUTION_KEY
+    _DISTRIBUTION_KEY = None
     set_distributions(None)
 
 
@@ -281,8 +285,8 @@ def _force_clear_distributions() -> None:
 
     Bypass for the publish flow. Do not call from any other code path.
     """
-    global _DISTRIBUTION_SEASON
-    _DISTRIBUTION_SEASON = None
+    global _DISTRIBUTION_KEY
+    _DISTRIBUTION_KEY = None
     set_distributions(None)
 
 
@@ -294,20 +298,47 @@ def distributions_ready() -> bool:
     )
 
 
+def _resolve_active_release_id() -> str | None:
+    """Return the active Snapshot Release id, or None when no release is active.
+
+    Memoized per request via snapshot_versions.active, so the cache-key check in
+    ensure_distributions costs at most one DB lookup per request.
+    """
+    from services.snapshot_versions.active import (
+        ActiveReleaseMissingError,
+        get_active_release_id,
+    )
+
+    try:
+        return get_active_release_id(client=_get_supabase_client())
+    except ActiveReleaseMissingError:
+        return None
+
+
 def ensure_distributions(season: str, values: dict[str, Any], force: bool = False) -> bool:
     """
-    Build percentile normalization distributions when missing.
+    Build percentile normalization distributions when missing or stale.
+
+    The cache is keyed by (season, active snapshot_release_id): when a publish
+    or reactivate flips the active release, the key mismatch forces a rebuild
+    from the new release's released_players rows (#61).
 
     Returns True when percentile normalization is ready. Failures are logged and
     leave theoretical fallback available, so request handling can continue.
     """
-    global _DISTRIBUTION_SEASON
-    if not force and _DISTRIBUTION_SEASON == season and distributions_ready():
-        return True
+    if not force and distributions_ready():
+        try:
+            if _DISTRIBUTION_KEY == (season, _resolve_active_release_id()):
+                return True
+        except Exception as exc:
+            logger.warning(
+                "Unable to resolve active Snapshot Release for distribution "
+                "cache check; rebuilding (%s)",
+                exc,
+            )
 
     try:
         build_distributions(season, values)
-        _DISTRIBUTION_SEASON = season
     except Exception as exc:
         logger.warning(
             "Unable to build cohesion composite distributions; using theoretical fallback (%s)",
@@ -367,6 +398,8 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
     """
     from services.snapshot_versions.active import get_active_release_id, ActiveReleaseMissingError
 
+    global _DISTRIBUTION_KEY
+
     client = _get_supabase_client()
     all_raw: dict[str, list[float]] = {name: [] for name in COMPOSITE_NAMES}
 
@@ -379,6 +412,7 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
         )
         distributions: dict[str, list[float]] = {name: [] for name in COMPOSITE_NAMES}
         set_distributions(distributions)
+        _DISTRIBUTION_KEY = (season, None)
         return distributions
 
     # Regular players — source_player_id is non-null, is_legend=false
@@ -411,6 +445,7 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
 
     distributions = {name: sorted(vals) for name, vals in all_raw.items()}
     set_distributions(distributions)
+    _DISTRIBUTION_KEY = (season, active_release_id)
     return distributions
 
 

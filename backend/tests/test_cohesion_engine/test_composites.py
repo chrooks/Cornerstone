@@ -25,10 +25,15 @@ VALUES = _bootstrap_values()
 
 @pytest.fixture(autouse=True)
 def clear_distribution_cache():
-    """Each test starts in theoretical-max fallback mode unless it opts in."""
-    composites.clear_distributions()
+    """Each test starts in theoretical-max fallback mode unless it opts in.
+
+    Uses _force_clear_distributions: the public clear_distributions() is gated
+    by the draft-pin guard, which queries the live DB — test isolation must not
+    depend on whether a Snapshot draft happens to be open in production.
+    """
+    composites._force_clear_distributions()
     yield
-    composites.clear_distributions()
+    composites._force_clear_distributions()
 
 
 def sample_skills() -> dict[str, str]:
@@ -253,3 +258,109 @@ def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
     assert distributions["perimeter_defense"] == [0.0, 0.0]
     assert distributions["interior_defense"] == [0.0, 0.0]
     assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [1.0, 8.0]
+
+
+class _FlippableReleaseFixture:
+    """Fake DB where the active release id can flip mid-process (#61).
+
+    release-a rows are spot_up_shooter Elite (spacing raw 8.0 each);
+    release-b rows are crafty_finisher Elite (finishing raw 8.0, spacing 0.0).
+    Row counts exceed MIN_DISTRIBUTION_SIZE so distributions_ready() is True
+    and the cache-hit path actually engages.
+    """
+
+    ROWS = composites.MIN_DISTRIBUTION_SIZE + 5
+
+    def __init__(self):
+        self.active_release_id = "release-a"
+        self.build_query_count = 0
+        self._rows = {
+            "release-a": [
+                {"skill_profile_snapshot": {"spot_up_shooter": {"final_tier": "Elite"}}}
+            ]
+            * self.ROWS,
+            "release-b": [
+                {"skill_profile_snapshot": {"crafty_finisher": {"final_tier": "Elite"}}}
+            ]
+            * self.ROWS,
+        }
+
+    def install(self, monkeypatch):
+        import services.snapshot_versions.active as snapshots_active_mod
+
+        fixture = self
+
+        class FakeResult:
+            def __init__(self, data):
+                self.data = data
+
+        class FakeQuery:
+            def __init__(self):
+                self.filters = {}
+
+            def select(self, _columns):
+                return self
+
+            def eq(self, key, value):
+                self.filters[key] = value
+                return self
+
+            def execute(self):
+                fixture.build_query_count += 1
+                if self.filters.get("is_legend") is True:
+                    return FakeResult([])
+                release_id = self.filters.get("snapshot_release_id")
+                return FakeResult(fixture._rows.get(release_id, []))
+
+        class FakeClient:
+            def table(self, _name):
+                return FakeQuery()
+
+        monkeypatch.setattr(composites, "_get_supabase_client", lambda: FakeClient())
+        monkeypatch.setattr(composites, "_run_query", lambda query: query())
+        monkeypatch.setattr(
+            snapshots_active_mod,
+            "_query_active_release_id",
+            lambda client=None: fixture.active_release_id,
+        )
+
+
+def test_ensure_distributions_rebuilds_when_active_release_flips(monkeypatch):
+    """A publish/reactivate that flips the active release inside one process
+    must invalidate the season-keyed cache: normalization has to come from the
+    NEW release's released_players rows, not the prior cache (#61)."""
+    fixture = _FlippableReleaseFixture()
+    fixture.install(monkeypatch)
+
+    # Warm from release-a
+    assert composites.ensure_distributions("2025-26", VALUES) is True
+    assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [8.0] * fixture.ROWS
+    queries_after_warm = fixture.build_query_count
+
+    # Same season, same active release: cache hit, no rebuild queries
+    assert composites.ensure_distributions("2025-26", VALUES) is True
+    assert fixture.build_query_count == queries_after_warm
+
+    # Flip the active release without a restart (publish/reactivate effect)
+    fixture.active_release_id = "release-b"
+
+    assert composites.ensure_distributions("2025-26", VALUES) is True
+    assert fixture.build_query_count > queries_after_warm
+    # Distributions now reflect release-b rows (finishing-heavy, no spacing)
+    assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [0.0] * fixture.ROWS
+    assert composites.COMPOSITE_DISTRIBUTIONS["finishing"] == [8.0] * fixture.ROWS
+
+
+def test_ensure_distributions_cache_hit_on_same_release(monkeypatch):
+    """Sanity inverse of the flip test: while the active release is unchanged,
+    repeated ensure_distributions calls never re-query the DB."""
+    fixture = _FlippableReleaseFixture()
+    fixture.install(monkeypatch)
+
+    assert composites.ensure_distributions("2025-26", VALUES) is True
+    queries_after_warm = fixture.build_query_count
+
+    for _ in range(3):
+        assert composites.ensure_distributions("2025-26", VALUES) is True
+
+    assert fixture.build_query_count == queries_after_warm
