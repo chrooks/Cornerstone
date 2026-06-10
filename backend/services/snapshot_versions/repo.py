@@ -348,7 +348,34 @@ def reset_working_state_from_active(client=None) -> None:
     )
 
 
-def reactivate_release(release_id: str, client=None) -> SnapshotRelease:
+def _check_structural_staleness(release_id: str, client) -> None:
+    """Refuse to reactivate a Release frozen under an older schema era.
+
+    A Release published before the legends-freeze migration has zero
+    is_legend rows in released_players; reactivating it silently empties
+    the Lab's legends (and any other surface reading frozen legend rows).
+    Zero legend rows is only stale when legends exist to be frozen.
+    """
+    release_legends = run_query(
+        lambda: client.table("released_players")
+        .select("id", count="exact")
+        .eq("snapshot_release_id", release_id)
+        .eq("is_legend", True)
+        .execute()
+    )
+    if getattr(release_legends, "count", None) != 0:
+        return
+
+    legends_total = run_query(
+        lambda: client.table("legends").select("id", count="exact").execute()
+    )
+    if (getattr(legends_total, "count", None) or 0) > 0:
+        raise ValueError("release_structurally_stale")
+
+
+def reactivate_release(
+    release_id: str, client=None, allow_stale: bool = False
+) -> SnapshotRelease:
     """Atomically reactivate a previously published Snapshot Release.
 
     Calls reactivate_snapshot_release(p_release_id) Postgres RPC which
@@ -361,8 +388,14 @@ def reactivate_release(release_id: str, client=None) -> SnapshotRelease:
         ValueError('release_not_found') if the target Release does not exist.
         ValueError('not_published') if the target Release is not published.
         ValueError('draft_in_flight') if any draft/review row is open.
+        ValueError('release_structurally_stale') if the target Release has no
+            frozen legend rows while legends exist (pre-legends-freeze era).
+            Pass allow_stale=True to override deliberately.
     """
     c = client or _get_client()
+
+    if not allow_stale:
+        _check_structural_staleness(release_id, c)
 
     try:
         run_query(

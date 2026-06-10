@@ -369,14 +369,16 @@ def reactivate_release(release_id: str):
     uuid_err = _validate_uuid(release_id, "release_id")
     if uuid_err:
         return _err(uuid_err, 400)
+    body = request.get_json(silent=True) or {}
+    allow_stale = body.get("allow_stale") is True
     try:
-        release = repo.reactivate_release(release_id)
+        release = repo.reactivate_release(release_id, allow_stale=allow_stale)
         return _ok(_release_dict(release))
     except ValueError as exc:
         code = str(exc)
         if code == "release_not_found":
             return _err(code, 404)
-        if code == "draft_in_flight":
+        if code in ("draft_in_flight", "release_structurally_stale"):
             return _err(code, 409)
         return _err(code, 400)
     except Exception:

@@ -873,6 +873,89 @@ class TestReactivateRelease:
 
         assert str(exc_info.value) == expected_code
 
+    @staticmethod
+    def _stale_check_client(release_legend_count: int, legends_total: int):
+        """Fake client whose count queries answer the structural-staleness check.
+
+        released_players: .table().select(count).eq().eq().execute() -> count
+        legends:          .table().select(count).execute()           -> count
+        """
+
+        class FakeResult:
+            def __init__(self, count):
+                self.count = count
+                self.data = []
+
+        class FakeQuery:
+            def __init__(self, count):
+                self._count = count
+
+            def select(self, *args, **kwargs):
+                return self
+
+            def eq(self, *args, **kwargs):
+                return self
+
+            def execute(self):
+                return FakeResult(self._count)
+
+        client = MagicMock()
+        client.table.side_effect = lambda name: FakeQuery(
+            release_legend_count if name == "released_players" else legends_total
+        )
+        return client
+
+    def test_reactivate_refuses_structurally_stale_release(self):
+        """A Release frozen before the legends-freeze era (zero is_legend rows
+        while legends exist) must be refused — reactivating it silently empties
+        the Lab's legends."""
+        from services.snapshot_versions import repo
+
+        client = self._stale_check_client(release_legend_count=0, legends_total=36)
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with pytest.raises(ValueError, match="release_structurally_stale"):
+                repo.reactivate_release(self._RELEASE_ID)
+
+        client.rpc.assert_not_called()
+
+    def test_reactivate_allow_stale_overrides_guard(self):
+        from services.snapshot_versions import repo
+
+        client = self._stale_check_client(release_legend_count=0, legends_total=36)
+        client.rpc.return_value.execute.side_effect = Exception("not_published")
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with pytest.raises(ValueError, match="not_published"):
+                repo.reactivate_release(self._RELEASE_ID, allow_stale=True)
+
+        client.rpc.assert_called_once()
+
+    def test_reactivate_proceeds_when_release_has_legend_rows(self):
+        from services.snapshot_versions import repo
+
+        client = self._stale_check_client(release_legend_count=36, legends_total=36)
+        client.rpc.return_value.execute.side_effect = Exception("not_published")
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with pytest.raises(ValueError, match="not_published"):
+                repo.reactivate_release(self._RELEASE_ID)
+
+        client.rpc.assert_called_once()
+
+    def test_reactivate_proceeds_when_no_legends_exist_at_all(self):
+        """Zero legend rows is only stale when legends exist to be frozen."""
+        from services.snapshot_versions import repo
+
+        client = self._stale_check_client(release_legend_count=0, legends_total=0)
+        client.rpc.return_value.execute.side_effect = Exception("not_published")
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with pytest.raises(ValueError, match="not_published"):
+                repo.reactivate_release(self._RELEASE_ID)
+
+        client.rpc.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # Tests: issue #72 — season-from-draft

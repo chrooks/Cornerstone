@@ -634,7 +634,37 @@ class TestReactivateReleaseEndpoint:
         body = resp.get_json()
         assert body["success"] is True
         assert body["data"]["is_active"] is True
-        spy.assert_called_once_with(self._RELEASE_ID)
+        spy.assert_called_once_with(self._RELEASE_ID, allow_stale=False)
+
+    def test_reactivate_passes_allow_stale_through(self, admin_client):
+        from services.snapshot_versions import repo
+
+        reactivated = _fake_release(status="published", is_active=True)
+        with patch.object(repo, "reactivate_release", return_value=reactivated) as spy:
+            resp = admin_client.post(
+                f"/api/snapshots/releases/{self._RELEASE_ID}/reactivate",
+                headers=admin_client.auth_header,
+                json={"allow_stale": True},
+            )
+
+        assert resp.status_code == 200
+        spy.assert_called_once_with(self._RELEASE_ID, allow_stale=True)
+
+    def test_reactivate_returns_409_when_structurally_stale(self, admin_client):
+        from services.snapshot_versions import repo
+
+        with patch.object(
+            repo,
+            "reactivate_release",
+            side_effect=ValueError("release_structurally_stale"),
+        ):
+            resp = admin_client.post(
+                f"/api/snapshots/releases/{self._RELEASE_ID}/reactivate",
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 409
+        assert resp.get_json()["error"] == "release_structurally_stale"
 
     def test_reactivate_returns_400_when_not_published(self, admin_client):
         from services.snapshot_versions import repo
