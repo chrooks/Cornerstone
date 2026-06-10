@@ -12,10 +12,11 @@
  *                 supporting  → slot=index+1 (allSlots[0] = slot 1), is_cornerstone=false
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, useParams, usePathname } from "next/navigation";
-import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam, listRuleSets, NO_ACTIVE_RELEASE_ERROR } from "@/lib/api";
+import { listPlayersWithSkills, getLegend, evaluateRoster, saveTeam, listRuleSets } from "@/lib/api";
+import { useNoActiveReleaseRetry } from "@/lib/hooks/useNoActiveReleaseRetry";
 import { NoActiveReleaseError } from "@/components/lab/NoActiveReleaseError";
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
@@ -264,7 +265,13 @@ export function EvaluatePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedTeam, setSavedTeam] = useState<SavedTeamSummary | null>(null);
   const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
-  const [retryToken, setRetryToken] = useState(0);
+
+  /* Shared no_active_release Error State + retry bookkeeping (#62) */
+  const { noActiveRelease, retryToken, retrying, detectNoActiveRelease, retry, settleRetry } =
+    useNoActiveReleaseRetry(() => {
+      setErrorMsg(null);
+      setEvalState("loading");
+    });
 
   // Ref keeps the latest searchParams without re-triggering the load effect —
   // the load runs on mount + explicit retry only, but always reads fresh params.
@@ -283,7 +290,15 @@ export function EvaluatePage() {
     Promise.all([listPlayersWithSkills(), listRuleSets()])
       .then(async ([playersRes, rulesetsRes]) => {
         if (cancelled) return;
-        if (!playersRes.success || !playersRes.data) throw new Error(playersRes.error ?? "Failed to load players");
+        if (!playersRes.success || !playersRes.data) {
+          /* no_active_release gets the shared Lab Error State (#62) */
+          if (detectNoActiveRelease(playersRes)) {
+            setEvalState("error");
+            settleRetry();
+            return;
+          }
+          throw new Error(playersRes.error ?? "Failed to load players");
+        }
 
         // Resolve RuleSet Version for the current Lab RuleSet slug
         const rulesetSlug = ruleset ?? "standard";
@@ -310,12 +325,14 @@ export function EvaluatePage() {
         if (cancelled) return;
         setDataReady({ slots, legend });
         setEvalState("evaluating");
+        settleRetry();
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         /* Loading always terminates — evalState leaves "loading" on every path (#62) */
         setErrorMsg(err instanceof Error ? err.message : "Failed to load data");
         setEvalState("error");
+        settleRetry();
       });
     return () => {
       cancelled = true;
@@ -323,13 +340,6 @@ export function EvaluatePage() {
   // Mount + explicit retry only — paramsRef keeps params fresh without re-running
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryToken]);
-
-  /* Retry after a no_active_release Error State (#62) */
-  const handleNoReleaseRetry = useCallback(() => {
-    setErrorMsg(null);
-    setEvalState("loading");
-    setRetryToken((token) => token + 1);
-  }, []);
 
   // Phase 2: evaluate once data AND admin status are both resolved
   useEffect(() => {
@@ -352,7 +362,10 @@ export function EvaluatePage() {
           setEvaluation(evaluationWithCachedDescription);
           setEvalState("ready");
         } else {
-          setErrorMsg(res.error ?? "Evaluation failed");
+          /* no_active_release gets the shared Lab Error State (#62) */
+          if (!detectNoActiveRelease(res)) {
+            setErrorMsg(res.error ?? "Evaluation failed");
+          }
           setEvalState("error");
         }
       })
@@ -573,10 +586,10 @@ export function EvaluatePage() {
 
       {/* Error — no_active_release gets the shared Lab Error State (#62);
           generic errors keep their existing handling */}
-      {evalState === "error" && errorMsg === NO_ACTIVE_RELEASE_ERROR && (
-        <NoActiveReleaseError onRetry={handleNoReleaseRetry} />
+      {evalState === "error" && noActiveRelease && (
+        <NoActiveReleaseError onRetry={retry} retrying={retrying} />
       )}
-      {evalState === "error" && errorMsg !== NO_ACTIVE_RELEASE_ERROR && (
+      {evalState === "error" && !noActiveRelease && (
         <p id="eval-error" className="text-sm text-destructive">{errorMsg ?? "Something went wrong."}</p>
       )}
 

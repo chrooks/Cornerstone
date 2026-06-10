@@ -14,7 +14,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { listPlayersWithSkills, getLegend, listRuleSets, NO_ACTIVE_RELEASE_ERROR } from "@/lib/api";
+import { listPlayersWithSkills, getLegend, listRuleSets } from "@/lib/api";
+import { useNoActiveReleaseRetry } from "@/lib/hooks/useNoActiveReleaseRetry";
 import { NoActiveReleaseError } from "@/components/lab/NoActiveReleaseError";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { useRosterSlots } from "@/lib/hooks/useRosterSlots";
@@ -50,7 +51,13 @@ export function BuilderPage() {
   const [activeRows, setActiveRows] = useState<PlayerWithSkills[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
-  const [retryToken, setRetryToken] = useState(0);
+
+  /* Shared no_active_release Error State + retry bookkeeping (#62) */
+  const { noActiveRelease, retryToken, retrying, detectNoActiveRelease, retry, settleRetry } =
+    useNoActiveReleaseRetry(() => {
+      setDataError(null);
+      setDataLoading(true);
+    });
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +68,7 @@ export function BuilderPage() {
         if (res.success && res.data) {
           setLegendRows(res.data.filter((p) => p.is_legend === true));
           setActiveRows(res.data.filter((p) => !p.is_legend));
-        } else {
+        } else if (!detectNoActiveRelease(res)) {
           setDataError(res.error ?? "Failed to load data");
         }
       })
@@ -69,19 +76,16 @@ export function BuilderPage() {
         if (!cancelled) setDataError("Failed to load data");
       })
       .finally(() => {
-        if (!cancelled) setDataLoading(false);
+        if (!cancelled) {
+          setDataLoading(false);
+          settleRetry();
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [retryToken]);
-
-  /* Retry after a no_active_release Error State (#62) */
-  const handleDataRetry = useCallback(() => {
-    setDataError(null);
-    setDataLoading(true);
-    setRetryToken((token) => token + 1);
-  }, []);
+    /* detectNoActiveRelease / settleRetry are stable — deps stay mount + retryToken */
+  }, [retryToken, detectNoActiveRelease, settleRetry]);
 
   // ── Cornerstone — derived from URL + all player rows ───────────────────────
   const cornerstoneId = searchParams.get("cornerstone");
@@ -342,10 +346,10 @@ export function BuilderPage() {
 
   /* Specific Error State: no Snapshot Release is active (#62). Generic
      errors below keep their existing handling. */
-  if (dataError === NO_ACTIVE_RELEASE_ERROR) {
+  if (noActiveRelease) {
     return (
       <main id="builder-no-active-release" className="min-h-[calc(100vh-3rem)]">
-        <NoActiveReleaseError onRetry={handleDataRetry} />
+        <NoActiveReleaseError onRetry={retry} retrying={retrying} />
       </main>
     );
   }

@@ -11,7 +11,8 @@
 import Link from "next/link";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { listLegends, getLegend, listPlayersWithSkills, listRuleSets, isNoActiveRelease } from "@/lib/api";
+import { listLegends, getLegend, listPlayersWithSkills, listRuleSets } from "@/lib/api";
+import { useNoActiveReleaseRetry } from "@/lib/hooks/useNoActiveReleaseRetry";
 import { resolveRuleSetRules } from "@/lib/rulesets";
 import { NoActiveReleaseError } from "@/components/lab/NoActiveReleaseError";
 import { PlayerPoolBrowser, type PlayerPoolBrowserCounts, type PlayerPoolViewMode } from "@/components/players/PlayerPoolBrowser";
@@ -106,8 +107,10 @@ export default function LegendsPage() {
   const [details, setDetails] = useState<Record<string, LegendDetail>>({});
   const [allPlayers, setAllPlayers] = useState<PlayerWithSkills[]>([]);
   const [loading, setLoading] = useState(true);
-  const [noActiveRelease, setNoActiveRelease] = useState(false);
-  const [retryToken, setRetryToken] = useState(0);
+
+  /* ── Shared no_active_release Error State + retry bookkeeping (#62) ── */
+  const { noActiveRelease, retryToken, retrying, detectNoActiveRelease, retry, settleRetry } =
+    useNoActiveReleaseRetry(() => setLoading(true));
 
   /* ── PlayerWithSkills projection for filter/sort infra ── */
   const playersProjection = useMemo(() => {
@@ -146,12 +149,15 @@ export default function LegendsPage() {
         if (cancelled) return;
         if (res.success && res.data) {
           setAllPlayers(res.data);
-        } else if (isNoActiveRelease(res)) {
-          setNoActiveRelease(true);
+        } else {
+          detectNoActiveRelease(res);
         }
       } finally {
         /* Loading must terminate on every path — no infinite spinner (#62) */
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          settleRetry();
+        }
       }
     }
 
@@ -176,12 +182,15 @@ export default function LegendsPage() {
             });
             setDetails(detailMap);
           }
-        } else if (isNoActiveRelease(res)) {
-          setNoActiveRelease(true);
+        } else {
+          detectNoActiveRelease(res);
         }
       } finally {
         /* Loading must terminate on every path — no infinite spinner (#62) */
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          settleRetry();
+        }
       }
     }
 
@@ -192,14 +201,8 @@ export default function LegendsPage() {
     }
 
     return () => { cancelled = true; };
-  }, [resolvedRuleSet, cornerstoneSource, retryToken]);
-
-  /* ── Retry after a no_active_release Error State ── */
-  const handleRetry = useCallback(() => {
-    setNoActiveRelease(false);
-    setLoading(true);
-    setRetryToken((token) => token + 1);
-  }, []);
+    /* detectNoActiveRelease / settleRetry are stable — deps stay mount + retryToken */
+  }, [resolvedRuleSet, cornerstoneSource, retryToken, detectNoActiveRelease, settleRetry]);
 
   /* ── Row click in table → navigate to build with this cornerstone ── */
   const handleRowClick = useCallback(
@@ -263,7 +266,7 @@ export default function LegendsPage() {
 
       {/* ── Error State: no active Snapshot Release (#62) ── */}
       {!loading && noActiveRelease && (
-        <NoActiveReleaseError onRetry={handleRetry} />
+        <NoActiveReleaseError onRetry={retry} retrying={retrying} />
       )}
 
       {!loading && !noActiveRelease && (
