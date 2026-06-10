@@ -43,6 +43,17 @@ def _validate_uuid(val: str) -> bool:
 
 logger = logging.getLogger(__name__)
 
+
+def release_integrity_missing() -> dict:
+    """Return the single ReleaseIntegrity shape for a release-integrity gap.
+
+    Attached to player payloads when a Player exists in `players` but has no
+    row in the active Snapshot Release (#64), so the frontend can tell
+    "missing from release" apart from "rated with no skills". Mirrors the
+    ReleaseIntegrity interface in frontend/lib/types.ts.
+    """
+    return {"missing_from_release": True}
+
 players_bp = Blueprint("players", __name__, url_prefix="/api")
 
 
@@ -612,7 +623,7 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
             # Issue #64: a Player with no row in the active Snapshot Release is
             # not silent — flag it so the frontend (and logs) can tell "missing
             # from release" apart from "rated with no skills".
-            entry["release_integrity"] = {"missing_from_release": True}
+            entry["release_integrity"] = release_integrity_missing()
             missing_from_release.append(player.get("name") or player["id"])
         result.append(entry)
 
@@ -965,7 +976,7 @@ def player_profile(player_id: str):
                 player.get("name"),
                 active_release_id,
             )
-            response_data["release_integrity"] = {"missing_from_release": True}
+            response_data["release_integrity"] = release_integrity_missing()
 
         return _ok(response_data)
 
