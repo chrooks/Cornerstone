@@ -152,6 +152,13 @@ def _compute_player_composites(
     lineup: list[dict[str, Any]], values: dict[str, Any]
 ) -> list[PlayerComposites]:
     """Compute effective composites for every player in a lineup."""
+    # Imported at call time: snapshot_versions.distribution_cache imports this
+    # package's composites module at load, so a module-level import here would
+    # be circular. Grab the immutable state ONCE for the whole lineup — a
+    # concurrent publish flip cannot tear this batch.
+    from services.snapshot_versions import distribution_cache
+
+    state = distribution_cache.get_state()
     computed: list[PlayerComposites] = []
     for index, player in enumerate(lineup):
         height_inches = parse_height_inches(player.get("height"))
@@ -162,6 +169,7 @@ def _compute_player_composites(
                 name=str(player.get("name") or _player_id(player, index)),
                 values=values,
                 height_inches=height_inches,
+                distributions=state.distributions,
             )
         )
     return computed

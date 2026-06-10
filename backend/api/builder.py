@@ -29,12 +29,12 @@ from services.cohesion_engine import evaluate_roster
 from services.cohesion_engine import weights as cohesion_weights
 from services.cohesion_engine.bell_curve import apply_rp_pd_boost, compute_bell_params, parse_height_inches
 from services.cohesion_engine.cohesion import evaluate_lineup
-from services.cohesion_engine.composites import ensure_distributions
 from services.cohesion_engine.engine import CohesionEngine
 from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
 from services.cohesion_engine.types import RosterEvaluation
 from services.evaluation_versions.repo import get_active as get_active_eval_version
 from services.players_service import CURRENT_SEASON
+from services.snapshot_versions.distribution_cache import ensure_distributions
 
 logger = logging.getLogger(__name__)
 

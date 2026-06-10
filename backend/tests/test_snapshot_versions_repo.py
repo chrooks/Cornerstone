@@ -270,8 +270,8 @@ class TestPublishDraft:
                     "validate_publishable",
                     return_value={"players_missing_canonical": 0, "players_missing_composite": 0},
                 ):
-                    with patch("services.cohesion_engine.composites._force_clear_distributions"):
-                        with patch("services.cohesion_engine.composites.ensure_distributions"):
+                    with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
+                        with patch("services.snapshot_versions.distribution_cache.ensure_distributions"):
                             with patch("services.evaluation_versions.repo.get_active") as mock_active:
                                 from services.cohesion_engine.engine import EvaluationVersion
                                 mock_active.return_value = EvaluationVersion(
@@ -306,8 +306,8 @@ class TestPublishDraft:
         ) = _result(published_row)
 
         with patch.object(repo, "_get_client", return_value=client):
-            with patch("services.cohesion_engine.composites._force_clear_distributions"):
-                with patch("services.cohesion_engine.composites.ensure_distributions"):
+            with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
+                with patch("services.snapshot_versions.distribution_cache.ensure_distributions"):
                     with patch("services.evaluation_versions.repo.get_active") as mock_active:
                         from services.cohesion_engine.engine import EvaluationVersion
                         mock_active.return_value = EvaluationVersion(
@@ -369,11 +369,11 @@ class TestPublishDraft:
 
         with patch.object(repo, "_get_client", return_value=client):
             with patch(
-                "services.cohesion_engine.composites._force_clear_distributions",
+                "services.snapshot_versions.distribution_cache.force_clear_distributions",
                 side_effect=lambda: call_order.append("clear"),
             ):
                 with patch(
-                    "services.cohesion_engine.composites.ensure_distributions",
+                    "services.snapshot_versions.distribution_cache.ensure_distributions",
                     side_effect=lambda *a, **kw: call_order.append("ensure"),
                 ):
                     with patch("services.evaluation_versions.repo.get_active") as mock_active:
@@ -398,7 +398,7 @@ class TestPublishDraft:
         import services.snapshot_versions.active as snapshots_active_mod
         from services.cohesion_engine import composites
         from services.cohesion_engine.engine import EvaluationVersion
-        from services.snapshot_versions import repo
+        from services.snapshot_versions import distribution_cache, repo
 
         seed_path = (
             Path(__file__).resolve().parents[2]
@@ -464,7 +464,7 @@ class TestPublishDraft:
             lambda client=None: draft_id,
         )
 
-        composites._force_clear_distributions()
+        distribution_cache.force_clear_distributions()
         try:
             with patch.object(repo, "_get_client", return_value=repo_client):
                 with patch("services.pipeline_runs.repo.any_running", return_value=False):
@@ -479,10 +479,11 @@ class TestPublishDraft:
             # Distributions reflect the frozen snapshot rows of the new release:
             # spot_up Elite (spacing 8.0), spot_up Proficient (4.0), legend
             # crafty_finisher Elite (spacing 0.0, finishing 8.0).
-            assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [0.0, 4.0, 8.0]
-            assert composites.COMPOSITE_DISTRIBUTIONS["finishing"] == [0.0, 0.0, 8.0]
+            state = distribution_cache.get_state()
+            assert state.distributions["spacing"] == [0.0, 4.0, 8.0]
+            assert state.distributions["finishing"] == [0.0, 0.0, 8.0]
         finally:
-            composites._force_clear_distributions()
+            distribution_cache.force_clear_distributions()
 
 
 # ---------------------------------------------------------------------------
@@ -534,8 +535,8 @@ class TestPublishDraftRunsGuard:
 
         with patch.object(repo, "_get_client", return_value=client):
             with patch("services.pipeline_runs.repo.any_running", return_value=False):
-                with patch("services.cohesion_engine.composites._force_clear_distributions"):
-                    with patch("services.cohesion_engine.composites.ensure_distributions"):
+                with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
+                    with patch("services.snapshot_versions.distribution_cache.ensure_distributions"):
                         with patch("services.evaluation_versions.repo.get_active") as mock_active:
                             from services.cohesion_engine.engine import EvaluationVersion
                             mock_active.return_value = EvaluationVersion(
@@ -612,8 +613,8 @@ class TestPublishDraftPendingCommitsGuard:
                     "services.pipeline_runs.repo.any_pending_commit",
                     return_value=False,
                 ):
-                    with patch("services.cohesion_engine.composites._force_clear_distributions"):
-                        with patch("services.cohesion_engine.composites.ensure_distributions"):
+                    with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
+                        with patch("services.snapshot_versions.distribution_cache.ensure_distributions"):
                             with patch("services.evaluation_versions.repo.get_active") as mock_active:
                                 from services.cohesion_engine.engine import EvaluationVersion
                                 mock_active.return_value = EvaluationVersion(
@@ -695,8 +696,8 @@ class TestPublishDraftMissingCompositePreflight:
                     snap_validator,
                     "validate_publishable",
                 ) as mock_validate:
-                    with patch("services.cohesion_engine.composites._force_clear_distributions"):
-                        with patch("services.cohesion_engine.composites.ensure_distributions"):
+                    with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
+                        with patch("services.snapshot_versions.distribution_cache.ensure_distributions"):
                             with patch("services.evaluation_versions.repo.get_active") as mock_active:
                                 from services.cohesion_engine.engine import EvaluationVersion
                                 mock_active.return_value = EvaluationVersion(
@@ -746,8 +747,8 @@ class TestPublishDraftDataCutoffAt:
 
         with patch.object(repo, "_get_client", return_value=client):
             with patch("services.pipeline_runs.repo.any_running", return_value=False):
-                with patch("services.cohesion_engine.composites._force_clear_distributions"):
-                    with patch("services.cohesion_engine.composites.ensure_distributions"):
+                with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
+                    with patch("services.snapshot_versions.distribution_cache.ensure_distributions"):
                         with patch("services.evaluation_versions.repo.get_active") as mock_active:
                             from services.cohesion_engine.engine import EvaluationVersion
                             mock_active.return_value = EvaluationVersion(
@@ -811,8 +812,8 @@ class TestReactivateRelease:
         self._wire_release_fetch(client, _make_published_row(id=self._RELEASE_ID))
 
         with patch.object(repo, "_get_client", return_value=client):
-            with patch("services.cohesion_engine.composites._force_clear_distributions"):
-                with patch("services.cohesion_engine.composites.ensure_distributions"):
+            with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
+                with patch("services.snapshot_versions.distribution_cache.ensure_distributions"):
                     with patch("services.evaluation_versions.repo.get_active") as mock_active:
                         from services.cohesion_engine.engine import EvaluationVersion
                         mock_active.return_value = EvaluationVersion(
@@ -836,11 +837,11 @@ class TestReactivateRelease:
         call_order = []
         with patch.object(repo, "_get_client", return_value=client):
             with patch(
-                "services.cohesion_engine.composites._force_clear_distributions",
+                "services.snapshot_versions.distribution_cache.force_clear_distributions",
                 side_effect=lambda: call_order.append("clear"),
             ):
                 with patch(
-                    "services.cohesion_engine.composites.ensure_distributions",
+                    "services.snapshot_versions.distribution_cache.ensure_distributions",
                     side_effect=lambda *a, **kw: call_order.append("ensure"),
                 ):
                     with patch("services.evaluation_versions.repo.get_active") as mock_active:
@@ -1056,9 +1057,9 @@ class TestPublishCacheWarmSeason:
         with patch.object(repo, "_get_client", return_value=client):
             with patch("services.pipeline_runs.repo.any_running", return_value=False):
                 with patch("services.pipeline_runs.repo.any_pending_commit", return_value=False):
-                    with patch("services.cohesion_engine.composites._force_clear_distributions"):
+                    with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
                         with patch(
-                            "services.cohesion_engine.composites.ensure_distributions",
+                            "services.snapshot_versions.distribution_cache.ensure_distributions",
                             side_effect=lambda season, *a, **kw: captured.update(season=season),
                         ):
                             with patch("services.evaluation_versions.repo.get_active") as mock_active:
@@ -1097,9 +1098,9 @@ class TestReactivateCacheWarmSeason:
         captured = {}
 
         with patch.object(repo, "_get_client", return_value=client):
-            with patch("services.cohesion_engine.composites._force_clear_distributions"):
+            with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
                 with patch(
-                    "services.cohesion_engine.composites.ensure_distributions",
+                    "services.snapshot_versions.distribution_cache.ensure_distributions",
                     side_effect=lambda season, *a, **kw: captured.update(season=season),
                 ):
                     with patch("services.evaluation_versions.repo.get_active") as mock_active:

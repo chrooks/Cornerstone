@@ -1,15 +1,23 @@
 """
-Player composite computation for the cohesion engine.
+Player composite mechanics for the cohesion engine.
 
 This module extracts the validated prototype formulas into production code.
 Raw composites use tier values directly, dependent formulas reference raw
 sub-composites, and normalization happens once at the end.
+
+Boundary: this module is pure mechanics — raw composite math, building
+distributions from an explicitly supplied Snapshot Release id, and percentile
+normalization against an explicitly supplied distributions mapping. The cache
+flip policy (the (season, release_id) key, staleness checks, the draft-pin
+guard, and the clear/ensure entry points) lives in
+services.snapshot_versions.distribution_cache, which imports this module —
+never the reverse.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Mapping
 
 from services.skills import ALL_SKILLS
 
@@ -19,13 +27,6 @@ from .weights import (
     COMPOSITE_NAMES,
     MIN_DISTRIBUTION_SIZE,
 )
-
-COMPOSITE_DISTRIBUTIONS: dict[str, list[float]] = {}
-# Cache key: (season, active snapshot_release_id). Keying on the release id —
-# not season alone — means a publish or reactivate that flips the active
-# release invalidates the cache on the next ensure_distributions() call, even
-# without a Flask restart (#61). release_id is None when no release is active.
-_DISTRIBUTION_KEY: tuple[str, str | None] | None = None
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,7 @@ def tier_value(skills: dict[str, str | float], skill: str, tier_values: dict[str
     Return a skill's numeric value.
 
     Phase 3 synergies may pass already-boosted numeric skill values, while base
-    player profiles use tier strings. Supporting both keeps this module context
-    free.
+    player profiles use tier strings; both inputs are supported.
     """
     value = skills.get(skill, "None")
     if isinstance(value, int | float):
@@ -234,131 +234,39 @@ def _percentile_normalize(
     return round(min(10.0, result), 1)
 
 
-def set_distributions(distributions: dict[str, list[float]] | None) -> None:
-    """Replace cached distributions; tests and cache invalidation use this hook."""
-    COMPOSITE_DISTRIBUTIONS.clear()
-    if distributions:
-        COMPOSITE_DISTRIBUTIONS.update(
-            {name: sorted(vals) for name, vals in distributions.items()}
-        )
-
-
-def _invalidation_allowed() -> bool:
-    """
-    Return False while a Snapshot draft/review is open.
-
-    Invariant: the distribution cache must not be cleared mid-draft so that
-    production cohesion reads remain stable against the previously published
-    Snapshot.  Only the publish flow (which explicitly calls
-    _force_clear_distributions) is exempt from this guard.
-
-    Lazy import avoids a circular import at module load time.
-    """
-    try:
-        from services.snapshot_versions.repo import get_draft
-        return get_draft() is None
-    except Exception:
-        # If the draft check fails, allow invalidation (safe default)
-        return True
-
-
-def clear_distributions() -> None:
-    """
-    Clear cached distributions — gated by the draft-pin Invariant.
-
-    No-ops while a Snapshot draft or review is open.  Call
-    _force_clear_distributions() to bypass the guard (publish flow only).
-    """
-    if not _invalidation_allowed():
-        logger.debug(
-            "clear_distributions skipped: draft in progress (distribution cache pinned)"
-        )
-        return
-    global _DISTRIBUTION_KEY
-    _DISTRIBUTION_KEY = None
-    set_distributions(None)
-
-
-def _force_clear_distributions() -> None:
-    """
-    Unconditionally clear the distribution cache.
-
-    Bypass for the publish flow. Do not call from any other code path.
-    """
-    global _DISTRIBUTION_KEY
-    _DISTRIBUTION_KEY = None
-    set_distributions(None)
-
-
-def distributions_ready() -> bool:
+def distributions_ready(distributions: Mapping[str, list[float]] | None) -> bool:
     """Return True when every composite has enough distribution values."""
+    if not distributions:
+        return False
     return all(
-        len(COMPOSITE_DISTRIBUTIONS.get(name, [])) >= MIN_DISTRIBUTION_SIZE
+        len(distributions.get(name, [])) >= MIN_DISTRIBUTION_SIZE
         for name in COMPOSITE_NAMES
     )
 
 
-def _resolve_active_release_id() -> str | None:
-    """Return the active Snapshot Release id, or None when no release is active.
+def normalize_composites(
+    raw: dict[str, float],
+    values: dict[str, Any],
+    distributions: Mapping[str, list[float]] | None = None,
+) -> dict[str, float]:
+    """Normalize raw composites to 0.0-10.0.
 
-    Memoized per request via snapshot_versions.active, so the cache-key check in
-    ensure_distributions costs at most one DB lookup per request.
+    Uses percentile normalization against the supplied distributions when they
+    are ready, theoretical-max fallback otherwise. Callers normalizing against
+    the production cache grab one immutable state via
+    services.snapshot_versions.distribution_cache.get_state() and pass its
+    distributions here — one read per evaluation, so a concurrent release flip
+    cannot tear the computation.
     """
-    from services.snapshot_versions.active import (
-        ActiveReleaseMissingError,
-        get_active_release_id,
-    )
-
-    try:
-        return get_active_release_id(client=_get_supabase_client())
-    except ActiveReleaseMissingError:
-        return None
-
-
-def ensure_distributions(season: str, values: dict[str, Any], force: bool = False) -> bool:
-    """
-    Build percentile normalization distributions when missing or stale.
-
-    The cache is keyed by (season, active snapshot_release_id): when a publish
-    or reactivate flips the active release, the key mismatch forces a rebuild
-    from the new release's released_players rows (#61).
-
-    Returns True when percentile normalization is ready. Failures are logged and
-    leave theoretical fallback available, so request handling can continue.
-    """
-    if not force and distributions_ready():
-        try:
-            if _DISTRIBUTION_KEY == (season, _resolve_active_release_id()):
-                return True
-        except Exception as exc:
-            logger.warning(
-                "Unable to resolve active Snapshot Release for distribution "
-                "cache check; rebuilding (%s)",
-                exc,
-            )
-
-    try:
-        build_distributions(season, values)
-    except Exception as exc:
-        logger.warning(
-            "Unable to build cohesion composite distributions; using theoretical fallback (%s)",
-            exc,
-        )
-        return False
-
-    return distributions_ready()
-
-
-def normalize_composites(raw: dict[str, float], values: dict[str, Any]) -> dict[str, float]:
-    """Normalize raw composites to 0.0-10.0 using cache or theoretical fallback."""
     theoretical_max = values["theoretical_max"]
     breakpoint_percentile = values["normalization_breakpoint_percentile"]
     breakpoint_score = values["normalization_breakpoint_score"]
 
-    if distributions_ready():
+    if distributions_ready(distributions):
+        assert distributions is not None
         return {
             name: _percentile_normalize(
-                value, COMPOSITE_DISTRIBUTIONS.get(name, []),
+                value, distributions.get(name, []),
                 breakpoint_percentile, breakpoint_score,
             )
             for name, value in raw.items()
@@ -382,48 +290,41 @@ def _extract_skills(profile: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[float]]:
+def build_distributions(
+    season: str, values: dict[str, Any], release_id: str
+) -> dict[str, list[float]]:
     """
-    Build and cache raw composite distributions for current players + legends.
+    Build raw composite distributions for a Snapshot Release's players + legends.
+
+    Pure mechanics: the release id is supplied by the caller (the cache policy
+    in services.snapshot_versions.distribution_cache resolves the active
+    release and owns the swap into the cache) and no module state is mutated
+    here.
 
     After M3 (#50): reads from released_players (the table formerly named
-    snapshot_players) for the active Snapshot Release instead of live
+    snapshot_players) for the given Snapshot Release instead of live
     skill_profiles, so production normalization is stable against a known,
     immutable snapshot. Both regular-player and legend profiles are sourced
     from the skill_profile_snapshot column — the publish RPC freezes legends
     into released_players, superseding the original plan to keep reading
-    legends from live skill_profiles. If no active release exists, logs and
-    degrades gracefully to an empty distribution (existing
-    MIN_DISTRIBUTION_SIZE fallback handles the theoretical-max path).
+    legends from live skill_profiles.
 
     If fewer than MIN_DISTRIBUTION_SIZE player profiles exist, callers will still
     receive the small distribution, but normalization falls back to theoretical
     maxima until the cache has enough population data.
     """
-    from services.snapshot_versions.active import get_active_release_id, ActiveReleaseMissingError
-
-    global _DISTRIBUTION_KEY
+    logger.info(
+        "Building composite distributions for season %s, release %s", season, release_id
+    )
 
     client = _get_supabase_client()
     all_raw: dict[str, list[float]] = {name: [] for name in COMPOSITE_NAMES}
-
-    try:
-        active_release_id = get_active_release_id(client=client)
-    except ActiveReleaseMissingError:
-        logger.warning(
-            "build_distributions: no active Snapshot Release — "
-            "returning empty distributions (theoretical fallback will be used)"
-        )
-        distributions: dict[str, list[float]] = {name: [] for name in COMPOSITE_NAMES}
-        set_distributions(distributions)
-        _DISTRIBUTION_KEY = (season, None)
-        return distributions
 
     # Regular players — source_player_id is non-null, is_legend=false
     profiles = _run_query(
         lambda: client.table("released_players")
         .select("skill_profile_snapshot")
-        .eq("snapshot_release_id", active_release_id)
+        .eq("snapshot_release_id", release_id)
         .eq("is_legend", False)
         .execute()
     )
@@ -437,7 +338,7 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
     legend_profiles = _run_query(
         lambda: client.table("released_players")
         .select("skill_profile_snapshot")
-        .eq("snapshot_release_id", active_release_id)
+        .eq("snapshot_release_id", release_id)
         .eq("is_legend", True)
         .execute()
     )
@@ -447,13 +348,7 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
         for name, value in raw.items():
             all_raw[name].append(value)
 
-    distributions = {name: sorted(vals) for name, vals in all_raw.items()}
-    # Key must be written before the distributions become visible: a concurrent
-    # reader that sees distributions_ready() == True must never compare against
-    # the previous (or None) key, or it triggers a redundant rebuild.
-    _DISTRIBUTION_KEY = (season, active_release_id)
-    set_distributions(distributions)
-    return distributions
+    return {name: sorted(vals) for name, vals in all_raw.items()}
 
 
 def compute_player_composites(
@@ -462,10 +357,16 @@ def compute_player_composites(
     name: str,
     values: dict[str, Any],
     height_inches: int | None = None,
+    distributions: Mapping[str, list[float]] | None = None,
 ) -> PlayerComposites:
-    """Compute normalized composites and bell parameters for one player."""
+    """Compute normalized composites and bell parameters for one player.
+
+    distributions: percentile-normalization population, usually one atomic
+    read of distribution_cache.get_state().distributions taken by the caller
+    for the whole evaluation. None falls back to theoretical maxima.
+    """
     raw = compute_raw_composites(skills, values)
-    normalized = normalize_composites(raw, values)
+    normalized = normalize_composites(raw, values, distributions)
 
     # A missing height should not break partial roster previews; the midpoint
     # keeps the dataclass complete until the API provides real player height.

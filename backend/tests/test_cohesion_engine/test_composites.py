@@ -11,6 +11,7 @@ import pytest
 
 from backend.services.cohesion_engine import composites
 from backend.services.cohesion_engine.types import PlayerComposites
+from backend.services.snapshot_versions import distribution_cache
 
 
 def _bootstrap_values() -> dict:
@@ -27,13 +28,13 @@ VALUES = _bootstrap_values()
 def clear_distribution_cache():
     """Each test starts in theoretical-max fallback mode unless it opts in.
 
-    Uses _force_clear_distributions: the public clear_distributions() is gated
+    Uses force_clear_distributions: the public clear_distributions() is gated
     by the draft-pin guard, which queries the live DB — test isolation must not
     depend on whether a Snapshot draft happens to be open in production.
     """
-    composites._force_clear_distributions()
+    distribution_cache.force_clear_distributions()
     yield
-    composites._force_clear_distributions()
+    distribution_cache.force_clear_distributions()
 
 
 def sample_skills() -> dict[str, str]:
@@ -142,13 +143,29 @@ def test_percentile_normalize_uses_sixtieth_percentile_breakpoint():
     assert composites._percentile_normalize(19.0, distribution, 0.6, 6.0) == 10.0
 
 
-def test_normalize_composites_uses_cached_distribution_when_large_enough():
+def test_normalize_composites_uses_explicit_distributions_when_large_enough():
     distributions = {name: [float(value) for value in range(20)] for name in composites.COMPOSITE_NAMES}
-    composites.set_distributions(distributions)
 
-    normalized = composites.normalize_composites({name: 12.0 for name in composites.COMPOSITE_NAMES}, VALUES)
+    normalized = composites.normalize_composites(
+        {name: 12.0 for name in composites.COMPOSITE_NAMES}, VALUES, distributions
+    )
 
     assert all(value == 6.0 for value in normalized.values())
+
+
+def test_normalize_composites_falls_back_when_distributions_too_small():
+    """Below MIN_DISTRIBUTION_SIZE, the explicit distributions are ignored in
+    favor of the theoretical-max fallback."""
+    distributions = {name: [1.0, 2.0] for name in composites.COMPOSITE_NAMES}
+
+    with_small = composites.normalize_composites(
+        {name: 12.0 for name in composites.COMPOSITE_NAMES}, VALUES, distributions
+    )
+    with_none = composites.normalize_composites(
+        {name: 12.0 for name in composites.COMPOSITE_NAMES}, VALUES
+    )
+
+    assert with_small == with_none
 
 
 def test_compute_player_composites_returns_dataclass_with_bell_params():
@@ -206,11 +223,9 @@ def test_normalize_composites_guards_zero_theoretical_max():
 
 def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
     """After M3: build_distributions reads released_players.skill_profile_snapshot,
-    not draft_skill_profiles.profile. Patching snapshot_versions.active so the active-release
-    guard succeeds without a live DB.
+    not draft_skill_profiles.profile. The release id is now an explicit argument
+    (no internal active-release resolution) and no cache state is mutated.
     """
-    import services.snapshot_versions.active as snapshots_active_mod
-
     FAKE_RELEASE_ID = "fake-release-id"
 
     class FakeResult:
@@ -230,6 +245,7 @@ def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
 
         def execute(self):
             # Return skill_profile_snapshot (released_players column, not profile)
+            assert self.filters.get("snapshot_release_id") == FAKE_RELEASE_ID
             if self.filters.get("is_legend") is True:
                 return FakeResult(
                     [{"skill_profile_snapshot": {"movement_shooter": {"final_tier": "Capable"}}}]
@@ -244,20 +260,15 @@ def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
 
     monkeypatch.setattr(composites, "_get_supabase_client", lambda: FakeClient())
     monkeypatch.setattr(composites, "_run_query", lambda query: query())
-    # Patch the active-release lookup so the guard passes without a live DB
-    monkeypatch.setattr(
-        snapshots_active_mod,
-        "_query_active_release_id",
-        lambda client=None: FAKE_RELEASE_ID,
-    )
 
-    distributions = composites.build_distributions("2025-26", VALUES)
+    distributions = composites.build_distributions("2025-26", VALUES, FAKE_RELEASE_ID)
 
     assert distributions["spacing"] == [1.0, 8.0]
     assert distributions["finishing"] == [0.0, 0.0]
     assert distributions["perimeter_defense"] == [0.0, 0.0]
     assert distributions["interior_defense"] == [0.0, 0.0]
-    assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [1.0, 8.0]
+    # Pure mechanics: building does NOT swap the production cache
+    assert distribution_cache.get_state().distributions == {}
 
 
 class _FlippableReleaseFixture:
@@ -286,6 +297,11 @@ class _FlippableReleaseFixture:
         }
 
     def install(self, monkeypatch):
+        # Patch the `services.`-prefixed module instances: distribution_cache
+        # imports `services.cohesion_engine.composites`, NOT this test module's
+        # `backend.`-prefixed import — patching the latter would let the ensure
+        # path fall through to the live DB.
+        import services.cohesion_engine.composites as composites_mod
         import services.snapshot_versions.active as snapshots_active_mod
 
         fixture = self
@@ -316,8 +332,8 @@ class _FlippableReleaseFixture:
             def table(self, _name):
                 return FakeQuery()
 
-        monkeypatch.setattr(composites, "_get_supabase_client", lambda: FakeClient())
-        monkeypatch.setattr(composites, "_run_query", lambda query: query())
+        monkeypatch.setattr(composites_mod, "_get_supabase_client", lambda: FakeClient())
+        monkeypatch.setattr(composites_mod, "_run_query", lambda query: query())
         monkeypatch.setattr(
             snapshots_active_mod,
             "_query_active_release_id",
@@ -333,22 +349,24 @@ def test_ensure_distributions_rebuilds_when_active_release_flips(monkeypatch):
     fixture.install(monkeypatch)
 
     # Warm from release-a
-    assert composites.ensure_distributions("2025-26", VALUES) is True
-    assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [8.0] * fixture.ROWS
+    assert distribution_cache.ensure_distributions("2025-26", VALUES) is True
+    assert distribution_cache.get_state().distributions["spacing"] == [8.0] * fixture.ROWS
     queries_after_warm = fixture.build_query_count
 
     # Same season, same active release: cache hit, no rebuild queries
-    assert composites.ensure_distributions("2025-26", VALUES) is True
+    assert distribution_cache.ensure_distributions("2025-26", VALUES) is True
     assert fixture.build_query_count == queries_after_warm
 
     # Flip the active release without a restart (publish/reactivate effect)
     fixture.active_release_id = "release-b"
 
-    assert composites.ensure_distributions("2025-26", VALUES) is True
+    assert distribution_cache.ensure_distributions("2025-26", VALUES) is True
     assert fixture.build_query_count > queries_after_warm
     # Distributions now reflect release-b rows (finishing-heavy, no spacing)
-    assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [0.0] * fixture.ROWS
-    assert composites.COMPOSITE_DISTRIBUTIONS["finishing"] == [8.0] * fixture.ROWS
+    state = distribution_cache.get_state()
+    assert state.distributions["spacing"] == [0.0] * fixture.ROWS
+    assert state.distributions["finishing"] == [8.0] * fixture.ROWS
+    assert state.key == ("2025-26", "release-b")
 
 
 def test_ensure_distributions_cache_hit_on_same_release(monkeypatch):
@@ -357,10 +375,65 @@ def test_ensure_distributions_cache_hit_on_same_release(monkeypatch):
     fixture = _FlippableReleaseFixture()
     fixture.install(monkeypatch)
 
-    assert composites.ensure_distributions("2025-26", VALUES) is True
+    assert distribution_cache.ensure_distributions("2025-26", VALUES) is True
     queries_after_warm = fixture.build_query_count
 
     for _ in range(3):
-        assert composites.ensure_distributions("2025-26", VALUES) is True
+        assert distribution_cache.ensure_distributions("2025-26", VALUES) is True
 
     assert fixture.build_query_count == queries_after_warm
+
+
+def test_reader_holding_state_is_unaffected_by_concurrent_swap(monkeypatch):
+    """The TOCTOU fix: a reader that grabbed the state reference keeps a
+    consistent (key, distributions) pair even when a publish/reactivate swaps
+    the cache mid-evaluation. Normalization against the held state must use
+    release-a's distributions, not release-b's."""
+    fixture = _FlippableReleaseFixture()
+    fixture.install(monkeypatch)
+
+    assert distribution_cache.ensure_distributions("2025-26", VALUES) is True
+    reader_state = distribution_cache.get_state()
+    assert reader_state.key == ("2025-26", "release-a")
+
+    # Concurrent flip: force-clear + rewarm from release-b (publish effect)
+    fixture.active_release_id = "release-b"
+    distribution_cache.force_clear_distributions()
+    assert distribution_cache.ensure_distributions("2025-26", VALUES) is True
+
+    # The held reference still pairs release-a's key with release-a's rows
+    assert reader_state.key == ("2025-26", "release-a")
+    assert reader_state.distributions["spacing"] == [8.0] * fixture.ROWS
+    # And normalization against the held state is internally consistent:
+    # raw 8.0 against release-a's all-8.0 distribution sits at the median
+    # (5.0); release-b's all-0.0 distribution would max it out at 10.0.
+    held = composites.normalize_composites(
+        {"spacing": 8.0}, VALUES, reader_state.distributions
+    )
+    assert held["spacing"] == 5.0
+    # The production cache itself has moved on to release-b
+    new_state = distribution_cache.get_state()
+    assert new_state.key == ("2025-26", "release-b")
+    flipped = composites.normalize_composites(
+        {"spacing": 8.0}, VALUES, new_state.distributions
+    )
+    assert flipped["spacing"] == 10.0
+
+
+def test_distribution_cache_instances_are_injectable():
+    """Singleton-as-default-instance: a test-local DistributionCache works in
+    isolation without touching the production module-level cache."""
+    local = distribution_cache.DistributionCache()
+    distributions = {
+        name: [float(v) for v in range(20)] for name in composites.COMPOSITE_NAMES
+    }
+    local.set_distributions(distributions, key=("2025-26", "release-x"))
+
+    assert local.ready() is True
+    assert local.get_state().key == ("2025-26", "release-x")
+    # Production default cache untouched
+    assert distribution_cache.get_state().distributions == {}
+
+    local.force_clear()
+    assert local.ready() is False
+    assert local.get_state().distributions == {}

@@ -248,8 +248,8 @@ def publish_draft(
     Steps:
     1. Guard: raise if any pipeline_run is still running for this draft (mirrors move_to_review).
     2. Call publish_snapshot_draft RPC (freezes released_players, flips is_active).
-    3. _force_clear_distributions() to bypass the draft-pin guard.
-    4. ensure_distributions(force=True) to rewarm from the new active snapshot.
+    3. distribution_cache.force_clear_distributions() to bypass the draft-pin guard.
+    4. distribution_cache.ensure_distributions(force=True) to rewarm from the new active snapshot.
 
     Args:
         allow_missing_composite: bypass the missing-composite gate.
@@ -322,16 +322,15 @@ def publish_draft(
     # Issue #72: warm against the published Release's own season, not the
     # hardcoded CURRENT_SEASON, so the cache key matches the freeze scope.
     try:
-        from services.cohesion_engine.composites import (
-            _force_clear_distributions,
-            ensure_distributions,
-        )
         from services.evaluation_versions.repo import get_active
+        from services.snapshot_versions import distribution_cache
 
-        # _force_clear_distributions bypasses the draft-pin guard (A-1)
-        _force_clear_distributions()
+        # force_clear_distributions bypasses the draft-pin guard (A-1)
+        distribution_cache.force_clear_distributions()
         active_version = get_active()
-        ensure_distributions(published.season, active_version.payload.get("values", {}), force=True)
+        distribution_cache.ensure_distributions(
+            published.season, active_version.payload.get("values", {}), force=True
+        )
     except Exception:
         logger.exception(
             "Cache rewarm after publish failed — next evaluation will retry lazily"
@@ -418,18 +417,15 @@ def reactivate_release(
 
     # Rewarm distribution cache against the freshly reactivated snapshot.
     # Issue #72: warm against the reactivated Release's own season, not the
-    # hardcoded CURRENT_SEASON. _force_clear_distributions bypasses the
+    # hardcoded CURRENT_SEASON. force_clear_distributions bypasses the
     # draft-pin guard (mirrors publish).
     try:
-        from services.cohesion_engine.composites import (
-            _force_clear_distributions,
-            ensure_distributions,
-        )
         from services.evaluation_versions.repo import get_active
+        from services.snapshot_versions import distribution_cache
 
-        _force_clear_distributions()
+        distribution_cache.force_clear_distributions()
         active_version = get_active()
-        ensure_distributions(
+        distribution_cache.ensure_distributions(
             reactivated.season,
             active_version.payload.get("values", {}),
             force=True,

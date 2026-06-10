@@ -121,9 +121,9 @@ def _warm_cohesion_distributions() -> None:
     theoretical fallback; calibration/builder requests also attempt a lazy load.
     """
     try:
-        from services.cohesion_engine.composites import ensure_distributions
         from services.evaluation_versions.repo import get_active
         from services.players_service import CURRENT_SEASON
+        from services.snapshot_versions.distribution_cache import ensure_distributions
 
         version = get_active()
         ready = ensure_distributions(CURRENT_SEASON, version.values)

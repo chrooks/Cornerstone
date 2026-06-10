@@ -33,7 +33,6 @@ from services.cohesion_engine.bell_curve import (
 )
 from services.cohesion_engine.cohesion import evaluate_lineup
 from services.cohesion_engine.composites import compute_player_composites, compute_raw_composites
-from services.cohesion_engine.composites import ensure_distributions
 from services.cohesion_engine import evaluate_roster
 from services.cohesion_engine.engine import CohesionEngine
 from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
@@ -43,6 +42,8 @@ from services.evaluation_versions.repo import get_active as get_active_eval_vers
 from services.rotation_config import MAX_ROTATION_SLOTS
 from services.cohesion_engine import weights as weights_module
 from services.players_service import CURRENT_SEASON
+from services.snapshot_versions import distribution_cache
+from services.snapshot_versions.distribution_cache import ensure_distributions
 from services.supabase_client import get_supabase
 
 
@@ -470,12 +471,14 @@ def get_player_composites(player_id: str) -> tuple:
 
     height_inches = parse_height_inches(player.get("height"))
     try:
+        # One atomic read of the distribution state for this evaluation.
         pc = compute_player_composites(
             player["skills"],
             player_id=player["id"],
             name=player["name"],
             values=values,
             height_inches=height_inches,
+            distributions=distribution_cache.get_state().distributions,
         )
     except Exception:
         logger.exception("Error computing composites for player %s", player_id)

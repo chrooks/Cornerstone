@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 from backend.services.cohesion_engine import composites, weights
+from backend.services.snapshot_versions import distribution_cache
 from backend.services.cohesion_engine.weights import (
     COMPOSITE_COEFFICIENTS,
     TIER_VALUES,
@@ -96,9 +97,11 @@ TV = TIER_VALUES  # shortcut
 
 @pytest.fixture(autouse=True)
 def clear_distributions():
-    composites.clear_distributions()
+    """Isolation via force_clear: the gated clear() consults the live draft
+    pin (a real DB read) — test isolation must not depend on production state."""
+    distribution_cache.force_clear_distributions()
     yield
-    composites.clear_distributions()
+    distribution_cache.force_clear_distributions()
 
 
 # ===========================================================================

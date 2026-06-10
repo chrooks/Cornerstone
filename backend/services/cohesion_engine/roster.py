@@ -98,6 +98,13 @@ def _normalize_player_skills(players: list[dict[str, Any]]) -> list[dict[str, An
 def _compute_base_composites(
     players: list[dict[str, Any]], values: dict[str, Any]
 ) -> list[PlayerComposites]:
+    # Imported at call time: snapshot_versions.distribution_cache imports this
+    # package's composites module at load, so a module-level import here would
+    # be circular. Grab the immutable state ONCE for the whole roster — a
+    # concurrent publish flip cannot tear this batch.
+    from services.snapshot_versions import distribution_cache
+
+    state = distribution_cache.get_state()
     composites: list[PlayerComposites] = []
     for index, player in enumerate(players):
         composites.append(
@@ -107,6 +114,7 @@ def _compute_base_composites(
                 name=str(player.get("name") or _player_id(player, index)),
                 values=values,
                 height_inches=parse_height_inches(player.get("height")),
+                distributions=state.distributions,
             )
         )
     return composites
