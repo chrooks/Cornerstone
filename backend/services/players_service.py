@@ -370,12 +370,16 @@ def get_or_fetch_career(player_id: str, supabase: Client) -> dict | None:
 def run_bulk_salary_scrape(
     team_abbrev: str | None,
     supabase: Client,
+    player_ids: list[str] | None = None,
 ) -> dict:
     """
     Scrape salary data from ESPN and upsert into Supabase.
 
     If team_abbrev is provided, scrape only that team's roster page.
     Otherwise scrape the full league via paginated salary listing.
+
+    If player_ids is provided, only those players are matched and updated —
+    other players on the scraped page(s) are left untouched (#76 subset runs).
 
     Returns {"matched": int, "unmatched": int, "total": int}.
     """
@@ -401,6 +405,11 @@ def run_bulk_salary_scrape(
 
     if team_abbrev:
         players = [p for p in players if p.get("team", "").upper() == team_abbrev.upper()]
+
+    # Subset run (#76): restrict matching/updates to exactly the selected players.
+    if player_ids is not None:
+        wanted = set(player_ids)
+        players = [p for p in players if p["id"] in wanted]
 
     # Snapshot salaries before matching so we only PATCH rows that actually changed.
     pre_match = {p["id"]: p.get("salary") for p in players}

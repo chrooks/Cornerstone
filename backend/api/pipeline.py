@@ -245,19 +245,39 @@ def fetch_stats_batch():
 # ---------------------------------------------------------------------------
 
 
-def _run_salary_scrape_job(run_id: str, player_id: str | None) -> None:
-    """Background worker: scrape salaries."""
+def _run_salary_scrape_job(run_id: str, player_ids: list[str]) -> None:
+    """Background worker: scrape salaries.
+
+    Empty player_ids → full-league scrape (bulk, unchanged behavior).
+    Subset (#76) → resolve the subset's teams, scrape each distinct team page
+    once, and match/update only the selected players.
+    """
     supabase = get_supabase()
     rows = 0
     try:
-        if player_id:
-            # Single-player salary update — use bulk scrape filtered to team
-            player_row = supabase.table("players").select("team").eq("id", player_id).single().execute()
-            team = player_row.data.get("team") if player_row.data else None
-            result = run_bulk_salary_scrape(team, supabase)
+        if player_ids:
+            rows_result = run_query(lambda: (
+                supabase.table("players")
+                .select("id, team")
+                .in_("id", player_ids)
+                .execute()
+            ))
+            team_map: dict[str, list[str]] = {}
+            for row in (rows_result.data or []):
+                team = row.get("team")
+                if team:
+                    team_map.setdefault(team, []).append(row["id"])
+
+            teams = sorted(team_map.keys())
+            total_teams = len(teams)
+            runs_repo.update_progress(run_id, 0, total_teams)
+            for idx, team in enumerate(teams, start=1):
+                result = run_bulk_salary_scrape(team, supabase, player_ids=team_map[team])
+                rows += result.get("matched", 0)
+                runs_repo.update_progress(run_id, idx, total_teams)
         else:
             result = run_bulk_salary_scrape(None, supabase)
-        rows = result.get("matched", 0)
+            rows = result.get("matched", 0)
         runs_repo.complete_run(run_id, rows_processed=rows)
     except Exception as exc:
         logger.exception("salary-scrape [%s]: fatal error", run_id)
@@ -268,16 +288,31 @@ def _run_salary_scrape_job(run_id: str, player_id: str | None) -> None:
 @require_admin
 @require_open_draft
 def salary_scrape_bulk():
-    """Kick off a bulk salary scrape."""
+    """Kick off a salary scrape — bulk, or scoped to an optional player_ids subset.
+
+    Request body (optional): { "player_ids": ["<uuid>", ...] }
+    Empty/omitted player_ids = full-league scrape, same convention as fetch-stats.
+    """
+    body = request.get_json(silent=True) or {}
+    player_ids = body.get("player_ids") or []
+    if not isinstance(player_ids, list):
+        return _err("'player_ids' must be a list of UUID strings", 400)
+
     draft_id = g.draft_id
+    scope = "player" if player_ids else "bulk"
+
     try:
-        run_id = runs_repo.start_run("salary_scrape", "bulk", snapshot_release_id=draft_id)
+        run_id = runs_repo.start_run(
+            "salary_scrape", scope,
+            snapshot_release_id=draft_id,
+            player_id=player_ids[0] if len(player_ids) == 1 else None,
+        )
     except Exception:
         return _err("Failed to start salary scrape run", 500)
 
     threading.Thread(
         target=_run_salary_scrape_job,
-        args=(run_id, None),
+        args=(run_id, player_ids),
         daemon=True,
     ).start()
 
@@ -301,7 +336,7 @@ def salary_scrape_player(player_id: str):
 
     threading.Thread(
         target=_run_salary_scrape_job,
-        args=(run_id, player_id),
+        args=(run_id, [player_id]),
         daemon=True,
     ).start()
 
@@ -313,16 +348,25 @@ def salary_scrape_player(player_id: str):
 # ---------------------------------------------------------------------------
 
 
-def _run_bio_team_sync_job(run_id: str, player_id: str | None, season: str) -> None:
-    """Background worker: bio/team sync."""
+def _run_bio_team_sync_job(run_id: str, player_ids: list[str], season: str) -> None:
+    """Background worker: bio/team sync.
+
+    Empty player_ids → bulk refresh of all qualifying players (unchanged behavior).
+    Subset (#76) → per-player sync loop with fetch-stats-style progress bookkeeping.
+    """
     supabase = get_supabase()
     rows = 0
     try:
-        if player_id:
-            result = run_player_bio_team_sync(player_id, supabase)
+        if player_ids:
+            total = len(player_ids)
+            runs_repo.update_progress(run_id, 0, total)
+            for idx, pid in enumerate(player_ids, start=1):
+                result = run_player_bio_team_sync(pid, supabase)
+                rows += result.get("refreshed", 0)
+                runs_repo.update_progress(run_id, idx, total)
         else:
             result = run_bulk_bio_team_sync(season, supabase)
-        rows = result.get("refreshed", 0)
+            rows = result.get("refreshed", 0)
         runs_repo.complete_run(run_id, rows_processed=rows)
     except Exception as exc:
         logger.exception("bio-team-sync [%s]: fatal error", run_id)
@@ -333,19 +377,32 @@ def _run_bio_team_sync_job(run_id: str, player_id: str | None, season: str) -> N
 @require_admin
 @require_open_draft
 def bio_team_sync_bulk():
-    """Kick off a bulk bio/team sync."""
+    """Kick off a bio/team sync — bulk, or scoped to an optional player_ids subset.
+
+    Request body (optional): { "player_ids": ["<uuid>", ...], "season": "2025-26" }
+    Empty/omitted player_ids = all qualifying players, same convention as fetch-stats.
+    """
     body = request.get_json(silent=True) or {}
     season = body.get("season", CURRENT_SEASON)
+    player_ids = body.get("player_ids") or []
+    if not isinstance(player_ids, list):
+        return _err("'player_ids' must be a list of UUID strings", 400)
+
     draft_id = g.draft_id
+    scope = "player" if player_ids else "bulk"
 
     try:
-        run_id = runs_repo.start_run("bio_team_sync", "bulk", snapshot_release_id=draft_id)
+        run_id = runs_repo.start_run(
+            "bio_team_sync", scope,
+            snapshot_release_id=draft_id,
+            player_id=player_ids[0] if len(player_ids) == 1 else None,
+        )
     except Exception:
         return _err("Failed to start bio/team sync run", 500)
 
     threading.Thread(
         target=_run_bio_team_sync_job,
-        args=(run_id, None, season),
+        args=(run_id, player_ids, season),
         daemon=True,
     ).start()
 
@@ -455,7 +512,7 @@ def bio_team_sync_player(player_id: str):
 
     threading.Thread(
         target=_run_bio_team_sync_job,
-        args=(run_id, player_id, season),
+        args=(run_id, [player_id], season),
         daemon=True,
     ).start()
 
