@@ -386,11 +386,15 @@ def build_distributions(season: str, values: dict[str, Any]) -> dict[str, list[f
     """
     Build and cache raw composite distributions for current players + legends.
 
-    After M3: reads from released_players (active Snapshot Release) instead of
-    draft_skill_profiles. Both regular-player and legend profiles are sourced from
-    skill_profile_snapshot column. If no active release exists, logs and degrades
-    gracefully to an empty distribution (existing MIN_DISTRIBUTION_SIZE fallback
-    handles the theoretical-max path).
+    After M3 (#50): reads from released_players (the table formerly named
+    snapshot_players) for the active Snapshot Release instead of live
+    skill_profiles, so production normalization is stable against a known,
+    immutable snapshot. Both regular-player and legend profiles are sourced
+    from the skill_profile_snapshot column — the publish RPC freezes legends
+    into released_players, superseding the original plan to keep reading
+    legends from live skill_profiles. If no active release exists, logs and
+    degrades gracefully to an empty distribution (existing
+    MIN_DISTRIBUTION_SIZE fallback handles the theoretical-max path).
 
     If fewer than MIN_DISTRIBUTION_SIZE player profiles exist, callers will still
     receive the small distribution, but normalization falls back to theoretical

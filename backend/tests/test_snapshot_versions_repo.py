@@ -386,6 +386,104 @@ class TestPublishDraft:
 
         assert call_order == ["clear", "ensure"]
 
+    def test_publish_rewarm_rebuilds_distributions_from_snapshot_rows(self, monkeypatch):
+        """Issue #50: the publish rewarm rebuilds normalization distributions
+        from the newly active release's released_players.skill_profile_snapshot
+        rows (frozen snapshot data) — not from live skill_profiles. Legends are
+        frozen into released_players by the publish RPC, so legend profiles are
+        sourced from the same snapshot table."""
+        import json
+        from pathlib import Path
+
+        import services.snapshot_versions.active as snapshots_active_mod
+        from services.cohesion_engine import composites
+        from services.cohesion_engine.engine import EvaluationVersion
+        from services.snapshot_versions import repo
+
+        seed_path = (
+            Path(__file__).resolve().parents[2]
+            / "supabase" / "migrations" / "data" / "evaluation_version_v1_seed.json"
+        )
+        values = json.loads(seed_path.read_text())["payload"]["values"]
+
+        draft_id = "aaaaaaaa-0000-0000-0000-000000000001"
+        published_row = _make_published_row(id=draft_id)
+
+        # Repo-side fake client: RPC + get_release after publish
+        repo_client = MagicMock()
+        repo_client.rpc.return_value.execute.return_value = _result(None)
+        (
+            repo_client
+            .table.return_value
+            .select.return_value
+            .eq.return_value
+            .single.return_value
+            .execute.return_value
+        ) = _result(published_row)
+
+        # Composites-side fake DB: released_players rows frozen for the new release
+        class FakeResult:
+            def __init__(self, data):
+                self.data = data
+
+        class FakeQuery:
+            def __init__(self):
+                self.filters = {}
+
+            def select(self, _columns):
+                return self
+
+            def eq(self, key, value):
+                self.filters[key] = value
+                return self
+
+            def execute(self):
+                if self.filters.get("snapshot_release_id") != draft_id:
+                    return FakeResult([])
+                if self.filters.get("is_legend") is True:
+                    return FakeResult(
+                        [{"skill_profile_snapshot": {"crafty_finisher": {"final_tier": "Elite"}}}]
+                    )
+                return FakeResult(
+                    [
+                        {"skill_profile_snapshot": {"spot_up_shooter": {"final_tier": "Elite"}}},
+                        {"skill_profile_snapshot": {"spot_up_shooter": {"final_tier": "Proficient"}}},
+                    ]
+                )
+
+        class FakeClient:
+            def table(self, _name):
+                return FakeQuery()
+
+        monkeypatch.setattr(composites, "_get_supabase_client", lambda: FakeClient())
+        monkeypatch.setattr(composites, "_run_query", lambda query: query())
+        # Publish flipped is_active to the freshly published release
+        monkeypatch.setattr(
+            snapshots_active_mod,
+            "_query_active_release_id",
+            lambda client=None: draft_id,
+        )
+
+        composites._force_clear_distributions()
+        try:
+            with patch.object(repo, "_get_client", return_value=repo_client):
+                with patch("services.pipeline_runs.repo.any_running", return_value=False):
+                    with patch("services.pipeline_runs.repo.any_pending_commit", return_value=False):
+                        with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                            mock_active.return_value = EvaluationVersion(
+                                id="ev-1", slug="cohesion-v1", status="published",
+                                payload={"values": values},
+                            )
+                            repo.publish_draft(draft_id, "label", allow_missing_composite=True)
+
+            # Distributions reflect the frozen snapshot rows of the new release:
+            # spot_up Elite (spacing 8.0), spot_up Proficient (4.0), legend
+            # crafty_finisher Elite (spacing 0.0, finishing 8.0).
+            assert composites.COMPOSITE_DISTRIBUTIONS["spacing"] == [0.0, 4.0, 8.0]
+            assert composites.COMPOSITE_DISTRIBUTIONS["finishing"] == [0.0, 0.0, 8.0]
+        finally:
+            composites._force_clear_distributions()
+
 
 # ---------------------------------------------------------------------------
 # Tests: publish_draft — pipeline_runs_in_flight guard
