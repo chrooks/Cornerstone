@@ -95,8 +95,15 @@ export function PlayerSubsetPicker({
         <input
           id={`${idPrefix}-search-input`}
           type="text"
+          role="combobox"
+          aria-expanded={results.length > 0 && !searching && query.trim().length >= 2}
+          aria-controls={`${idPrefix}-results`}
+          aria-autocomplete="list"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setQuery("");
+          }}
           disabled={disabled}
           placeholder={placeholder}
           className="w-full text-sm border border-[#d9d0c9] rounded-[6px] px-3 py-2 focus:outline-none focus:border-[#ffa05c] disabled:opacity-50"
@@ -104,6 +111,7 @@ export function PlayerSubsetPicker({
         {(searching || results.length > 0) && query.trim().length >= 2 && (
           <ul
             id={`${idPrefix}-results`}
+            role="listbox"
             className="absolute z-10 mt-1 w-full max-h-56 overflow-auto rounded-[6px] border border-[#d9d0c9] bg-white shadow-sm"
           >
             {searching && (
@@ -113,7 +121,7 @@ export function PlayerSubsetPicker({
               <li className="px-3 py-2 text-xs text-neutral-400">No matches.</li>
             )}
             {results.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} role="option" aria-selected={false}>
                 <button
                   id={`${idPrefix}-result-${p.id}`}
                   type="button"
@@ -145,7 +153,7 @@ export function PlayerSubsetPicker({
                 type="button"
                 onClick={() => removePlayer(p.id)}
                 aria-label={`Remove ${p.name}`}
-                className="text-[#fe6d34] hover:text-[#0e0907] leading-none"
+                className="inline-flex items-center justify-center min-w-[24px] min-h-[24px] -my-1 -mr-1 text-[#fe6d34] hover:text-[#0e0907] leading-none"
               >
                 ×
               </button>

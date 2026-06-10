@@ -32,16 +32,24 @@ function SectionHeader({
   label,
   count,
   accentClass,
+  dominant = false,
 }: {
   id: string;
   label: string;
   count: number;
   accentClass: string;
+  dominant?: boolean;
 }) {
+  // The "changed" section carries the Hierarchy — heavier size + darker ink so
+  // it reads as the star, while added/removed stay muted.
   return (
     <p
       id={id}
-      className="text-[11px] uppercase tracking-[0.18em] font-semibold text-neutral-400 mb-2"
+      className={
+        dominant
+          ? "text-[12px] uppercase tracking-[0.18em] font-semibold text-[#0e0907] mb-2"
+          : "text-[11px] uppercase tracking-[0.18em] font-semibold text-neutral-400 mb-2"
+      }
     >
       {label} <span className={accentClass}>({count})</span>
     </p>
@@ -188,7 +196,7 @@ export function ReleaseDiffView({ draftId }: ReleaseDiffViewProps) {
         style={{ backgroundColor: "#fef9f5" }}
       >
         <p className="text-sm font-medium text-[#0e0907] mb-1">
-          No changes vs published release
+          <span className="text-green-600" aria-hidden="true">✓</span> No changes vs published release
         </p>
         <p className="text-xs text-neutral-500">
           Publishing this draft would freeze the same {summary.unchanged} player
@@ -232,6 +240,7 @@ export function ReleaseDiffView({ draftId }: ReleaseDiffViewProps) {
             label="Players changed"
             count={summary.changed}
             accentClass="text-[#fe6d34]"
+            dominant
           />
           <div className="space-y-1.5">
             {diff.players_changed.map((player) => {

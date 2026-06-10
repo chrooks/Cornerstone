@@ -271,14 +271,23 @@ def _run_salary_scrape_job(run_id: str, player_ids: list[str]) -> None:
             teams = sorted(team_map.keys())
             total_teams = len(teams)
             runs_repo.update_progress(run_id, 0, total_teams)
+            errors: list[str] = []
             for idx, team in enumerate(teams, start=1):
-                result = run_bulk_salary_scrape(team, supabase, player_ids=team_map[team])
-                rows += result.get("matched", 0)
+                # Isolate per-team failures so one bad team doesn't abandon the
+                # rest of the subset (matches the fetch-stats per-item pattern).
+                try:
+                    result = run_bulk_salary_scrape(team, supabase, player_ids=team_map[team])
+                    rows += result.get("matched", 0)
+                except Exception as team_exc:
+                    logger.exception("salary-scrape [%s]: team %s failed", run_id, team)
+                    errors.append(f"{team}: {team_exc}")
                 runs_repo.update_progress(run_id, idx, total_teams)
+            error = "; ".join(errors) if errors else None
+            runs_repo.complete_run(run_id, rows_processed=rows, error=error)
         else:
             result = run_bulk_salary_scrape(None, supabase)
             rows = result.get("matched", 0)
-        runs_repo.complete_run(run_id, rows_processed=rows)
+            runs_repo.complete_run(run_id, rows_processed=rows)
     except Exception as exc:
         logger.exception("salary-scrape [%s]: fatal error", run_id)
         runs_repo.complete_run(run_id, rows_processed=rows, error=str(exc))
@@ -360,14 +369,23 @@ def _run_bio_team_sync_job(run_id: str, player_ids: list[str], season: str) -> N
         if player_ids:
             total = len(player_ids)
             runs_repo.update_progress(run_id, 0, total)
+            errors: list[str] = []
             for idx, pid in enumerate(player_ids, start=1):
-                result = run_player_bio_team_sync(pid, supabase)
-                rows += result.get("refreshed", 0)
+                # Isolate per-player failures so one bad player doesn't abandon
+                # the rest of the subset (matches the fetch-stats per-item pattern).
+                try:
+                    result = run_player_bio_team_sync(pid, supabase)
+                    rows += result.get("refreshed", 0)
+                except Exception as player_exc:
+                    logger.exception("bio-team-sync [%s]: player %s failed", run_id, pid)
+                    errors.append(f"{pid}: {player_exc}")
                 runs_repo.update_progress(run_id, idx, total)
+            error = "; ".join(errors) if errors else None
+            runs_repo.complete_run(run_id, rows_processed=rows, error=error)
         else:
             result = run_bulk_bio_team_sync(season, supabase)
             rows = result.get("refreshed", 0)
-        runs_repo.complete_run(run_id, rows_processed=rows)
+            runs_repo.complete_run(run_id, rows_processed=rows)
     except Exception as exc:
         logger.exception("bio-team-sync [%s]: fatal error", run_id)
         runs_repo.complete_run(run_id, rows_processed=rows, error=str(exc))

@@ -300,6 +300,45 @@ def test_salary_scrape_worker_scrapes_each_team_once_filtered_to_subset(
     assert runs_repo_capture["progress"] == [(0, 2), (1, 2), (2, 2)]
 
 
+def test_salary_scrape_worker_isolates_per_team_failure(monkeypatch, runs_repo_capture):
+    """One failing team must not abandon the rest of the subset — the run
+    completes with the surviving teams' rows and a per-team error string."""
+    import api.pipeline as pipeline_mod
+
+    lookup_result = MagicMock()
+    lookup_result.data = [
+        {"id": _PID_1, "team": "BOS"},
+        {"id": _PID_2, "team": "LAL"},
+    ]
+    mock_supabase = MagicMock()
+    (
+        mock_supabase
+        .table.return_value
+        .select.return_value
+        .in_.return_value
+        .execute.return_value
+    ) = lookup_result
+    monkeypatch.setattr(pipeline_mod, "get_supabase", lambda: mock_supabase)
+    monkeypatch.setattr(pipeline_mod, "run_query", lambda fn: fn())
+
+    def fake_scrape(team_abbrev, supabase, player_ids=None):
+        if team_abbrev == "BOS":
+            raise RuntimeError("scrape page 500")
+        return {"matched": 1, "unmatched": 0, "total": 1}
+
+    monkeypatch.setattr(pipeline_mod, "run_bulk_salary_scrape", fake_scrape)
+
+    pipeline_mod._run_salary_scrape_job(_RUN_ID, [_PID_1, _PID_2])
+
+    # LAL still scraped despite BOS failing; run completes once with the error noted.
+    assert len(runs_repo_capture["complete"]) == 1
+    completion = runs_repo_capture["complete"][0]
+    assert completion["rows_processed"] == 1
+    assert completion["error"] is not None and "BOS" in completion["error"]
+    # Progress ticked through both teams.
+    assert runs_repo_capture["progress"] == [(0, 2), (1, 2), (2, 2)]
+
+
 def test_salary_scrape_worker_bulk_path_unchanged(monkeypatch, runs_repo_capture):
     """Empty player_ids → single full-league scrape, no player_ids filter."""
     import api.pipeline as pipeline_mod

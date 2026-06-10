@@ -80,6 +80,7 @@ export function ReleaseDiffPlayerRow({
         type="button"
         onClick={onToggle}
         aria-expanded={isExpanded}
+        aria-controls={`diff-player-row-${slug}-detail`}
         className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-[#fef9f5] transition-colors rounded-[6px]"
       >
         <span
@@ -118,14 +119,18 @@ export function ReleaseDiffPlayerRow({
                       {formatSkillName(change.skill)}
                     </span>
                     <span className="inline-flex items-center gap-1.5">
-                      <TierChip tier={change.old_tier} />
+                      <span aria-label={`was ${change.old_tier ?? "none"}`}>
+                        <TierChip tier={change.old_tier} />
+                      </span>
                       <span
                         className="text-neutral-400 text-[10px] select-none"
                         aria-hidden="true"
                       >
                         &rarr;
                       </span>
-                      <TierChip tier={change.new_tier} />
+                      <span aria-label={`now ${change.new_tier ?? "none"}`}>
+                        <TierChip tier={change.new_tier} />
+                      </span>
                     </span>
                   </div>
                 ))}

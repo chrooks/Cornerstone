@@ -160,17 +160,16 @@ export function StageSubsetRunner({
             Composited{" "}
             <span className="font-semibold">{compositeResult.processed}</span> of{" "}
             {compositeResult.total} Players —{" "}
-            <span className="font-semibold">{compositeResult.auto_accepted}</span> auto-accepted,{" "}
-            <span className="font-semibold">{compositeResult.flagged_for_review}</span> flagged.
+            <span className="font-semibold">{compositeResult.auto_accepted}</span> skills auto-accepted,{" "}
+            <span className="font-semibold">{compositeResult.flagged_for_review}</span> flagged for review.
           </p>
           {compositeResult.flagged_for_review > 0 && (
             <Link
               id={`${stage}-review-link`}
               href={reviewHref}
-              className="inline-block mt-1 font-semibold text-[#fe6d34] underline hover:text-[#e85c25]"
+              className="mt-2 inline-block rounded border border-[#ffa05c]/60 bg-[#fff8f4] px-3 py-1.5 font-semibold text-[#fe6d34] hover:bg-[#ffa05c]/10 transition-colors"
             >
-              Review {compositeResult.flagged_for_review} flagged Player
-              {compositeResult.flagged_for_review === 1 ? "" : "s"} →
+              Review flagged Players →
             </Link>
           )}
         </div>

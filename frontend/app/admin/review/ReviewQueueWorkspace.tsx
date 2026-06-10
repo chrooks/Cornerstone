@@ -245,7 +245,8 @@ export function ReviewQueueWorkspace() {
       {scopedIds && (
         <div
           id="review-queue-scope-banner"
-          className="flex items-center justify-between gap-3 rounded-lg border border-[#ffa05c]/40 bg-[#fff8f4] px-3 py-2 text-xs text-[#0e0907]"
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-[6px] border border-[#ffa05c]/40 bg-[#fff8f4] px-3 py-2 text-xs text-[#0e0907]"
         >
           <span>
             Scoped to <span className="font-semibold">{scopedIds.size}</span> Player
@@ -265,7 +266,9 @@ export function ReviewQueueWorkspace() {
       {!loading && !error && (
         <p id="review-queue-count" className="text-xs text-muted-foreground">
           {visiblePlayers.length === 0
-            ? "No players in queue."
+            ? scopedIds
+              ? "None of the scoped Players have unresolved flags in the current queue."
+              : "No players in queue."
             : `${visiblePlayers.length} player${visiblePlayers.length !== 1 ? "s" : ""} in queue`}
         </p>
       )}
