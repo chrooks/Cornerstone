@@ -36,6 +36,7 @@ from services.snapshot_versions.active import (
 from services.snapshot_versions.released_repo import (
     fetch_legend_profiles_by_nba_api_ids,
 )
+from services.positions import normalize_position
 from services.supabase_client import get_supabase
 
 # ---------------------------------------------------------------------------
@@ -226,7 +227,7 @@ def list_legends():
                 "weight":         legend.get("weight"),
                 "peak_year":      legend.get("peak_year"),
                 "team":           legend.get("team"),
-                "position":       legend.get("position"),
+                "position":       normalize_position(legend.get("position")),
                 "nba_api_id":     legend.get("nba_api_id"),
                 "completion":     rated,
                 "completion_pct": round(rated / _TOTAL_SKILLS * 100, 1),
@@ -333,7 +334,7 @@ def get_legend(legend_id: str):
             "weight":         legend.get("weight"),
             "peak_year":      legend.get("peak_year"),
             "team":           legend.get("team"),
-            "position":       legend.get("position"),
+            "position":       normalize_position(legend.get("position")),
             "nba_api_id":     legend.get("nba_api_id"),
             "profile":        profile,
             "completion":     rated,
@@ -523,7 +524,8 @@ def update_legend_attributes(legend_id: str):
         val = body["position"]
         if val is not None and not isinstance(val, str):
             return _err("'position' must be a string or null", status=400)
-        update["position"] = val
+        # Fold to the canonical enum so manual legend entry stays consistent.
+        update["position"] = normalize_position(val)
 
     if not update:
         return _err("No valid fields provided", status=400)

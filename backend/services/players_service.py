@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from supabase import Client
 
 from services import nba_api_client, salary_scraper
+from services.positions import normalize_position
 from services.stats_assembler import assemble_stats_blob
 from services.supabase_client import run_query
 
@@ -88,10 +89,13 @@ def get_or_fetch_players(
         pid_int  = int(pid)
         physical = player_index.get(pid_int, {})
 
-        # Prefer PlayerIndex position (cleaner); fall back to base stats column
-        position = (
+        # Prefer PlayerIndex position (cleaner); fall back to base stats column.
+        # Normalize to the canonical enum so the raw-fallback path can't reintroduce
+        # dashed/reversed spellings (e.g. "G-F", "F-G") that bypass nba_api_client.
+        position = normalize_position(
             physical.get("position")
             or str(row.get("PLAYER_POSITION") or row.get("POSITION") or "")
+            or None
         )
 
         # Derive season_exp from draft_year when available.

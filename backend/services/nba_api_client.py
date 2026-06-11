@@ -18,6 +18,8 @@ import pandas as pd
 from curl_cffi.requests import Session as CffiSession
 from nba_api.library.http import NBAHTTP
 
+from services.positions import normalize_position
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -206,7 +208,7 @@ def get_player_index(season: str = "2025-26") -> dict[int, dict]:
         result[pid] = {
             "height":      str(row.get("HEIGHT") or "").strip() or None,
             "weight":      int(weight_raw) if weight_raw and str(weight_raw).strip().isdigit() else None,
-            "position":    str(row.get("POSITION") or "").strip() or None,
+            "position":    normalize_position(str(row.get("POSITION") or "") or None),
             "draft_round": _safe_int(draft_round_raw),
             "draft_year":  _safe_int(draft_year_raw),
         }
@@ -517,7 +519,7 @@ def get_player_info(nba_api_id: int) -> dict | None:
         return {
             "name":        str(row.get("DISPLAY_FIRST_LAST") or "").strip() or None,
             "team":        str(row.get("TEAM_ABBREVIATION") or "").strip() or None,
-            "position":    str(row.get("POSITION") or "").strip() or None,
+            "position":    normalize_position(str(row.get("POSITION") or "") or None),
             "height":      str(row.get("HEIGHT") or "").strip() or None,
             "weight":      int(weight_raw) if weight_raw and str(weight_raw).strip().isdigit() else None,
             "age":         age,
