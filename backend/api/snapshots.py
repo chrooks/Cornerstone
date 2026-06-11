@@ -13,7 +13,7 @@ from uuid import UUID
 
 from flask import Blueprint, g, jsonify, request
 
-from api.auth import require_admin
+from api.auth import require_admin, require_open_draft
 from services.snapshot_versions import repo, validator, summary
 from services.season import SEASON_FORMAT_MESSAGE, validate_nba_season
 
@@ -473,6 +473,37 @@ def get_release_diff():
     except Exception:
         logger.exception("Failed to compute draft-vs-published diff")
         return _err("Failed to compute draft-vs-published diff", 500)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/snapshots/draft/player-pool
+# ---------------------------------------------------------------------------
+
+
+@snapshots_bp.route("/draft/player-pool", methods=["GET"])
+@require_admin
+@require_open_draft
+def get_draft_player_pool():
+    """Every player + legend with the open draft's composite Skill Profile.
+
+    Read-only Surface backing the draft workspace Player Pool tab. The rows
+    carry the ratings that *will* be frozen when this draft publishes (NOT the
+    active release), mirroring the publish RPC's freeze selection so the pool
+    matches the diff/publish exactly. Each row includes ``data_missing_skills``
+    — the canonical skills with no draft composite rating (#5b badge source).
+    """
+    try:
+        from services.snapshot_versions import draft_pool
+        rows = draft_pool.get_draft_player_pool()
+        return _ok(rows)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "no_open_draft":
+            return _err(code, 409)
+        return _err(code, 400)
+    except Exception:
+        logger.exception("Failed to build draft player pool")
+        return _err("Failed to build draft player pool", 500)
 
 
 # ---------------------------------------------------------------------------
