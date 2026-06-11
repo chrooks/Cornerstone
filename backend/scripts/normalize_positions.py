@@ -32,11 +32,34 @@ _TARGETS = [
 ]
 
 
+_PAGE = 1000  # PostgREST default row cap — paginate past it.
+
+
+def _all_rows(sb, table: str, pk: str) -> list[dict]:
+    """Fetch every row, paging past the 1000-row PostgREST cap."""
+    rows: list[dict] = []
+    start = 0
+    while True:
+        page = (
+            sb.table(table)
+            .select(f"{pk}, position")
+            .order(pk)
+            .range(start, start + _PAGE - 1)
+            .execute()
+            .data
+            or []
+        )
+        rows.extend(page)
+        if len(page) < _PAGE:
+            break
+        start += _PAGE
+    return rows
+
+
 def _plan(sb, table: str, pk: str) -> list[tuple]:
     """Return [(pk_value, old, new), ...] for rows whose position would change."""
-    rows = sb.table(table).select(f"{pk}, position").execute().data or []
     changes = []
-    for r in rows:
+    for r in _all_rows(sb, table, pk):
         old = r.get("position")
         new = normalize_position(old)
         if new != old:
