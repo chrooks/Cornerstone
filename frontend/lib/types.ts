@@ -393,6 +393,12 @@ export interface PlayerWithSkills {
    * composite (value null / "None"). Drives the "N unrated" badge.
    */
   data_missing_skills?: string[];
+  /**
+   * True when the player is excluded from Snapshot Releases — skipped by the
+   * publish freeze and dropped from the missing-composite gate. The Player Pool
+   * tab greys these and offers an "include" action.
+   */
+  excluded_from_snapshot?: boolean;
 }
 
 // ---------------------------------------------------------------------------

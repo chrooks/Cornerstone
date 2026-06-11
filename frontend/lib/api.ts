@@ -167,6 +167,21 @@ export async function getDraftPlayerPool(): Promise<ApiResponse<PlayerWithSkills
   return apiFetch<PlayerWithSkills[]>(`/api/snapshots/draft/player-pool`);
 }
 
+/**
+ * Bulk include/exclude players from Snapshot Releases. Excluded players are
+ * skipped by the publish freeze and dropped from the missing-composite gate.
+ * Global and reversible — pass excluded=false to bring players back.
+ */
+export async function setPlayersExcludedFromSnapshot(
+  playerIds: string[],
+  excluded: boolean,
+): Promise<ApiResponse<{ updated: number; excluded: boolean }>> {
+  return apiFetch<{ updated: number; excluded: boolean }>(
+    "/api/players/exclude-from-snapshot",
+    { method: "POST", body: JSON.stringify({ player_ids: playerIds, excluded }) },
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Manual player include
 // ---------------------------------------------------------------------------

@@ -75,10 +75,13 @@ def validate_publishable(
 
     # Players in the draft's season — pull display fields up front so we can
     # surface missing-composite Player identities without a second round-trip.
+    # Excluded players are skipped by the publish freeze, so they must not count
+    # toward the missing-composite gate either — mirrors publish_snapshot_draft.
     all_players = run_query(
         lambda: c.table("players")
         .select("id, nba_api_id, name, team, position")
         .eq("season", season)
+        .eq("excluded_from_snapshot", False)
         .execute()
     )
     players = all_players.data or []

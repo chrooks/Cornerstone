@@ -464,6 +464,47 @@ def remove_manual_include(player_id: str):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/players/exclude-from-snapshot
+# ---------------------------------------------------------------------------
+
+@players_bp.route("/players/exclude-from-snapshot", methods=["POST"])
+@require_admin
+@require_open_draft
+def set_excluded_from_snapshot():
+    """Bulk set players.excluded_from_snapshot for a set of players.
+
+    Excluded players are skipped by the publish freeze and dropped from the
+    missing-composite gate (so fringe players can't block a publish). Global
+    and reversible — pass excluded=false to bring a player back.
+
+    Request body: { "player_ids": ["<uuid>", ...], "excluded": true|false }
+    """
+    body = request.get_json(silent=True) or {}
+    player_ids = body.get("player_ids") or []
+    excluded = body.get("excluded")
+
+    if not isinstance(player_ids, list) or not player_ids:
+        return _err("'player_ids' must be a non-empty list of UUID strings", status=400)
+    if not isinstance(excluded, bool):
+        return _err("'excluded' must be a boolean", status=400)
+    if any(not _validate_uuid(pid) for pid in player_ids):
+        return _err("'player_ids' must all be valid UUID strings", status=400)
+
+    try:
+        supabase = get_supabase()
+        supabase.table("players").update(
+            {"excluded_from_snapshot": excluded}
+        ).in_("id", player_ids).execute()
+        logger.info(
+            "Set excluded_from_snapshot=%s for %d player(s)", excluded, len(player_ids)
+        )
+        return _ok({"updated": len(player_ids), "excluded": excluded})
+    except Exception as exc:
+        logger.exception("Error in POST /api/players/exclude-from-snapshot")
+        return _err(str(exc))
+
+
+# ---------------------------------------------------------------------------
 # GET /api/players/bulk
 # ---------------------------------------------------------------------------
 

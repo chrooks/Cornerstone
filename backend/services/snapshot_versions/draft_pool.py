@@ -88,6 +88,7 @@ def _make_row(
     nba_api_id: Any,
     profile: Optional[dict],
     flag_summary: dict,
+    excluded_from_snapshot: bool = False,
 ) -> dict:
     skill_map = _skill_map(profile)
     return {
@@ -108,6 +109,9 @@ def _make_row(
         "skills": skill_map,
         "data_missing_skills": _data_missing(skill_map),
         "flag_summary": flag_summary,
+        # True → skipped by the publish freeze; the Player Pool tab greys these
+        # and offers an "include" action. Legends are never excludable.
+        "excluded_from_snapshot": excluded_from_snapshot,
     }
 
 
@@ -178,7 +182,8 @@ def _collect_pool_rows(season: str, client) -> list[dict]:
         run_query(
             lambda: client.table("players")
             .select(
-                "id, nba_api_id, name, team, position, age, height, weight, salary"
+                "id, nba_api_id, name, team, position, age, height, weight, "
+                "salary, excluded_from_snapshot"
             )
             .eq("season", season)
             .execute()
@@ -225,6 +230,7 @@ def _collect_pool_rows(season: str, client) -> list[dict]:
                 nba_api_id=p.get("nba_api_id"),
                 profile=regular_profiles.get(pid),
                 flag_summary=flag_counts.get(pid, {"total": 0, "unresolved": 0}),
+                excluded_from_snapshot=bool(p.get("excluded_from_snapshot")),
             )
         )
     for l in legends:
