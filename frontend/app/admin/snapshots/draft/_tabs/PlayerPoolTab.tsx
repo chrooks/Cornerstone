@@ -196,6 +196,9 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
           hideViewToggleUntilReady
           onViewModeReadyChange={setViewModeReady}
           onSkillOverride={isFrozen ? undefined : handleSkillOverride}
+          getMutedPlayerIds={(rows) =>
+            new Set(rows.filter((p) => p.excluded_from_snapshot).map((p) => p.id))
+          }
           isAdmin
           renderViewToggle={({ viewSize, setViewSize }) => (
             <PlayerViewSizeToggle

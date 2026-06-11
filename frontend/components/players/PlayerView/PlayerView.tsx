@@ -12,6 +12,8 @@ interface PlayerViewProps {
   player: PlayerWithSkills;
   skills?: Record<string, string | null | undefined> | null;
   disabled?: boolean;
+  /** Dimmed but still interactive (e.g. excluded from snapshot). */
+  muted?: boolean;
   highlighted?: boolean;
   primaryActionLabel?: string;
   onPrimaryAction?: (player: PlayerWithSkills) => void;

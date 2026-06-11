@@ -14,6 +14,8 @@ const TOP_SKILL_COUNT = 6;
 interface PlayerCardViewProps {
   player: PlayerWithSkills;
   disabled?: boolean;
+  /** Dimmed but still interactive (e.g. excluded from snapshot). */
+  muted?: boolean;
   highlighted?: boolean;
   primaryActionLabel?: string;
   onPrimaryAction?: (player: PlayerWithSkills) => void;
@@ -27,6 +29,7 @@ interface PlayerCardViewProps {
 export function PlayerCardView({
   player,
   disabled = false,
+  muted = false,
   highlighted = false,
   primaryActionLabel,
   onPrimaryAction,
@@ -73,6 +76,7 @@ export function PlayerCardView({
         "group rounded-md border border-[#d9d0c9] bg-[#f7f7f7] p-4 flex flex-col gap-3 transition-colors",
         canClickCard && "cursor-pointer hover:border-[#0e0907]/30",
         disabled && "opacity-40 cursor-not-allowed",
+        muted && !disabled && "opacity-55 grayscale-[0.4]",
         highlighted && "!opacity-100 ring-2 ring-[#ffa05c]/60",
         isLegend && "border-[#ffa05c]/50 bg-[#f7f7f7]",
       )}

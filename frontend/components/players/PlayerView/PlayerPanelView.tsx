@@ -15,6 +15,8 @@ interface PlayerPanelViewProps {
   player: PlayerWithSkills;
   skills?: PanelSkillProfile | null;
   disabled?: boolean;
+  /** Dimmed but still interactive (e.g. excluded from snapshot). */
+  muted?: boolean;
   highlighted?: boolean;
   primaryActionLabel?: string;
   onPrimaryAction?: (player: PlayerWithSkills) => void;
@@ -35,6 +37,7 @@ export function PlayerPanelView({
   player,
   skills,
   disabled = false,
+  muted = false,
   highlighted = false,
   primaryActionLabel,
   onPrimaryAction,
@@ -96,6 +99,7 @@ export function PlayerPanelView({
         "rounded-md border border-[#d9d0c9] bg-[#f7f7f7] transition-colors",
         canClickPanel && "cursor-pointer hover:border-[#0e0907]/30",
         disabled && "opacity-40 cursor-not-allowed",
+        muted && !disabled && "opacity-55 grayscale-[0.4]",
         highlighted && "!opacity-100 ring-2 ring-[#ffa05c]/60",
       )}
     >

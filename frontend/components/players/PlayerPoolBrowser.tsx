@@ -90,6 +90,12 @@ interface PlayerPoolBrowserProps {
     ready: boolean;
   }) => React.ReactNode;
   getDisabledPlayerIds?: (players: PlayerWithSkills[]) => Set<string>;
+  /**
+   * Player IDs to render muted/de-emphasized (dimmed) but still interactive —
+   * e.g. excluded-from-snapshot rows in the draft Player Pool. Distinct from
+   * disabled, which is non-interactive.
+   */
+  getMutedPlayerIds?: (players: PlayerWithSkills[]) => Set<string>;
   getPanelSkills?: (player: PlayerWithSkills) => Record<string, string | null | undefined> | null | undefined;
   getProfileLegendDetail?: (player: PlayerWithSkills) => LegendDetail | null | undefined;
   getPrimaryActionLabel?: (player: PlayerWithSkills, viewSize: PlayerViewSize) => string | undefined;
@@ -174,6 +180,7 @@ export function PlayerPoolBrowser({
   onViewModeReadyChange,
   renderViewToggle,
   getDisabledPlayerIds,
+  getMutedPlayerIds,
   getPanelSkills,
   getProfileLegendDetail,
   getPrimaryActionLabel,
@@ -391,6 +398,10 @@ export function PlayerPoolBrowser({
     () => getDisabledPlayerIds?.(paginatedPlayers),
     [getDisabledPlayerIds, paginatedPlayers],
   );
+  const mutedPlayerIds = useMemo(
+    () => getMutedPlayerIds?.(paginatedPlayers),
+    [getMutedPlayerIds, paginatedPlayers],
+  );
 
   useEffect(() => {
     onCountsChange?.({
@@ -536,6 +547,7 @@ export function PlayerPoolBrowser({
             openProfile(player);
           })}
           disabledPlayerIds={disabledPlayerIds}
+          mutedPlayerIds={mutedPlayerIds}
           onRowHover={onRowHover}
           onRowHoverEnd={onRowHoverEnd}
           highlightedPlayerId={highlightedPlayerId}
@@ -556,6 +568,7 @@ export function PlayerPoolBrowser({
         <div id={collectionId} className={collectionClassName}>
           {paginatedPlayers.map((player) => {
             const disabled = disabledPlayerIds?.has(player.id) ?? false;
+            const muted = mutedPlayerIds?.has(player.id) ?? false;
             const highlighted = highlightedPlayerId != null && highlightedPlayerId === player.id;
             return (
               <PlayerView
@@ -564,6 +577,7 @@ export function PlayerPoolBrowser({
                 player={player}
                 skills={viewSize === "panel" ? getPanelSkills?.(player) : undefined}
                 disabled={disabled}
+                muted={muted}
                 highlighted={highlighted}
                 primaryActionLabel={getPrimaryActionLabel?.(player, viewSize)}
                 onPrimaryAction={onPrimaryAction ? (item) => onPrimaryAction(item, viewSize) : undefined}

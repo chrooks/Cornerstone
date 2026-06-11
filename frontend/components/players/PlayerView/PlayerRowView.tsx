@@ -17,6 +17,8 @@ interface PlayerRowViewProps {
   columns: PlayerRowColumn[];
   columnWidths: Record<string, number>;
   disabled?: boolean;
+  /** Dimmed but still interactive (e.g. excluded from snapshot). */
+  muted?: boolean;
   highlighted?: boolean;
   clickable?: boolean;
   legend?: boolean;
@@ -35,6 +37,7 @@ export function PlayerRowView({
   columns,
   columnWidths,
   disabled = false,
+  muted = false,
   highlighted = false,
   clickable = false,
   legend = false,
@@ -65,6 +68,8 @@ export function PlayerRowView({
           : legend
           ? "bg-amber-50/30 dark:bg-amber-950/10 cursor-default"
           : "hover:bg-muted/40 cursor-pointer",
+        // Muted (e.g. excluded from snapshot): dimmed + desaturated, still interactive.
+        muted && !disabled && "opacity-55 grayscale-[0.4]",
         highlighted && "!opacity-100 bg-amber-100/70 dark:bg-amber-900/30 outline outline-2 outline-amber-400/80 outline-offset-[-2px]",
       )}
     >

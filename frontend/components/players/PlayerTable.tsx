@@ -149,6 +149,11 @@ interface PlayerTableProps {
    * Used by the builder to mark rostered players and over-budget players.
    */
   disabledPlayerIds?: Set<string>;
+  /**
+   * Player IDs to render muted/dimmed but still interactive (e.g. excluded
+   * from snapshot). Distinct from disabled, which is non-interactive.
+   */
+  mutedPlayerIds?: Set<string>;
   /** Called on row mouseenter — used by builder picker to preview cap impact in gauge. */
   onRowHover?: (player: PlayerWithSkills) => void;
   /** Called on row mouseleave — clears gauge preview. */
@@ -187,6 +192,7 @@ export function PlayerTable({
   onRowDragStart,
   onRowContextMenu,
   disabledPlayerIds,
+  mutedPlayerIds,
   onRowHover,
   onRowHoverEnd,
   highlightedPlayerId,
@@ -534,6 +540,7 @@ export function PlayerTable({
               players.map((player) => {
                 const isLegend = player.is_legend === true;
                 const isDisabled = disabledPlayerIds?.has(player.id) ?? false;
+                const isMuted = mutedPlayerIds?.has(player.id) ?? false;
                 // onRowClick overrides navigation (used by builder picker); blocked for disabled rows
                 // Admin users navigate to /admin/players/[id]; everyone else to /players/[id]
                 const profilePath = isAdmin ? `/admin/players/${player.id}` : `/players/${player.id}`;
@@ -556,6 +563,7 @@ export function PlayerTable({
                     columns={visibleColumns}
                     columnWidths={columnWidths}
                     disabled={isDisabled}
+                    muted={isMuted}
                     highlighted={isHighlighted}
                     clickable={!!onRowClick}
                     legend={isLegend}
