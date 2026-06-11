@@ -16,7 +16,11 @@
  *   - open_flags > 0 (banner only — the modal enforces the block + override flow)
  */
 
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { CountSummary } from "../../_components/CountSummary";
+import { ExcludedSection } from "../_components/ExcludedSection";
+import { setPlayersExcludedFromSnapshot } from "@/lib/api";
 import type {
   SnapshotDraftSummary,
   SnapshotCountSummary,
@@ -37,10 +41,61 @@ export interface PublishTabProps {
 export function PublishTab({
   summary,
   validation,
+  reload,
   onTabChange,
   onOpenPublishModal,
   isPublishing,
 }: PublishTabProps) {
+  const missingCompositePlayers = useMemo(
+    () => validation?.missing_composite_players ?? [],
+    [validation],
+  );
+
+  // ── Bulk "exclude from snapshot" selection over the missing-composite list ──
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isExcluding, setIsExcluding] = useState(false);
+  // Bumped after a bulk exclude so the Excluded section re-fetches.
+  const [excludedRefreshKey, setExcludedRefreshKey] = useState(0);
+
+  const onToggleSelect = useCallback((playerId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+  }, []);
+
+  const onSelectAll = useCallback(() => {
+    setSelectedIds(new Set(missingCompositePlayers.map((p) => p.id)));
+  }, [missingCompositePlayers]);
+
+  const onClearSelect = useCallback(() => setSelectedIds(new Set()), []);
+
+  const onExcludeSelected = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setIsExcluding(true);
+    try {
+      const res = await setPlayersExcludedFromSnapshot(ids, true);
+      if (!res.success) {
+        toast.error(res.error ?? "Failed to exclude players");
+        return;
+      }
+      toast.success(
+        `Excluded ${res.data?.updated ?? ids.length} from snapshot`,
+      );
+      setSelectedIds(new Set());
+      setExcludedRefreshKey((k) => k + 1);
+      // Re-fetch authoritative validation so excluded players drop off the list.
+      await reload();
+    } catch {
+      toast.error("Failed to exclude players");
+    } finally {
+      setIsExcluding(false);
+    }
+  }, [selectedIds, reload]);
+
   const missingComposite = validation?.players_missing_composite ?? 0;
   const missingCanonical = validation?.players_missing_canonical ?? 0;
   const legendsMissingCanonical = validation?.legends_missing_canonical ?? 0;
@@ -89,8 +144,23 @@ export function PublishTab({
           <CountSummary
             id="publish-tab-count-summary"
             summary={summary}
-            missingCompositePlayers={validation?.missing_composite_players ?? []}
+            missingCompositePlayers={missingCompositePlayers}
+            selection={{
+              selectedIds,
+              onToggle: onToggleSelect,
+              onSelectAll,
+              onClear: onClearSelect,
+              onExcludeSelected,
+              isExcluding,
+            }}
           />
+          <div id="publish-tab-excluded" className="mt-4">
+            <ExcludedSection
+              id="publish-tab-excluded-section"
+              onChanged={reload}
+              refreshKey={excludedRefreshKey}
+            />
+          </div>
         </div>
       ) : (
         <div

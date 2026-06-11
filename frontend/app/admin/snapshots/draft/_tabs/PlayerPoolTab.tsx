@@ -28,6 +28,7 @@ import type {
 import { PlayerPoolBrowser, type PlayerPoolViewMode } from "@/components/players/PlayerPoolBrowser";
 import { PlayerViewSizeToggle } from "@/components/players/PlayerView";
 import type { SortKey } from "@/components/players/SortControls";
+import { ExcludedSection } from "../_components/ExcludedSection";
 import type { TabSlug } from "../_lib/tabRouting";
 
 const POOL_ROW_PAGE_SIZE = 32;
@@ -52,21 +53,31 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
   // Frozen in review state — overrides become read-only.
   const isFrozen = draft.status === "review";
 
-  // ── Load the draft pool on mount ──────────────────────────────────────────
-  useEffect(() => {
+  // ── Load the draft pool (mount + after an include) ────────────────────────
+  const loadPool = useCallback(async () => {
     setLoading(true);
     setError(null);
-    getDraftPlayerPool()
-      .then((res) => {
-        if (res.success && res.data) {
-          setPlayers(res.data);
-        } else {
-          setError(res.error ?? "Failed to load draft player pool");
-        }
-      })
-      .catch(() => setError("Failed to load draft player pool"))
-      .finally(() => setLoading(false));
+    try {
+      const res = await getDraftPlayerPool();
+      if (res.success && res.data) {
+        setPlayers(res.data);
+      } else {
+        setError(res.error ?? "Failed to load draft player pool");
+      }
+    } catch {
+      setError("Failed to load draft player pool");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadPool();
+  }, [loadPool]);
+
+  const excludedCount = players.filter(
+    (p) => p.excluded_from_snapshot === true,
+  ).length;
 
   // ── Right-click skill override → writes to the draft, optimistic local merge ──
   const handleSkillOverride = useCallback(
@@ -116,6 +127,18 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
               : "Right-click a skill cell to override it in the draft."}
           </p>
         </div>
+        <div id="player-pool-tab-chips" className="flex items-center gap-2 flex-wrap">
+        {!loading && excludedCount > 0 && (
+          <span
+            id="player-pool-excluded-chip"
+            className="inline-flex items-center gap-1.5 rounded-[4px] border border-[#e3d9cf] bg-[#f1ece6]
+              px-2.5 py-1 text-[11px] font-medium text-neutral-500"
+            title="Players excluded from snapshot Releases. Reverse below or in the Publish tab."
+          >
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400" />
+            {excludedCount} excluded
+          </span>
+        )}
         {!loading && playersWithMissing > 0 && (
           <span
             id="player-pool-unrated-chip"
@@ -127,6 +150,7 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
             {playersWithMissing} with unrated skills
           </span>
         )}
+        </div>
       </div>
 
       {loading && (
@@ -144,6 +168,13 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
         >
           {error}
         </div>
+      )}
+
+      {!loading && !error && (
+        <ExcludedSection
+          id="player-pool-excluded-section"
+          onChanged={loadPool}
+        />
       )}
 
       {!loading && !error && (
