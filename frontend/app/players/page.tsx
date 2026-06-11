@@ -15,7 +15,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { listPlayersWithSkills, manualOverrideSkill, searchNbaPlayers, manuallyIncludePlayer, removeManualInclude } from "@/lib/api";
+import { listPlayersWithSkills, searchNbaPlayers, manuallyIncludePlayer, removeManualInclude } from "@/lib/api";
 import type { NbaPlayerSearchResult } from "@/lib/api";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import {
@@ -59,7 +59,7 @@ function makeLegendsExcludeFilter(connector: FilterConnector): ActiveFilter {
   };
 }
 import type { SortKey } from "@/components/players/SortControls";
-import type { PlayerWithSkills, SkillTier } from "@/lib/types";
+import type { PlayerWithSkills } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // View mode persistence key
@@ -263,25 +263,9 @@ function PlayersPageContent() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Skill tier override (right-click edit in table) ──────────────────────
-  //
-  // TODO: gate this behind an admin mode check before passing to PlayerTable.
-  //   e.g. const isAdmin = useAdminMode();
-  //        onSkillOverride={isAdmin ? handleSkillOverride : undefined}
-  const handleSkillOverride = useCallback(
-    async (playerId: string, skillKey: string, tier: SkillTier) => {
-      const res = await manualOverrideSkill(playerId, { skill_name: skillKey, resolved_value: tier });
-      if (!res.success) return;
-      setPlayers((prev) =>
-        prev.map((p) =>
-          p.id !== playerId
-            ? p
-            : { ...p, skills: { ...(p.skills ?? {}), [skillKey]: tier } },
-        ),
-      );
-    },
-    [],
-  );
+  // Skill tier overrides are intentionally NOT available on /players. Admins
+  // edit Skill Profiles only inside a draft Snapshot (the Player Pool tab), so
+  // published ratings never drift outside the draft → publish flow.
 
   // ── Add player (manual include) state ────────────────────────────────────
 
@@ -498,7 +482,7 @@ function PlayersPageContent() {
           onSortKeysChange={setSortKeys}
           onCountsChange={setBrowserCounts}
           onViewModeReadyChange={setViewModeReady}
-          onSkillOverride={isAdmin ? handleSkillOverride : undefined}
+          onSkillOverride={undefined}
           onRemoveManualPlayer={isAdmin ? handleRemoveManualPlayer : undefined}
           isAdmin={isAdmin}
           renderViewToggle={({ viewSize, setViewSize }) => (

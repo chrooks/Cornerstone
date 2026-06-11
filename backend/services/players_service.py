@@ -183,6 +183,7 @@ def get_or_fetch_player_stats(
     season: str,
     supabase: Client,
     refresh: bool = False,
+    cached_only: bool = False,
 ) -> dict | None:
     """
     Return the stats blob for a player/season, using Supabase as the cache.
@@ -193,6 +194,12 @@ def get_or_fetch_player_stats(
 
     Pass refresh=True to bypass the cache and force a fresh NBA API fetch.
     Useful when a previous fetch timed out and left incomplete data cached.
+
+    Pass cached_only=True to return whatever is cached WITHOUT ever triggering a
+    live nba_api fetch (~18s of ShotChartDetail + matchup calls). The review/QA
+    path uses this — a stale-but-instant blob beats blocking the page on a cold
+    fetch. Stats refresh belongs to the draft fetch-stats pipeline stage, not a
+    read-only review view. Returns the cached blob, or None when nothing is cached.
 
     Returns None if the player is not found.
     """
@@ -222,6 +229,11 @@ def get_or_fetch_player_stats(
         if cutoff is None or (fetched_at and fetched_at > cutoff):
             # Cache is fresh — return without hitting nba_api
             return row["stats"]
+
+    # cached_only: never trigger the ~18s live fetch. Return the stale cached
+    # blob if one exists; otherwise signal "no cached stats" with None.
+    if cached_only:
+        return cached.data[0]["stats"] if cached.data else None
 
     # Cache miss — fetch fresh stats
     logger.info("Fetching fresh stats for player %s (nba_api_id=%d, season=%s)", player_id, nba_api_id, season)

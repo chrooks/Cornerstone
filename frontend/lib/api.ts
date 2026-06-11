@@ -224,10 +224,14 @@ export async function getPlayerStats(
   playerId: string,
   season?: string,
   refresh = false,
+  cachedOnly = false,
 ): Promise<ApiResponse<StatsBlob>> {
   const params = new URLSearchParams();
   if (season) params.set("season", season);
   if (refresh) params.set("refresh", "true");
+  // cached_only skips the ~18s live nba_api fetch on cold cache — read-only
+  // views (review profile) use it so the page never blocks on a refetch.
+  if (cachedOnly) params.set("cached_only", "true");
   const qs = params.toString() ? `?${params}` : "";
   return apiFetch<StatsBlob>(`/api/players/${playerId}/stats${qs}`);
 }

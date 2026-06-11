@@ -335,7 +335,7 @@ export default function PlayerReviewPage() {
     try {
       const res = await deletePlayer(player_id);
       if (res.success) {
-        router.push("/admin/review");
+        router.push("/admin/snapshots/draft?tab=review");
       } else {
         setDeleteError(res.error ?? "Delete failed");
         setDeleting(false);
@@ -361,10 +361,12 @@ export default function PlayerReviewPage() {
     if (!player_id) return;
     setLoading(true);
     setError(null);
-    // Fetch flags and stats blob in parallel
+    // Fetch flags and stats blob in parallel. cachedOnly: the review profile
+    // must not block on the ~18s cold nba_api refetch — stats refresh belongs
+    // to the draft fetch-stats pipeline stage, not this read-only QA view.
     const [flagsRes, statsRes] = await Promise.all([
       getPlayerFlags(player_id, CURRENT_SEASON),
-      getPlayerStats(player_id, CURRENT_SEASON),
+      getPlayerStats(player_id, CURRENT_SEASON, false, true),
     ]);
     if (flagsRes.success && flagsRes.data) {
       setDetail(flagsRes.data);
@@ -469,7 +471,7 @@ export default function PlayerReviewPage() {
             toast.success("All flags resolved — player review complete!", {
               action: {
                 label:   "Back to Queue",
-                onClick: () => router.push("/admin/review"),
+                onClick: () => router.push("/admin/snapshots/draft?tab=review"),
               },
             });
           }
@@ -603,7 +605,7 @@ export default function PlayerReviewPage() {
         <div className="rounded-md bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
           {error ?? "Player not found"}
         </div>
-        <Link href="/admin/review" className="mt-4 inline-block text-sm text-muted-foreground hover:text-foreground">
+        <Link href="/admin/snapshots/draft?tab=review" className="mt-4 inline-block text-sm text-muted-foreground hover:text-foreground">
           ← Back to queue
         </Link>
       </main>
@@ -708,7 +710,7 @@ export default function PlayerReviewPage() {
       <div id="review-player-header">
         <Link
           id="review-back-link"
-          href="/admin/review"
+          href="/admin/snapshots/draft?tab=review"
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           ← Review Queue
@@ -893,7 +895,7 @@ export default function PlayerReviewPage() {
       {flags.length === 0 && (
         <div className="text-center py-12 text-muted-foreground text-sm">
           No flags found for this player.{" "}
-          <Link href="/admin/review" className="underline hover:text-foreground">
+          <Link href="/admin/snapshots/draft?tab=review" className="underline hover:text-foreground">
             Back to queue
           </Link>
         </div>

@@ -115,10 +115,13 @@ def player_stats(player_id: str):
     """
     season = request.args.get("season", players_service.CURRENT_SEASON)
     refresh = request.args.get("refresh", "false").lower() == "true"
+    cached_only = request.args.get("cached_only", "false").lower() == "true"
 
     try:
         supabase = get_supabase()
-        blob = players_service.get_or_fetch_player_stats(player_id, season, supabase, refresh=refresh)
+        blob = players_service.get_or_fetch_player_stats(
+            player_id, season, supabase, refresh=refresh, cached_only=cached_only
+        )
         if blob is None:
             return _err(f"Player {player_id} not found", status=404)
         return _ok(blob)

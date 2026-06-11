@@ -117,6 +117,19 @@ export function SkillEvaluationRunner({
         </div>
       </div>
 
+      {/* Stats-layer vs published-composite signifier (#5a): make it honest
+          that this stage updates stat-derived ratings only. */}
+      <div
+        id="skill-eval-layer-note"
+        className="rounded-[6px] border border-[#d9d0c9] bg-[#fef9f5] px-3 py-2 mb-4 text-xs text-neutral-600"
+      >
+        Updates <span className="font-medium text-[#0e0907]">stat-derived</span> ratings only.
+        A Player&rsquo;s <span className="font-medium text-[#0e0907]">published</span> rating
+        comes from the composite — re-run <span className="font-medium text-[#0e0907]">Compositing</span>{" "}
+        or use a <span className="font-medium text-[#0e0907]">manual override</span> in Review/Player Pool
+        for the change to reach the published profile.
+      </div>
+
       {/* Skill subset */}
       <div id="skill-eval-skill-picker" className="mb-5">
         <div className="flex items-center justify-between mb-2">
