@@ -117,32 +117,54 @@ def _make_row(
 
 
 def _fetch_flag_counts(player_ids: list[str], client) -> dict[str, dict]:
-    """Per-player draft flag counts: {player_id: {total, unresolved}}.
+    """Per-player UNRESOLVED draft flag counts: {player_id: {total, unresolved}}.
 
-    Best-effort: reads ``draft_skill_flags`` in chunks. Any failure degrades
-    to empty counts (the pool is read-only and the badge that matters is
-    data-missing, not flags).
+    Mirrors the Review queue (api/review.py): draft_skill_flags links to a player
+    via draft_skill_profiles.id -> player_id, and a flag is unresolved when
+    resolution IS NULL. We surface the unresolved count (the actionable one);
+    total is reported equal to it since this tab only signals open work.
+
+    Best-effort: any failure degrades to empty counts — the badge that matters
+    on this tab is data-missing, and flag triage lives in the Review tab.
     """
-    counts: dict[str, dict] = {}
+    if not player_ids:
+        return {}
     try:
+        # Map draft profile id -> player_id for these players.
+        profile_to_player: dict[str, str] = {}
         for i in range(0, len(player_ids), release_diff._CHUNK):
             chunk = player_ids[i : i + release_diff._CHUNK]
             result = run_query(
-                lambda c_chunk=chunk: client.table("draft_skill_flags")
-                .select("player_id, status")
+                lambda c_chunk=chunk: client.table("draft_skill_profiles")
+                .select("id, player_id")
                 .in_("player_id", c_chunk)
                 .execute()
             )
             for row in result.data or []:
-                pid = str(row.get("player_id"))
+                profile_to_player[str(row["id"])] = str(row["player_id"])
+
+        profile_ids = list(profile_to_player.keys())
+        counts: dict[str, dict] = {}
+        for i in range(0, len(profile_ids), release_diff._CHUNK):
+            chunk = profile_ids[i : i + release_diff._CHUNK]
+            result = run_query(
+                lambda c_chunk=chunk: client.table("draft_skill_flags")
+                .select("skill_profile_id")
+                .in_("skill_profile_id", c_chunk)
+                .is_("resolution", "null")
+                .execute()
+            )
+            for row in result.data or []:
+                pid = profile_to_player.get(str(row.get("skill_profile_id")))
+                if pid is None:
+                    continue
                 entry = counts.setdefault(pid, {"total": 0, "unresolved": 0})
                 entry["total"] += 1
-                if row.get("status") not in ("resolved", "dismissed"):
-                    entry["unresolved"] += 1
+                entry["unresolved"] += 1
+        return counts
     except Exception:
         logger.warning("draft_pool: flag counts unavailable; defaulting to 0")
         return {}
-    return counts
 
 
 # ---------------------------------------------------------------------------
