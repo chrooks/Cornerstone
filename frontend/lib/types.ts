@@ -388,6 +388,11 @@ export interface PlayerWithSkills {
   flag_summary: { total: number; unresolved: number };
   /** See ReleaseIntegrity — skills is null for a release-integrity reason (#64). */
   release_integrity?: ReleaseIntegrity;
+  /**
+   * Player Pool tab (#5b): canonical skills with NO rating in the draft
+   * composite (value null / "None"). Drives the "N unrated" badge.
+   */
+  data_missing_skills?: string[];
 }
 
 // ---------------------------------------------------------------------------

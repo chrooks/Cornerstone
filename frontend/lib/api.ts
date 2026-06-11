@@ -156,6 +156,17 @@ export async function listPlayersWithSkills(
   return apiFetch<PlayerWithSkills[]>(`/api/players/bulk?${params}`);
 }
 
+// Player Pool tab
+/**
+ * Fetch every player + legend with the open draft's COMPOSITE Skill Profile —
+ * the ratings that will be frozen when this draft publishes (NOT the active
+ * release). Each row carries `data_missing_skills` (#5b badge source). Backs
+ * the draft workspace Player Pool tab. Read-only; 409 when no draft is open.
+ */
+export async function getDraftPlayerPool(): Promise<ApiResponse<PlayerWithSkills[]>> {
+  return apiFetch<PlayerWithSkills[]>(`/api/snapshots/draft/player-pool`);
+}
+
 // ---------------------------------------------------------------------------
 // Manual player include
 // ---------------------------------------------------------------------------

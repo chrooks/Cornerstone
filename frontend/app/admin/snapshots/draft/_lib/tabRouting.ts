@@ -10,6 +10,7 @@ export type TabSlug =
   | "pipeline"
   | "thresholds"
   | "review"
+  | "player-pool"
   | "diff"
   | "publish";
 
@@ -20,6 +21,7 @@ export const ALL_TABS: readonly TabSlug[] = [
   "pipeline",
   "thresholds",
   "review",
+  "player-pool",
   "diff",
   "publish",
 ] as const;
@@ -29,6 +31,7 @@ export const TAB_LABELS: Record<TabSlug, string> = {
   pipeline: "Pipeline",
   thresholds: "Thresholds",
   review: "Review",
+  "player-pool": "Player Pool",
   diff: "Diff",
   publish: "Publish",
 };

@@ -39,6 +39,7 @@ import { OverviewTab } from "../_tabs/OverviewTab";
 import { PipelineTab } from "../_tabs/PipelineTab";
 import { ThresholdsTab } from "../_tabs/ThresholdsTab";
 import { ReviewTab } from "../_tabs/ReviewTab";
+import { PlayerPoolTab } from "../_tabs/PlayerPoolTab";
 import { DiffTab } from "../_tabs/DiffTab";
 import { PublishTab } from "../_tabs/PublishTab";
 import { PublishModal } from "../../_components/PublishModal";
@@ -368,6 +369,7 @@ export function DraftWorkspaceShell() {
           )}
           {activeTab === "thresholds" && <ThresholdsTab {...tabProps} />}
           {activeTab === "review" && <ReviewTab {...tabProps} />}
+          {activeTab === "player-pool" && <PlayerPoolTab {...tabProps} />}
           {activeTab === "diff" && <DiffTab {...tabProps} />}
           {activeTab === "publish" && (
             <PublishTab
