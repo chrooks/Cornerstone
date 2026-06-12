@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { getUserProfile, listPlayersWithSkills, listSavedTeams, getRebuildCheck, deleteSavedTeam, renameSavedTeam, updateSavedTeamVisibility } from "@/lib/api";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
+import { EvalCompatBanner } from "@/components/saved-team/EvalCompatBanner";
 import type { PlayerWithSkills, RebuildCheckResponse, RebuildPlayerReport, SavedTeamSummary, UserProfile } from "@/lib/types";
 
 type ProfileLoadState = "loading" | "ready" | "signed-out" | "error";
@@ -641,6 +642,12 @@ function RebuildCheckModal({
   const [state, setState] = useState<RebuildModalState>("loading");
   const [report, setReport] = useState<RebuildCheckResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Evaluation Version taxonomy compat gate (issue #33).
+  const [evalNeedsResolution, setEvalNeedsResolution] = useState(false);
+  const [evalAcknowledged, setEvalAcknowledged] = useState(false);
+  const handleEvalResolved = useCallback((needsResolution: boolean) => {
+    setEvalNeedsResolution(needsResolution);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -732,6 +739,9 @@ function RebuildCheckModal({
 
           {state === "ready" && report && (
             <div id="rebuild-check-modal-report" className="space-y-4">
+              {/* Evaluation Version taxonomy compat check (issue #33) */}
+              <EvalCompatBanner savedTeamId={savedTeamId} onResolved={handleEvalResolved} />
+
               {/* Version drift banner */}
               {versionChanged && (
                 <div id="rebuild-version-drift-banner" className="flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 p-3">
@@ -807,14 +817,26 @@ function RebuildCheckModal({
             >
               Cancel
             </button>
-            <Link
-              id="rebuild-check-modal-continue-btn"
-              href={buildTargetUrl()}
-              className="inline-flex min-h-9 items-center gap-2 rounded border border-[oklch(0.18_0.02_45)] bg-[oklch(0.18_0.02_45)] px-4 py-1.5 text-sm font-semibold text-[oklch(0.92_0.08_64)] transition-colors hover:bg-[oklch(0.25_0.03_45)]"
-            >
-              {cornerstoneAvailable ? "Continue to Builder" : "Pick a Cornerstone"}
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
+            {evalNeedsResolution && !evalAcknowledged ? (
+              <button
+                id="rebuild-check-modal-acknowledge-btn"
+                type="button"
+                onClick={() => setEvalAcknowledged(true)}
+                className="inline-flex min-h-9 items-center gap-2 rounded border border-amber-700 bg-amber-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-amber-700"
+              >
+                Re-evaluate with new Version
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : (
+              <Link
+                id="rebuild-check-modal-continue-btn"
+                href={buildTargetUrl()}
+                className="inline-flex min-h-9 items-center gap-2 rounded border border-[oklch(0.18_0.02_45)] bg-[oklch(0.18_0.02_45)] px-4 py-1.5 text-sm font-semibold text-[oklch(0.92_0.08_64)] transition-colors hover:bg-[oklch(0.25_0.03_45)]"
+              >
+                {cornerstoneAvailable ? "Continue to Builder" : "Pick a Cornerstone"}
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            )}
           </div>
         )}
       </div>

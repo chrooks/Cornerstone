@@ -11,6 +11,8 @@ from typing import Any
 from flask import Blueprint, g, jsonify, request
 
 from api.auth import require_user
+from services.evaluation_versions import repo as eval_versions_repo
+from services.evaluation_versions.compat import diff_taxonomy
 from services.evaluation_versions.repo import get_active as get_active_eval_version
 from services.supabase_client import get_supabase
 
@@ -350,6 +352,66 @@ def _latest_evaluation_for_saved_team(supabase, saved_team_id: str) -> dict[str,
     ev = row.pop("evaluation_versions", None)
     row["evaluation_version"] = ev["slug"] if ev and isinstance(ev, dict) else None
     return row
+
+
+def _stored_evaluation_version_id(supabase, saved_team_id: str) -> str | None:
+    """Return the Evaluation Version id of the Saved Team's latest evaluation."""
+    res = (
+        supabase.table("saved_team_evaluations")
+        .select("evaluation_version_id, created_at")
+        .eq("saved_team_id", saved_team_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = res.data or []
+    if not rows:
+        return None
+    return rows[0].get("evaluation_version_id")
+
+
+def _version_chip(version: Any) -> dict[str, Any]:
+    """Compact descriptor for an Evaluation Version (no payload)."""
+    return {"id": version.id, "slug": version.slug, "status": version.status}
+
+
+def _build_eval_compat_report(
+    supabase,
+    saved_team_id: str,
+) -> tuple[dict[str, Any] | None, str | None, int]:
+    """Compare the Saved Team's stored Evaluation Version taxonomy footprint to
+    the active Version's. Returns (report, error_msg, status_code).
+
+    Per ADR-0002, the compat check runs at Lab open time. When the stored and
+    active Versions share a taxonomy footprint (only values changed), the report
+    sets needs_resolution=False so re-evaluation proceeds without a dialog.
+    """
+    active_version = get_active_eval_version()
+
+    stored_version_id = _stored_evaluation_version_id(supabase, saved_team_id)
+    if not stored_version_id or stored_version_id == active_version.id:
+        # No prior binding, or already scored under the active Version — nothing
+        # to migrate; re-eval can proceed straight through.
+        return {
+            "saved_team_id": saved_team_id,
+            "stored_version": None if not stored_version_id else _version_chip(active_version),
+            "active_version": _version_chip(active_version),
+            "same_version": bool(stored_version_id) and stored_version_id == active_version.id,
+            "needs_resolution": False,
+            "diff": diff_taxonomy(active_version.payload, active_version.payload),
+        }, None, 200
+
+    stored_version = eval_versions_repo.get_version(stored_version_id)
+    diff = diff_taxonomy(stored_version.payload, active_version.payload)
+
+    return {
+        "saved_team_id": saved_team_id,
+        "stored_version": _version_chip(stored_version),
+        "active_version": _version_chip(active_version),
+        "same_version": False,
+        "needs_resolution": diff["needs_resolution"],
+        "diff": diff,
+    }, None, 200
 
 
 def _extract_starting_lineup_score(evaluation: dict[str, Any]) -> Any:
@@ -705,6 +767,38 @@ def rebuild_check(saved_team_id: str):
 
     except Exception:
         logger.exception("Error in GET /api/saved-teams/%s/rebuild-check", saved_team_id)
+        return _err("Internal server error", status=500)
+
+
+@saved_teams_bp.route("/saved-teams/<saved_team_id>/eval-compat-check", methods=["GET"])
+@require_user
+def eval_compat_check(saved_team_id: str):
+    """Compare a Saved Team's stored Evaluation Version taxonomy to the active one.
+
+    Surfaces renamed Skills, removed Impact Traits, and added Subscores so the
+    user can resolve taxonomy drift before the Lab re-evaluates (issue #33).
+    """
+    try:
+        supabase = get_supabase()
+
+        res = (
+            supabase.table("saved_teams")
+            .select("id")
+            .eq("id", saved_team_id)
+            .eq("user_id", g.user_id)
+            .limit(1)
+            .execute()
+        )
+        if not (res.data or []):
+            return _err("Saved Team not found", status=404)
+
+        report, error_msg, status = _build_eval_compat_report(supabase, saved_team_id)
+        if error_msg:
+            return _err(error_msg, status=status)
+        return _ok(report)
+
+    except Exception:
+        logger.exception("Error in GET /api/saved-teams/%s/eval-compat-check", saved_team_id)
         return _err("Internal server error", status=500)
 
 
