@@ -175,6 +175,27 @@ interface PlayerTableProps {
   rootClassName?: string;
   /** Optional scroll-frame class for embedded table surfaces. */
   wrapperClassName?: string;
+  /**
+   * Opt-in bulk-selection mode. When provided, a leading checkbox column and a
+   * bulk footer are rendered. Absent by default — non-bulk surfaces (/players,
+   * Lab, builder) render no checkbox column and no footer.
+   */
+  bulkSelection?: PlayerTableBulkSelection;
+}
+
+export interface PlayerTableBulkSelection {
+  /** Currently-selected player ids. */
+  selectedIds: Set<string>;
+  /** Toggle a single player's selection. */
+  onToggle: (playerId: string) => void;
+  /** Select every filtered (not just on-page) player. */
+  onSelectAllFiltered: () => void;
+  /** Clear the selection. */
+  onClear: () => void;
+  /** Total filtered count, for the "select all (filtered)" label. */
+  filteredCount: number;
+  /** Renders the bulk action buttons (Exclude N / Include N). */
+  renderActions: () => React.ReactNode;
 }
 
 export function PlayerTable({
@@ -202,8 +223,29 @@ export function PlayerTable({
   onHiddenColumnsChange,
   rootClassName,
   wrapperClassName,
+  bulkSelection,
 }: PlayerTableProps) {
   const router = useRouter();
+
+  // Page-scoped header-checkbox state: checked when every on-page row is selected.
+  const pageRowIds = players.map((p) => p.id);
+  const allPageSelected =
+    !!bulkSelection && pageRowIds.length > 0 && pageRowIds.every((id) => bulkSelection.selectedIds.has(id));
+  const somePageSelected =
+    !!bulkSelection && pageRowIds.some((id) => bulkSelection.selectedIds.has(id));
+
+  const handleToggleAllPage = useCallback(() => {
+    if (!bulkSelection) return;
+    if (allPageSelected) {
+      pageRowIds.forEach((id) => {
+        if (bulkSelection.selectedIds.has(id)) bulkSelection.onToggle(id);
+      });
+    } else {
+      pageRowIds.forEach((id) => {
+        if (!bulkSelection.selectedIds.has(id)) bulkSelection.onToggle(id);
+      });
+    }
+  }, [allPageSelected, bulkSelection, pageRowIds]);
 
   // Column widths — start from defaults
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
@@ -493,6 +535,25 @@ export function PlayerTable({
         <table id="player-table" className="border-collapse text-xs" style={{ tableLayout: "fixed", minWidth: "max-content" }}>
           <thead>
             <tr className="bg-muted/60 border-b border-border">
+              {bulkSelection && (
+                <th
+                  id="player-pool-bulk-select-all-header"
+                  className="px-2 py-2 bg-muted/60 border-r border-border"
+                  style={{ width: 36, minWidth: 36 }}
+                  title={allPageSelected ? "Clear page selection" : "Select all on this page"}
+                >
+                  <input
+                    id="player-pool-bulk-select-all-check"
+                    type="checkbox"
+                    checked={allPageSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = !allPageSelected && somePageSelected;
+                    }}
+                    onChange={handleToggleAllPage}
+                    className="rounded-sm cursor-pointer align-middle accent-[#fe6d34]"
+                  />
+                </th>
+              )}
               {visibleColumns.map((col) => {
                 const width = columnWidths[col.key] ?? col.defaultWidth;
                 const isSorted = sortKeys.some((k) => k.field === col.key);
@@ -530,7 +591,7 @@ export function PlayerTable({
             {players.length === 0 ? (
               <tr>
                 <td
-                  colSpan={visibleColumns.length}
+                  colSpan={visibleColumns.length + (bulkSelection ? 1 : 0)}
                   className="py-12 text-center text-sm text-muted-foreground"
                 >
                   No players match the current filters.
@@ -574,6 +635,10 @@ export function PlayerTable({
                     onHoverEnd={onRowHoverEnd}
                     onSkillContextMenu={handleSkillContextMenu}
                     onSkillOverrideEnabled={!!onSkillOverride}
+                    selectable={!!bulkSelection}
+                    selected={bulkSelection?.selectedIds.has(player.id) ?? false}
+                    onToggleSelect={bulkSelection ? () => bulkSelection.onToggle(player.id) : undefined}
+                    selectCheckboxId={`player-pool-row-check-${player.id}`}
                     renderCell={renderCell}
                   />
               );
@@ -582,6 +647,40 @@ export function PlayerTable({
           </tbody>
         </table>
       </div>
+
+      {/* Bulk-selection footer (opt-in via bulkSelection prop) */}
+      {bulkSelection && (
+        <div
+          id="player-pool-bulk-footer"
+          className="mt-2 flex items-center justify-between gap-3 flex-wrap rounded-[6px] border border-[#d9d0c9] bg-[#fff8f4] px-4 py-2.5 text-xs"
+        >
+          <div id="player-pool-bulk-footer-left" className="flex items-center gap-3 flex-wrap">
+            <span className="font-semibold tabular-nums text-[#0e0907]">
+              {bulkSelection.selectedIds.size} selected
+            </span>
+            <button
+              id="player-pool-bulk-select-all-filtered-btn"
+              type="button"
+              onClick={bulkSelection.onSelectAllFiltered}
+              className="font-medium text-[#fe6d34] hover:text-[#0e0907] transition-colors"
+            >
+              Select all (filtered) ({bulkSelection.filteredCount})
+            </button>
+            <button
+              id="player-pool-bulk-clear-btn"
+              type="button"
+              onClick={bulkSelection.onClear}
+              disabled={bulkSelection.selectedIds.size === 0}
+              className="font-medium text-neutral-500 hover:text-[#0e0907] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Clear
+            </button>
+          </div>
+          <div id="player-pool-bulk-footer-actions" className="flex items-center gap-2">
+            {bulkSelection.renderActions()}
+          </div>
+        </div>
+      )}
 
       {/* Pagination bar */}
       <div id="player-table-pagination" className="flex items-center justify-between text-xs text-muted-foreground">

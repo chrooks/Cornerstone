@@ -16,8 +16,13 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import type React from "react";
 import { toast } from "sonner";
-import { getDraftPlayerPool, manualOverrideSkill } from "@/lib/api";
+import {
+  getDraftPlayerPool,
+  manualOverrideSkill,
+  setPlayersExcludedFromSnapshot,
+} from "@/lib/api";
 import type {
   PlayerWithSkills,
   SkillTier,
@@ -36,6 +41,20 @@ const POOL_CARD_PAGE_SIZE = 16;
 const POOL_PANEL_PAGE_SIZE = 16;
 const DEFAULT_SORT: SortKey[] = [{ field: "name", direction: "asc" }];
 
+interface RowMenuState {
+  open: boolean;
+  x: number;
+  y: number;
+  playerId: string;
+  playerName: string;
+  excluded: boolean;
+  saving: boolean;
+}
+
+const CLOSED_ROW_MENU: RowMenuState = {
+  open: false, x: 0, y: 0, playerId: "", playerName: "", excluded: false, saving: false,
+};
+
 export interface PlayerPoolTabProps {
   draft: SnapshotDraftSummary;
   summary: SnapshotCountSummary | null;
@@ -49,6 +68,13 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewModeReady, setViewModeReady] = useState(false);
+
+  // Bulk-selection state (Player Pool tab owns it; row view only).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Bumped after a mutation so ExcludedSection re-fetches its authoritative list.
+  const [excludedRefreshKey, setExcludedRefreshKey] = useState(0);
+  // Row right-click exclude/include menu.
+  const [rowMenu, setRowMenu] = useState<RowMenuState>(CLOSED_ROW_MENU);
 
   // Frozen in review state — overrides become read-only.
   const isFrozen = draft.status === "review";
@@ -78,6 +104,90 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
   const excludedCount = players.filter(
     (p) => p.excluded_from_snapshot === true,
   ).length;
+
+  // ── Exclude/include mutation → API then authoritative reload ────────────────
+  const applyExclusion = useCallback(
+    async (playerIds: string[], excluded: boolean): Promise<boolean> => {
+      if (playerIds.length === 0) return false;
+      const res = await setPlayersExcludedFromSnapshot(playerIds, excluded);
+      if (!res.success) {
+        toast.error(res.error ?? "Failed to update snapshot exclusion");
+        return false;
+      }
+      toast.success(
+        excluded
+          ? `Excluded ${playerIds.length} from snapshot`
+          : `Included ${playerIds.length} in snapshot`,
+      );
+      await loadPool();
+      setExcludedRefreshKey((k) => k + 1);
+      return true;
+    },
+    [loadPool],
+  );
+
+  // ── Bulk selection helpers ──────────────────────────────────────────────────
+  const toggleSelected = useCallback((playerId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+  }, []);
+
+  const selectAllFiltered = useCallback((filteredIds: string[]) => {
+    setSelectedIds(new Set(filteredIds));
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const excludeSelected = useCallback(
+    async (excluded: boolean) => {
+      const ok = await applyExclusion(Array.from(selectedIds), excluded);
+      if (ok) setSelectedIds(new Set());
+    },
+    [applyExclusion, selectedIds],
+  );
+
+  // How many selected rows are already excluded — drives Exclude vs Include label.
+  const selectedExcludedCount = players.filter(
+    (p) => selectedIds.has(p.id) && p.excluded_from_snapshot === true,
+  ).length;
+  const selectedAllExcluded =
+    selectedIds.size > 0 && selectedExcludedCount === selectedIds.size;
+
+  // ── Row right-click menu ────────────────────────────────────────────────────
+  const openRowMenu = useCallback((event: React.MouseEvent, player: PlayerWithSkills) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const x = Math.min(event.clientX, window.innerWidth - 230);
+    const y = Math.min(event.clientY, window.innerHeight - 90);
+    setRowMenu({
+      open: true,
+      x, y,
+      playerId: player.id,
+      playerName: player.name,
+      excluded: player.excluded_from_snapshot === true,
+      saving: false,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!rowMenu.open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRowMenu(CLOSED_ROW_MENU);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [rowMenu.open]);
+
+  const handleRowMenuToggle = useCallback(async () => {
+    if (rowMenu.saving) return;
+    setRowMenu((prev) => ({ ...prev, saving: true }));
+    await applyExclusion([rowMenu.playerId], !rowMenu.excluded);
+    setRowMenu(CLOSED_ROW_MENU);
+  }, [applyExclusion, rowMenu.playerId, rowMenu.excluded, rowMenu.saving]);
 
   // ── Right-click skill override → writes to the draft, optimistic local merge ──
   const handleSkillOverride = useCallback(
@@ -124,7 +234,7 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
             publishes.{" "}
             {isFrozen
               ? "Snapshot is in review — overrides are locked."
-              : "Right-click a skill cell to override it in the draft."}
+              : "Right-click a skill cell to override it, or right-click a row (or use the checkboxes) to exclude players from the snapshot."}
           </p>
         </div>
         <div id="player-pool-tab-chips" className="flex items-center gap-2 flex-wrap">
@@ -174,6 +284,7 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
         <ExcludedSection
           id="player-pool-excluded-section"
           onChanged={loadPool}
+          refreshKey={excludedRefreshKey}
         />
       )}
 
@@ -196,6 +307,33 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
           hideViewToggleUntilReady
           onViewModeReadyChange={setViewModeReady}
           onSkillOverride={isFrozen ? undefined : handleSkillOverride}
+          onRowContextMenu={isFrozen ? undefined : openRowMenu}
+          bulkSelection={
+            isFrozen
+              ? undefined
+              : {
+                  selectedIds,
+                  onToggle: toggleSelected,
+                  onSelectAllFiltered: selectAllFiltered,
+                  onClear: clearSelection,
+                  renderActions: () => (
+                    <button
+                      id="player-pool-exclude-selected-btn"
+                      type="button"
+                      disabled={selectedIds.size === 0}
+                      onClick={() => excludeSelected(!selectedAllExcluded)}
+                      className="font-semibold px-3 py-1.5 rounded-[4px] border border-[#d9d0c9]
+                        text-[#fe6d34] hover:text-[#0e0907] hover:border-[#fe6d34]
+                        focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
+                        disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {selectedAllExcluded
+                        ? `Include ${selectedIds.size} in snapshot`
+                        : `Exclude ${selectedIds.size} from snapshot`}
+                    </button>
+                  ),
+                }
+          }
           getMutedPlayerIds={(rows) =>
             new Set(rows.filter((p) => p.excluded_from_snapshot).map((p) => p.id))
           }
@@ -210,6 +348,42 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
             />
           )}
         />
+      )}
+
+      {/* Row right-click exclude/include menu */}
+      {rowMenu.open && (
+        <>
+          <div
+            className="fixed inset-0 z-[9998]"
+            onMouseDown={() => setRowMenu(CLOSED_ROW_MENU)}
+          />
+          <div
+            id="player-pool-row-menu"
+            role="menu"
+            aria-label={`Snapshot exclusion for ${rowMenu.playerName}`}
+            style={{ left: rowMenu.x, top: rowMenu.y }}
+            className="fixed z-[9999] w-56 rounded-lg border border-[#d9d0c9] bg-[#fff8f4] shadow-lg py-1 text-xs"
+          >
+            <div className="px-3 py-1.5 border-b border-[#e3d9cf]">
+              <div className="font-semibold text-[#0e0907] truncate">{rowMenu.playerName}</div>
+            </div>
+            <button
+              id="player-pool-rowmenu-exclude"
+              type="button"
+              role="menuitem"
+              disabled={rowMenu.saving}
+              onClick={handleRowMenuToggle}
+              className="w-full text-left px-3 py-1.5 font-medium text-[#fe6d34]
+                hover:bg-[#f7ede5] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {rowMenu.saving
+                ? "Saving…"
+                : rowMenu.excluded
+                ? "Include in snapshot"
+                : "Exclude from snapshot"}
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

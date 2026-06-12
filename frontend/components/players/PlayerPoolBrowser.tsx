@@ -5,7 +5,7 @@ import type React from "react";
 import { cn } from "@/lib/utils";
 import { getLegend, getPlayerProfile, getPlayerStats } from "@/lib/api";
 import { FilterBar } from "@/components/players/FilterBar";
-import { PlayerTable } from "@/components/players/PlayerTable";
+import { PlayerTable, type PlayerTableBulkSelection } from "@/components/players/PlayerTable";
 import { SortControls } from "@/components/players/SortControls";
 import {
   PlayerProfileModal,
@@ -113,6 +113,22 @@ interface PlayerPoolBrowserProps {
   }) => React.ReactNode;
   highlightedPlayerId?: string | null;
   isAdmin?: boolean;
+  /**
+   * Opt-in bulk selection (row view only). When absent, no checkbox column or
+   * footer renders — /players, Lab, and the builder pass nothing and are
+   * unaffected. The browser injects the filtered-id set for "select all
+   * (filtered)"; the consumer owns selectedIds + the action buttons.
+   */
+  bulkSelection?: PlayerPoolBulkSelection;
+}
+
+export interface PlayerPoolBulkSelection {
+  selectedIds: Set<string>;
+  onToggle: (playerId: string) => void;
+  /** Receives every filtered player id (across all pages). */
+  onSelectAllFiltered: (filteredIds: string[]) => void;
+  onClear: () => void;
+  renderActions: () => React.ReactNode;
 }
 
 function nextFilterId(): string {
@@ -195,6 +211,7 @@ export function PlayerPoolBrowser({
   renderPlayerFit,
   highlightedPlayerId,
   isAdmin,
+  bulkSelection,
 }: PlayerPoolBrowserProps) {
   const initialPageSize = defaultPageSizeByViewSize?.[defaultViewSize] ?? defaultPageSize;
   const [filterEntries, setFilterEntries] = useState<FilterEntry[]>(initialFilterEntries);
@@ -526,6 +543,18 @@ export function PlayerPoolBrowser({
     ? renderViewToggle({ viewSize, setViewSize, ready: viewModeReady })
     : defaultViewToggle({ viewSize, setViewSize, ready: viewModeReady, viewSizes, id });
 
+  const tableBulkSelection: PlayerTableBulkSelection | undefined = bulkSelection
+    ? {
+        selectedIds: bulkSelection.selectedIds,
+        onToggle: bulkSelection.onToggle,
+        onSelectAllFiltered: () =>
+          bulkSelection.onSelectAllFiltered(filteredPlayers.map((p) => p.id)),
+        onClear: bulkSelection.onClear,
+        filteredCount: filteredPlayers.length,
+        renderActions: bulkSelection.renderActions,
+      }
+    : undefined;
+
   const renderCollectionView = () => {
     if (viewSize === "row") {
       return (
@@ -556,6 +585,7 @@ export function PlayerPoolBrowser({
           onHiddenColumnsChange={setHiddenColumns}
           rootClassName={tableRootClassName}
           wrapperClassName={tableWrapperClassName}
+          bulkSelection={tableBulkSelection}
         />
       );
     }

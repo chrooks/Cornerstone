@@ -29,6 +29,14 @@ interface PlayerRowViewProps {
   onHoverEnd?: () => void;
   onSkillContextMenu?: (event: React.MouseEvent, player: PlayerWithSkills, skillKey: string) => void;
   onSkillOverrideEnabled?: boolean;
+  /**
+   * When provided, a leading checkbox cell is rendered for bulk selection.
+   * Absent by default — non-bulk surfaces render no checkbox column.
+   */
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (event: React.MouseEvent) => void;
+  selectCheckboxId?: string;
   renderCell: (player: PlayerWithSkills, column: PlayerRowColumn) => React.ReactNode;
 }
 
@@ -48,6 +56,10 @@ export function PlayerRowView({
   onHoverEnd,
   onSkillContextMenu,
   onSkillOverrideEnabled = false,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
+  selectCheckboxId,
   renderCell,
 }: PlayerRowViewProps) {
   return (
@@ -73,6 +85,24 @@ export function PlayerRowView({
         highlighted && "!opacity-100 bg-amber-100/70 dark:bg-amber-900/30 outline outline-2 outline-amber-400/80 outline-offset-[-2px]",
       )}
     >
+      {selectable && (
+        <td
+          className="px-2 py-1.5 bg-background group-hover:bg-muted transition-colors"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <input
+            id={selectCheckboxId}
+            type="checkbox"
+            checked={selected}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleSelect?.(event);
+            }}
+            onChange={() => {}}
+            className="rounded-sm cursor-pointer align-middle accent-[#fe6d34]"
+          />
+        </td>
+      )}
       {columns.map((column) => {
         const isSkillColumn = ALL_SKILL_NAMES.includes(column.key);
         return (
