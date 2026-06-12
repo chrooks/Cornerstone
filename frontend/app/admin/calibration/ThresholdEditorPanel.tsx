@@ -904,6 +904,10 @@ export function ThresholdEditorPanel({
   const [testingAll, setTestingAll] = useState(false);
   const [showTestAllResults, setShowTestAllResults] = useState(false);
   const [testAllResults, setTestAllResults] = useState<SkillTestResult[]>([]);
+  // Skills with an edit staged this session but not yet committed → run_id.
+  // Drives the "Staged" pending-commit badge so the editor is honest about the
+  // stage→commit lifecycle (Save stages a run; the threshold lands on commit).
+  const [stagedRuns, setStagedRuns] = useState<Record<string, string>>({});
 
   // Get the current threshold row for the selected skill
   const thresholdRow = thresholds.find((t) => t.skill_name === selectedSkill);
@@ -1002,7 +1006,9 @@ export function ThresholdEditorPanel({
     setIsAdvancedMode((v) => !v);
   };
 
-  const handleSave = async () => {
+  // Named "stage edit" not "save": this stages a draft run; the threshold is
+  // applied only when that run is committed in the Pipeline tab.
+  const handleStageEdit = async () => {
     setSaving(true);
     try {
       // Strip pending-delete markers before sending to the API — _deleted items
@@ -1013,11 +1019,17 @@ export function ThresholdEditorPanel({
         const runId = res.data.run_id;
         // Clear the unsaved-edit flag for this skill in the parent (use clean rule)
         onSaved(selectedSkill, cleanRule as Record<string, unknown>);
+        // Mark this skill as staged-pending-commit so the badge appears.
+        setStagedRuns((prev) => ({ ...prev, [selectedSkill]: runId }));
+        // Honest signifier: staging is not the same as applying. The threshold
+        // only lands when the run is committed in the Pipeline tab.
+        onToast(
+          `Edit staged (run ${runId.slice(0, 8)}…) — commit it in the Pipeline tab to apply.`,
+          "success"
+        );
         // Notify the parent so it can deep-link to the Pipeline tab
         if (onStagedEdit) {
           onStagedEdit(runId);
-        } else {
-          onToast(`Threshold edit staged: run ${runId.slice(0, 8)}…`, "success");
         }
       } else if (!res.success && res.error?.startsWith("pending_commit_run_exists")) {
         onToast(
@@ -1165,6 +1177,19 @@ export function ThresholdEditorPanel({
             <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
               Unsaved
             </span>
+          )}
+          {/* Pending-commit badge — an edit is staged but not yet applied.
+              Hidden once the user starts a fresh edit (that supersedes it). */}
+          {!hasUnsavedChanges && stagedRuns[selectedSkill] && (
+            <button
+              type="button"
+              id="threshold-staged-badge"
+              onClick={() => onStagedEdit?.(stagedRuns[selectedSkill])}
+              aria-label="Edit staged in a draft run — commit it in the Pipeline tab to apply. Click to open the run."
+              className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-200 transition-colors"
+            >
+              Staged · commit to apply
+            </button>
           )}
         </div>
         <button
@@ -1502,17 +1527,20 @@ export function ThresholdEditorPanel({
             {testing ? "Testing…" : "Test Anchors"}
           </button>
 
-          {/* Save */}
+          {/* Stage Edit — honest label: this stages a draft run; the threshold
+              is applied only when the run is committed in the Pipeline tab. */}
           <button
             type="button"
-            onClick={handleSave}
+            id="threshold-stage-edit-btn"
+            onClick={handleStageEdit}
             disabled={saving || !!jsonError}
+            title="Stages a draft run with this rule. Commit it in the Pipeline tab to apply."
             className={cn(
               "text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground",
               "hover:bg-primary/90 transition-colors disabled:opacity-50"
             )}
           >
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Staging…" : "Stage Edit"}
           </button>
         </div>
       </div>
