@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
-import { saveThresholdEdit, testThresholds } from "@/lib/api";
+import { saveThresholdEdit, testThresholds, getStagedThresholdEdits } from "@/lib/api";
 import { formatSkillName } from "@/lib/skills";
 import { SkillPickerBar } from "./SkillPickerBar";
 import { ALL_STAT_KEYS, getStatLabel } from "@/lib/stat-keys";
@@ -904,10 +904,21 @@ export function ThresholdEditorPanel({
   const [testingAll, setTestingAll] = useState(false);
   const [showTestAllResults, setShowTestAllResults] = useState(false);
   const [testAllResults, setTestAllResults] = useState<SkillTestResult[]>([]);
-  // Skills with an edit staged this session but not yet committed → run_id.
-  // Drives the "Staged" pending-commit badge so the editor is honest about the
-  // stage→commit lifecycle (Save stages a run; the threshold lands on commit).
+  // Skills with an uncommitted threshold_edit run → run_id. Drives the "Staged"
+  // pending-commit badge. Seeded from real run state on mount so it is
+  // authoritative: a skill drops out once its run is committed or discarded
+  // (the draft tabs unmount/remount, so returning here re-fetches).
   const [stagedRuns, setStagedRuns] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let active = true;
+    getStagedThresholdEdits().then((res) => {
+      if (active && res.success && res.data) setStagedRuns(res.data);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Get the current threshold row for the selected skill
   const thresholdRow = thresholds.find((t) => t.skill_name === selectedSkill);

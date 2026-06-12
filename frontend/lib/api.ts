@@ -336,6 +336,18 @@ export async function saveThresholdEdit(
 }
 
 /**
+ * Map of skill_name -> run_id for threshold edits staged (but not yet committed)
+ * in the open draft. Authoritative source for the editor's pending-commit badge:
+ * a skill drops out of the map once its run is committed or discarded.
+ * Returns {} when no draft is open.
+ */
+export async function getStagedThresholdEdits(): Promise<
+  ApiResponse<Record<string, string>>
+> {
+  return apiFetch<Record<string, string>>("/api/skills/thresholds/staged-edits");
+}
+
+/**
  * Test a skill's threshold rule against its anchor players.
  * Pass overrideThresholds to test unsaved edits before committing.
  */

@@ -158,6 +158,35 @@ def any_pending_commit(snapshot_release_id: Optional[str], client=None) -> bool:
     return bool(result.data)
 
 
+def staged_threshold_edits(snapshot_release_id: Optional[str], client=None) -> dict[str, str]:
+    """Return {skill_name: run_id} for uncommitted threshold_edit runs in a draft.
+
+    A threshold_edit run is "staged" when it has succeeded but not yet been
+    committed (committed_at IS NULL). This is the authoritative source for the
+    editor's pending-commit badge — it clears automatically once the run is
+    committed or discarded. Returns {} when there is no open draft.
+    """
+    if snapshot_release_id is None:
+        return {}
+
+    c = client or _get_client()
+    result = run_query(
+        lambda: c.table("pipeline_runs")
+        .select("id, params")
+        .eq("snapshot_release_id", snapshot_release_id)
+        .eq("pipeline_name", "threshold_edit")
+        .eq("status", "success")
+        .is_("committed_at", "null")
+        .execute()
+    )
+    edits: dict[str, str] = {}
+    for row in (result.data or []):
+        skill_name = (row.get("params") or {}).get("skill_name")
+        if skill_name:
+            edits[skill_name] = str(row["id"])
+    return edits
+
+
 def get_run(run_id: str, client=None) -> Optional[dict]:
     """Return a single pipeline_run row by id, or None if not found.
 

@@ -421,6 +421,34 @@ def save_threshold_edit(skill_name: str):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/skills/thresholds/staged-edits
+# (which skills have an uncommitted threshold_edit run in the open draft)
+# ---------------------------------------------------------------------------
+
+
+@calibration_bp.route("/skills/thresholds/staged-edits", methods=["GET"])
+@require_admin
+def get_staged_threshold_edits():
+    """Return {skill_name: run_id} for uncommitted threshold_edit runs in the
+    open draft — the authoritative source for the editor's pending-commit badge.
+
+    Returns {} when no draft is open. Because it reflects real run state, the
+    badge clears on its own once a run is committed or discarded.
+    """
+    try:
+        from services.snapshot_versions import repo as snap_repo
+        from services.pipeline_runs import repo as runs_repo
+
+        draft = snap_repo.get_draft()
+        if draft is None:
+            return _ok({})
+        return _ok(runs_repo.staged_threshold_edits(draft.id))
+    except Exception:
+        logger.exception("Failed to list staged threshold edits")
+        return _err("Failed to list staged threshold edits", 500)
+
+
+# ---------------------------------------------------------------------------
 # POST /api/skills/test-thresholds
 # ---------------------------------------------------------------------------
 
