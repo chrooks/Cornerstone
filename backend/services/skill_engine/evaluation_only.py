@@ -73,6 +73,42 @@ def _merge_composite_for_skills(
     return merged
 
 
+def _stage_composite_for_player(
+    player_id: str,
+    season: str,
+    skills_result: dict,
+    affected_skills: list[str],
+    existing_composite: dict,
+    notability_score: int,
+) -> tuple[StagedProfileRow, list[StagedFlagRow]]:
+    """Build the merged composite profile row + any review flags for one player."""
+    merged_composite = _merge_composite_for_skills(
+        skills_result, affected_skills, existing_composite, notability_score
+    )
+    profile_row = StagedProfileRow(
+        player_id=player_id,
+        season=season,
+        source="composite",
+        profile=merged_composite,
+    )
+    # Stage a review flag for any affected skill the composite flagged (Claude
+    # disagreement / low-notability). The commit RPC persists these into
+    # draft_skill_flags and marks the profile review_required.
+    flag_rows: list[StagedFlagRow] = []
+    for skill_name in affected_skills:
+        entry = merged_composite.get(skill_name) or {}
+        if entry.get("flagged"):
+            flag_rows.append(StagedFlagRow(
+                player_id=player_id,
+                skill_name=skill_name,
+                flag_reason=entry.get("flag_reason") or "flagged",
+                season=season,
+                claude_tier=entry.get("claude_tier"),
+                stats_tier=entry.get("stat_tier"),
+            ))
+    return profile_row, flag_rows
+
+
 def evaluate_skills_for_run(
     run_id: str,
     player_ids: list[str],
@@ -196,15 +232,12 @@ def evaluate_skills_for_run(
                 get_notability_score(player_id, season, client)
                 if needs_notability else 0
             )
-            merged_composite = _merge_composite_for_skills(
-                skills_result, affected_skills, existing_composite, notability
+            profile_row, flag_rows = _stage_composite_for_player(
+                player_id, season, skills_result, affected_skills,
+                existing_composite, notability,
             )
-            staged_profiles.append(StagedProfileRow(
-                player_id=player_id,
-                season=season,
-                source="composite",
-                profile=merged_composite,
-            ))
+            staged_profiles.append(profile_row)
+            staged_flags.extend(flag_rows)
             continue
 
         # Apply skill filter — only keep requested skills in the staged profile

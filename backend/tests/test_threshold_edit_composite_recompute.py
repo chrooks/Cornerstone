@@ -91,6 +91,64 @@ def _run_worker_recompute(stats_rows, composite_rows, skill_filter, fake_skills)
     return mock_stage
 
 
+def _run_worker_capturing_flags(stats_rows, composite_rows, skill_filter, fake_skills, composite_entry):
+    """Run recompute with composite_skill stubbed; capture staged flag rows."""
+    from services.skill_engine.evaluation_only import evaluate_skills_for_run
+
+    with patch("services.skill_engine.evaluation_only.get_thresholds", return_value={}), \
+         patch("services.skill_engine.evaluation_only.get_league_averages", return_value={}), \
+         patch("services.skill_engine.evaluation_only.evaluate_all_skills", return_value=fake_skills), \
+         patch("services.skill_engine.evaluation_only.apply_auto_promotions", return_value=fake_skills), \
+         patch("services.skill_engine.evaluation_only.get_notability_score", return_value=80), \
+         patch("services.skill_engine.evaluation_only.composite_skill", return_value=composite_entry), \
+         patch("services.skill_engine.evaluation_only._get_client", return_value=_mock_client(stats_rows, composite_rows)), \
+         patch("services.skill_engine.evaluation_only.stage_profile_rows"), \
+         patch("services.skill_engine.evaluation_only.stage_flag_rows") as mock_flags:
+        evaluate_skills_for_run(
+            run_id="run-comp",
+            player_ids=["p1"],
+            season="2025-26",
+            skill_filter=skill_filter,
+            recompute_composite=True,
+        )
+    return mock_flags
+
+
+def test_recompute_stages_flag_for_flagged_skill():
+    """A flagged composite (Claude disagreement) stages a review flag row."""
+    fake_skills = {"cutter": {"tier": "Elite", "stat_confidence": "high"}}
+    stats_rows = [{"player_id": "p1", "season": "2025-26", "stats": {"x": 1}}]
+    composite_rows = [{"player_id": "p1", "profile": {"cutter": {"final_tier": "Capable", "claude_tier": "Capable"}}}]
+    flagged_entry = {
+        "final_tier": "Capable", "stat_tier": "Elite", "claude_tier": "Capable",
+        "flagged": True, "flag_reason": "stat_claude_disagreement",
+    }
+
+    mock_flags = _run_worker_capturing_flags(stats_rows, composite_rows, ["cutter"], fake_skills, flagged_entry)
+
+    mock_flags.assert_called_once()
+    rows = mock_flags.call_args[0][1]
+    assert len(rows) == 1
+    flag = rows[0]
+    assert flag.skill_name == "cutter"
+    assert flag.flag_reason == "stat_claude_disagreement"
+    assert flag.stats_tier == "Elite"
+    assert flag.claude_tier == "Capable"
+    assert flag.season == "2025-26"
+
+
+def test_recompute_stages_no_flag_for_unflagged_skill():
+    """A high-confidence skill is never flagged → no flag staged."""
+    fake_skills = {"rebounder": {"tier": "Capable", "stat_confidence": "high"}}
+    stats_rows = [{"player_id": "p1", "season": "2025-26", "stats": {"x": 1}}]
+    composite_rows = [{"player_id": "p1", "profile": {"rebounder": {"final_tier": "None"}}}]
+    unflagged_entry = {"final_tier": "Capable", "stat_tier": "Capable", "flagged": False}
+
+    mock_flags = _run_worker_capturing_flags(stats_rows, composite_rows, ["rebounder"], fake_skills, unflagged_entry)
+
+    mock_flags.assert_not_called()
+
+
 def test_recompute_stages_composite_for_high_confidence_skill():
     """rebounder (high-confidence): committed composite.final_tier follows the new stat tier."""
     # New stats evaluation: rebounder now Capable.
