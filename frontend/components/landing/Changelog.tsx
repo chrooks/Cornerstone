@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import type { ChangelogEntry, ChangelogEntryType } from "@/lib/types";
 
 /* ── Tunables ── */
-const ENTRY_LIMIT = 6;
+const ENTRY_LIMIT = 4;
 
 /* ── Per-type presentation ── */
 
