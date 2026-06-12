@@ -63,7 +63,7 @@ export interface PlayerPoolTabProps {
   onTabChange: (slug: TabSlug) => void;
 }
 
-export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
+export function PlayerPoolTab({ draft, reload }: PlayerPoolTabProps) {
   const [players, setPlayers] = useState<PlayerWithSkills[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,9 +121,12 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
       );
       await loadPool();
       setExcludedRefreshKey((k) => k + 1);
+      // Also refresh the shell's draft validation so the Publish tab's
+      // missing-composite count stays in sync across tabs after an exclude.
+      await reload();
       return true;
     },
-    [loadPool],
+    [loadPool, reload],
   );
 
   // ── Bulk selection helpers ──────────────────────────────────────────────────

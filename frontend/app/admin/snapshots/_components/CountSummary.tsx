@@ -10,6 +10,8 @@
  * the count is large so it never pushes the action bar offscreen.
  */
 
+import Link from "next/link";
+
 import type {
   MissingCompositePlayer,
   SnapshotCountSummary,
@@ -145,9 +147,13 @@ function MissingCompositeDisclosure({
                     aria-label={`Select ${p.name} for snapshot exclusion`}
                   />
                 )}
-                <span className="font-medium text-[#0e0907] truncate">
+                <Link
+                  href={`/admin/review/${p.id}`}
+                  className="font-medium text-[#0e0907] truncate hover:text-[#fe6d34] hover:underline transition-colors"
+                  title={`Open ${p.name}'s review profile`}
+                >
                   {p.name}
-                </span>
+                </Link>
               </span>
               <span className="flex items-center gap-2 font-mono text-[11px] text-amber-900/80 shrink-0">
                 <span className="tabular-nums">{p.team ?? "—"}</span>
