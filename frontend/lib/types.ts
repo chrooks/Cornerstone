@@ -968,6 +968,8 @@ export interface MissingCompositePlayer {
 /** Validation counts returned before publish. */
 export interface SnapshotPublishValidation {
   players_missing_canonical: number;
+  /** Full list of Players whose nba_api_id has no canonical_players row. Hard gate. */
+  missing_canonical_players: MissingCompositePlayer[];
   /** Count of Legends whose nba_api_id has no canonical_players row. Hard gate. */
   legends_missing_canonical: number;
   players_missing_composite: number;

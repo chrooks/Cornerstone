@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { CountSummary } from "../../_components/CountSummary";
 import { ExcludedSection } from "../_components/ExcludedSection";
@@ -40,6 +41,9 @@ export interface PublishTabProps {
   markLocalTransition?: () => void;
   onOpenPublishModal: () => void;
   isPublishing: boolean;
+  /** Revert the snapshot to draft — surfaced inline on the canonical block. */
+  onBackToDraft?: () => void;
+  isTransitioning?: boolean;
 }
 
 export function PublishTab({
@@ -51,6 +55,8 @@ export function PublishTab({
   markLocalTransition,
   onOpenPublishModal,
   isPublishing,
+  onBackToDraft,
+  isTransitioning,
 }: PublishTabProps) {
   const missingCompositePlayers = useMemo(
     () => validation?.missing_composite_players ?? [],
@@ -113,6 +119,7 @@ export function PublishTab({
 
   const missingComposite = validation?.players_missing_composite ?? 0;
   const missingCanonical = validation?.players_missing_canonical ?? 0;
+  const missingCanonicalPlayers = validation?.missing_canonical_players ?? [];
   const legendsMissingCanonical = validation?.legends_missing_canonical ?? 0;
   const openFlags = validation?.open_flags ?? 0;
 
@@ -192,9 +199,56 @@ export function PublishTab({
           id="publish-tab-blocked"
           className="rounded-[6px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 mb-6"
         >
-          <strong>Cannot publish:</strong> {missingCanonical} player
-          {missingCanonical !== 1 ? "s" : ""} missing canonical profiles.
-          Run the ingestion pipelines and composite review first.
+          <p>
+            <strong>Cannot publish:</strong> {missingCanonical} player
+            {missingCanonical !== 1 ? "s" : ""} missing a canonical profile.
+            Each player needs a canonical_players row before the snapshot can be
+            frozen — fix it in draft, then return here.
+          </p>
+
+          {missingCanonicalPlayers.length > 0 && (
+            <ul
+              id="publish-tab-blocked-players"
+              className="mt-3 flex flex-wrap gap-1.5"
+            >
+              {missingCanonicalPlayers.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    href={`/admin/review/${p.id}`}
+                    className="inline-flex items-center gap-1.5 rounded-[4px] border border-amber-300
+                      bg-amber-100/60 px-2 py-1 text-[12px] font-medium text-amber-900
+                      hover:border-[#fe6d34] hover:text-[#0e0907] transition-colors"
+                    title={`Open ${p.name}'s review profile`}
+                  >
+                    {p.name}
+                    {p.team && (
+                      <span className="font-mono text-[11px] text-amber-900/70">
+                        {p.team}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {onBackToDraft && (
+            <div className="mt-4">
+              <button
+                id="publish-tab-blocked-back-to-draft"
+                type="button"
+                onClick={onBackToDraft}
+                disabled={isTransitioning}
+                className="text-xs font-semibold px-3 py-1.5 rounded-[4px]
+                  border border-amber-400 bg-white text-amber-900
+                  hover:border-[#fe6d34] hover:text-[#0e0907]
+                  focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
+                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isTransitioning ? "Moving…" : "Back to draft to fix"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

@@ -60,6 +60,10 @@ def validate_publishable(
                                                # nba_api_id has no canonical_players row
                                                # (mirrors the publish RPC predicate
                                                # legends_missing_canonical_player)
+            "missing_canonical_players": [    # full list — Player identities for the gate
+                {"id": str, "name": str, "team": str | None, "position": str | None},
+                ...
+            ],
             "players_missing_composite": int,  # soft warning
             "missing_composite_players": [    # full list — Player identities for the disclosure
                 {"id": str, "name": str, "team": str | None, "position": str | None},
@@ -88,6 +92,7 @@ def validate_publishable(
     player_nba_ids = [str(p["nba_api_id"]) for p in players if p.get("nba_api_id")]
 
     missing_canonical = 0
+    missing_canonical_players: list[dict] = []
     if player_nba_ids:
         canonical_rows = run_query(
             lambda: c.table("canonical_players")
@@ -96,7 +101,23 @@ def validate_publishable(
             .execute()
         )
         matched_ids = {str(r["nba_api_id"]) for r in (canonical_rows.data or [])}
-        missing_canonical = sum(1 for nba_id in player_nba_ids if nba_id not in matched_ids)
+        # Surface the Player identities (not just a count) so the publish gate can
+        # name who's blocking and link to their review profile — mirrors
+        # missing_composite_players. Players without an nba_api_id are not counted
+        # (they can't be matched against canonical_players), matching the gate.
+        for p in players:
+            nba_id = str(p["nba_api_id"]) if p.get("nba_api_id") else None
+            if not nba_id or nba_id in matched_ids:
+                continue
+            missing_canonical += 1
+            missing_canonical_players.append(
+                {
+                    "id": str(p["id"]),
+                    "name": p.get("name") or "Unknown",
+                    "team": p.get("team"),
+                    "position": p.get("position"),
+                }
+            )
 
     # Legends missing a canonical_players row. The publish RPC hard-blocks with
     # legends_missing_canonical_player when a Legend's nba_api_id has no
@@ -196,6 +217,7 @@ def validate_publishable(
 
     return {
         "players_missing_canonical": missing_canonical,
+        "missing_canonical_players": missing_canonical_players,
         "legends_missing_canonical": legends_missing_canonical,
         "players_missing_composite": missing_composite,
         "missing_composite_players": missing_composite_players,

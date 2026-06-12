@@ -427,6 +427,8 @@ export function DraftWorkspaceShell() {
               {...tabProps}
               onOpenPublishModal={openPublishModal}
               isPublishing={isPublishing}
+              onBackToDraft={handleMoveToDraft}
+              isTransitioning={isTransitioning}
             />
           )}
         </div>
