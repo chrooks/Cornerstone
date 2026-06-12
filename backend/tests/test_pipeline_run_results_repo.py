@@ -183,7 +183,8 @@ def test_get_diff_returns_expected_shape(mock_supabase):
     def table_router(name):
         mock = MagicMock()
         if name == "pipeline_run_results":
-            mock.select.return_value.eq.return_value.execute.return_value = MagicMock(data=staged_rows)
+            # staged_rows fetch is paginated via .range(); mirror that chain.
+            mock.select.return_value.eq.return_value.range.return_value.execute.return_value = MagicMock(data=staged_rows)
         elif name == "draft_skill_profiles":
             mock.select.return_value.in_.return_value.execute.return_value = MagicMock(data=current_rows)
         return mock
@@ -221,7 +222,8 @@ def test_get_diff_counts_promotion_correctly(mock_supabase):
     def table_router(name):
         mock = MagicMock()
         if name == "pipeline_run_results":
-            mock.select.return_value.eq.return_value.execute.return_value = MagicMock(data=staged_rows)
+            # staged_rows fetch is paginated via .range(); mirror that chain.
+            mock.select.return_value.eq.return_value.range.return_value.execute.return_value = MagicMock(data=staged_rows)
         elif name == "draft_skill_profiles":
             mock.select.return_value.in_.return_value.execute.return_value = MagicMock(data=current_rows)
         return mock
@@ -266,7 +268,8 @@ def _diff_with(staged_profile, current_profile, mock_supabase):
     def table_router(name):
         mock = MagicMock()
         if name == "pipeline_run_results":
-            mock.select.return_value.eq.return_value.execute.return_value = MagicMock(data=staged_rows)
+            # staged_rows fetch is paginated via .range(); mirror that chain.
+            mock.select.return_value.eq.return_value.range.return_value.execute.return_value = MagicMock(data=staged_rows)
         elif name == "draft_skill_profiles":
             mock.select.return_value.in_.return_value.execute.return_value = MagicMock(data=current_rows)
         return mock

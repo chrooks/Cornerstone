@@ -92,6 +92,48 @@ class StagedFlagRow:
 # ---------------------------------------------------------------------------
 
 
+# PostgREST returns at most 1000 rows per request by default. A single
+# .in_("player_id", [...]) over many players × several profile sources can
+# exceed that and silently truncate, so we page the IN-list in chunks small
+# enough that chunk × sources-per-player stays well under the cap.
+_DIFF_FETCH_CHUNK = 200
+
+# Page size for paginating a single-filter fetch (e.g. all staged rows for one
+# run_id) that can itself exceed the 1000-row cap on a large bulk run.
+_DIFF_PAGE = 500
+
+
+def _fetch_all_paged(fetch_page) -> list[dict]:
+    """Page through a filtered query until a short page signals the end.
+
+    fetch_page(offset, limit) returns that page's rows (or None). Guards the
+    staged-rows fetch — keyed on run_id, not an IN-list — from PostgREST's
+    1000-row page cap silently truncating the diff's source of truth.
+    """
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        page = fetch_page(offset, _DIFF_PAGE) or []
+        rows.extend(page)
+        if len(page) < _DIFF_PAGE:
+            break
+        offset += _DIFF_PAGE
+    return rows
+
+
+def _fetch_in_chunks(values: list, fetch_chunk) -> list[dict]:
+    """Aggregate fetch_chunk(chunk) across chunks of `values`.
+
+    Guards against PostgREST's 1000-row page cap silently truncating a large
+    IN-list query. fetch_chunk receives a slice of `values` and returns its rows
+    (or None); results are concatenated in order.
+    """
+    rows: list[dict] = []
+    for i in range(0, len(values), _DIFF_FETCH_CHUNK):
+        rows.extend(fetch_chunk(values[i : i + _DIFF_FETCH_CHUNK]) or [])
+    return rows
+
+
 def _get_client():
     """Indirection point so tests can patch without touching get_supabase."""
     return get_supabase()
@@ -202,14 +244,17 @@ def get_diff(run_id: str) -> dict:
     """
     client = _get_client()
 
-    # Fetch all staged rows for this run
-    staged_result = run_query(
-        lambda: client.table("pipeline_run_results")
-        .select("*")
-        .eq("run_id", run_id)
-        .execute()
+    # Fetch all staged rows for this run — paginated so a large bulk run staging
+    # >1000 rows isn't silently truncated (this is the diff's source of truth).
+    staged_rows = _fetch_all_paged(
+        lambda offset, limit: run_query(
+            lambda o=offset, l=limit: client.table("pipeline_run_results")
+            .select("*")
+            .eq("run_id", run_id)
+            .range(o, o + l - 1)
+            .execute()
+        ).data
     )
-    staged_rows = staged_result.data or []
 
     if not staged_rows:
         return {
@@ -221,14 +266,18 @@ def get_diff(run_id: str) -> dict:
     # Collect the distinct player_ids to look up current profiles
     player_ids = list({row["player_id"] for row in staged_rows})
 
-    # Fetch current draft_skill_profiles for these players
-    current_result = run_query(
-        lambda: client.table("draft_skill_profiles")
-        .select("player_id, season, source, profile")
-        .in_("player_id", player_ids)
-        .execute()
+    # Fetch current draft_skill_profiles for these players — chunked so a large
+    # player set can't be truncated at PostgREST's 1000-row cap (which would make
+    # missing-current players' skills look spuriously "new").
+    current_rows = _fetch_in_chunks(
+        player_ids,
+        lambda chunk: run_query(
+            lambda c=chunk: client.table("draft_skill_profiles")
+            .select("player_id, season, source, profile")
+            .in_("player_id", c)
+            .execute()
+        ).data,
     )
-    current_rows = current_result.data or []
 
     # Build lookup: (player_id, season, source) -> profile dict
     current_lookup: dict[tuple[str, str, str], dict] = {}
@@ -300,13 +349,16 @@ def get_diff(run_id: str) -> dict:
     # so attach the display name (null for legends, which have no players row).
     changed_player_ids = list({c["player_id"] for c in changes})
     if changed_player_ids:
-        names_result = run_query(
-            lambda: client.table("players")
-            .select("id, name")
-            .in_("id", changed_player_ids)
-            .execute()
+        name_rows = _fetch_in_chunks(
+            changed_player_ids,
+            lambda chunk: run_query(
+                lambda c=chunk: client.table("players")
+                .select("id, name")
+                .in_("id", c)
+                .execute()
+            ).data,
         )
-        name_lookup = {row["id"]: row.get("name") for row in (names_result.data or [])}
+        name_lookup = {row["id"]: row.get("name") for row in name_rows}
         for change in changes:
             change["player_name"] = name_lookup.get(change["player_id"])
 
