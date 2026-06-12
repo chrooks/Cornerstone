@@ -14,7 +14,7 @@
  *  - Sticky lifecycle action bar
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast, Toaster } from "sonner";
 import { cn } from "@/lib/utils";
@@ -70,6 +70,13 @@ export function DraftWorkspaceShell() {
   const [publishCountChanged, setPublishCountChanged] = useState(false);
   const [publishResetNonce, setPublishResetNonce] = useState(0);
 
+  // Issue #69: track the previously-seen draft status so a SILENT flip (another
+  // admin window / backend) can be surfaced with explicit Feedback. Local flips
+  // already toast for themselves, so localTransitionRef marks the next reload as
+  // a known transition that must NOT be double-toasted.
+  const prevStatusRef = useRef<string | null>(null);
+  const localTransitionRef = useRef(false);
+
   // Derive gate context from current draft state
   const gateContext: TabGateContext = {
     hasDraft: !!draft,
@@ -101,6 +108,36 @@ export function DraftWorkspaceShell() {
       setPublishModalOpen(false);
     }
   }, [draft, publishModalOpen]);
+
+  // Issue #69: surface SILENT status flips (another admin window / backend) with
+  // explicit Feedback. Local flips (Move to review / Back to draft buttons, and
+  // the Run-pipeline revert) arm localTransitionRef and already toast for
+  // themselves, so they're skipped here to avoid double-toasting.
+  useEffect(() => {
+    if (!draft) return;
+    const prev = prevStatusRef.current;
+    const next = draft.status;
+
+    // Initial load: no prior status to compare against.
+    if (prev === null) {
+      prevStatusRef.current = next;
+      return;
+    }
+
+    if (prev !== next) {
+      if (localTransitionRef.current) {
+        // Known local flip — consume the marker, don't toast.
+        localTransitionRef.current = false;
+      } else if (prev === "draft" && next === "review") {
+        if (activeTab === "thresholds" || activeTab === "review") {
+          toast.info("Snapshot moved to review. Thresholds locked.");
+        }
+      } else if (prev === "review" && next === "draft") {
+        toast.info("Snapshot returned to draft. Publish disabled.");
+      }
+      prevStatusRef.current = next;
+    }
+  }, [draft, activeTab]);
 
   const handleTabChange = useCallback(
     (slug: TabSlug) => {
@@ -156,6 +193,8 @@ export function DraftWorkspaceShell() {
 
   const handleMoveToReview = useCallback(async () => {
     if (!draft) return;
+    // Issue #69: this flip is locally initiated — suppress the silent-flip toast.
+    localTransitionRef.current = true;
     setIsTransitioning(true);
     try {
       const res = await moveDraftToReview(draft.id);
@@ -165,6 +204,8 @@ export function DraftWorkspaceShell() {
         // Thresholds now disabled — if user is on that tab, resolveActiveTab will
         // redirect to overview on next render.
       } else {
+        // No flip happened — don't leave the suppression armed for a later silent flip.
+        localTransitionRef.current = false;
         if (res.error === "pipeline_runs_in_flight") {
           toast.error("Wait for all pipeline runs to finish before moving to review.");
         } else {
@@ -172,6 +213,7 @@ export function DraftWorkspaceShell() {
         }
       }
     } catch {
+      localTransitionRef.current = false;
       toast.error("Failed to move to review");
     } finally {
       setIsTransitioning(false);
@@ -180,6 +222,8 @@ export function DraftWorkspaceShell() {
 
   const handleMoveToDraft = useCallback(async () => {
     if (!draft) return;
+    // Issue #69: this flip is locally initiated — suppress the silent-flip toast.
+    localTransitionRef.current = true;
     setIsTransitioning(true);
     try {
       const res = await moveReviewToDraft(draft.id);
@@ -187,9 +231,11 @@ export function DraftWorkspaceShell() {
         toast.success("Back to draft");
         await reload();
       } else {
+        localTransitionRef.current = false;
         toast.error(res.error ?? "Failed to move back to draft");
       }
     } catch {
+      localTransitionRef.current = false;
       toast.error("Failed to move back to draft");
     } finally {
       setIsTransitioning(false);
@@ -287,6 +333,11 @@ export function DraftWorkspaceShell() {
         validation,
         reload,
         onTabChange: handleTabChange,
+        // Issue #69: lets the Run-pipeline path mark its own review→draft revert
+        // as a known local flip so the silent-flip effect doesn't double-toast.
+        markLocalTransition: () => {
+          localTransitionRef.current = true;
+        },
       }
     : null;
 

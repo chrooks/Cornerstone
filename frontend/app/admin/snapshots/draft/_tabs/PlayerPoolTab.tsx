@@ -63,9 +63,16 @@ export interface PlayerPoolTabProps {
   validation: SnapshotPublishValidation | null;
   reload: () => Promise<void>;
   onTabChange: (slug: TabSlug) => void;
+  /** Issue #69: arm the shell's silent-flip suppression for the pipeline revert. */
+  markLocalTransition?: () => void;
 }
 
-export function PlayerPoolTab({ draft, reload, onTabChange }: PlayerPoolTabProps) {
+export function PlayerPoolTab({
+  draft,
+  reload,
+  onTabChange,
+  markLocalTransition,
+}: PlayerPoolTabProps) {
   const [players, setPlayers] = useState<PlayerWithSkills[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -162,6 +169,7 @@ export function PlayerPoolTab({ draft, reload, onTabChange }: PlayerPoolTabProps
     draft,
     reload,
     onTabChange,
+    markLocalTransition,
     onComplete: async () => {
       setSelectedIds(new Set());
       await loadPool();

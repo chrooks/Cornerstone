@@ -36,6 +36,8 @@ export interface PublishTabProps {
   validation: SnapshotPublishValidation | null;
   reload: () => Promise<void>;
   onTabChange: (slug: TabSlug) => void;
+  /** Issue #69: arm the shell's silent-flip suppression for the pipeline revert. */
+  markLocalTransition?: () => void;
   onOpenPublishModal: () => void;
   isPublishing: boolean;
 }
@@ -46,6 +48,7 @@ export function PublishTab({
   validation,
   reload,
   onTabChange,
+  markLocalTransition,
   onOpenPublishModal,
   isPublishing,
 }: PublishTabProps) {
@@ -65,6 +68,7 @@ export function PublishTab({
     draft,
     reload,
     onTabChange,
+    markLocalTransition,
     onComplete: () => setSelectedIds(new Set()),
   });
 

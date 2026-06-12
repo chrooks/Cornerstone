@@ -30,6 +30,12 @@ interface UseRunCompositePipelineArgs {
   onTabChange: (slug: TabSlug) => void;
   /** Consumer-specific refresh after a successful run (e.g. reload a local list). */
   onComplete?: () => void | Promise<void>;
+  /**
+   * Issue #69: mark the upcoming review→draft revert as a locally-initiated
+   * flip so the shell's silent-flip Feedback effect doesn't also toast for it
+   * (this hook already toasts "Moved back to draft — resolve the new flags…").
+   */
+  markLocalTransition?: () => void;
 }
 
 export interface UseRunCompositePipeline {
@@ -50,6 +56,7 @@ export function useRunCompositePipeline({
   reload,
   onTabChange,
   onComplete,
+  markLocalTransition,
 }: UseRunCompositePipelineArgs): UseRunCompositePipeline {
   const [isRunning, setIsRunning] = useState(false);
   const [pendingIds, setPendingIds] = useState<string[] | null>(null);
@@ -83,6 +90,9 @@ export function useRunCompositePipeline({
         // editable and reviewable, then land the admin in the Review tab.
         let reverted = false;
         if (revertToDraft) {
+          // Issue #69: arm the shell's local-transition marker before the flip so
+          // the silent-flip Feedback effect treats this as a known local change.
+          markLocalTransition?.();
           const moveRes = await moveReviewToDraft(draft.id);
           if (moveRes.success) {
             reverted = true;
@@ -104,7 +114,7 @@ export function useRunCompositePipeline({
         setPendingIds(null);
       }
     },
-    [draft.id, draft.season, reload, onComplete, onTabChange],
+    [draft.id, draft.season, reload, onComplete, onTabChange, markLocalTransition],
   );
 
   const start = useCallback(
