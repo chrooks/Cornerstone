@@ -233,7 +233,7 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
             The draft composite ratings that will be frozen when this draft
             publishes.{" "}
             {isFrozen
-              ? "Snapshot is in review — overrides are locked."
+              ? "Snapshot is in review — skill overrides are locked, but you can still exclude players: right-click a row or use the checkboxes."
               : "Right-click a skill cell to override it, or right-click a row (or use the checkboxes) to exclude players from the snapshot."}
           </p>
         </div>
@@ -307,33 +307,29 @@ export function PlayerPoolTab({ draft }: PlayerPoolTabProps) {
           hideViewToggleUntilReady
           onViewModeReadyChange={setViewModeReady}
           onSkillOverride={isFrozen ? undefined : handleSkillOverride}
-          onRowContextMenu={isFrozen ? undefined : openRowMenu}
-          bulkSelection={
-            isFrozen
-              ? undefined
-              : {
-                  selectedIds,
-                  onToggle: toggleSelected,
-                  onSelectAllFiltered: selectAllFiltered,
-                  onClear: clearSelection,
-                  renderActions: () => (
-                    <button
-                      id="player-pool-exclude-selected-btn"
-                      type="button"
-                      disabled={selectedIds.size === 0}
-                      onClick={() => excludeSelected(!selectedAllExcluded)}
-                      className="font-semibold px-3 py-1.5 rounded-[4px] border border-[#d9d0c9]
-                        text-[#fe6d34] hover:text-[#0e0907] hover:border-[#fe6d34]
-                        focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
-                        disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {selectedAllExcluded
-                        ? `Include ${selectedIds.size} in snapshot`
-                        : `Exclude ${selectedIds.size} from snapshot`}
-                    </button>
-                  ),
-                }
-          }
+          onRowContextMenu={openRowMenu}
+          bulkSelection={{
+            selectedIds,
+            onToggle: toggleSelected,
+            onSelectAllFiltered: selectAllFiltered,
+            onClear: clearSelection,
+            renderActions: () => (
+              <button
+                id="player-pool-exclude-selected-btn"
+                type="button"
+                disabled={selectedIds.size === 0}
+                onClick={() => excludeSelected(!selectedAllExcluded)}
+                className="font-semibold px-3 py-1.5 rounded-[4px] border border-[#d9d0c9]
+                  text-[#fe6d34] hover:text-[#0e0907] hover:border-[#fe6d34]
+                  focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
+                  disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {selectedAllExcluded
+                  ? `Include ${selectedIds.size} in snapshot`
+                  : `Exclude ${selectedIds.size} from snapshot`}
+              </button>
+            ),
+          }}
           getMutedPlayerIds={(rows) =>
             new Set(rows.filter((p) => p.excluded_from_snapshot).map((p) => p.id))
           }
