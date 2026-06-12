@@ -51,11 +51,14 @@ def count_summary(draft_id: str, client=None) -> dict:
     c = client or _get_client()
     season = _draft_season(draft_id, c)
 
-    # Total qualifying players in the draft's season
+    # Total qualifying players in the draft's season. Excluded players are
+    # skipped by the publish freeze, so this "what will be published" summary
+    # drops them too — both Total and Missing-composite reflect the freeze.
     all_players = run_query(
         lambda: c.table("players")
         .select("id")
         .eq("season", season)
+        .eq("excluded_from_snapshot", False)
         .execute()
     )
     player_ids = [str(r["id"]) for r in (all_players.data or [])]
