@@ -10,6 +10,7 @@ remain unit-testable without a live connection.
 
 import logging
 import math
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from supabase import Client
@@ -387,6 +388,7 @@ def run_bulk_salary_scrape(
     team_abbrev: str | None,
     supabase: Client,
     player_ids: list[str] | None = None,
+    progress_cb: Callable[[int, int], None] | None = None,
 ) -> dict:
     """
     Scrape salary data from ESPN and upsert into Supabase.
@@ -396,6 +398,14 @@ def run_bulk_salary_scrape(
 
     If player_ids is provided, only those players are matched and updated —
     other players on the scraped page(s) are left untouched (#76 subset runs).
+
+    progress_cb(processed, total) is invoked on a throttled cadence as the
+    per-player match/update loop advances, so the full-league bulk run can
+    render a determinate bar (#70). It mirrors the step = max(1, total // 40)
+    throttle used by _run_fetch_stats_job. The scrape itself is one paginated
+    network call, so progress reflects the per-player matching work, not the
+    network fetch. Defaults to None — single-team and subset callers drive
+    their own per-team/per-player progress at the worker level.
 
     Returns {"matched": int, "unmatched": int, "total": int}.
     """
@@ -408,6 +418,11 @@ def run_bulk_salary_scrape(
 
     if not salary_map:
         logger.warning("No salary data scraped for %s", target_label)
+        # Report 0/0 — there is no per-player work to denominate. The card
+        # treats total == 0 as "no determinate total" and keeps the elapsed
+        # timer, which is the correct state for an empty scrape.
+        if progress_cb is not None:
+            progress_cb(0, 0)
         return {"matched": 0, "unmatched": 0, "total": 0}
 
     # Fetch all players from Supabase (current season)
@@ -427,6 +442,20 @@ def run_bulk_salary_scrape(
         wanted = set(player_ids)
         players = [p for p in players if p["id"] in wanted]
 
+    total = len(players)
+
+    # Determinate progress (#70): seed 0/N up front, then tick through the
+    # per-player loops below on a throttled cadence (~40 writes max).
+    processed = 0
+    step = max(1, total // 40)
+
+    def _tick() -> None:
+        if progress_cb is not None and (processed % step == 0 or processed == total):
+            progress_cb(processed, total)
+
+    if progress_cb is not None:
+        progress_cb(0, total)
+
     # Snapshot salaries before matching so we only PATCH rows that actually changed.
     pre_match = {p["id"]: p.get("salary") for p in players}
 
@@ -441,10 +470,11 @@ def run_bulk_salary_scrape(
         if new_salary is not None and new_salary != pre_match.get(p["id"]):
             supabase.table("players").update({"salary": p["salary"]}).eq("id", p["id"]).execute()
             update_count += 1
+        processed += 1
+        _tick()
     if update_count:
         logger.info("Updated salaries for %d players (%s)", update_count, target_label)
 
-    total = len(players)
     logger.info("Salary bulk scrape: %d matched, %d unmatched, %d total", matched, unmatched, total)
 
     # Assign the NBA minimum salary to players we couldn't match on ESPN.
@@ -465,6 +495,11 @@ def run_bulk_salary_scrape(
             NBA_MINIMUM_SALARY,
             min_salary_count,
         )
+
+    # Ensure the final tick lands on total/total even when the throttle step
+    # skipped the last iteration.
+    if progress_cb is not None and processed != 0:
+        progress_cb(total, total)
 
     return {"matched": matched, "unmatched": unmatched, "total": total}
 

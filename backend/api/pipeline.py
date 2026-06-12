@@ -285,7 +285,15 @@ def _run_salary_scrape_job(run_id: str, player_ids: list[str]) -> None:
             error = "; ".join(errors) if errors else None
             runs_repo.complete_run(run_id, rows_processed=rows, error=error)
         else:
-            result = run_bulk_salary_scrape(None, supabase)
+            # #70: forward the per-player match loop's progress to the run so
+            # the full-league bulk card renders a determinate bar (X / N).
+            result = run_bulk_salary_scrape(
+                None,
+                supabase,
+                progress_cb=lambda processed, total: runs_repo.update_progress(
+                    run_id, processed, total
+                ),
+            )
             rows = result.get("matched", 0)
             runs_repo.complete_run(run_id, rows_processed=rows)
     except Exception as exc:
