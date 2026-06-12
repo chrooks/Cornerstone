@@ -33,6 +33,10 @@ class EvaluationVersion:
     slug: str
     status: str
     payload: dict[str, Any]
+    # Publish metadata — present on published rows, None on drafts. Defaulted so
+    # existing constructors (and tests) that omit them keep working.
+    changelog_note: str | None = None
+    published_at: str | None = None
 
     @property
     def values(self) -> dict[str, Any]:

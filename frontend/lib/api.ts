@@ -41,6 +41,7 @@ import type {
   CommunityStatsMap,
   CommunityTeamsResponse,
   SkillEvaluationRequest,
+  ChangelogEntry,
 } from "./types";
 
 // Points to the Flask dev server by default; override via env var in production.
@@ -701,6 +702,21 @@ export async function getLegendClaudeSuggestion(
 /** List published RuleSets for Lab selection. */
 export async function listRuleSets(): Promise<ApiResponse<RuleSetSummary[]>> {
   return apiFetch<RuleSetSummary[]>("/api/rulesets");
+}
+
+// ---------------------------------------------------------------------------
+// Changelog (public)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the public changelog feed — published Rule Set Version and Evaluation
+ * Version events, newest first. Drives the landing page changelog section.
+ */
+export async function getChangelog(
+  limit?: number,
+): Promise<ApiResponse<ChangelogEntry[]>> {
+  const qs = limit ? `?limit=${encodeURIComponent(limit)}` : "";
+  return apiFetch<ChangelogEntry[]>(`/api/changelog${qs}`);
 }
 
 // ---------------------------------------------------------------------------

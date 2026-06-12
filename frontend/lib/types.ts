@@ -665,6 +665,27 @@ export interface RuleSetDetail extends RuleSetSummary {
   versions: RuleSetVersionSummary[];
 }
 
+/** Discriminator for the kind of version a changelog entry describes. */
+export type ChangelogEntryType = "ruleset_version" | "evaluation_version";
+
+/**
+ * One public changelog event — a published Rule Set Version or Evaluation
+ * Version. Mirrors the backend `GET /api/changelog` entry shape exactly.
+ */
+export interface ChangelogEntry {
+  type: ChangelogEntryType;
+  /** ISO-8601 publish timestamp (published_at). */
+  date: string;
+  /** Human version label (e.g. "v2") or Evaluation Version slug. */
+  version_label: string;
+  /** Short headline for the entry. */
+  title: string;
+  /** One-line description of what changed. */
+  summary: string;
+  /** Relevant in-app link, when one applies (else null). */
+  link: string | null;
+}
+
 /** Payload for POST /api/rulesets. */
 export interface CreateRuleSetPayload {
   slug: string;

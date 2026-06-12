@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { HeroSlideshow } from "@/components/landing/HeroSlideshow";
 import { ProofCardRotator } from "@/components/landing/ProofCardRotator";
+import { Changelog } from "@/components/landing/Changelog";
 
 const STEPS = [
   {
@@ -194,7 +195,13 @@ export default function LandingPage() {
       </section>
 
       {/* ════════════════════════════════════════════════════════════
-          SECTION 3: HOW IT WORKS — Three numbered steps
+          SECTION 3: CHANGELOG — Published Rule Set + Evaluation Versions
+          Auto-updates from /api/changelog; no hardcoded entries here.
+          ════════════════════════════════════════════════════════════ */}
+      <Changelog />
+
+      {/* ════════════════════════════════════════════════════════════
+          SECTION 4: HOW IT WORKS — Three numbered steps
           ════════════════════════════════════════════════════════════ */}
       <section
         id="landing-how-it-works"

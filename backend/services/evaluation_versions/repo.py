@@ -27,6 +27,8 @@ def _row_to_version(row: dict[str, Any]) -> EvaluationVersion:
         slug=row["slug"],
         status=row["status"],
         payload=row["payload"],
+        changelog_note=row.get("changelog_note"),
+        published_at=row.get("published_at"),
     )
 
 

@@ -111,6 +111,7 @@ from api.community import community_bp
 from api.evaluation_versions import evaluation_versions_bp
 from api.snapshots import snapshots_bp
 from api.pipeline_runs import pipeline_runs_bp
+from api.changelog import changelog_bp
 
 
 def _warm_cohesion_distributions() -> None:
@@ -218,6 +219,7 @@ def create_app() -> Flask:
     app.register_blueprint(evaluation_versions_bp)  # Evaluation Version publishing
     app.register_blueprint(snapshots_bp)            # Snapshot Release lifecycle
     app.register_blueprint(pipeline_runs_bp)        # Pipeline run management (commit/discard)
+    app.register_blueprint(changelog_bp)            # Public changelog feed (landing page)
 
     _warm_cohesion_distributions()
 
