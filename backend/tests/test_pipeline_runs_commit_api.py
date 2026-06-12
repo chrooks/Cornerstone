@@ -108,7 +108,7 @@ def test_get_pipeline_run_404_when_not_found(admin_client):
 
 
 def test_get_pipeline_run_diff_returns_diff(admin_client):
-    """GET /api/pipeline-runs/<id>/diff returns diff payload."""
+    """GET /api/pipeline-runs/<id>/diff returns the live diff for an uncommitted run."""
     diff_payload = {
         "run_id": "run-diff",
         "summary": {
@@ -118,13 +118,87 @@ def test_get_pipeline_run_diff_returns_diff(admin_client):
         "changes": [],
     }
 
-    with patch("services.pipeline_run_results.repo.get_diff", return_value=diff_payload):
-        resp = admin_client.get("/api/pipeline-runs/run-diff/diff", headers=AUTH)
+    with patch("services.pipeline_runs.repo.get_run", return_value=_mock_run("run-diff")):
+        with patch("services.pipeline_run_results.repo.get_diff", return_value=diff_payload):
+            resp = admin_client.get("/api/pipeline-runs/run-diff/diff", headers=AUTH)
 
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["success"] is True
     assert body["data"]["run_id"] == "run-diff"
+
+
+def test_get_pipeline_run_diff_returns_persisted_diff_for_committed_run(admin_client):
+    """A committed run returns its persisted committed_diff snapshot, NOT a live recompute.
+
+    After commit the staged rows are deleted, so a live recompute is empty. The
+    persisted snapshot is what lets the committed run still show what it changed.
+    """
+    persisted = {
+        "run_id": "run-committed",
+        "summary": {
+            "per_skill": {"rebounder": {"promotions": 1, "demotions": 0, "new": 0, "unchanged": 0}},
+            "total_changed": 1,
+        },
+        "changes": [],
+    }
+    committed_run = _mock_run("run-committed", committed_at="2026-06-12T16:23:53Z")
+    committed_run["committed_diff"] = persisted
+
+    with patch("services.pipeline_runs.repo.get_run", return_value=committed_run):
+        # If the handler wrongly recomputed live, this empty diff would surface instead.
+        with patch(
+            "services.pipeline_run_results.repo.get_diff",
+            return_value={"run_id": "run-committed", "summary": {"per_skill": {}, "total_changed": 0}, "changes": []},
+        ) as mock_live:
+            resp = admin_client.get("/api/pipeline-runs/run-committed/diff", headers=AUTH)
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["success"] is True
+    assert body["data"]["summary"]["total_changed"] == 1
+    mock_live.assert_not_called()
+
+
+def test_get_pipeline_run_diff_serves_empty_but_present_snapshot(admin_client):
+    """A committed run whose snapshot staged zero changes serves that empty snapshot.
+
+    The gate is `is not None`, not truthiness — an empty-but-present RunDiff is a
+    real snapshot (the run genuinely changed nothing), not an absent one, so it
+    must NOT fall through to a live recompute.
+    """
+    empty_snapshot = {
+        "run_id": "run-zero",
+        "summary": {"per_skill": {}, "total_changed": 0},
+        "changes": [],
+    }
+    committed_run = _mock_run("run-zero", committed_at="2026-06-12T16:23:53Z")
+    committed_run["committed_diff"] = empty_snapshot
+
+    with patch("services.pipeline_runs.repo.get_run", return_value=committed_run):
+        with patch("services.pipeline_run_results.repo.get_diff") as mock_live:
+            resp = admin_client.get("/api/pipeline-runs/run-zero/diff", headers=AUTH)
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["data"]["summary"]["total_changed"] == 0
+    mock_live.assert_not_called()
+
+
+def test_get_pipeline_run_diff_falls_back_to_live_for_legacy_committed_run(admin_client):
+    """A committed run with NO persisted diff (pre-migration) falls back to the live recompute."""
+    legacy_run = _mock_run("run-legacy", committed_at="2026-01-01T00:00:00Z")
+    legacy_run["committed_diff"] = None
+    live_empty = {"run_id": "run-legacy", "summary": {"per_skill": {}, "total_changed": 0}, "changes": []}
+
+    with patch("services.pipeline_runs.repo.get_run", return_value=legacy_run):
+        with patch("services.pipeline_run_results.repo.get_diff", return_value=live_empty) as mock_live:
+            resp = admin_client.get("/api/pipeline-runs/run-legacy/diff", headers=AUTH)
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["data"]["summary"]["total_changed"] == 0
+    mock_live.assert_called_once_with("run-legacy")
 
 
 # ---------------------------------------------------------------------------

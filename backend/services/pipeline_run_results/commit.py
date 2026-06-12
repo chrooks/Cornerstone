@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 
 from services.supabase_client import get_supabase, run_query
+from services.pipeline_run_results import repo as prr_repo
 from services.pipeline_run_results.repo import discard_staged_rows
 from services.pipeline_runs import repo as runs_repo
 
@@ -54,6 +55,15 @@ def commit_run(run_id: str) -> str:
         for commits; there is no Python-side fallback.
     """
     client = _get_client()
+
+    # Snapshot the staged-vs-current diff BEFORE the RPC runs — the RPC deletes
+    # the staged rows, after which the live recompute would always be empty.
+    # Best-effort: a failure here must not block the commit itself.
+    try:
+        diff = prr_repo.get_diff(run_id)
+        runs_repo.save_committed_diff(run_id, diff, client=client)
+    except Exception:
+        logger.exception("Failed to persist committed diff for run %s; commit proceeds", run_id)
 
     rpc_result = run_query(
         lambda: client.rpc(

@@ -194,6 +194,22 @@ def mark_committed(run_id: str, committed_at: str, client=None) -> None:
     )
 
 
+def save_committed_diff(run_id: str, diff: dict, client=None) -> None:
+    """Persist the staged-vs-current tier diff snapshot for a run.
+
+    Called by commit_run BEFORE the commit RPC deletes the staged rows, so the
+    diff endpoint can return what a committed run changed instead of an empty
+    live recompute. Stored as JSONB in pipeline_runs.committed_diff (RunDiff shape).
+    """
+    c = client or _get_client()
+    run_query(
+        lambda: c.table("pipeline_runs")
+        .update({"committed_diff": diff})
+        .eq("id", run_id)
+        .execute()
+    )
+
+
 def mark_discarded(run_id: str, client=None) -> None:
     """Set status='discarded' on a pipeline_run row."""
     c = client or _get_client()

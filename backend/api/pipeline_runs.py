@@ -55,8 +55,20 @@ def get_pipeline_run(run_id: str):
 @pipeline_runs_bp.route("/pipeline-runs/<run_id>/diff", methods=["GET"])
 @require_admin
 def get_pipeline_run_diff(run_id: str):
-    """Return the staged diff for a pipeline run."""
+    """Return the diff for a pipeline run.
+
+    A committed run's staged rows are deleted by the commit RPC, so a live
+    recompute would be empty. For committed runs we return the diff snapshot
+    persisted at commit time (committed_diff); only when that snapshot is
+    absent (legacy runs) or the run is uncommitted do we recompute live.
+    """
     try:
+        run = runs_repo.get_run(run_id)
+        # `is not None` (not truthiness): a committed run that staged zero changes
+        # has a real, empty-but-present snapshot — serve it rather than recomputing
+        # live. Only NULL (legacy / never-persisted) falls through to live recompute.
+        if run and run.get("committed_at") and run.get("committed_diff") is not None:
+            return _ok(run["committed_diff"])
         diff = prr_repo.get_diff(run_id)
         return _ok(diff)
     except Exception:
