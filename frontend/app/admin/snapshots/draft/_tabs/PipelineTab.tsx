@@ -41,6 +41,7 @@ const PIPELINE_LABELS: Record<string, string> = {
   bio_team_sync: "Bio / Team Sync",
   skill_evaluation: "Skill Evaluation",
   threshold_edit: "Threshold Edit",
+  composite_batch: "Compositing",
 };
 
 function RunStatusBadge({ status }: { status: PipelineRun["status"] }) {

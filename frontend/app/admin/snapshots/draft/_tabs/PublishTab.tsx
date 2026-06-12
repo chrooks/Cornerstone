@@ -20,6 +20,8 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CountSummary } from "../../_components/CountSummary";
 import { ExcludedSection } from "../_components/ExcludedSection";
+import { RunPipelineConfirmDialog } from "../_components/RunPipelineConfirmDialog";
+import { useRunCompositePipeline } from "../_lib/useRunCompositePipeline";
 import { setPlayersExcludedFromSnapshot } from "@/lib/api";
 import type {
   SnapshotDraftSummary,
@@ -39,6 +41,7 @@ export interface PublishTabProps {
 }
 
 export function PublishTab({
+  draft,
   summary,
   validation,
   reload,
@@ -56,6 +59,14 @@ export function PublishTab({
   const [isExcluding, setIsExcluding] = useState(false);
   // Bumped after a bulk exclude so the Excluded section re-fetches.
   const [excludedRefreshKey, setExcludedRefreshKey] = useState(0);
+
+  // Run-pipeline-for-selection behavior (review status → confirm + revert to draft).
+  const runPipeline = useRunCompositePipeline({
+    draft,
+    reload,
+    onTabChange,
+    onComplete: () => setSelectedIds(new Set()),
+  });
 
   const onToggleSelect = useCallback((playerId: string) => {
     setSelectedIds((prev) => {
@@ -152,6 +163,8 @@ export function PublishTab({
               onClear: onClearSelect,
               onExcludeSelected,
               isExcluding,
+              onRunSelected: () => runPipeline.start(Array.from(selectedIds)),
+              isRunning: runPipeline.isRunning,
             }}
           />
           <div id="publish-tab-excluded" className="mt-4">
@@ -221,6 +234,16 @@ export function PublishTab({
           </p>
         )}
       </div>
+
+      {runPipeline.pendingIds && (
+        <RunPipelineConfirmDialog
+          id="publish-tab-run-pipeline-confirm"
+          count={runPipeline.pendingIds.length}
+          isRunning={runPipeline.isRunning}
+          onConfirm={runPipeline.confirm}
+          onCancel={runPipeline.cancel}
+        />
+      )}
     </div>
   );
 }

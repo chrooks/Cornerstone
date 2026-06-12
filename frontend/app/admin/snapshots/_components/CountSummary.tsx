@@ -37,6 +37,14 @@ export interface MissingCompositeSelection {
   onClear: () => void;
   onExcludeSelected: () => void;
   isExcluding: boolean;
+  /**
+   * Optional "run the compositing pipeline for the selected players" action.
+   * When provided, the footer grows a second button beside Exclude so an admin
+   * can generate composites for fringe players and review them in-place instead
+   * of only excluding them. Omit to hide the button entirely.
+   */
+  onRunSelected?: () => void;
+  isRunning?: boolean;
 }
 
 function SummaryRow({
@@ -77,6 +85,7 @@ function MissingCompositeDisclosure({
   const hasSelection = Boolean(selection);
   const selectedCount = selection?.selectedIds.size ?? 0;
   const allSelected = players.length > 0 && selectedCount === players.length;
+  const isBusy = Boolean(selection?.isExcluding || selection?.isRunning);
 
   return (
     <details
@@ -174,27 +183,47 @@ function MissingCompositeDisclosure({
               id="exclude-select-all-btn"
               type="button"
               onClick={allSelected ? selection!.onClear : selection!.onSelectAll}
-              disabled={selection!.isExcluding}
+              disabled={isBusy}
               className="text-[11px] font-semibold uppercase tracking-wide text-amber-900
                 hover:text-[#0e0907] transition-colors disabled:opacity-50
                 disabled:cursor-not-allowed"
             >
               {allSelected ? "Clear" : "Select all"}
             </button>
-            <button
-              id="exclude-selected-btn"
-              type="button"
-              onClick={selection!.onExcludeSelected}
-              disabled={selection!.isExcluding || selectedCount === 0}
-              className="text-[11px] font-semibold px-3 py-1.5 rounded-[4px]
-                bg-[#ffa05c] text-[#0e0907] hover:bg-[#fe6d34]
-                focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
-                disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {selection!.isExcluding
-                ? "Excluding…"
-                : `Exclude ${selectedCount} from snapshot`}
-            </button>
+            <div className="flex items-center gap-2">
+              {selection!.onRunSelected && (
+                <button
+                  id="run-pipeline-selected-btn"
+                  type="button"
+                  onClick={selection!.onRunSelected}
+                  disabled={isBusy || selectedCount === 0}
+                  title="Run the compositing pipeline for the selected players, then review their composites here."
+                  className="text-[11px] font-semibold px-3 py-1.5 rounded-[4px]
+                    border border-[#d9d0c9] bg-white text-[#0e0907]
+                    hover:border-[#fe6d34] hover:text-[#fe6d34]
+                    focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
+                    disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {selection!.isRunning
+                    ? "Running…"
+                    : `Run pipeline (${selectedCount})`}
+                </button>
+              )}
+              <button
+                id="exclude-selected-btn"
+                type="button"
+                onClick={selection!.onExcludeSelected}
+                disabled={isBusy || selectedCount === 0}
+                className="text-[11px] font-semibold px-3 py-1.5 rounded-[4px]
+                  bg-[#ffa05c] text-[#0e0907] hover:bg-[#fe6d34]
+                  focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
+                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {selection!.isExcluding
+                  ? "Excluding…"
+                  : `Exclude ${selectedCount} from snapshot`}
+              </button>
+            </div>
           </div>
         )}
       </div>

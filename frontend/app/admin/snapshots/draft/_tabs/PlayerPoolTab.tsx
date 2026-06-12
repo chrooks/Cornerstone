@@ -34,6 +34,8 @@ import { PlayerPoolBrowser, type PlayerPoolViewMode } from "@/components/players
 import { PlayerViewSizeToggle } from "@/components/players/PlayerView";
 import type { SortKey } from "@/components/players/SortControls";
 import { ExcludedSection } from "../_components/ExcludedSection";
+import { RunPipelineConfirmDialog } from "../_components/RunPipelineConfirmDialog";
+import { useRunCompositePipeline } from "../_lib/useRunCompositePipeline";
 import type { TabSlug } from "../_lib/tabRouting";
 
 const POOL_ROW_PAGE_SIZE = 32;
@@ -63,7 +65,7 @@ export interface PlayerPoolTabProps {
   onTabChange: (slug: TabSlug) => void;
 }
 
-export function PlayerPoolTab({ draft, reload }: PlayerPoolTabProps) {
+export function PlayerPoolTab({ draft, reload, onTabChange }: PlayerPoolTabProps) {
   const [players, setPlayers] = useState<PlayerWithSkills[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +154,19 @@ export function PlayerPoolTab({ draft, reload }: PlayerPoolTabProps) {
     },
     [applyExclusion, selectedIds],
   );
+
+  // ── Run the compositing pipeline for the selected players ───────────────────
+  // In review status this confirms, composites, then reverts to draft so the
+  // new flags are reviewable (see useRunCompositePipeline).
+  const runPipeline = useRunCompositePipeline({
+    draft,
+    reload,
+    onTabChange,
+    onComplete: async () => {
+      setSelectedIds(new Set());
+      await loadPool();
+    },
+  });
 
   // How many selected rows are already excluded — drives Exclude vs Include label.
   const selectedExcludedCount = players.filter(
@@ -317,20 +332,37 @@ export function PlayerPoolTab({ draft, reload }: PlayerPoolTabProps) {
             onSelectAllFiltered: selectAllFiltered,
             onClear: clearSelection,
             renderActions: () => (
-              <button
-                id="player-pool-exclude-selected-btn"
-                type="button"
-                disabled={selectedIds.size === 0}
-                onClick={() => excludeSelected(!selectedAllExcluded)}
-                className="font-semibold px-3 py-1.5 rounded-[4px] border border-[#d9d0c9]
-                  text-[#fe6d34] hover:text-[#0e0907] hover:border-[#fe6d34]
-                  focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
-                  disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {selectedAllExcluded
-                  ? `Include ${selectedIds.size} in snapshot`
-                  : `Exclude ${selectedIds.size} from snapshot`}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  id="player-pool-run-pipeline-btn"
+                  type="button"
+                  disabled={selectedIds.size === 0 || runPipeline.isRunning}
+                  onClick={() => runPipeline.start(Array.from(selectedIds))}
+                  title="Run the compositing pipeline for the selected players, then review their composites here."
+                  className="font-semibold px-3 py-1.5 rounded-[4px] border border-[#d9d0c9]
+                    bg-white text-[#0e0907] hover:text-[#fe6d34] hover:border-[#fe6d34]
+                    focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
+                    disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {runPipeline.isRunning
+                    ? "Running…"
+                    : `Run pipeline (${selectedIds.size})`}
+                </button>
+                <button
+                  id="player-pool-exclude-selected-btn"
+                  type="button"
+                  disabled={selectedIds.size === 0 || runPipeline.isRunning}
+                  onClick={() => excludeSelected(!selectedAllExcluded)}
+                  className="font-semibold px-3 py-1.5 rounded-[4px] border border-[#d9d0c9]
+                    text-[#fe6d34] hover:text-[#0e0907] hover:border-[#fe6d34]
+                    focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
+                    disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {selectedAllExcluded
+                    ? `Include ${selectedIds.size} in snapshot`
+                    : `Exclude ${selectedIds.size} from snapshot`}
+                </button>
+              </div>
             ),
           }}
           getMutedPlayerIds={(rows) =>
@@ -383,6 +415,16 @@ export function PlayerPoolTab({ draft, reload }: PlayerPoolTabProps) {
             </button>
           </div>
         </>
+      )}
+
+      {runPipeline.pendingIds && (
+        <RunPipelineConfirmDialog
+          id="player-pool-run-pipeline-confirm"
+          count={runPipeline.pendingIds.length}
+          isRunning={runPipeline.isRunning}
+          onConfirm={runPipeline.confirm}
+          onCancel={runPipeline.cancel}
+        />
       )}
     </div>
   );

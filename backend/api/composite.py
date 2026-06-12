@@ -17,10 +17,11 @@ import threading
 import uuid as _uuid_mod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 from supabase import Client
 
 from api.auth import require_admin, require_open_draft
+from services.pipeline_runs import repo as runs_repo
 from services.supabase_client import get_supabase
 from services.players_service import CURRENT_SEASON, DEFAULT_MIN_MPG
 from services import skill_engine
@@ -338,6 +339,21 @@ def composite_batch():
     if not _validate_season(season):
         return _err("Invalid season format — expected 'YYYY-YY' e.g. '2025-26'", status=400)
 
+    # Record a pipeline_runs row so this synchronous batch surfaces in the draft
+    # Pipeline tab with an audit trail (players processed, cost). scope is read
+    # from the original request before player_ids is resolved to the full league.
+    scope = "player" if player_ids else "bulk"
+    try:
+        run_id = runs_repo.start_run(
+            name="composite_batch",
+            scope=scope,
+            snapshot_release_id=g.draft_id,
+            player_id=player_ids[0] if len(player_ids) == 1 else None,
+        )
+    except Exception:
+        logger.exception("Failed to start composite batch run")
+        return _err("Failed to start composite batch run", 500)
+
     try:
         # Use a dedicated client for the main thread (qualifying lookup, cache preload).
         # Each worker thread creates its own client to avoid concurrency issues with
@@ -361,6 +377,7 @@ def composite_batch():
 
         total = len(player_ids)
         if total == 0:
+            runs_repo.complete_run(run_id, rows_processed=0)
             return _ok({
                 "total": 0, "processed": 0, "claude_calls_made": 0,
                 "claude_calls_skipped": 0, "auto_accepted": 0,
@@ -480,6 +497,8 @@ def composite_batch():
             processed_count, total, errors_count, claude_calls_made, claude_calls_failed, estimated_cost,
         )
 
+        runs_repo.complete_run(run_id, rows_processed=processed_count)
+
         return _ok({
             "total":                total,
             "processed":            processed_count,
@@ -495,7 +514,9 @@ def composite_batch():
 
     except RuntimeError as exc:
         logger.error("Claude config error: %s", exc)
+        runs_repo.complete_run(run_id, rows_processed=0, error=str(exc))
         return _err(str(exc), status=503)
-    except Exception:
+    except Exception as exc:
         logger.exception("Error in POST /api/composite/batch")
+        runs_repo.complete_run(run_id, rows_processed=0, error=str(exc))
         return _err("Internal server error")

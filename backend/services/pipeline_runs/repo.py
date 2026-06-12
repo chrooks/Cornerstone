@@ -21,7 +21,7 @@ from services.supabase_client import get_supabase, run_query
 
 logger = logging.getLogger(__name__)
 
-PipelineName = Literal["stat_fetch", "salary_scrape", "bio_team_sync", "skill_evaluation", "threshold_edit"]
+PipelineName = Literal["stat_fetch", "salary_scrape", "bio_team_sync", "skill_evaluation", "threshold_edit", "composite_batch"]
 
 
 @dataclass(frozen=True)
