@@ -842,6 +842,52 @@ export interface RebuildCheckResponse {
   builder_url_params: Record<string, string>;
 }
 
+/** A compact Evaluation Version descriptor (no payload). */
+export interface EvalVersionChip {
+  id: string;
+  slug: string;
+  status: string;
+}
+
+/** One taxonomy entry surfaced as added or removed. */
+export interface TaxonomyDiffEntry {
+  key: string;
+  label: string | null;
+}
+
+/** One taxonomy entry surfaced as renamed in place. */
+export interface TaxonomyRenameEntry {
+  key: string;
+  from_label: string | null;
+  to_label: string | null;
+}
+
+/** Added / removed / renamed entries for one taxonomy dimension. */
+export interface TaxonomyDimensionDiff {
+  added: TaxonomyDiffEntry[];
+  removed: TaxonomyDiffEntry[];
+  renamed: TaxonomyRenameEntry[];
+}
+
+/** Full taxonomy footprint diff between two Evaluation Versions. */
+export interface TaxonomyDiff {
+  skills: TaxonomyDimensionDiff;
+  impact_traits: TaxonomyDimensionDiff;
+  subscores: TaxonomyDimensionDiff;
+  summary: { added: number; removed: number; renamed: number };
+  needs_resolution: boolean;
+}
+
+/** Full response from GET /api/saved-teams/<id>/eval-compat-check (issue #33). */
+export interface EvalCompatCheckResponse {
+  saved_team_id: string;
+  stored_version: EvalVersionChip | null;
+  active_version: EvalVersionChip;
+  same_version: boolean;
+  needs_resolution: boolean;
+  diff: TaxonomyDiff;
+}
+
 /** One ranked five-player combination returned by calibration rotation diagnostics. */
 export interface CohesionLineupCombination extends CohesionLineupData {
   rank: number;

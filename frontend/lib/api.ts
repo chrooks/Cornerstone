@@ -37,6 +37,7 @@ import type {
   UpdateRuleSetPayload,
   CreateRuleSetVersionPayload,
   RebuildCheckResponse,
+  EvalCompatCheckResponse,
   UserProfile,
   CommunityStatsMap,
   CommunityTeamsResponse,
@@ -826,6 +827,20 @@ export async function getRebuildCheck(
 ): Promise<ApiResponse<RebuildCheckResponse>> {
   return apiFetch<RebuildCheckResponse>(
     `/api/saved-teams/${encodeURIComponent(savedTeamId)}/rebuild-check`,
+  );
+}
+
+/**
+ * Fetch the Evaluation Version compat check for a Saved Team (issue #33).
+ *
+ * Compares the stored Evaluation Version's taxonomy footprint to the active
+ * Version's so the Lab can surface taxonomy drift before re-evaluating.
+ */
+export async function getEvalCompatCheck(
+  savedTeamId: string,
+): Promise<ApiResponse<EvalCompatCheckResponse>> {
+  return apiFetch<EvalCompatCheckResponse>(
+    `/api/saved-teams/${encodeURIComponent(savedTeamId)}/eval-compat-check`,
   );
 }
 

@@ -1328,3 +1328,175 @@ def test_shared_rebuild_check_404_for_private_team(client, fake_supabase):
 
     assert resp.status_code == 404
     assert data["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# eval-compat-check endpoint tests (issue #33)
+# ---------------------------------------------------------------------------
+
+STORED_EVAL_VERSION_ID = "eeeeeeee-1111-1111-1111-eeeeeeeeeeee"
+ACTIVE_EVAL_VERSION_ID = "eeeeeeee-2222-2222-2222-eeeeeeeeeeee"
+
+_STORED_TAXONOMY_PAYLOAD = {
+    "taxonomy": {
+        "skills": [{"key": "passer", "label": "Passer", "order": 0}],
+        "impact_traits": [
+            {"key": "spacing", "label": "Spacing", "order": 0},
+            {"key": "rebounding", "label": "Rebounding", "order": 1},
+        ],
+        "subscore_tree": [
+            {
+                "category_key": "offense",
+                "category_label": "Offense",
+                "subscores": [{"key": "pnr_pairing", "label": "PnR Pairing", "order": 0}],
+            }
+        ],
+    },
+    "values": {"tier_values": {"Elite": 6.0}},
+}
+
+_ACTIVE_TAXONOMY_PAYLOAD = {
+    "taxonomy": {
+        "skills": [{"key": "passer", "label": "Passer", "order": 0}],
+        "impact_traits": [
+            {"key": "spacing", "label": "Spacing", "order": 0},
+        ],
+        "subscore_tree": [
+            {
+                "category_key": "offense",
+                "category_label": "Offense",
+                "subscores": [
+                    {"key": "pnr_pairing", "label": "PnR Pairing", "order": 0},
+                    {"key": "collective_passing", "label": "Collective Passing", "order": 1},
+                ],
+            }
+        ],
+    },
+    "values": {"tier_values": {"Elite": 7.0}},
+}
+
+
+@pytest.fixture()
+def compat_active_version(monkeypatch):
+    """Point the active-version lookup at the real repo so seeded payloads drive it.
+
+    The default `fake_supabase` fixture stubs `get_active_eval_version` with an
+    empty payload; the compat check needs real taxonomy payloads from the DB.
+    """
+    monkeypatch.setattr(
+        saved_teams, "get_active_eval_version", eval_versions_repo.get_active
+    )
+
+
+def _seed_compat_versions(fake_supabase, *, stored_payload, active_payload):
+    """Replace the fake DB's evaluation_versions with a stored + active pair."""
+    fake_supabase.rows["evaluation_versions"] = [
+        {
+            "id": STORED_EVAL_VERSION_ID,
+            "slug": "cohesion-v1",
+            "status": "published",
+            "is_active": False,
+            "payload": stored_payload,
+        },
+        {
+            "id": ACTIVE_EVAL_VERSION_ID,
+            "slug": "cohesion-v2",
+            "status": "published",
+            "is_active": True,
+            "payload": active_payload,
+        },
+    ]
+
+
+def _seed_team_with_eval_version(fake_supabase, *, eval_version_id):
+    """Seed a saved team plus a latest evaluation bound to eval_version_id."""
+    saved_team_id = _seed_saved_team(fake_supabase)
+    fake_supabase.rows.setdefault("saved_team_evaluations", []).append({
+        "id": "ste-compat",
+        "saved_team_id": saved_team_id,
+        "evaluation_version_id": eval_version_id,
+        "star_rating": 3.5,
+        "created_at": "2026-05-11T00:00:00Z",
+    })
+    return saved_team_id
+
+
+def get_eval_compat_check(client, saved_team_id, token="test-token"):
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    resp = client.get(
+        f"/api/saved-teams/{saved_team_id}/eval-compat-check", headers=headers
+    )
+    return resp, resp.get_json()
+
+
+def test_eval_compat_check_surfaces_taxonomy_diff(client, fake_supabase, compat_active_version):
+    _seed_compat_versions(
+        fake_supabase,
+        stored_payload=_STORED_TAXONOMY_PAYLOAD,
+        active_payload=_ACTIVE_TAXONOMY_PAYLOAD,
+    )
+    saved_team_id = _seed_team_with_eval_version(
+        fake_supabase, eval_version_id=STORED_EVAL_VERSION_ID
+    )
+
+    resp, data = get_eval_compat_check(client, saved_team_id)
+
+    assert resp.status_code == 200
+    assert data["success"] is True
+    result = data["data"]
+    assert result["needs_resolution"] is True
+    assert result["stored_version"]["slug"] == "cohesion-v1"
+    assert result["active_version"]["slug"] == "cohesion-v2"
+    assert [r["key"] for r in result["diff"]["impact_traits"]["removed"]] == ["rebounding"]
+    assert [a["key"] for a in result["diff"]["subscores"]["added"]] == ["collective_passing"]
+
+
+def test_eval_compat_check_value_only_change_needs_no_resolution(client, fake_supabase, compat_active_version):
+    # Same taxonomy footprint, only a value differs.
+    _seed_compat_versions(
+        fake_supabase,
+        stored_payload=_STORED_TAXONOMY_PAYLOAD,
+        active_payload={**_STORED_TAXONOMY_PAYLOAD, "values": {"tier_values": {"Elite": 9.0}}},
+    )
+    saved_team_id = _seed_team_with_eval_version(
+        fake_supabase, eval_version_id=STORED_EVAL_VERSION_ID
+    )
+
+    resp, data = get_eval_compat_check(client, saved_team_id)
+
+    assert resp.status_code == 200
+    assert data["data"]["needs_resolution"] is False
+
+
+def test_eval_compat_check_same_version_needs_no_resolution(client, fake_supabase, compat_active_version):
+    _seed_compat_versions(
+        fake_supabase,
+        stored_payload=_STORED_TAXONOMY_PAYLOAD,
+        active_payload=_ACTIVE_TAXONOMY_PAYLOAD,
+    )
+    # Team already scored under the active Version.
+    saved_team_id = _seed_team_with_eval_version(
+        fake_supabase, eval_version_id=ACTIVE_EVAL_VERSION_ID
+    )
+
+    resp, data = get_eval_compat_check(client, saved_team_id)
+
+    assert resp.status_code == 200
+    assert data["data"]["needs_resolution"] is False
+    assert data["data"]["same_version"] is True
+
+
+def test_eval_compat_check_requires_auth(client):
+    resp, data = get_eval_compat_check(client, "any-id", token=None)
+    assert resp.status_code == 401
+
+
+def test_eval_compat_check_404_for_unknown_team(client, fake_supabase, compat_active_version):
+    _seed_compat_versions(
+        fake_supabase,
+        stored_payload=_STORED_TAXONOMY_PAYLOAD,
+        active_payload=_ACTIVE_TAXONOMY_PAYLOAD,
+    )
+    resp, data = get_eval_compat_check(client, "nonexistent-id")
+    assert resp.status_code == 404
+    assert data["success"] is False
