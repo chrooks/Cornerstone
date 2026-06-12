@@ -31,12 +31,18 @@ MAX_CHANGELOG_LENGTH = 2000
 
 
 def _version_dict(v) -> dict:
-    """Serialize an EvaluationVersion to a JSON-safe dict."""
+    """Serialize an EvaluationVersion to a JSON-safe dict.
+
+    Includes `changelog_note` and `published_at` so the public changelog Surface
+    (issue #18) can display the publish event without a second fetch.
+    """
     return {
         "id": v.id,
         "slug": v.slug,
         "status": v.status,
         "payload": v.payload,
+        "changelog_note": v.changelog_note,
+        "published_at": v.published_at,
     }
 
 
