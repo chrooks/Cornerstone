@@ -119,18 +119,56 @@ def _warm_cohesion_distributions() -> None:
 
     If Supabase is unavailable during startup, the engine can still serve using
     theoretical fallback; calibration/builder requests also attempt a lazy load.
+
+    The outcome is recorded in services.warmup_state so GET /api/health can
+    surface a degraded boot. Without this, a missing active Snapshot Release
+    silently falls back to theoretical maxima with no externally-visible signal.
     """
+    from services import warmup_state
+
+    logger = logging.getLogger(__name__)
+
     try:
         from services.evaluation_versions.repo import get_active
         from services.players_service import CURRENT_SEASON
+        from services.snapshot_versions.active import (
+            ActiveReleaseMissingError,
+            get_active_release_id,
+        )
         from services.snapshot_versions.distribution_cache import ensure_distributions
 
         version = get_active()
+
+        # Probe the active release up front so we can record the precise reason.
+        # ensure_distributions also degrades on a missing release, but conflates
+        # it with transient build failures; this split keeps /health actionable.
+        try:
+            get_active_release_id()
+        except ActiveReleaseMissingError:
+            logger.warning(
+                "Cohesion warmup degraded: no active Snapshot Release — "
+                "cohesion will fall back to theoretical maxima"
+            )
+            warmup_state.record_warmup_degraded(
+                warmup_state.REASON_NO_ACTIVE_RELEASE
+            )
+            return
+
         ready = ensure_distributions(CURRENT_SEASON, version.values)
         if ready:
-            logging.getLogger(__name__).info("Cohesion composite distributions loaded")
+            logger.info("Cohesion composite distributions loaded")
+            warmup_state.record_warmup_ok()
+        else:
+            logger.warning(
+                "Cohesion warmup degraded: distributions unavailable — "
+                "using theoretical fallback"
+            )
+            warmup_state.record_warmup_degraded(
+                warmup_state.REASON_DISTRIBUTIONS_UNAVAILABLE
+            )
     except Exception:
-        logging.getLogger(__name__).exception("Unable to warm cohesion composite distributions")
+        logger.exception("Unable to warm cohesion composite distributions")
+        warmup_state.record_warmup_degraded(warmup_state.REASON_ERROR)
 
 
 def create_app() -> Flask:

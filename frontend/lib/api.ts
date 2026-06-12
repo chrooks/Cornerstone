@@ -119,8 +119,21 @@ export function isNoActiveRelease<T>(res: ApiResponse<T>): boolean {
   return !res.success && res.error === NO_ACTIVE_RELEASE_ERROR;
 }
 
+/**
+ * Backend health/readiness response.
+ *
+ * `status` is "ok" only when boot-time cohesion warmup succeeded; "degraded"
+ * (with `reasons`, e.g. "cohesion_warmup_no_active_release") means the backend
+ * is reachable but cohesion fell back to theoretical maxima.
+ */
+export interface HealthStatus {
+  status: "ok" | "degraded";
+  reasons: string[];
+  message: string;
+}
+
 /** Check backend health — used on the homepage to confirm connectivity. */
-export async function checkHealth(): Promise<{ status: string; message: string }> {
+export async function checkHealth(): Promise<HealthStatus> {
   const res = await fetch(`${API_BASE_URL}/api/health`);
   return res.json();
 }
