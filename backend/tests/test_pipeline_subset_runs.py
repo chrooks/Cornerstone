@@ -347,7 +347,7 @@ def test_salary_scrape_worker_bulk_path_unchanged(monkeypatch, runs_repo_capture
 
     scrape_calls: list[tuple] = []
 
-    def fake_scrape(team_abbrev, supabase, player_ids=None):
+    def fake_scrape(team_abbrev, supabase, player_ids=None, progress_cb=None):
         scrape_calls.append((team_abbrev, player_ids))
         return {"matched": 42, "unmatched": 3, "total": 45}
 
@@ -359,13 +359,36 @@ def test_salary_scrape_worker_bulk_path_unchanged(monkeypatch, runs_repo_capture
     assert runs_repo_capture["complete"] == [{"rows_processed": 42, "error": None}]
 
 
+def test_salary_scrape_worker_bulk_path_forwards_progress(monkeypatch, runs_repo_capture):
+    """#70: the bulk path hands run_bulk_salary_scrape a progress_cb that
+    forwards to runs_repo.update_progress so the card renders a determinate bar."""
+    import api.pipeline as pipeline_mod
+
+    monkeypatch.setattr(pipeline_mod, "get_supabase", lambda: MagicMock())
+
+    def fake_scrape(team_abbrev, supabase, player_ids=None, progress_cb=None):
+        # Simulate the per-player loop driving determinate progress.
+        assert progress_cb is not None
+        progress_cb(0, 3)
+        progress_cb(3, 3)
+        return {"matched": 3, "unmatched": 0, "total": 3}
+
+    monkeypatch.setattr(pipeline_mod, "run_bulk_salary_scrape", fake_scrape)
+
+    pipeline_mod._run_salary_scrape_job(_RUN_ID, [])
+
+    # The callback's ticks reached runs_repo.update_progress verbatim.
+    assert runs_repo_capture["progress"] == [(0, 3), (3, 3)]
+    assert runs_repo_capture["complete"] == [{"rows_processed": 3, "error": None}]
+
+
 def test_salary_scrape_worker_records_error_on_failure(monkeypatch, runs_repo_capture):
     """A scrape exception completes the run with the error recorded, not silently."""
     import api.pipeline as pipeline_mod
 
     monkeypatch.setattr(pipeline_mod, "get_supabase", lambda: MagicMock())
 
-    def boom(team_abbrev, supabase, player_ids=None):
+    def boom(team_abbrev, supabase, player_ids=None, progress_cb=None):
         raise RuntimeError("espn fell over")
 
     monkeypatch.setattr(pipeline_mod, "run_bulk_salary_scrape", boom)
