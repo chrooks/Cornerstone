@@ -406,6 +406,9 @@ def save_threshold_edit(skill_name: str):
                 season=season,
                 skill_filter=[skill_name],
                 thresholds_override=override,
+                # Stage the merged composite (what the Player Pool / publish read)
+                # so committing this edit actually updates the displayed tiers.
+                recompute_composite=True,
             )
             runs_repo.complete_run(run_id, rows_processed=len(player_ids))
         except Exception as exc:

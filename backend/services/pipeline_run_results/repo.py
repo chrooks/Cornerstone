@@ -39,14 +39,22 @@ def _tier_rank(tier: Optional[str]) -> int:
 def _extract_tier(skill_data) -> Optional[str]:
     """Pull a tier from either profile shape.
 
-    Staged rows (pipeline_run_results.profile) nest per-skill metadata:
-    {"tier": "Capable", ...}. Committed rows (draft_skill_profiles.profile)
-    store the bare tier string: "Capable". The literal "None" / "" means the
-    skill has no tier, so normalize those to Python None for consistent
-    promotion/demotion/new classification on both sides.
+    Handles three shapes:
+      - Composite entries nest {"final_tier": "Capable", ...} — the source the
+        Player Pool reads, staged by threshold_edit composite recompute.
+      - Stats-staged entries nest {"tier": "Capable", ...}.
+      - Committed stats profiles store the bare tier string: "Capable".
+    The literal "None" / "" means the skill has no tier, so normalize those to
+    Python None for consistent promotion/demotion/new classification on both sides.
     """
     if isinstance(skill_data, dict):
-        tier = skill_data.get("tier")
+        # Explicit key priority (not truthiness): a composite entry owns the
+        # skill's tier via final_tier even when it is SQL-null; only fall back
+        # to the stats `tier` key when final_tier is absent entirely.
+        if "final_tier" in skill_data:
+            tier = skill_data["final_tier"]
+        else:
+            tier = skill_data.get("tier")
     elif isinstance(skill_data, str):
         tier = skill_data
     else:
