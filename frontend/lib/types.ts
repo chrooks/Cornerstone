@@ -930,7 +930,8 @@ export interface PipelineRun {
     | "salary_scrape"
     | "bio_team_sync"
     | "skill_evaluation"
-    | "threshold_edit";
+    | "threshold_edit"
+    | "composite_batch";
   scope: "bulk" | "player";
   player_id: string | null;
   snapshot_release_id: string | null;
@@ -1098,6 +1099,8 @@ export interface CompositeBatchResult {
   processed: number;
   claude_calls_made: number;
   claude_calls_skipped: number;
+  /** Players with no player_stats row — composite can't run until Stat Fetch populates them. */
+  skipped_no_stats: number;
   auto_accepted: number;
   flagged_for_review: number;
   errors: number;

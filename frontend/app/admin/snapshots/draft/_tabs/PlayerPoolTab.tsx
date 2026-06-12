@@ -35,6 +35,7 @@ import { PlayerViewSizeToggle } from "@/components/players/PlayerView";
 import type { SortKey } from "@/components/players/SortControls";
 import { ExcludedSection } from "../_components/ExcludedSection";
 import { RunPipelineConfirmDialog } from "../_components/RunPipelineConfirmDialog";
+import { PipelineActionMenu } from "../../_components/PipelineActionMenu";
 import { useRunCompositePipeline } from "../_lib/useRunCompositePipeline";
 import type { TabSlug } from "../_lib/tabRouting";
 
@@ -341,25 +342,23 @@ export function PlayerPoolTab({
             onClear: clearSelection,
             renderActions: () => (
               <div className="flex items-center gap-2">
-                <button
-                  id="player-pool-run-pipeline-btn"
-                  type="button"
-                  disabled={selectedIds.size === 0 || runPipeline.isRunning}
-                  onClick={() => runPipeline.start(Array.from(selectedIds))}
-                  title="Run the compositing pipeline for the selected players, then review their composites here."
-                  className="font-semibold px-3 py-1.5 rounded-[4px] border border-[#d9d0c9]
-                    bg-white text-[#0e0907] hover:text-[#fe6d34] hover:border-[#fe6d34]
-                    focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
-                    disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {runPipeline.isRunning
-                    ? "Running…"
-                    : `Run pipeline (${selectedIds.size})`}
-                </button>
+                <PipelineActionMenu
+                  id="player-pool-pipeline-menu"
+                  count={selectedIds.size}
+                  onCombined={() => runPipeline.runStatsThenComposite(Array.from(selectedIds))}
+                  onStatFetch={() => runPipeline.runStatFetch(Array.from(selectedIds))}
+                  onComposite={() => runPipeline.start(Array.from(selectedIds))}
+                  busy={runPipeline.isRunning || runPipeline.isFetchingStats}
+                  busyLabel={runPipeline.isFetchingStats ? "Fetching…" : "Running…"}
+                />
                 <button
                   id="player-pool-exclude-selected-btn"
                   type="button"
-                  disabled={selectedIds.size === 0 || runPipeline.isRunning}
+                  disabled={
+                    selectedIds.size === 0 ||
+                    runPipeline.isRunning ||
+                    runPipeline.isFetchingStats
+                  }
                   onClick={() => excludeSelected(!selectedAllExcluded)}
                   className="font-semibold px-3 py-1.5 rounded-[4px] border border-[#d9d0c9]
                     text-[#fe6d34] hover:text-[#0e0907] hover:border-[#fe6d34]
@@ -429,7 +428,8 @@ export function PlayerPoolTab({
         <RunPipelineConfirmDialog
           id="player-pool-run-pipeline-confirm"
           count={runPipeline.pendingIds.length}
-          isRunning={runPipeline.isRunning}
+          mode={runPipeline.pendingMode ?? undefined}
+          isRunning={runPipeline.isRunning || runPipeline.isFetchingStats}
           onConfirm={runPipeline.confirm}
           onCancel={runPipeline.cancel}
         />

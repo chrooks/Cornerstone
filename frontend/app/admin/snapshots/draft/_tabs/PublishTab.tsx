@@ -175,7 +175,12 @@ export function PublishTab({
               onExcludeSelected,
               isExcluding,
               onRunSelected: () => runPipeline.start(Array.from(selectedIds)),
+              onStatFetchSelected: () =>
+                runPipeline.runStatFetch(Array.from(selectedIds)),
+              onCombinedSelected: () =>
+                runPipeline.runStatsThenComposite(Array.from(selectedIds)),
               isRunning: runPipeline.isRunning,
+              isFetchingStats: runPipeline.isFetchingStats,
             }}
           />
           <div id="publish-tab-excluded" className="mt-4">
@@ -297,7 +302,8 @@ export function PublishTab({
         <RunPipelineConfirmDialog
           id="publish-tab-run-pipeline-confirm"
           count={runPipeline.pendingIds.length}
-          isRunning={runPipeline.isRunning}
+          mode={runPipeline.pendingMode ?? undefined}
+          isRunning={runPipeline.isRunning || runPipeline.isFetchingStats}
           onConfirm={runPipeline.confirm}
           onCancel={runPipeline.cancel}
         />

@@ -380,7 +380,7 @@ def composite_batch():
             runs_repo.complete_run(run_id, rows_processed=0)
             return _ok({
                 "total": 0, "processed": 0, "claude_calls_made": 0,
-                "claude_calls_skipped": 0, "auto_accepted": 0,
+                "claude_calls_skipped": 0, "skipped_no_stats": 0, "auto_accepted": 0,
                 "flagged_for_review": 0, "errors": 0, "estimated_cost_usd": 0.0,
             })
 
@@ -392,6 +392,7 @@ def composite_batch():
         results_lock      = threading.Lock()
         processed_count   = 0
         errors_count      = 0
+        skipped_no_stats  = 0
         auto_accepted     = 0
         flagged_review    = 0
         claude_calls_made = 0
@@ -407,7 +408,7 @@ def composite_batch():
             connection state across threads (supabase-py thread safety is
             not officially documented).
             """
-            nonlocal processed_count, errors_count, auto_accepted, flagged_review
+            nonlocal processed_count, errors_count, skipped_no_stats, auto_accepted, flagged_review
             nonlocal claude_calls_made, claude_calls_failed, total_input_tok, total_output_tok
 
             # Per-thread client — avoids sharing httpx transport state across threads
@@ -426,9 +427,12 @@ def composite_batch():
                 )
                 stats_blob = (stats_row.data[0].get("stats") or {}) if stats_row.data else {}
                 if not stats_blob:
-                    logger.warning("No stats blob for player %s — skipping", pid)
+                    # Composite reads existing stats — it never fetches them. A
+                    # player with no player_stats row can't be composited; this is
+                    # a skip, not an error (run Stat Fetch for them first).
+                    logger.warning("No stats blob for player %s — skipping (no stats)", pid)
                     with results_lock:
-                        errors_count += 1
+                        skipped_no_stats += 1
                     return
 
                 # Evaluate stat skills using pre-loaded thresholds/averages
@@ -492,9 +496,10 @@ def composite_batch():
         estimated_cost = estimate_cost_usd(total_input_tok, total_output_tok)
 
         logger.info(
-            "composite/batch complete: %d/%d processed, %d errors, "
+            "composite/batch complete: %d/%d processed, %d skipped (no stats), %d errors, "
             "%d claude calls made, %d claude calls failed, ~$%.4f cost",
-            processed_count, total, errors_count, claude_calls_made, claude_calls_failed, estimated_cost,
+            processed_count, total, skipped_no_stats, errors_count,
+            claude_calls_made, claude_calls_failed, estimated_cost,
         )
 
         runs_repo.complete_run(run_id, rows_processed=processed_count)
@@ -506,6 +511,9 @@ def composite_batch():
             # claude_calls_skipped counts players where Claude was called but failed
             # (they fall back to stat-only ratings rather than blocking the batch)
             "claude_calls_skipped": claude_calls_failed,
+            # skipped_no_stats: players with no player_stats row — composite can't
+            # run on them until Stat Fetch populates their stats.
+            "skipped_no_stats":     skipped_no_stats,
             "auto_accepted":        auto_accepted,
             "flagged_for_review":   flagged_review,
             "errors":               errors_count,

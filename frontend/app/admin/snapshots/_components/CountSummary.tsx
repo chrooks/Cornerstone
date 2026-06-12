@@ -16,6 +16,7 @@ import type {
   MissingCompositePlayer,
   SnapshotCountSummary,
 } from "@/lib/types";
+import { PipelineActionMenu } from "./PipelineActionMenu";
 
 interface CountSummaryProps {
   id: string;
@@ -38,13 +39,17 @@ export interface MissingCompositeSelection {
   onExcludeSelected: () => void;
   isExcluding: boolean;
   /**
-   * Optional "run the compositing pipeline for the selected players" action.
-   * When provided, the footer grows a second button beside Exclude so an admin
-   * can generate composites for fringe players and review them in-place instead
-   * of only excluding them. Omit to hide the button entirely.
+   * Optional "run a pipeline stage for the selected players" actions. When both
+   * are provided, the footer grows a Run-pipeline dropdown beside Exclude
+   * (Fetch stats / Run compositing) so an admin can populate stats and generate
+   * composites for fringe players in-place. Omit to hide the dropdown.
    */
   onRunSelected?: () => void;
+  onStatFetchSelected?: () => void;
+  /** Default combined action: fetch stats, then composite. */
+  onCombinedSelected?: () => void;
   isRunning?: boolean;
+  isFetchingStats?: boolean;
 }
 
 function SummaryRow({
@@ -85,7 +90,9 @@ function MissingCompositeDisclosure({
   const hasSelection = Boolean(selection);
   const selectedCount = selection?.selectedIds.size ?? 0;
   const allSelected = players.length > 0 && selectedCount === players.length;
-  const isBusy = Boolean(selection?.isExcluding || selection?.isRunning);
+  const isBusy = Boolean(
+    selection?.isExcluding || selection?.isRunning || selection?.isFetchingStats,
+  );
 
   return (
     <details
@@ -191,24 +198,19 @@ function MissingCompositeDisclosure({
               {allSelected ? "Clear" : "Select all"}
             </button>
             <div className="flex items-center gap-2">
-              {selection!.onRunSelected && (
-                <button
-                  id="run-pipeline-selected-btn"
-                  type="button"
-                  onClick={selection!.onRunSelected}
-                  disabled={isBusy || selectedCount === 0}
-                  title="Run the compositing pipeline for the selected players, then review their composites here."
-                  className="text-[11px] font-semibold px-3 py-1.5 rounded-[4px]
-                    border border-[#d9d0c9] bg-white text-[#0e0907]
-                    hover:border-[#fe6d34] hover:text-[#fe6d34]
-                    focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-1
-                    disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {selection!.isRunning
-                    ? "Running…"
-                    : `Run pipeline (${selectedCount})`}
-                </button>
-              )}
+              {selection!.onRunSelected &&
+                selection!.onStatFetchSelected &&
+                selection!.onCombinedSelected && (
+                  <PipelineActionMenu
+                    id="count-summary-pipeline-menu"
+                    count={selectedCount}
+                    onCombined={selection!.onCombinedSelected}
+                    onStatFetch={selection!.onStatFetchSelected}
+                    onComposite={selection!.onRunSelected}
+                    busy={isBusy}
+                    busyLabel={selection!.isFetchingStats ? "Fetching…" : "Running…"}
+                  />
+                )}
               <button
                 id="exclude-selected-btn"
                 type="button"
