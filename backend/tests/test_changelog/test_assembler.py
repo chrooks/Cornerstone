@@ -37,6 +37,16 @@ def _eval_row(**overrides):
     return row
 
 
+def _snapshot_row(**overrides):
+    row = {
+        "label": "Opening Night",
+        "season": "2025-26",
+        "published_at": "2026-05-12T12:00:00+00:00",
+    }
+    row.update(overrides)
+    return row
+
+
 # ---------------------------------------------------------------------------
 # RuleSet Version entries
 # ---------------------------------------------------------------------------
@@ -89,6 +99,29 @@ class TestEvaluationEntries:
 
 
 # ---------------------------------------------------------------------------
+# Snapshot Release entries (issue #78)
+# ---------------------------------------------------------------------------
+
+
+class TestSnapshotEntries:
+    def test_produces_one_entry_per_snapshot_release(self):
+        entries = assemble_changelog([], [], [_snapshot_row()])
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry["type"] == "snapshot_release"
+        assert entry["date"] == "2026-05-12T12:00:00+00:00"
+        # The season is surfaced so users see which player pool changed.
+        assert "2025-26" in entry["title"]
+        assert entry["summary"]  # non-empty human summary
+        # Snapshot Releases link to the released player pool.
+        assert entry["link"] == "/players"
+
+    def test_snapshot_entry_drops_when_unpublished(self):
+        entries = assemble_changelog([], [], [_snapshot_row(published_at=None)])
+        assert entries == []
+
+
+# ---------------------------------------------------------------------------
 # Merge + ordering
 # ---------------------------------------------------------------------------
 
@@ -101,10 +134,23 @@ class TestMergeAndOrdering:
         assert entries[0]["type"] == "evaluation_version"
         assert entries[1]["type"] == "ruleset_version"
 
+    def test_merges_all_three_sources_newest_first(self):
+        entries = assemble_changelog(
+            [_ruleset_row()], [_eval_row()], [_snapshot_row()]
+        )
+        assert len(entries) == 3
+        # Snapshot (05-12) > eval (05-11) > ruleset (05-10).
+        assert [e["type"] for e in entries] == [
+            "snapshot_release",
+            "evaluation_version",
+            "ruleset_version",
+        ]
+
     def test_drops_rows_without_published_at(self):
         entries = assemble_changelog(
             [_ruleset_row(published_at=None)],
             [_eval_row(published_at=None)],
+            [_snapshot_row(published_at=None)],
         )
         assert entries == []
 

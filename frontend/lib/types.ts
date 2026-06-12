@@ -666,11 +666,15 @@ export interface RuleSetDetail extends RuleSetSummary {
 }
 
 /** Discriminator for the kind of version a changelog entry describes. */
-export type ChangelogEntryType = "ruleset_version" | "evaluation_version";
+export type ChangelogEntryType =
+  | "ruleset_version"
+  | "evaluation_version"
+  | "snapshot_release";
 
 /**
- * One public changelog event — a published Rule Set Version or Evaluation
- * Version. Mirrors the backend `GET /api/changelog` entry shape exactly.
+ * One public changelog event — a published Rule Set Version, Evaluation
+ * Version, or Snapshot Release. Mirrors the backend `GET /api/changelog` entry
+ * shape exactly.
  */
 export interface ChangelogEntry {
   type: ChangelogEntryType;

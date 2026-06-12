@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowUpRight, ClipboardList, ScrollText, SlidersHorizontal } from "lucide-react";
+import { ArrowUpRight, ClipboardList, ScrollText, SlidersHorizontal, Users } from "lucide-react";
 import { getChangelog } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { ChangelogEntry, ChangelogEntryType } from "@/lib/types";
@@ -31,6 +31,12 @@ const TYPE_META: Record<ChangelogEntryType, TypeMeta> = {
     Icon: SlidersHorizontal,
     badgeClass: "bg-[#eef2f7] text-[#3a4a5e] border-[#3a4a5e]/20",
     iconClass: "text-[#3a4a5e]",
+  },
+  snapshot_release: {
+    label: "Player Snapshot",
+    Icon: Users,
+    badgeClass: "bg-[#e9f4ec] text-[#1f6b3a] border-[#1f6b3a]/25",
+    iconClass: "text-[#1f6b3a]",
   },
 };
 
@@ -94,8 +100,9 @@ function EmptyState() {
         No updates published yet
       </h3>
       <p className="mt-2 max-w-sm text-[0.875rem] leading-relaxed text-[#0e0907]/65">
-        When a new Rule Set version or evaluation engine update ships, it shows up
-        here — what changed, when, and which part of the Lab it touches.
+        When a new Rule Set version, evaluation engine update, or player snapshot
+        ships, it shows up here — what changed, when, and which part of the Lab it
+        touches.
       </p>
       <Link
         id="landing-changelog-empty-cta"

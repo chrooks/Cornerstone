@@ -39,6 +39,14 @@ EVAL_ROWS = [
     }
 ]
 
+SNAPSHOT_ROWS = [
+    {
+        "label": "Opening Night",
+        "season": "2025-26",
+        "published_at": "2026-05-12T12:00:00+00:00",
+    }
+]
+
 
 class TestChangelogEndpoint:
     def test_is_public_and_returns_merged_feed(self, client):
@@ -48,6 +56,8 @@ class TestChangelogEndpoint:
             changelog_mod, "_fetch_published_ruleset_versions", return_value=RULESET_ROWS
         ), patch.object(
             changelog_mod, "_fetch_published_evaluation_versions", return_value=EVAL_ROWS
+        ), patch.object(
+            changelog_mod, "_fetch_published_snapshots", return_value=SNAPSHOT_ROWS
         ):
             resp = client.get("/api/changelog")
 
@@ -57,22 +67,28 @@ class TestChangelogEndpoint:
         assert body["error"] is None
 
         data = body["data"]
-        assert len(data) == 2
-        # Newest first: eval (05-11) before ruleset (05-10).
-        assert data[0]["type"] == "evaluation_version"
-        assert data[1]["type"] == "ruleset_version"
+        assert len(data) == 3
+        # Newest first: snapshot (05-12), eval (05-11), ruleset (05-10).
+        assert data[0]["type"] == "snapshot_release"
+        assert data[1]["type"] == "evaluation_version"
+        assert data[2]["type"] == "ruleset_version"
 
         # Each entry carries the required fields.
         for entry in data:
             assert {"type", "date", "version_label", "title", "summary", "link"} <= entry.keys()
 
         # RuleSet entry links into the Lab.
-        ruleset_entry = data[1]
+        ruleset_entry = data[2]
         assert ruleset_entry["link"] == "/lab/all-time"
         assert "All-Time" in ruleset_entry["title"]
 
         # Eval entry uses the admin changelog note as its summary.
-        assert data[0]["summary"] == "Rebalanced spacing weights."
+        assert data[1]["summary"] == "Rebalanced spacing weights."
+
+        # Snapshot Release entry links to the released player pool.
+        snapshot_entry = data[0]
+        assert snapshot_entry["link"] == "/players"
+        assert "2025-26" in snapshot_entry["title"]
 
     def test_empty_when_no_published_versions(self, client):
         import api.changelog as changelog_mod
@@ -81,6 +97,8 @@ class TestChangelogEndpoint:
             changelog_mod, "_fetch_published_ruleset_versions", return_value=[]
         ), patch.object(
             changelog_mod, "_fetch_published_evaluation_versions", return_value=[]
+        ), patch.object(
+            changelog_mod, "_fetch_published_snapshots", return_value=[]
         ):
             resp = client.get("/api/changelog")
 
@@ -105,6 +123,8 @@ class TestChangelogEndpoint:
             changelog_mod, "_fetch_published_ruleset_versions", return_value=[]
         ), patch.object(
             changelog_mod, "_fetch_published_evaluation_versions", return_value=many_eval
+        ), patch.object(
+            changelog_mod, "_fetch_published_snapshots", return_value=[]
         ):
             resp = client.get("/api/changelog?limit=2")
 

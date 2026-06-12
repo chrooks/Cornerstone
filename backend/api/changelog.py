@@ -1,9 +1,10 @@
 """
 api/changelog.py — public changelog read endpoint (issue #18).
 
-Surfaces published RuleSet Version and Evaluation Version events as a single
-newest-first feed for the landing page. The feed auto-updates whenever a new
-version is published — there is no hardcoded list anywhere.
+Surfaces published RuleSet Version, Evaluation Version, and Snapshot Release
+events as a single newest-first feed for the landing page. The feed auto-updates
+whenever a new version or Snapshot Release is published — there is no hardcoded
+list anywhere.
 
 Blueprint prefix: /api
 This endpoint is public (no auth). It reads only published version metadata.
@@ -81,6 +82,19 @@ def _fetch_published_evaluation_versions() -> list[dict[str, Any]]:
     return rows
 
 
+def _fetch_published_snapshots() -> list[dict[str, Any]]:
+    """Return published Snapshot Release rows (label, season, published_at)."""
+    supabase = get_supabase()
+    rows = run_query(
+        lambda: supabase.table("snapshot_releases")
+        .select("label, season, published_at")
+        .eq("status", "published")
+        .order("published_at", desc=True)
+        .execute()
+    ).data or []
+    return rows
+
+
 def _parse_limit(raw: str | None) -> int:
     """Clamp the optional ?limit= query param into a safe range."""
     if raw is None:
@@ -101,7 +115,10 @@ def get_changelog():
     try:
         ruleset_rows = _fetch_published_ruleset_versions()
         eval_rows = _fetch_published_evaluation_versions()
-        entries = assemble_changelog(ruleset_rows, eval_rows, limit=limit)
+        snapshot_rows = _fetch_published_snapshots()
+        entries = assemble_changelog(
+            ruleset_rows, eval_rows, snapshot_rows, limit=limit
+        )
         return jsonify({
             "success": True,
             "data": entries,
