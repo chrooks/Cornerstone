@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, randomId } from "@/lib/utils";
 import { evaluateRoster } from "@/lib/api";
 import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
 import { FeedbackTooltip } from "./FeedbackTooltip";
@@ -654,7 +654,7 @@ export function AssistantGmNotes({
 
         // Build the new history entry — pre-bucketed into S/W/S for cheap re-renders
         const entry: HistoryEntry = {
-          id: crypto.randomUUID(),
+          id: randomId(),
           timestamp: Date.now(),
           changeDescription,
           evaluation: res.data,

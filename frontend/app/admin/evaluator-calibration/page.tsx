@@ -13,7 +13,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Toaster, toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, randomId } from "@/lib/utils";
 import { compositeCoefficientsFromEvaluationValues } from "@/lib/cohesion-constants";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
 import {
@@ -332,7 +332,7 @@ export default function CohesionCalibrationPage() {
         return;
       }
       addResult({
-        id: crypto.randomUUID(),
+        id: randomId(),
         timestamp: Date.now(),
         playerIds: selectedSlots.map((s) => s.player?.id ?? ""),
         playerNames: selectedSlots.map((s) => s.player?.name ?? "?"),
@@ -368,7 +368,7 @@ export default function CohesionCalibrationPage() {
     );
     const selectedCombination = res.data.lineup_combinations[selectedCombinationIndex] ?? res.data.lineup_combinations[0];
     addResult({
-      id: crypto.randomUUID(),
+      id: randomId(),
       timestamp: Date.now(),
       playerIds: selectedSlots.map((s) => s.player?.id ?? ""),
       playerNames: selectedSlots.map((s) => s.player?.name ?? "?"),

@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { cn, randomId } from "@/lib/utils";
 import { listPlayersWithSkills, searchNbaPlayers, manuallyIncludePlayer, removeManualInclude } from "@/lib/api";
 import type { NbaPlayerSearchResult } from "@/lib/api";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
@@ -51,7 +51,7 @@ function hasLegendsExcludeFilter(entries: FilterEntry[]): boolean {
 function makeLegendsExcludeFilter(connector: FilterConnector): ActiveFilter {
   const legendFilter = AVAILABLE_FILTERS.find((f) => f.label === "Legend")!;
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     filter: legendFilter,
     value: "No",
     connector,
@@ -74,9 +74,9 @@ const PLAYERS_PANEL_PAGE_SIZE = 16;
 // Unique ID generator for filter entries
 // ---------------------------------------------------------------------------
 
-/** Use crypto.randomUUID() to avoid hot-reload counter resets colliding with existing filter IDs. */
+/** Uses randomId() to avoid hot-reload counter resets colliding with existing filter IDs. */
 function nextFilterId(): string {
-  return crypto.randomUUID();
+  return randomId();
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ function decodeFilterEntry(raw: string): FilterEntry | null {
   // Paren markers have 2 parts
   if (parts.length === 2 && (parts[0] === "(" || parts[0] === ")")) {
     const connector = parts[1] === "OR" ? "OR" : "AND";
-    return { id: crypto.randomUUID(), paren: parts[0] as "(" | ")", connector };
+    return { id: randomId(), paren: parts[0] as "(" | ")", connector };
   }
   // Active filters have 4 parts
   if (parts.length < 4) return null;
@@ -118,7 +118,7 @@ function decodeFilterEntry(raw: string): FilterEntry | null {
   if (!filter) return null;
   const connector: FilterConnector = connRaw === "OR" ? "OR" : "AND";
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     filter,
     value,
     connector,
@@ -152,7 +152,7 @@ function parseFiltersFromUrl(searchParams: URLSearchParams): FilterEntry[] {
   if (teamParam) {
     const teamFilter = AVAILABLE_FILTERS.find((f) => f.label === "Team");
     if (teamFilter) {
-      return [{ id: crypto.randomUUID(), filter: teamFilter, value: teamParam, connector: "AND", negated: false }];
+      return [{ id: randomId(), filter: teamFilter, value: teamParam, connector: "AND", negated: false }];
     }
   }
   return [];

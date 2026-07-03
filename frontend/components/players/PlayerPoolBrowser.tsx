@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
-import { cn } from "@/lib/utils";
+import { cn, randomId } from "@/lib/utils";
 import { getLegend, getPlayerProfile, getPlayerStats } from "@/lib/api";
 import { FilterBar } from "@/components/players/FilterBar";
 import { PlayerTable, type PlayerTableBulkSelection } from "@/components/players/PlayerTable";
@@ -132,7 +132,7 @@ export interface PlayerPoolBulkSelection {
 }
 
 function nextFilterId(): string {
-  return crypto.randomUUID();
+  return randomId();
 }
 
 function defaultViewToggle({

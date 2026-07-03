@@ -20,6 +20,7 @@ import {
 } from "@/components/players/PlayerPoolBrowser";
 import { PlayerViewSizeToggle, type PlayerViewSize } from "@/components/players/PlayerView";
 import { DEFAULT_MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { randomId } from "@/lib/utils";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 
@@ -127,7 +128,7 @@ export function PlayerPickerPanel({
   useEffect(() => {
     if (salaryFilterTrigger == null) return;
     setFilterRequest({
-      id: crypto.randomUUID(),
+      id: randomId(),
       filterLabel: "Salary",
       value: `≤|${(salaryFilterTrigger / 1_000_000).toFixed(1)}`,
       mode: "append",
@@ -138,7 +139,7 @@ export function PlayerPickerPanel({
   useEffect(() => {
     if (!skillFilterTrigger) return;
     setFilterRequest({
-      id: crypto.randomUUID(),
+      id: randomId(),
       filterLabel: "Skill",
       value: `${skillFilterTrigger.skill}|${skillFilterTrigger.tier}`,
       mode: "replace-same-skill",
