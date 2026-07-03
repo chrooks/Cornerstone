@@ -17,6 +17,7 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import type { PlayerStatRow } from "@/lib/types";
+import { resolveComputedValue, type ComputedStatDef } from "./computed-stats";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,12 +40,9 @@ export type ThresholdMap = Record<string, Record<string, TierConditions[]>>;
 /**
  * A computed stat definition from the active skill's rule.
  * e.g. passer_composite = potential_assists * 1 + secondary_assists * 1.5
+ * Re-exported from computed-stats.ts, which owns the shared resolver.
  */
-export interface ComputedStatDef {
-  name: string;
-  formula: "sum";
-  components: Array<{ stat: string; weight: number }>;
-}
+export type { ComputedStatDef } from "./computed-stats";
 
 interface StatLeadersTableProps {
   players: PlayerStatRow[];
@@ -142,21 +140,11 @@ function resolveValue(
   showStabilized: boolean,
   computedDefs: ComputedStatDef[],
 ): number | null {
-  if (key.startsWith("computed.")) {
-    const name = key.slice("computed.".length);
-    const def = computedDefs.find((d) => d.name === name);
-    if (!def) return null;
-    let total = 0;
-    for (const { stat, weight } of def.components) {
-      const raw = player.stats[stat] ?? null;
-      const v = showStabilized ? (player.stabilized[stat] ?? raw) : raw;
-      if (v === null) return null;
-      total += v * weight;
-    }
-    return total;
-  }
-  const raw = player.stats[key] ?? null;
-  return showStabilized ? (player.stabilized[key] ?? raw) : raw;
+  const getRaw = (statKey: string): number | null => {
+    const raw = player.stats[statKey] ?? null;
+    return showStabilized ? (player.stabilized[statKey] ?? raw) : raw;
+  };
+  return resolveComputedValue(getRaw, key, computedDefs);
 }
 
 /**
@@ -289,24 +277,13 @@ export function StatLeadersTable({
   // For "computed.*" keys, derive the value on the fly from computedStatDefs
   // since these are never stored in player_stats (they're calculated by the skill engine).
   const getValue = (player: PlayerStatRow, key: string): number | null => {
-    if (key.startsWith("computed.")) {
-      const name = key.slice("computed.".length);
-      const def = computedStatDefs.find((d) => d.name === name);
-      if (!def) return null;
-      // Only "sum" formula supported — sum weighted component stats
-      let total = 0;
-      for (const { stat, weight } of def.components) {
-        const raw = player.stats[stat] ?? null;
-        const compVal = showStabilized ? (player.stabilized[stat] ?? raw) : raw;
-        if (compVal === null) return null; // missing component → can't compute
-        total += compVal * weight;
+    const getRaw = (statKey: string): number | null => {
+      if (showStabilized && player.stabilized[statKey] !== undefined) {
+        return player.stabilized[statKey];
       }
-      return total;
-    }
-    if (showStabilized && player.stabilized[key] !== undefined) {
-      return player.stabilized[key];
-    }
-    return player.stats[key] ?? null;
+      return player.stats[statKey] ?? null;
+    };
+    return resolveComputedValue(getRaw, key, computedStatDefs);
   };
 
   // ---------------------------------------------------------------------------

@@ -14,11 +14,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getAllThresholds, getAnchors, getPlayerSkills } from "@/lib/api";
+import { getAllThresholds, getAnchors, getPlayerSkills, getStagedThresholdEdits } from "@/lib/api";
 import { PlayerExplorerPanel } from "./PlayerExplorerPanel";
 import { ThresholdEditorPanel } from "./ThresholdEditorPanel";
 import { AnchorSidebarPanel } from "./AnchorSidebarPanel";
 import { StatLeadersPanel } from "./StatLeadersPanel";
+import { CalibrationActionBar } from "./CalibrationActionBar";
 import { PanelResizeHandle } from "@/components/PanelResizeHandle";
 import { ALL_SKILL_NAMES } from "@/lib/skills";
 import type {
@@ -69,6 +70,19 @@ export function CalibrationWorkspace({
   const [showStatLeaders, setShowStatLeaders] = useState(false);
   const [loadingThresholds, setLoadingThresholds] = useState(true);
   const [loadingAnchors, setLoadingAnchors] = useState(true);
+
+  // --- Action-bar-adjacent state, lifted here so it survives the editor
+  // panel unmounting when Stat Leaders is shown. ---
+  const [testAllResults, setTestAllResults] = useState<SkillTestResult[]>([]);
+  const [showTestAllResults, setShowTestAllResults] = useState(false);
+  // Advanced JSON editor's effective error, reported up from ThresholdEditorPanel.
+  // Cleared whenever Stat Leaders is shown so the action bar never stays stuck disabled.
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  // Skills with an uncommitted threshold_edit run → run_id. Drives the "Staged"
+  // pending-commit badge in the editor header. Seeded from real run state on
+  // mount so it is authoritative: a skill drops out once its run is committed
+  // or discarded (the draft tabs unmount/remount, so returning here re-fetches).
+  const [stagedRuns, setStagedRuns] = useState<Record<string, string>>({});
 
   // --- Panel layout state (resizable + collapsible side panels) ---
   const [leftPanelWidth, setLeftPanelWidth] = useState(360);
@@ -127,7 +141,18 @@ export function CalibrationWorkspace({
         }
       })
     );
+
+    getStagedThresholdEdits().then((res) => {
+      if (res.success && res.data) setStagedRuns(res.data);
+    });
   }, []);
+
+  // Stat Leaders view unmounts ThresholdEditorPanel (and its advanced JSON
+  // editor), so clear any stale jsonError once it's shown — otherwise the
+  // action bar's Stage Edit / Test Anchors buttons could stay stuck disabled.
+  useEffect(() => {
+    if (showStatLeaders) setJsonError(null);
+  }, [showStatLeaders]);
 
   const handlePlayerSelect = useCallback((player: Player) => {
     setSelectedPlayer(player);
@@ -180,6 +205,32 @@ export function CalibrationWorkspace({
       }
       return updated;
     });
+  }, []);
+
+  // Called by CalibrationActionBar's "Test All" button — updates both the
+  // summary table (owned here so it survives ThresholdEditorPanel unmounting)
+  // and the per-skill testResults record the badges read from.
+  const handleTestAllComplete = useCallback(
+    (results: SkillTestResult[]) => {
+      setTestAllResults(results);
+      setShowTestAllResults(true);
+      handleTestAllResults(results);
+    },
+    [handleTestAllResults]
+  );
+
+  const handleDismissTestAllResults = useCallback(() => {
+    setShowTestAllResults(false);
+  }, []);
+
+  const handleJsonErrorChange = useCallback((error: string | null) => {
+    setJsonError(error);
+  }, []);
+
+  // Called by CalibrationActionBar after a successful Stage Edit — marks the
+  // skill as staged-pending-commit so ThresholdEditorPanel's header badge appears.
+  const handleSkillStaged = useCallback((skillName: string, runId: string) => {
+    setStagedRuns((prev) => ({ ...prev, [skillName]: runId }));
   }, []);
 
   const handleReEvaluatePlayer = useCallback(async () => {
@@ -367,34 +418,55 @@ export function CalibrationWorkspace({
           <PanelResizeHandle id="calibration-left-resize" onResize={handleLeftResize} />
         )}
 
-        {/* ── Center panel: editor / stat leaders ── */}
-        <div id="calibration-workspace-center-panel" className="flex-1 min-w-0 overflow-hidden">
-          {showStatLeaders ? (
-            <StatLeadersPanel
-              thresholds={thresholds}
-              editedThresholds={editedThresholds}
-              initialSkill={selectedSkill}
-              onSkillSelect={handleSkillClick}
-            />
-          ) : (
-            <ThresholdEditorPanel
-              selectedSkill={selectedSkill}
-              thresholds={thresholds}
-              editedThresholds={editedThresholds}
-              onThresholdChange={handleThresholdChange}
-              onSaved={handleThresholdSaved}
-              onStagedEdit={onStagedEdit}
-              anchors={anchors}
-              testResults={testResults}
-              onTestResult={handleTestResult}
-              onTestAllResults={handleTestAllResults}
-              selectedPlayer={selectedPlayer}
-              onReEvaluatePlayer={handleReEvaluatePlayer}
-              onSkillSelect={handleSkillClick}
-              onToast={handleToast}
-              leagueAverages={leagueAverages}
-            />
-          )}
+        {/* ── Center panel: editor / stat leaders, plus the shared action bar
+              below it — the action bar renders in both views so Stat Leaders
+              isn't missing Re-evaluate/Reset/Test All/Test Anchors/Stage Edit. ── */}
+        <div
+          id="calibration-workspace-center-panel"
+          className="flex-1 min-w-0 overflow-hidden flex flex-col"
+        >
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {showStatLeaders ? (
+              <StatLeadersPanel
+                thresholds={thresholds}
+                editedThresholds={editedThresholds}
+                initialSkill={selectedSkill}
+                onSkillSelect={handleSkillClick}
+              />
+            ) : (
+              <ThresholdEditorPanel
+                selectedSkill={selectedSkill}
+                thresholds={thresholds}
+                editedThresholds={editedThresholds}
+                onThresholdChange={handleThresholdChange}
+                anchors={anchors}
+                testResults={testResults}
+                onSkillSelect={handleSkillClick}
+                leagueAverages={leagueAverages}
+                testAllResults={testAllResults}
+                showTestAllResults={showTestAllResults}
+                onDismissTestAllResults={handleDismissTestAllResults}
+                onJsonErrorChange={handleJsonErrorChange}
+                stagedRuns={stagedRuns}
+                onStagedEdit={onStagedEdit}
+              />
+            )}
+          </div>
+          <CalibrationActionBar
+            selectedSkill={selectedSkill}
+            thresholds={thresholds}
+            editedThresholds={editedThresholds}
+            onThresholdChange={handleThresholdChange}
+            onSaved={handleThresholdSaved}
+            onStagedEdit={onStagedEdit}
+            onSkillStaged={handleSkillStaged}
+            onTestResult={handleTestResult}
+            onTestAllComplete={handleTestAllComplete}
+            selectedPlayer={selectedPlayer}
+            onReEvaluatePlayer={handleReEvaluatePlayer}
+            onToast={handleToast}
+            jsonError={jsonError}
+          />
         </div>
 
         {/* Right resize handle, or restore rail when collapsed */}

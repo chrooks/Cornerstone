@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
-import { saveThresholdEdit, testThresholds, getStagedThresholdEdits } from "@/lib/api";
 import { formatSkillName } from "@/lib/skills";
 import { SkillPickerBar } from "./SkillPickerBar";
 import { ALL_STAT_KEYS, getStatLabel } from "@/lib/stat-keys";
@@ -15,7 +14,6 @@ import type {
   SkillTestResult,
   ConditionResult,
   AnchorsBySkill,
-  Player,
   StatConfidence,
 } from "@/lib/types";
 
@@ -32,20 +30,33 @@ interface ThresholdEditorPanelProps {
   onThresholdChange: (skillName: string, rule: Record<string, unknown>) => void;
   anchors: AnchorsBySkill;
   testResults: Record<string, SkillTestResult>;
-  onTestResult: (result: SkillTestResult) => void;
-  onTestAllResults: (results: SkillTestResult[]) => void;
-  selectedPlayer: Player | null;
-  onReEvaluatePlayer: () => void;
   onSkillSelect: (skillName: string) => void;
-  /** Called after a successful save so the parent can clear the unsaved-edit flag */
-  onSaved: (skillName: string, savedRule: Record<string, unknown>) => void;
+  leagueAverages: Record<string, number>;
   /**
-   * Optional: called after a threshold edit is staged (M2 POST /save flow).
-   * Receives the run_id so the caller can deep-link to the Pipeline tab.
+   * Test All results, owned by CalibrationWorkspace so CalibrationActionBar's
+   * "Test All" button can populate it even though it renders this summary table.
+   */
+  testAllResults: SkillTestResult[];
+  showTestAllResults: boolean;
+  onDismissTestAllResults: () => void;
+  /**
+   * Reports the advanced JSON editor's effective error state up to the
+   * workspace (null whenever not in advanced mode or the JSON is valid) so
+   * CalibrationActionBar can gate Stage Edit / Test Anchors on it even
+   * though those buttons live outside this component.
+   */
+  onJsonErrorChange: (error: string | null) => void;
+  /**
+   * Skills with an uncommitted threshold_edit run → run_id, owned by
+   * CalibrationWorkspace (CalibrationActionBar updates it after staging;
+   * this panel only reads it to render the "Staged" badge).
+   */
+  stagedRuns: Record<string, string>;
+  /**
+   * Optional: called when the "Staged" badge is clicked so the caller can
+   * deep-link to the Pipeline tab for that run.
    */
   onStagedEdit?: (runId: string) => void;
-  onToast: (message: string, type: "success" | "error") => void;
-  leagueAverages: Record<string, number>;
 }
 
 /**
@@ -68,31 +79,6 @@ function updateAtPath(
     return { ...(obj as Record<string, unknown>), [key]: updateAtPath((obj as Record<string, unknown>)[key], rest, value) };
   }
   return obj;
-}
-
-/**
- * Recursively strip all items and objects flagged with `_deleted: true` from
- * a rule object before it is sent to the backend. This is the sole gatekeeper
- * ensuring pending-delete markers never reach the API.
- */
-function stripDeleted(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value
-      .filter(
-        (item) =>
-          !(item && typeof item === "object" && (item as Record<string, unknown>)._deleted)
-      )
-      .map(stripDeleted);
-  }
-  if (value && typeof value === "object") {
-    const obj = value as Record<string, unknown>;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _deleted, ...rest } = obj;
-    return Object.fromEntries(
-      Object.entries(rest).map(([k, v]) => [k, stripDeleted(v)])
-    );
-  }
-  return value;
 }
 
 /** Operators available for condition editing */
@@ -886,39 +872,18 @@ export function ThresholdEditorPanel({
   onThresholdChange,
   anchors,
   testResults,
-  onTestResult,
-  onTestAllResults,
-  selectedPlayer,
-  onReEvaluatePlayer,
   onSkillSelect,
-  onSaved,
-  onStagedEdit,
-  onToast,
   leagueAverages,
+  testAllResults,
+  showTestAllResults,
+  onDismissTestAllResults,
+  onJsonErrorChange,
+  stagedRuns,
+  onStagedEdit,
 }: ThresholdEditorPanelProps) {
   const [isAdvancedMode, setIsAdvancedMode] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testingAll, setTestingAll] = useState(false);
-  const [showTestAllResults, setShowTestAllResults] = useState(false);
-  const [testAllResults, setTestAllResults] = useState<SkillTestResult[]>([]);
-  // Skills with an uncommitted threshold_edit run → run_id. Drives the "Staged"
-  // pending-commit badge. Seeded from real run state on mount so it is
-  // authoritative: a skill drops out once its run is committed or discarded
-  // (the draft tabs unmount/remount, so returning here re-fetches).
-  const [stagedRuns, setStagedRuns] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    let active = true;
-    getStagedThresholdEdits().then((res) => {
-      if (active && res.success && res.data) setStagedRuns(res.data);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   // Get the current threshold row for the selected skill
   const thresholdRow = thresholds.find((t) => t.skill_name === selectedSkill);
@@ -939,6 +904,14 @@ export function ThresholdEditorPanel({
       setJsonError(null);
     }
   }, [isAdvancedMode, selectedSkill, currentRule]);
+
+  // Report the effective JSON error up to the workspace — null whenever the
+  // advanced editor isn't open, so CalibrationActionBar's Stage Edit / Test
+  // Anchors buttons never get stuck disabled by a stale error from a prior
+  // advanced-mode session.
+  useEffect(() => {
+    onJsonErrorChange(isAdvancedMode ? jsonError : null);
+  }, [isAdvancedMode, jsonError, onJsonErrorChange]);
 
   // Accepts any value type — numbers for threshold values, strings for
   // stat_confidence, booleans for always_flag_for_review
@@ -1015,106 +988,6 @@ export function ThresholdEditorPanel({
       setJsonError(null);
     }
     setIsAdvancedMode((v) => !v);
-  };
-
-  // Named "stage edit" not "save": this stages a draft run; the threshold is
-  // applied only when that run is committed in the Pipeline tab.
-  const handleStageEdit = async () => {
-    setSaving(true);
-    try {
-      // Strip pending-delete markers before sending to the API — _deleted items
-      // must never reach the backend. stripDeleted is the sole gatekeeper.
-      const cleanRule = stripDeleted(currentRule) as ThresholdRule;
-      const res = await saveThresholdEdit(selectedSkill, cleanRule);
-      if (res.success && res.data) {
-        const runId = res.data.run_id;
-        // Clear the unsaved-edit flag for this skill in the parent (use clean rule)
-        onSaved(selectedSkill, cleanRule as Record<string, unknown>);
-        // Mark this skill as staged-pending-commit so the badge appears.
-        setStagedRuns((prev) => ({ ...prev, [selectedSkill]: runId }));
-        // Honest signifier: staging is not the same as applying. The threshold
-        // only lands when the run is committed in the Pipeline tab.
-        onToast(
-          `Edit staged (run ${runId.slice(0, 8)}…) — commit it in the Pipeline tab to apply.`,
-          "success"
-        );
-        // Notify the parent so it can deep-link to the Pipeline tab
-        if (onStagedEdit) {
-          onStagedEdit(runId);
-        }
-      } else if (!res.success && res.error?.startsWith("pending_commit_run_exists")) {
-        onToast(
-          "Commit or discard the current threshold_edit run before staging a new one.",
-          "error"
-        );
-      } else if (!res.success && res.error === "no_open_draft") {
-        onToast("No open draft — open a draft before editing thresholds.", "error");
-      } else {
-        onToast(res.error ?? "Failed to stage threshold edit", "error");
-      }
-    } catch {
-      onToast("Failed to stage threshold edit", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleTest = async () => {
-    setTesting(true);
-    try {
-      // Build override map for the current skill if it has unsaved edits.
-      // Strip _deleted markers so the test engine sees the same rule as the save path.
-      const overrides =
-        editedThresholds[selectedSkill]
-          ? { [selectedSkill]: stripDeleted(editedThresholds[selectedSkill]) as ThresholdRule }
-          : undefined;
-
-      const res = await testThresholds(selectedSkill, overrides);
-      if (res.success && res.data && !Array.isArray(res.data)) {
-        onTestResult(res.data as SkillTestResult);
-      } else {
-        onToast(res.error ?? "Test failed", "error");
-      }
-    } catch {
-      onToast("Test failed", "error");
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const handleTestAll = async () => {
-    setTestingAll(true);
-    try {
-      // Strip _deleted markers from all edited skills before sending to the test engine.
-      const overrides =
-        Object.keys(editedThresholds).length > 0
-          ? Object.fromEntries(
-              Object.entries(editedThresholds).map(([k, v]) => [k, stripDeleted(v) as ThresholdRule])
-            )
-          : undefined;
-      const res = await testThresholds("all", overrides);
-      if (res.success && res.data && Array.isArray(res.data)) {
-        setTestAllResults(res.data as SkillTestResult[]);
-        setShowTestAllResults(true);
-        onTestAllResults(res.data as SkillTestResult[]);
-      } else {
-        onToast(res.error ?? "Test all failed", "error");
-      }
-    } catch {
-      onToast("Test all failed", "error");
-    } finally {
-      setTestingAll(false);
-    }
-  };
-
-  const handleResetToSaved = () => {
-    if (thresholdRow) {
-      onThresholdChange(selectedSkill, thresholdRow.thresholds as Record<string, unknown>);
-      if (isAdvancedMode) {
-        setJsonText(JSON.stringify(thresholdRow.thresholds, null, 2));
-        setJsonError(null);
-      }
-    }
   };
 
   const rule = currentRule as ThresholdRule;
@@ -1424,7 +1297,7 @@ export function ThresholdEditorPanel({
               <span className="text-xs font-semibold">Test All Skills — Summary</span>
               <button
                 type="button"
-                onClick={() => setShowTestAllResults(false)}
+                onClick={onDismissTestAllResults}
                 className="text-muted-foreground hover:text-foreground text-xs"
               >
                 ✕
@@ -1479,81 +1352,6 @@ export function ThresholdEditorPanel({
             </div>
           </div>
         )}
-      </div>
-
-      {/* Save / Test controls at the bottom */}
-      <div className="flex-shrink-0 border-t border-border bg-background px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Re-evaluate player button */}
-          {selectedPlayer && (
-            <button
-              type="button"
-              onClick={onReEvaluatePlayer}
-              className={cn(
-                "text-xs px-3 py-1.5 rounded-md border border-border",
-                "hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Re-evaluate {selectedPlayer.name.split(" ").pop()}
-            </button>
-          )}
-
-          <div className="flex-1" />
-
-          {/* Reset to saved */}
-          {hasUnsavedChanges && (
-            <button
-              type="button"
-              onClick={handleResetToSaved}
-              className="text-xs px-2.5 py-1.5 rounded-md border border-border hover:bg-muted transition-colors text-muted-foreground"
-            >
-              Reset
-            </button>
-          )}
-
-          {/* Test All */}
-          <button
-            type="button"
-            onClick={handleTestAll}
-            disabled={testingAll}
-            className={cn(
-              "text-xs px-3 py-1.5 rounded-md border border-border",
-              "hover:bg-muted transition-colors text-muted-foreground disabled:opacity-50"
-            )}
-          >
-            {testingAll ? "Testing…" : "Test All"}
-          </button>
-
-          {/* Test Against Anchors — disabled when advanced editor has invalid JSON */}
-          <button
-            type="button"
-            onClick={handleTest}
-            disabled={testing || (isAdvancedMode && !!jsonError)}
-            title={isAdvancedMode && !!jsonError ? "Fix JSON errors before testing" : undefined}
-            className={cn(
-              "text-xs px-3 py-1.5 rounded-md border border-primary text-primary",
-              "hover:bg-primary/10 transition-colors disabled:opacity-50"
-            )}
-          >
-            {testing ? "Testing…" : "Test Anchors"}
-          </button>
-
-          {/* Stage Edit — honest label: this stages a draft run; the threshold
-              is applied only when the run is committed in the Pipeline tab. */}
-          <button
-            type="button"
-            id="threshold-stage-edit-btn"
-            onClick={handleStageEdit}
-            disabled={saving || !!jsonError}
-            title="Stages a draft run with this rule. Commit it in the Pipeline tab to apply."
-            className={cn(
-              "text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground",
-              "hover:bg-primary/90 transition-colors disabled:opacity-50"
-            )}
-          >
-            {saving ? "Staging…" : "Stage Edit"}
-          </button>
-        </div>
       </div>
     </div>
   );

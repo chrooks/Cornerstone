@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { listPlayersStatsBulk } from "@/lib/api";
 import { SkillPickerBar } from "./SkillPickerBar";
 import { StatLeadersTable, type ThresholdMap, type StatSortKey, type ComputedStatDef } from "./StatLeadersTable";
+import { resolveComputedValue } from "./computed-stats";
 import type { ThresholdRow, PlayerStatRow, ConditionItem } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -185,21 +186,11 @@ function resolveStatValue(
   showStabilized: boolean,
   computedDefs: ComputedStatDef[],
 ): number | null {
-  if (key.startsWith("computed.")) {
-    const name = key.slice("computed.".length);
-    const def = computedDefs.find((d) => d.name === name);
-    if (!def) return null;
-    let total = 0;
-    for (const { stat, weight } of def.components) {
-      const raw = player.stats[stat] ?? null;
-      const v = showStabilized ? (player.stabilized[stat] ?? raw) : raw;
-      if (v === null) return null;
-      total += v * weight;
-    }
-    return total;
-  }
-  const raw = player.stats[key] ?? null;
-  return showStabilized ? (player.stabilized[key] ?? raw) : raw;
+  const getRaw = (statKey: string): number | null => {
+    const raw = player.stats[statKey] ?? null;
+    return showStabilized ? (player.stabilized[statKey] ?? raw) : raw;
+  };
+  return resolveComputedValue(getRaw, key, computedDefs);
 }
 
 /** Stable multi-key sort for PlayerStatRow using the provided stat key sort keys. */

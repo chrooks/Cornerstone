@@ -6,15 +6,15 @@
  * When a threshold edit is staged, shows a toast with a "View in Pipeline" link
  * and rewrites the URL to `?tab=pipeline&run=<id>`.
  *
- * Layout: the tool is sized to the viewport below the sticky 48px navbar
- * (100dvh - 3rem). The draft header + tab strip sit above it in normal flow,
- * so the page scrolls them away — scroll down once and the tool fills the
- * screen with no header chrome and no forced bottom gap. The 1180px shell cap
- * is broken out to near-full width (dense 3-pane data tool, not a reading
- * column).
+ * Layout: the tool fills exactly the viewport space below whatever chrome sits
+ * above it (sticky navbar + draft header + tab strip), measured at mount and on
+ * resize. No page scroll is ever needed — the workspace's own action footer is
+ * always visible at the bottom of the pane, and inner panels scroll internally.
+ * The 1180px shell cap is broken out to near-full width (dense 3-pane data
+ * tool, not a reading column).
  */
 
-import { useCallback } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CalibrationWorkspace } from "@/app/admin/calibration/CalibrationWorkspace";
@@ -35,6 +35,24 @@ export interface ThresholdsTabProps {
 
 export function ThresholdsTab({ onTabChange }: ThresholdsTabProps) {
   const router = useRouter();
+  const paneRef = useRef<HTMLDivElement>(null);
+  // Fallback matches the old fixed assumption until the first measure runs.
+  const [paneHeight, setPaneHeight] = useState("calc(100dvh - 3rem)");
+
+  // Size the pane to the viewport space below the chrome actually above it
+  // (navbar + draft header + tab strip), so the action footer is always
+  // visible without any page scroll.
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = paneRef.current;
+      if (!el) return;
+      const topInDocument = el.getBoundingClientRect().top + window.scrollY;
+      setPaneHeight(`calc(100dvh - ${Math.max(0, Math.round(topInDocument))}px)`);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
 
   const handleStagedEdit = useCallback(
     (runId: string) => {
@@ -60,7 +78,9 @@ export function ThresholdsTab({ onTabChange }: ThresholdsTabProps) {
   return (
     <div
       id="thresholds-tab-content"
-      className="h-[calc(100dvh-3rem)] overflow-hidden mx-[calc(50%-50vw+1rem)]"
+      ref={paneRef}
+      style={{ height: paneHeight }}
+      className="overflow-hidden mx-[calc(50%-50vw+1rem)]"
     >
       <CalibrationWorkspace embedded onStagedEdit={handleStagedEdit} />
     </div>
