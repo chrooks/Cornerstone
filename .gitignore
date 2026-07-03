@@ -39,3 +39,6 @@ scripts/composite_results/
 scripts/compute_composites.py
 tmp/
 .understand-anything/
+node_modules/
+# agent-native local plan bridge tokens
+plans/**/.plan-url
