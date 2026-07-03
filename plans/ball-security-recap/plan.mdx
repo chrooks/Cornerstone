@@ -1,0 +1,253 @@
+---
+title: "Secure Handler shipped: 22nd skill, trait rewire, calibration loop"
+brief: "Issue #41 end to end: the secure_handler skill landed across taxonomy, thresholds, and cohesion engine; calibrated live against anchors; published as Evaluation Version cohesion-v6 and a new Snapshot Release."
+kind: "recap"
+localOnly: true
+---
+
+<Columns id="ui-pair">
+<Column id="ui-before" label="Before">
+
+<WireframeBlock id="wf-before">
+  <Screen
+    surface="panel"
+    caption="Calibration pane before: computed stat columns render NaN (resolver only knew the sum formula) and the action bar lives inside the editor view, below the page fold."
+    html={'<div style="display:flex;flex-direction:column;height:100%"><div style="display:flex;gap:8px;padding:10px 12px;border-bottom:1.4px solid var(--wf-line)"><span class="wf-pill accent">Secure Handler</span><span class="wf-pill">Stat Leaders</span></div><div style="flex:1;padding:12px;display:flex;flex-direction:column;gap:8px"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px" class="wf-muted"><span>Name</span><span>Tov Pct</span><span>Tov/Touch</span><span>Ast/To</span></div><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px"><span>Luka Dončić</span><span class="wf-muted">—</span><span class="wf-muted">NaN</span><span class="wf-muted">NaN</span></div><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px"><span>Jalen Brunson</span><span class="wf-muted">—</span><span class="wf-muted">NaN</span><span class="wf-muted">NaN</span></div><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px"><span>Nikola Jokić</span><span class="wf-muted">—</span><span class="wf-muted">NaN</span><span class="wf-muted">NaN</span></div><p class="wf-muted" style="margin-top:14px">… page scrolls; Reset / Test / Stage Edit buttons are off-screen and absent entirely in this view …</p></div></div>'}
+  />
+</WireframeBlock>
+
+</Column>
+<Column id="ui-after" label="After">
+
+<WireframeBlock id="wf-after">
+  <Screen
+    surface="panel"
+    caption="After: shared resolver computes ratio + nested computed stats (real TOV% with tier tint), the pane sizes itself to the viewport, and the action bar is pinned to the pane bottom in BOTH editor and stat-leaders views."
+    html={'<div style="display:flex;flex-direction:column;height:100%"><div style="display:flex;gap:8px;padding:10px 12px;border-bottom:1.4px solid var(--wf-line)"><span class="wf-pill accent">Secure Handler</span><span class="wf-pill">Stat Leaders</span></div><div style="flex:1;padding:12px;display:flex;flex-direction:column;gap:8px;overflow:hidden"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px" class="wf-muted"><span>Name</span><span>Tov Pct</span><span>Tov/Touch</span><span>Ast/To</span></div><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px"><span>Luka Dončić</span><span>14.9%</span><span>.041</span><span>2.4</span></div><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px"><span>Jalen Brunson</span><span style="background:var(--wf-accent-soft);border-radius:4px;padding:0 4px">9.7%</span><span style="background:var(--wf-accent-soft);border-radius:4px;padding:0 4px">.026</span><span>2.8</span></div><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px"><span>Nikola Jokić</span><span>15.3%</span><span>.038</span><span>2.9</span></div></div><div style="display:flex;gap:8px;justify-content:flex-end;padding:10px 12px;border-top:1.4px solid var(--wf-line)"><button>Reset</button><button>Test All</button><button>Test Anchors</button><button class="primary">Stage Edit</button></div></div>'}
+  />
+</WireframeBlock>
+
+</Column>
+</Columns>
+
+## What shipped
+
+Cornerstone's Ball Security Impact Trait previously approximated turnover economy from three unrelated skills (`passer`, `pnr_ball_handler`, `driver`). This work added a real 22nd skill, **`secure_handler`**, derived from turnover statistics already in the stats blob — Oliver TOV% primary, turnovers-per-touch secondary, `time_of_possession` gates that rise with the tier (4 / 3 / 1.5 / none), and two tier bumps (a skill-curve bump for elite-band TOV% at usage ≥ 28%, and an AST/TO ≥ 2.75 relief valve for playmaking hubs like Jokić whose Oliver TOV% understates them). The trait now reads the skill tier when a profile carries the key, and falls back to the legacy proxy **only** for key-absent profiles (unbackfilled Legends) — a rated "None" never inherits the proxy. Decisions are recorded in ADR 0004 and the throughline's Decision Ledger; the research evidence lives in `docs/research/secure-handler-evidence.md`.
+
+The change is live end to end: Evaluation Version **cohesion-v6** published (22-skill taxonomy, ball_security theoretical max 28.8 → 16.0), thresholds calibrated over three live rounds against a six-player anchor slate (9/9 passing), the review queue triaged (335 flood flags bulk-accepted, 24 bump promotions human-reviewed), and a new Snapshot Release published. A live three-way probe through `POST /api/builder/evaluate` confirmed the fallback contract: key-absent + strong proxy → 7.9, rated-None + strong proxy → 0.0 (no leak), rated-Elite alone → 7.0.
+
+Calibration surfaced and fixed three latent bugs beyond the feature itself: `composite_skill` dropped the evaluator's `review_recommended` (HIGH-confidence skills could never reach the review queue), the stat-leaders resolver only understood `sum` computed stats (three duplicated copies, now one shared module), and distribution warm-up pre-filled default skills before the engine (which would have erased Legend key-absence). Pre-existing dirty files not owned by this work (`.github/`, root `package.json`/`package-lock.json`, `frontend/next.config.mjs`, `frontend/scripts/dev-with-cleanup.mjs`, `RunDiffPreview.tsx`) are excluded from this recap.
+
+### How the trait computes now
+
+<Diagram id="trait-flow" caption="The Ball Security trait before and after: weighted 3-skill proxy replaced by the secure_handler tier, with the proxy retained only as an explicit fallback for key-absent (unbackfilled Legend) profiles.">
+
+```html
+<div class="flow-stack"><div class="diagram-panel" data-rough><div class="diagram-muted panel-label">BEFORE — proxy</div><div class="flow-row"><div class="diagram-card"><div class="diagram-muted">Skill Profile</div><div class="pill-row"><span class="diagram-pill">passer</span><span class="diagram-pill">pnr_ball_handler</span><span class="diagram-pill">driver</span></div></div><svg width="36" height="12" viewBox="0 0 36 12"><line x1="0" y1="6" x2="28" y2="6" stroke="var(--wf-ink)"/><polygon points="28,2 36,6 28,10" fill="var(--wf-ink)"/></svg><div class="diagram-node">weighted proxy sum</div><svg width="36" height="12" viewBox="0 0 36 12"><line x1="0" y1="6" x2="28" y2="6" stroke="var(--wf-ink)"/><polygon points="28,2 36,6 28,10" fill="var(--wf-ink)"/></svg><div class="diagram-node">ball_security trait</div></div></div><div class="diagram-panel accent-panel" data-rough><div class="diagram-muted panel-label">AFTER — skill-driven with explicit fallback</div><div class="flow-row"><div class="diagram-card"><div class="diagram-muted">Snapshot stats blob</div><div class="pill-row"><span class="diagram-pill">tov</span><span class="diagram-pill">fga·fta</span><span class="diagram-pill">touches</span><span class="diagram-pill">time of poss</span></div></div><svg width="36" height="12" viewBox="0 0 36 12"><line x1="0" y1="6" x2="28" y2="6" stroke="var(--wf-ink)"/><polygon points="28,2 36,6 28,10" fill="var(--wf-ink)"/></svg><div class="diagram-node">threshold rule<div class="diagram-muted">TOV% + per-touch + TOP gates</div></div><svg width="36" height="12" viewBox="0 0 36 12"><line x1="0" y1="6" x2="28" y2="6" stroke="var(--wf-ink)"/><polygon points="28,2 36,6 28,10" fill="var(--wf-ink)"/></svg><div class="diagram-node accent-node">secure_handler tier</div><svg width="36" height="12" viewBox="0 0 36 12"><line x1="0" y1="6" x2="28" y2="6" stroke="var(--wf-ink)"/><polygon points="28,2 36,6 28,10" fill="var(--wf-ink)"/></svg><div class="diagram-node">ball_security trait</div></div><div class="fallback-row"><div class="diagram-box fallback-box"><span class="diagram-muted">fallback ONLY when the profile lacks the key (unbackfilled Legend):</span> passer + 0.45·pnr_handler + 0.35·driver</div></div></div></div>
+```
+
+```css
+.flow-stack { display: flex; flex-direction: column; gap: 14px; }
+.flow-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.panel-label { margin-bottom: 8px; }
+.accent-panel { border-color: var(--wf-accent); }
+.accent-node { border-color: var(--wf-accent); }
+.fallback-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.fallback-box { border-style: dashed; }
+```
+
+</Diagram>
+
+### Files touched
+
+<FileTree
+  id="files"
+  title="Thread-owned changes (pre-existing dirty files excluded)"
+  entries={[
+    { path: "backend/services/skills.py", change: "modified", note: "22nd skill in HIGH_CONFIDENCE_SKILLS + SKILL_DEFINITIONS; everything backend derives from here" },
+    { path: "supabase/migrations/20260702000000_add_secure_handler_skill.sql", change: "added", note: "Threshold JSONB seed + 4 anchor players (slate later re-cut to 6 during calibration)" },
+    { path: "backend/services/cohesion_engine/formula_engine.py", change: "modified", note: "New fallback primitive: when_missing + factors, keyed on raw-profile key presence" },
+    { path: "backend/services/cohesion_engine/composites.py", change: "modified", note: "Hardcoded path mirrors the fallback; presence captured before default-fill; distribution builders pass raw profiles" },
+    { path: "backend/services/cohesion_engine/weights.py", change: "modified", note: "THEORETICAL_MAX.ball_security 28.8 → 16.0" },
+    { path: "backend/services/cohesion_engine/formula_export.py", change: "modified", note: "Export carries the fallback block" },
+    { path: "backend/services/compositing.py", change: "modified", note: "Bug fix: honor evaluator review_recommended → HIGH-confidence skills can reach the review queue" },
+    { path: "backend/services/evaluation_versions/validator.py", change: "modified", note: "L8 validates fallback factor skills against ALL_SKILLS" },
+    { path: "backend/api/legends.py", change: "modified", note: "Prompt count derives from _TOTAL_SKILLS (was hardcoded 'all 20 skills')" },
+    { path: "backend/api/cohesion_calibration.py", change: "modified", note: "Histogram passes raw profiles (was pre-filling defaults, erasing key-absence)" },
+    { path: "backend/tests/test_skill_mapping_service.py", change: "modified", note: "5 synthetic-blob mapping tests parsing the shipped migration JSON" },
+    { path: "backend/tests/test_cohesion_engine/test_formula_engine.py", change: "modified", note: "4 fallback tests incl. rated-None no-proxy-leak" },
+    { path: "backend/tests/test_cohesion_engine/test_parity.py", change: "modified", note: "3-case hardcoded vs declarative parity" },
+    { path: "backend/tests/test_compositing_and_notability.py", change: "modified", note: "HIGH count 6 → 7; 3 review_recommended flag tests" },
+    { path: "frontend/lib/skills.ts", change: "modified", note: "Seven canonical maps per the file's own add-a-skill checklist; TOTAL_SKILLS === 22" },
+    { path: "frontend/app/admin/calibration/computed-stats.ts", change: "added", note: "Shared computed-stat resolver: sum, ratio, nested computed refs (replaced 3 sum-only copies)" },
+    { path: "frontend/app/admin/calibration/CalibrationActionBar.tsx", change: "added", note: "Action bar lifted out of the editor; pinned below the center pane in both views" },
+    { path: "frontend/app/admin/calibration/threshold-utils.ts", change: "added", note: "stripDeleted extracted for the shared action bar" },
+    { path: "frontend/app/admin/calibration/CalibrationWorkspace.tsx", change: "modified", note: "Center pane is a flex column: content + pinned action bar; lifted testAllResults/stagedRuns/jsonError state" },
+    { path: "frontend/app/admin/calibration/ThresholdEditorPanel.tsx", change: "modified", note: "Footer + handlers removed; reads lifted state via props" },
+    { path: "frontend/app/admin/calibration/StatLeadersPanel.tsx", change: "modified", note: "Sorting delegates to the shared resolver" },
+    { path: "frontend/app/admin/calibration/StatLeadersTable.tsx", change: "modified", note: "Cell display + sort delegate to the shared resolver" },
+    { path: "frontend/app/admin/snapshots/draft/_tabs/ThresholdsTab.tsx", change: "modified", note: "Pane height measured from actual chrome above it — no page scroll needed" },
+    { path: "frontend/app/page.tsx", change: "modified", note: "Stale '21 skills' copy" },
+    { path: "frontend/app/faq/page.tsx", change: "modified", note: "Stale '21 skills' copy" },
+    { path: "frontend/app/admin/page.tsx", change: "modified", note: "Stale '21 skills' copy" },
+    { path: "frontend/components/landing/ProofCardRotator.tsx", change: "modified", note: "Stale skill-count display strings" },
+    { path: "docs/adr/0004-secure-handler-stat-mapping.md", change: "added", note: "The stat-mapping decision record" },
+    { path: "docs/research/secure-handler-evidence.md", change: "added", note: "Cited analytics research backing the mapping (AC1)" },
+    { path: "CONTEXT.md", change: "modified", note: "Lexicon: skill vs Impact Trait naming convention" },
+    { path: "feature_requests/ball-security-throughline.md", change: "added", note: "DevOS Throughline: decisions, work log, proof ledger" },
+    { path: "feature_requests/ball-security-plan.md", change: "added", note: "ExecPlan (living document)" },
+    { path: "plans/ball-security/plan.mdx", change: "added", note: "Visual plan source (local-files mode)" }
+  ]}
+/>
+
+## Key changes
+
+<TabsBlock
+  id="key-changes"
+  tabs={[
+    {
+      id: "tab-skills",
+      label: "skills.py",
+      blocks: [
+        {
+          id: "diff-skills",
+          type: "diff",
+          data: {
+            filename: "backend/services/skills.py",
+            language: "python",
+            mode: "split",
+            before: "HIGH_CONFIDENCE_SKILLS: frozenset[str] = frozenset({\n    \"rim_protector\",\n    \"spot_up_shooter\",\n    \"off_dribble_shooter\",\n    \"rebounder\",\n    \"offensive_rebounder\",\n    \"isolation_scorer\",\n})\n\nSKILL_DEFINITIONS: dict[str, str] = {\n    # ...\n    \"high_flyer\": \"Possesses elite explosive athleticism...\",\n}",
+            after: "HIGH_CONFIDENCE_SKILLS: frozenset[str] = frozenset({\n    \"rim_protector\",\n    \"spot_up_shooter\",\n    \"off_dribble_shooter\",\n    \"rebounder\",\n    \"offensive_rebounder\",\n    \"isolation_scorer\",\n    \"secure_handler\",\n})\n\nSKILL_DEFINITIONS: dict[str, str] = {\n    # ...\n    \"high_flyer\": \"Possesses elite explosive athleticism...\",\n    \"secure_handler\": (\n        \"Protects possessions with a low turnover rate relative to \"\n        \"ball responsibility — secure handling, safe decisions, and \"\n        \"strong hands under pressure.\"\n    ),\n}",
+            summary: "The one-line taxonomy change everything derives from: pipeline allowlist, calibration allowlist, compositing loops, legends prompt, and validator all read ALL_SKILLS, which is computed from these frozensets.",
+            annotations: [
+              { lines: "7", label: "22nd skill", note: "HIGH confidence: the stat pipeline is authoritative; Claude assessment is never called for this skill." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "tab-migration",
+      label: "migration (threshold rule)",
+      blocks: [
+        {
+          id: "code-migration",
+          type: "annotated-code",
+          data: {
+            filename: "supabase/migrations/20260702000000_add_secure_handler_skill.sql (rule payload, final calibrated form)",
+            language: "json",
+            code: "{\n  \"skill_name\": \"secure_handler\",\n  \"stat_confidence\": \"high\",\n  \"always_flag_for_review\": true,\n  \"computed_stats\": [\n    {\"name\": \"oliver_denominator\", \"formula\": \"sum\", \"components\": [\n      {\"stat\": \"box_score.fga\", \"weight\": 1.0},\n      {\"stat\": \"box_score.fta\", \"weight\": 0.44},\n      {\"stat\": \"box_score.tov\", \"weight\": 1.0}]},\n    {\"name\": \"tov_pct\", \"formula\": \"ratio\", \"components\": [\n      {\"role\": \"numerator\", \"stat\": \"box_score.tov\"},\n      {\"role\": \"denominator\", \"stat\": \"computed.oliver_denominator\"}]},\n    {\"name\": \"tov_per_touch\", \"formula\": \"ratio\", \"components\": [\n      {\"role\": \"numerator\", \"stat\": \"box_score.tov\"},\n      {\"role\": \"denominator\", \"stat\": \"tracking_possessions.touches\"}]},\n    {\"name\": \"ast_to_ratio\", \"formula\": \"ratio\", \"components\": [\n      {\"role\": \"numerator\", \"stat\": \"box_score.ast\"},\n      {\"role\": \"denominator\", \"stat\": \"box_score.tov\"}]}\n  ],\n  \"volume_gate\": {\"logic\": \"AND\", \"fail_tier\": \"None\", \"conditions\": [\n    {\"stat\": \"tracking_possessions.touches\", \"operator\": \">=\", \"value\": 15}]},\n  \"tiers\": {\n    \"All-Time Great\": {\"tov_pct\": \"<= .085\", \"tov_per_touch\": \"<= .022\", \"usage\": \">= .24\", \"time_of_possession\": \">= 4\"},\n    \"Elite\":      {\"tov_pct\": \"<= .105\", \"tov_per_touch\": \"<= .025\", \"time_of_possession\": \">= 3\"},\n    \"Proficient\": {\"tov_pct\": \"<= .125\", \"tov_per_touch\": \"<= .035\", \"time_of_possession\": \">= 1.5\"},\n    \"Capable\":    {\"tov_pct\": \"<= .146\", \"tov_per_touch\": \"<= .045\"}\n  },\n  \"tier_bumps\": [\n    {\"skill_curve\": \"tov_pct <= .105 AND usage >= .28\", \"effect\": \"bump_up_one_tier\", \"max_tier\": \"Elite\"},\n    {\"relief_valve\": \"ast_to_ratio >= 2.75 AND ast >= 4\", \"effect\": \"bump_up_one_tier\", \"max_tier\": \"Elite\"}\n  ]\n}",
+            annotations: [
+              { lines: "5-19", label: "pure-JSONB math", note: "computed_stats evaluate in declaration order, so tov_pct can reference the oliver_denominator sum — zero engine changes for the mapping itself." },
+              { lines: "24-27", label: "the tier ladder", note: "Handling bar rises with tier: time_of_possession >= 4 / 3 / 1.5 / none. Calibrated live in three rounds — the original usage-based gate admitted play-finishing bigs (Portis, Vucevic) and is gone. Tiers shown condensed; real JSON uses full condition objects." },
+              { lines: "29-31", label: "the two bumps", note: "Skill-curve bump lifts high-usage clean handlers (Brunson, SGA); AST/TO relief valve rescues playmaking hubs Oliver TOV% punishes (Jokic, Trae -> Capable). Both capped at Elite — ATG is only reachable via base conditions." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "tab-formula",
+      label: "formula_engine.py",
+      blocks: [
+        {
+          id: "diff-formula",
+          type: "diff",
+          data: {
+            filename: "backend/services/cohesion_engine/formula_engine.py",
+            language: "python",
+            mode: "split",
+            before: "def compute_raw_from_formulas(\n    skills: dict[str, str | float],\n    formulas: dict[str, dict[str, Any]],\n    tier_values: dict[str, float],\n    *,\n    order: list[str] | None = None,\n) -> dict[str, float]:\n    skills = _with_default_skills(skills)\n    if order is None:\n        order = topological_sort(formulas)\n\n    for key in order:\n        formula = formulas[key]\n        factors = formula.get(\"factors\", [])\n        amplifiers = formula.get(\"amplifiers\", [])",
+            after: "def compute_raw_from_formulas(\n    skills: dict[str, str | float],\n    formulas: dict[str, dict[str, Any]],\n    tier_values: dict[str, float],\n    *,\n    order: list[str] | None = None,\n    present_keys: set[str] | None = None,\n) -> dict[str, float]:\n    if present_keys is None:\n        present_keys = set(skills.keys())\n    skills = _with_default_skills(skills)\n    if order is None:\n        order = topological_sort(formulas)\n\n    for key in order:\n        formula = formulas[key]\n        factors = formula.get(\"factors\", [])\n        amplifiers = formula.get(\"amplifiers\", [])\n\n        # Fallback: swap in the fallback factor set only when EVERY skill in\n        # when_missing is absent from the raw profile (all-or-nothing).\n        fallback = formula.get(\"fallback\")\n        if fallback:\n            when_missing = fallback.get(\"when_missing\") or []\n            if when_missing and all(k not in present_keys for k in when_missing):\n                factors = fallback.get(\"factors\", [])",
+            summary: "The one new engine primitive: an optional per-formula fallback keyed on raw-profile key presence — the only place 'missing' is still distinguishable from 'rated None'.",
+            annotations: [
+              { lines: "7-10", label: "presence travels separately", note: "Captured BEFORE _with_default_skills fills every missing key with 'None'. A rated-None profile has the key (no fallback); an unbackfilled Legend does not (fallback fires)." },
+              { lines: "20-26", label: "all-or-nothing", note: "No nested fallbacks, no partial-missing semantics. Validator L8 checks fallback factor skills against ALL_SKILLS." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "tab-composites",
+      label: "composites.py",
+      blocks: [
+        {
+          id: "diff-composites",
+          type: "diff",
+          data: {
+            filename: "backend/services/cohesion_engine/composites.py",
+            language: "python",
+            mode: "split",
+            before: "    # ball_security expanded from single-skill proxy to 3-skill model:\n    # passer = bad-pass avoidance, pnr_handler = lost-ball avoidance,\n    # driver = drive turnover avoidance (live-ball TO source).\n    raw_ball_security = (\n        _tv(\"passer\")\n        + c.get(\"ball_security_pnr_handler\", 0.0) * _tv(\"pnr_ball_handler\")\n        + c.get(\"ball_security_driver\", 0.0) * _tv(\"driver\")\n    )",
+            after: "    # ball_security reads the secure_handler skill when the raw profile carries\n    # the key (even at tier \"None\" — rated careless is NOT proxied); the legacy\n    # 3-skill proxy (passer / pnr_handler / driver) fires only for key-absent\n    # profiles (unbackfilled Legends). Mirrors the formula engine's fallback.\n    if \"secure_handler\" in present_keys:\n        raw_ball_security = _tv(\"secure_handler\")\n    else:\n        raw_ball_security = (\n            _tv(\"passer\")\n            + c.get(\"ball_security_pnr_handler\", 0.0) * _tv(\"pnr_ball_handler\")\n            + c.get(\"ball_security_driver\", 0.0) * _tv(\"driver\")\n        )",
+            summary: "The hardcoded path (what the active cohesion-v6 version actually runs — it carries no composite_formulas) mirrors the declarative fallback exactly; a parity test holds the two paths together.",
+            annotations: [
+              { lines: "5-6", label: "skill drives the trait", note: "Live probe against the published version: rated-Elite alone -> ball_security 7.9 with proxy skills absent; rated-None + Elite proxy skills -> 0.0 (no leak); key-absent + Elite proxy skills -> 7.9 via fallback." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "tab-compositing",
+      label: "compositing.py (bug fix)",
+      blocks: [
+        {
+          id: "diff-compositing",
+          type: "diff",
+          data: {
+            filename: "backend/services/compositing.py",
+            language: "python",
+            mode: "split",
+            before: "    return {\n        \"final_tier\": final_tier,\n        \"stat_tier\": stat_tier,\n        ...\n        \"flagged\": outcome.flagged,\n        \"flag_reason\": outcome.flag_reason,\n    }",
+            after: "    # Honor the stat evaluator's review recommendation even when the\n    # compositing rules didn't flag (they only cover Claude disagreement\n    # / notability). This is what lets always_flag_for_review,\n    # data_missing, and borderline tier bumps reach the review queue for\n    # HIGH-confidence skills, where Claude never runs.\n    flagged = outcome.flagged\n    flag_reason = outcome.flag_reason\n    if not flagged and stat_result.get(\"review_recommended\"):\n        flagged = True\n        if stat_result.get(\"data_missing\"):\n            flag_reason = \"data_missing\"\n        elif stat_result.get(\"tier_bump_applied\"):\n            flag_reason = \"tier_bump_applied\"\n        else:\n            flag_reason = \"always_flag_for_review\"\n\n    return {\n        \"final_tier\": final_tier,\n        \"stat_tier\": stat_tier,\n        ...\n        \"flagged\": flagged,\n        \"flag_reason\": flag_reason,\n    }",
+            summary: "Latent bug found live: the review queue stayed empty because composite_skill dropped the evaluator's review_recommended — no HIGH-confidence skill could ever be flagged. secure_handler was the first skill to hit this path.",
+            annotations: [
+              { lines: "8-15", label: "reason propagates honestly", note: "data_missing > tier_bump_applied > always_flag_for_review. In the live cycle this produced 335 flood flags (bulk-accepted with audit note) + 24 bump-promotion flags (human-triaged)." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "tab-resolver",
+      label: "computed-stats.ts (new)",
+      blocks: [
+        {
+          id: "code-resolver",
+          type: "annotated-code",
+          data: {
+            filename: "frontend/app/admin/calibration/computed-stats.ts",
+            language: "typescript",
+            code: "export function resolveComputedValue(\n  getRaw: RawStatGetter,\n  key: string,\n  computedDefs: ComputedStatDef[],\n  depth: number = 0,\n): number | null {\n  if (!key.startsWith(\"computed.\")) return getRaw(key);\n  if (depth >= MAX_DEPTH) return null;\n\n  const name = key.slice(\"computed.\".length);\n  const def = computedDefs.find((d) => d.name === name);\n  if (!def || !Array.isArray(def.components)) return null;\n\n  const resolve = (statKey: string | undefined): number | null =>\n    statKey ? resolveComputedValue(getRaw, statKey, computedDefs, depth + 1) : null;\n\n  if (def.formula === \"sum\") {\n    let total = 0;\n    for (const c of def.components) {\n      const v = resolve(c.stat);\n      if (v === null) return null;\n      total += v * (c.weight ?? 1.0);\n    }\n    return total;\n  }\n\n  if (def.formula === \"ratio\") {\n    const num = resolve(def.components.find((c) => c.role === \"numerator\")?.stat);\n    const den = resolve(def.components.find((c) => c.role === \"denominator\")?.stat);\n    if (num === null || den === null || den === 0) return null;\n    return num / den;\n  }\n\n  return null;\n}",
+            annotations: [
+              { lines: "14-15", label: "nested computed refs", note: "tov_pct's denominator is computed.oliver_denominator — the recursion (depth-capped) is what the three old sum-only copies couldn't do, hence the NaN columns." },
+              { lines: "27-32", label: "ratio support", note: "Role-based components mirror the backend's compute_derived_stats. One module now serves table cells, table sort, and panel sort (was three drifting copies)." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "tab-actionbar",
+      label: "calibration UI",
+      blocks: [
+        {
+          id: "code-actionbar",
+          type: "annotated-code",
+          data: {
+            filename: "frontend/app/admin/snapshots/draft/_tabs/ThresholdsTab.tsx (height fix) — plus CalibrationActionBar.tsx extraction",
+            language: "tsx",
+            code: "  // Size the pane to the viewport space below the chrome actually above it\n  // (navbar + draft header + tab strip), so the action footer is always\n  // visible without any page scroll.\n  useLayoutEffect(() => {\n    const measure = () => {\n      const el = paneRef.current;\n      if (!el) return;\n      const topInDocument = el.getBoundingClientRect().top + window.scrollY;\n      setPaneHeight(`calc(100dvh - ${Math.max(0, Math.round(topInDocument))}px)`);\n    };\n    measure();\n    window.addEventListener(\"resize\", measure);\n    return () => window.removeEventListener(\"resize\", measure);\n  }, []);",
+            annotations: [
+              { lines: "1-3", label: "replaces a fixed 3rem assumption", note: "The old h-[calc(100dvh-3rem)] ignored ~10rem of draft-page chrome, pushing the footer below the fold (a deliberate old 'scroll the header away' design, now overridden)." },
+              { lines: "4-14", label: "paired with the action-bar lift", note: "Reset / Test All / Test Anchors / Stage Edit moved from inside ThresholdEditorPanel to a new CalibrationActionBar rendered by the workspace below the center pane — visible in BOTH editor and stat-leaders views. testAllResults, stagedRuns, and jsonError state lifted to the workspace so they survive view switches." }
+            ]
+          }
+        }
+      ]
+    }
+  ]}
+/>

@@ -1,0 +1,227 @@
+---
+title: "Secure Handler skill + Ball Security trait rewire (issue #41)"
+brief: "Add a 22nd stat-derived skill for turnover economy, calibrate it in the draft Snapshot workflow, and rewire the Ball Security trait off the passer proxy."
+---
+
+## What this delivers
+
+Cornerstone rates NBA players on a fixed 21-skill taxonomy, and a cohesion engine scores five-man lineups from those Skill Profiles. The engine's **Ball Security** trait (how well a lineup avoids turnovers) currently has no real skill behind it — it is approximated from `passer`, `pnr_ball_handler`, and `driver`. A turnover-prone star passer reads as "secure"; a careful low-assist scorer reads as careless.
+
+After this work, a 22nd skill **`secure_handler`** ("Secure Handler") exists, derived directly from turnover statistics already in the stats blob. An admin can tune its thresholds against a draft Snapshot, rerun the pipeline for just that skill, review player-level tier diffs, and publish a Snapshot Release. The Ball Security trait reads the new skill, falling back to the legacy proxy only for Legends that have not been backfilled yet.
+
+**Done means:** a published Snapshot Release whose profiles include `secure_handler`, a published Evaluation Version whose `ball_security` formula reads it, and the test suite proving the mapping and the fallback.
+
+**Not in scope:** bulk Legends backfill (deferred to a follow-up issue — the fallback covers the window), synergy rules or accentuation entries for the new skill, and any new NBA.com stat fetching (all inputs exist: `tov`, `fga`, `fta`, `ast`, `usage_rate`, `touches`).
+
+All seven product decisions were settled up front and are recorded in `feature_requests/ball-security-throughline.md` (Decision Ledger), `docs/adr/0004-secure-handler-stat-mapping.md`, and `docs/research/secure-handler-evidence.md`. A few implementation questions remain — see Open Questions at the bottom.
+
+### How Ball Security computes: today vs. after
+
+<Diagram id="flow-diagram" caption="Before: the trait is a weighted proxy of three unrelated skills. After: a real stat-derived skill feeds it; the proxy survives only as an explicit fallback for profiles that lack the key (unbackfilled Legends).">
+
+```html
+<div class="flow-stack"><div class="diagram-panel" data-rough><div class="diagram-muted panel-label">TODAY — proxy</div><div class="flow-row"><div class="diagram-card"><div class="diagram-muted">Skill Profile</div><div class="pill-row"><span class="diagram-pill">passer</span><span class="diagram-pill">pnr_ball_handler</span><span class="diagram-pill">driver</span></div></div><svg width="36" height="12" viewBox="0 0 36 12"><line x1="0" y1="6" x2="28" y2="6" stroke="var(--wf-ink)"/><polygon points="28,2 36,6 28,10" fill="var(--wf-ink)"/></svg><div class="diagram-node">weighted proxy sum<div class="diagram-muted">composites.py:129-133</div></div><svg width="36" height="12" viewBox="0 0 36 12"><line x1="0" y1="6" x2="28" y2="6" stroke="var(--wf-ink)"/><polygon points="28,2 36,6 28,10" fill="var(--wf-ink)"/></svg><div class="diagram-node">ball_security trait<div class="diagram-muted">0.1 of offense quality</div></div></div></div><div class="diagram-panel accent-panel" data-rough><div class="diagram-muted panel-label">AFTER — stat-derived skill with explicit fallback</div><div class="flow-row"><div class="diagram-card"><div class="diagram-muted">Snapshot stats blob</div><div class="pill-row"><span class="diagram-pill">tov</span><span class="diagram-pill">fga·fta</span><span class="diagram-pill">touches</span><span class="diagram-pill">usage</span></div></div><svg width="36" height="12" viewBox="0 0 36 12"><line x1="0" y1="6" x2="28" y2="6" stroke="var(--wf-ink)"/><polygon points="28,2 36,6 28,10" fill="var(--wf-ink)"/></svg><div class="diagram-node">threshold rule<div class="diagram-muted">TOV% + per-touch + gates (JSONB)</div></div><svg width="36" height="12" viewBox="0 0 36 12"><line x1="0" y1="6" x2="28" y2="6" stroke="var(--wf-ink)"/><polygon points="28,2 36,6 28,10" fill="var(--wf-ink)"/></svg><div class="diagram-node accent-node">secure_handler tier</div><svg width="36" height="12" viewBox="0 0 36 12"><line x1="0" y1="6" x2="28" y2="6" stroke="var(--wf-ink)"/><polygon points="28,2 36,6 28,10" fill="var(--wf-ink)"/></svg><div class="diagram-node">ball_security trait</div></div><div class="fallback-row"><div class="diagram-box fallback-box"><span class="diagram-muted">fallback when profile lacks the key (unbackfilled Legend):</span> passer + coeff·pnr_handler + coeff·driver</div></div></div></div>
+```
+
+```css
+.flow-stack { display: flex; flex-direction: column; gap: 14px; }
+.flow-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.panel-label { margin-bottom: 8px; }
+.accent-panel { border-color: var(--wf-accent); }
+.accent-node { border-color: var(--wf-accent); }
+.fallback-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.fallback-box { border-style: dashed; }
+```
+
+</Diagram>
+
+### Settled decisions (do not reopen)
+
+<Table
+  id="decisions-table"
+  columns={["Decision", "Choice", "Why"]}
+  rows={[
+    ["Skill identity", "`secure_handler` / \"Secure Handler\"; trait keeps `ball_security`", "Skills are player-archetype nouns; traits are team-quality nouns — no dual-meaning key"],
+    ["Primary metric", "Oliver TOV% = tov / (fga + 0.44·fta + tov)", "Community-consensus ball-security measure; tempo/volume-free"],
+    ["Secondary metric", "Turnovers per 100 touches", "Catches playmakers TOV% understates and fumble-prone bigs it misses"],
+    ["AST/TO", "Rejected as primary; tier-bump only", "Structurally punishes non-passers (prime-KD problem)"],
+    ["Role guards", "Elite needs touches >= ~30 or usage >= ~18%; bump for Elite-band TOV% at usage >= ~28%", "Low TOV% without volume is cheap (skill-curve literature)"],
+    ["Confidence bucket", "HIGH — Claude never called", "Turnover economy is fully stat-measured; Claude adds no signal"],
+    ["Trait consumption", "Skill tier when present; explicit proxy fallback when key absent", "Legends don't crater mid-transition; proxy retirement becomes a data event"],
+    ["Legends backfill", "Deferred to follow-up issue", "Keeps the slice thin; fallback covers the window"]
+  ]}
+/>
+
+<Callout id="trap-callout" tone="risk">
+
+**The one genuine trap — missing vs. rated-None.** `tier_value` returns 0.0 both for a missing skill key and a skill rated None, and `_with_default_skills` fills every missing key with None BEFORE formulas evaluate. So key-absence is erased by the time the formula engine runs. The fallback trigger must be captured upstream: record whether the raw incoming profile contains `secure_handler` and thread that presence set into formula evaluation. A pipeline-rated None (careless player) must NOT inherit the proxy; an unbackfilled Legend must. Milestone 3 carries a targeted three-case test, and Milestone 1 verifies the pipeline writes skill keys even at None tier (if it omits them, that write path gets a one-line fix).
+
+</Callout>
+
+### Milestones
+
+**M1 — The 22nd skill exists everywhere the taxonomy is named.** Add `secure_handler` to `HIGH_CONFIDENCE_SKILLS` and `SKILL_DEFINITIONS` in `backend/services/skills.py`; everything backend-side derives from those (pipeline allowlist, calibration allowlist, compositing, legends prompt, Evaluation Version validator). Update `frontend/lib/skills.ts` per its own header checklist (SKILL_CATEGORIES, SKILL_LABELS, SKILL_ABBREV, SKILL_TYPE_PRIORITY, SKILL_GROUPS, PUBLIC_SKILL_CATEGORIES, SKILL_DESCRIPTIONS). Fix stale count literals: the test hardcoding `len(HIGH_CONFIDENCE_SKILLS) == 6`, the legends prompt's "all 20 skills" prose, and cosmetic "21 skills" copy in landing/FAQ/admin pages. Verify None-tier keys are written (trap above).
+
+**M2 — The threshold rule exists as data.** New migration modeled on `20260407000001_add_driver_skill.sql`: full JSONB rule into `skill_thresholds` (mirroring into `draft_skill_thresholds` only if drafts don't auto-seed from production — verify first), plus `anchor_players` rows. `always_flag_for_review: true` for the first cycle — deliberately floods the review queue once so the review pass has material. New unit tests evaluate synthetic blobs against the rule.
+
+**M3 — The formula engine learns fallback; the trait reads the skill.** Add an optional `fallback` block (`when_missing` + `factors`) to `formula_engine.py` — all-or-nothing on `when_missing`, no nesting. Mirror in the hardcoded path for parity. Extend validator L8 so fallback factors validate against ALL_SKILLS. Three-case test: rated-Elite uses the skill, rated-None stays 0.0, key-absent gets the proxy.
+
+**M4 — A new Evaluation Version carries the rewired trait.** Draft from active version; add `secure_handler` to `taxonomy.skills`; replace the `ball_security` composite formula with primary factor `secure_handler` (weight 1.0 — tier values already span 0–10 and the trait's theoretical max is 10.0) plus the fallback block reproducing current proxy coefficients. Validate, publish, confirm distribution warm-up.
+
+**M5 — The live admin loop (driven interactively).** Open a draft Snapshot: edit a secure_handler threshold (stages a `threshold_edit` run, production untouched), rerun the pipeline with `skill_filter: ["secure_handler"]`, review player-level diffs, flags, and outliers against the research bands, adjusting and rerunning until the anchors land right, then publish the Snapshot Release. File the Legends-backfill follow-up issue.
+
+### The load-bearing changes
+
+<TabsBlock
+  id="code-tabs-block"
+  orientation="vertical"
+  tabs={[
+    {
+      id: "tab-skills",
+      label: "skills.py — taxonomy",
+      blocks: [
+        {
+          id: "code-skills",
+          type: "annotated-code",
+          data: {
+            filename: "backend/services/skills.py",
+            language: "python",
+            code: "# Skills where stat pipeline is reliable — Claude is NOT called\nHIGH_CONFIDENCE_SKILLS: frozenset[str] = frozenset({\n    \"rim_protector\",\n    \"spot_up_shooter\",\n    \"off_dribble_shooter\",\n    \"rebounder\",\n    \"offensive_rebounder\",\n    \"isolation_scorer\",\n    \"secure_handler\",\n})\n\nSKILL_DEFINITIONS: dict[str, str] = {\n    # ... existing 21 entries ...\n    \"secure_handler\": (\n        \"Protects possessions with a low turnover rate relative to \"\n        \"ball responsibility — secure handling, safe decisions, and \"\n        \"strong hands under pressure.\"\n    ),\n}",
+            annotations: [
+              { lines: "9", label: "the one-line taxonomy change", note: "ALL_SKILLS derives from the frozensets, so the pipeline allowlist, calibration allowlist, compositing loops, legends prompt, and validator all pick the skill up from this single line." },
+              { lines: "14-18", label: "Claude prompt description", note: "Used only in the legends claude-suggestion prompt (HIGH skills are never sent to Claude in the player pipeline)." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "tab-threshold",
+      label: "threshold rule — JSONB",
+      blocks: [
+        {
+          id: "code-threshold",
+          type: "annotated-code",
+          data: {
+            filename: "supabase/migrations/<ts>_add_secure_handler_skill.sql (rule payload)",
+            language: "json",
+            code: "{\n  \"skill_name\": \"secure_handler\",\n  \"stat_confidence\": \"high\",\n  \"always_flag_for_review\": true,\n  \"computed_stats\": [\n    {\"name\": \"oliver_denom\", \"formula\": \"sum\", \"components\": [\n      {\"stat\": \"base.fga\", \"weight\": 1.0},\n      {\"stat\": \"base.fta\", \"weight\": 0.44},\n      {\"stat\": \"base.tov\", \"weight\": 1.0}]},\n    {\"name\": \"tov_pct\", \"formula\": \"ratio\", \"components\": [\n      {\"role\": \"numerator\", \"stat\": \"base.tov\"},\n      {\"role\": \"denominator\", \"stat\": \"computed.oliver_denom\"}]},\n    {\"name\": \"tov_per_touch\", \"formula\": \"ratio\", \"components\": [\n      {\"role\": \"numerator\", \"stat\": \"base.tov\"},\n      {\"role\": \"denominator\", \"stat\": \"tracking_possession.touches\"}]},\n    {\"name\": \"ast_to_ratio\", \"formula\": \"ratio\", \"components\": [\n      {\"role\": \"numerator\", \"stat\": \"base.ast\"},\n      {\"role\": \"denominator\", \"stat\": \"base.tov\"}]}\n  ],\n  \"volume_gate\": {\"logic\": \"AND\", \"fail_tier\": \"None\", \"conditions\": [\n    {\"stat\": \"tracking_possession.touches\", \"operator\": \">=\", \"value\": 15.0}]},\n  \"tiers\": {\n    \"Elite\": {\"logic\": \"AND\", \"conditions\": [\n      {\"stat\": \"computed.tov_pct\", \"operator\": \"<=\", \"value\": 0.105},\n      {\"stat\": \"computed.tov_per_touch\", \"operator\": \"<=\", \"value\": 0.025},\n      {\"logic\": \"OR\", \"conditions\": [\n        {\"stat\": \"tracking_possession.touches\", \"operator\": \">=\", \"value\": 30.0},\n        {\"stat\": \"advanced.usage_rate\", \"operator\": \">=\", \"value\": 18.0}]}]}\n  },\n  \"tier_bumps\": [\n    {\"condition\": {\"logic\": \"AND\", \"conditions\": [\n      {\"stat\": \"computed.tov_pct\", \"operator\": \"<=\", \"value\": 0.105},\n      {\"stat\": \"advanced.usage_rate\", \"operator\": \">=\", \"value\": 28.0}]},\n     \"effect\": \"bump_up_one_tier\"},\n    {\"condition\": {\"logic\": \"AND\", \"conditions\": [\n      {\"stat\": \"computed.ast_to_ratio\", \"operator\": \">=\", \"value\": 3.5},\n      {\"stat\": \"base.ast\", \"operator\": \">=\", \"value\": 4.0}]},\n     \"effect\": \"bump_up_one_tier\", \"max_tier\": \"Elite\"}\n  ]\n}",
+            annotations: [
+              { lines: "5-19", label: "pure-JSONB math", note: "computed_stats evaluate in declaration order, so the TOV% ratio can reference the sum — no engine code change, no new stat fetching." },
+              { lines: "20-21", label: "hard floor vs. soft gate", note: "volume_gate zeroes the skill below 15 touches (noise floor). The responsibility gate (30 touches OR 18% usage) lives inside the Elite conditions so low-volume players cap rather than vanish." },
+              { lines: "30-39", label: "the two bumps", note: "Skill-curve credit for elite-band TOV% at very high usage; AST/TO credits playmakers whose Oliver TOV% understates them (CP3 case). AST/TO is never the primary." }
+            ]
+          }
+        },
+        {
+          id: "threshold-note",
+          type: "rich-text",
+          data: {
+            markdown: "Shown abbreviated — the real payload carries All-Time Great / Proficient / Capable tiers on the same pattern (bands: TOV% <= .095 ATG / .105 / .125 / .14; per-touch <= .025 / .035 / .045), plus anchor players (Haliburton -> Elite, low-usage wing -> capped, high-TOV star -> boundary). Exact numbers are calibration starting points, tuned live in M5."
+          }
+        }
+      ]
+    },
+    {
+      id: "tab-fallback",
+      label: "formula_engine.py — fallback",
+      blocks: [
+        {
+          id: "code-fallback",
+          type: "annotated-code",
+          data: {
+            filename: "backend/services/cohesion_engine/formula_engine.py (planned shape)",
+            language: "python",
+            code: "def compute_raw_from_formulas(\n    skills, formulas, tier_values,\n    present_keys: set[str] | None = None,   # NEW: keys in the RAW profile\n):\n    ...\n    for key in topological_sort(formulas):\n        formula = formulas[key]\n        factors = formula.get(\"factors\", [])\n        fb = formula.get(\"fallback\")\n        if fb and present_keys is not None:\n            missing = [s for s in fb[\"when_missing\"] if s not in present_keys]\n            if len(missing) == len(fb[\"when_missing\"]):\n                factors = fb[\"factors\"]   # all named skills absent -> proxy\n        ...",
+            annotations: [
+              { lines: "3", label: "presence travels separately", note: "compute_raw_composites captures the raw profile's key set BEFORE _with_default_skills fills missing skills with None — the only place absence is still observable." },
+              { lines: "10-13", label: "all-or-nothing", note: "Minimal semantics: no nested fallbacks, no partial-missing logic. Validator L8 extends to check fallback factor skills against ALL_SKILLS." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "tab-version",
+      label: "Evaluation Version — formula",
+      blocks: [
+        {
+          id: "code-version",
+          type: "code",
+          data: {
+            filename: "new Evaluation Version payload (values.composite_formulas.ball_security)",
+            language: "json",
+            caption: "Weight 1.0 needs no rescale: tier values span 0-10 and theoretical_max.ball_security is already 10.0. Published via the existing drafts -> validate -> publish workflow; taxonomy.skills gains secure_handler at order 21.",
+            code: "{\n  \"ball_security\": {\n    \"factors\": [\n      {\"type\": \"skill\", \"skill\": \"secure_handler\", \"weight\": 1.0}\n    ],\n    \"fallback\": {\n      \"when_missing\": [\"secure_handler\"],\n      \"factors\": [\n        {\"type\": \"skill\", \"skill\": \"passer\", \"weight\": 1.0},\n        {\"type\": \"skill\", \"skill\": \"pnr_ball_handler\", \"weight\": \"<active coeff>\"},\n        {\"type\": \"skill\", \"skill\": \"driver\", \"weight\": \"<active coeff>\"}\n      ]\n    }\n  }\n}"
+          }
+        }
+      ]
+    }
+  ]}
+/>
+
+### Acceptance criteria and how each is proven
+
+<Table
+  id="ac-table"
+  columns={["AC", "Statement", "Proof method"]}
+  rows={[
+    ["ac1", "Mapping decisions research-backed", "Review: evidence doc + ADR 0004 exist with citations (already done)"],
+    ["ac2", "Threshold JSONB implements the mapping Contract", "pytest: synthetic blobs — Haliburton-like -> Elite; low-volume caps; usage bump fires; missing touches -> flagged, not silent"],
+    ["ac3", "Taxonomy consistent across backend / frontend / DB / Claude paths", "pytest + lint; TOTAL_SKILLS === 22; migration linted + pushed; legends prompt includes the skill"],
+    ["ac4", "Draft-scoped threshold editing, no production writes", "Live: save endpoint stages a threshold_edit run; production row unchanged"],
+    ["ac5", "Selected-skill pipeline rerun against draft", "Live: POST /api/pipeline/skill-evaluation with skill_filter=[secure_handler]"],
+    ["ac6", "Player-level profile diffs before publish", "Live: DiffTab / RunDiffPreview + GET /api/snapshots/diff payload"],
+    ["ac7", "Flag / outlier review before publish", "Live: review queue triaged; anchors land at expected tiers"],
+    ["ac8", "Trait reads skill; proxy is fallback-only; ships in a published Evaluation Version", "pytest three-case + parity tests; live: legends-only roster evaluates to nonzero ball_security"],
+    ["ac9", "Focused verification green", "backend pytest, frontend npm run lint, migration linter"]
+  ]}
+/>
+
+### Verification, end to end
+
+<Checklist
+  id="verify-checklist"
+  items={[
+    { id: "v1", label: "backend: source venv/bin/activate && python -m pytest tests/", note: "includes new mapping, fallback three-case, and parity tests" },
+    { id: "v2", label: "frontend: npm run lint (never npm run build — it breaks the dev server)" },
+    { id: "v3", label: "python backend/scripts/lint_migrations.py + supabase db push" },
+    { id: "v4", label: "Live smoke: swap a turnover-prone lineup for a secure one in POST /api/builder/evaluate — ball_security subscore must move" },
+    { id: "v5", label: "M5 admin loop: threshold edit -> selected-skill rerun -> diff/flag review -> Snapshot Release publish" }
+  ]}
+/>
+
+### Open Questions
+
+<QuestionForm
+  id="open-questions"
+  submitLabel="Send answers"
+  questions={[
+    {
+      id: "q-anchors",
+      title: "Anchor players for the migration",
+      subtitle: "anchor_players rows pin expected tiers for calibration review. Proposed: Tyrese Haliburton (Elite), Chris Paul-type veteran playmaker (Proficient — Oliver TOV% understates playmakers; the AST/TO bump should lift him), a high-usage high-TOV creator like Trae Young (Capable/None boundary), and a low-usage wing like Max Strus (capped below Elite despite low raw TOV). Adjust the list?",
+      mode: "freeform",
+      placeholder: "Keep as proposed, or name the players you want as anchors"
+    },
+    {
+      id: "q-publish-pace",
+      title: "How far should the implement pass run unattended?",
+      mode: "single",
+      options: [
+        {
+          id: "opt-pause",
+          label: "Code + tests (M1-M3), then pause — you drive M4-M5 with me live",
+          detail: "Version publish and Snapshot publish are the product workflow this issue exists to prove; running them together interactively is the point of the session.",
+          recommended: true
+        },
+        {
+          id: "opt-m4",
+          label: "Run through M4 (Evaluation Version published), pause before the admin loop",
+          detail: "Faster, but you don't see the validate step or the version diff before it goes active."
+        }
+      ]
+    }
+  ]}
+/>

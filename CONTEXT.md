@@ -148,6 +148,9 @@ _Avoid_: subscore categories (when referring to the data structure)
 
 ## Relationships
 
+### Naming conventions
+- **Skills** are named as player-archetype nouns — a "player who does X" (`passer`, `driver`, `rim_protector`, `secure_handler`). **Impact Traits** and **Subscores** are named as team-quality nouns (`spacing`, `ball_security`, `collective_passing`). The same basketball idea may exist in both namespaces under different keys: the Secure Handler Skill feeds the Ball Security Impact Trait.
+
 ### Team hierarchy
 - **Team** is the universal concept. **Lineup** (5), **Rotation** (9), and **Roster** (12) are size-specific Team types.
 - A **Lineup** is the atomic evaluation unit. All larger Teams are broken into **Lineup Combinations** (all C(N,5) combinations of 5 from N players).
