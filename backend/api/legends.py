@@ -583,15 +583,18 @@ def _build_legend_prompt(
     name: str,
     peak_era: str,
     existing_profile: dict | None,
+    skills: list[str],
 ) -> str:
     """
-    Build the Claude prompt for rating an all-time great on all taxonomy skills.
+    Build the Claude prompt for rating an all-time great on the requested skills
+    (defaults to the full taxonomy at the call site).
 
     When the legend already has ratings the prompt asks Claude to provide an
     independent assessment and explain any disagreements with the existing ratings.
     """
+    skill_count = len(skills)
     skill_list_lines = []
-    for skill in ALL_SKILLS:
+    for skill in skills:
         defn = _SKILL_DEFINITIONS.get(skill, "")
         skill_list_lines.append(f"- **{skill}**: {defn}")
     skill_definitions_block = "\n".join(skill_list_lines)
@@ -612,14 +615,14 @@ def _build_legend_prompt(
             "\n## Existing User Ratings\n\n"
             "The user has already rated this player as follows:\n"
             + "\n".join(existing_ratings_lines)
-            + f"\n\nPlease provide your INDEPENDENT assessment for all {_TOTAL_SKILLS} skills below. "
+            + f"\n\nPlease provide your INDEPENDENT assessment for all {skill_count} requested skills below. "
             "Where your assessment differs from the user's ratings, explain clearly why "
             "in your justification — this will surface as a disagreement for the user to review."
         )
     else:
         existing_context = (
             "\n## Context\n\n"
-            f"This legend has no existing ratings yet. Please rate this player on all {_TOTAL_SKILLS} skills "
+            f"This legend has no existing ratings yet. Please rate this player on all {skill_count} requested skills "
             "based solely on your knowledge of their peak abilities, playing style, historical "
             "reputation, and era context. There are no modern stats available — rely on historical "
             "accounts, contemporary records, and your knowledge of how this player is remembered."
@@ -663,7 +666,7 @@ def _build_legend_prompt(
         response_schema,
         "```",
         "",
-        f"Include ALL {_TOTAL_SKILLS} skills in the 'skills' object. Use the snake_case skill keys as "
+        f"Include ALL {skill_count} requested skills in the 'skills' object. Use the snake_case skill keys as "
         "the object keys. Be honest and direct — do not inflate ratings out of reverence.",
     ])
 
@@ -698,9 +701,13 @@ def claude_suggestion(legend_id: str):
     """
     Call Claude to suggest skill ratings for a legend based on historical basketball knowledge.
 
-    Builds a prompt with the legend's name, peak era, all 20 skill definitions, and any
-    existing ratings (if present). Claude's suggestions are returned to the client but
+    Builds a prompt with the legend's name, peak era, the requested skill definitions, and
+    any existing ratings (if present). Claude's suggestions are returned to the client but
     NOT persisted — the user decides what to accept via the diff view.
+
+    Optional JSON body:
+      { "skills": ["passer", "possession_protector", ...] }
+    When omitted (or null), all taxonomy skills are assessed.
 
     Response data:
       {
@@ -715,6 +722,19 @@ def claude_suggestion(legend_id: str):
     """
     if not _validate_uuid(legend_id):
         return _err("Invalid legend_id — must be a UUID", status=400)
+
+    # Optional skill subset — validated against the taxonomy, order preserved from ALL_SKILLS
+    body = request.get_json(silent=True) or {}
+    requested = body.get("skills")
+    if requested is not None:
+        if not isinstance(requested, list) or not requested:
+            return _err("'skills' must be a non-empty list of skill keys", status=400)
+        unknown = [s for s in requested if s not in ALL_SKILLS]
+        if unknown:
+            return _err(f"Unknown skill keys: {', '.join(unknown)}", status=400)
+        target_skills = [s for s in ALL_SKILLS if s in set(requested)]
+    else:
+        target_skills = list(ALL_SKILLS)
 
     try:
         supabase = get_supabase()
@@ -748,6 +768,7 @@ def claude_suggestion(legend_id: str):
             name=legend["name"],
             peak_era=legend["peak_era"],
             existing_profile=existing_profile,
+            skills=target_skills,
         )
 
         client = _get_anthropic_client()
@@ -789,7 +810,7 @@ def claude_suggestion(legend_id: str):
         # Validate and normalize tiers — unknown tiers default to None
         valid_tiers = {"None", "Capable", "Proficient", "Elite", "All-Time Great"}
         normalized: dict[str, dict] = {}
-        for skill in ALL_SKILLS:
+        for skill in target_skills:
             entry = skills_result.get(skill) or {}
             tier = entry.get("tier", "None")
             if tier not in valid_tiers:

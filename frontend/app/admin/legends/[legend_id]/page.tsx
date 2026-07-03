@@ -14,7 +14,7 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SKILL_TIERS, TIER_SELECTOR_STYLES } from "@/lib/tiers";
-import { SKILL_GROUPS, TOTAL_SKILLS, formatSkillName } from "@/lib/skills";
+import { ALL_SKILL_NAMES, SKILL_GROUPS, TOTAL_SKILLS, formatSkillName } from "@/lib/skills";
 
 // SKILL_TIERS and TIER_SELECTOR_STYLES imported from @/lib/tiers
 
@@ -194,6 +194,11 @@ export default function LegendEditorPage() {
     Record<string, ClaudeSkillSuggestion> | null
   >(null);
   const [claudeError, setClaudeError] = useState<string | null>(null);
+  // Assessment scope — which skills the next Claude run covers (default: all)
+  const [assessSkills, setAssessSkills] = useState<Set<string>>(
+    () => new Set(ALL_SKILL_NAMES)
+  );
+  const [scopeOpen, setScopeOpen] = useState(false);
 
   // Collapsible sections — all open by default
   const [openSections, setOpenSections] = useState<Set<string>>(
@@ -346,13 +351,27 @@ export default function LegendEditorPage() {
     }
   }, [legendId]);
 
-  // Get Claude's suggestions
+  // Toggle a skill in the assessment scope
+  const toggleAssessSkill = useCallback((skillKey: string) => {
+    setAssessSkills((prev) => {
+      const next = new Set(prev);
+      if (next.has(skillKey)) next.delete(skillKey);
+      else next.add(skillKey);
+      return next;
+    });
+  }, []);
+
+  // Get Claude's suggestions (scoped to the selected skills)
   const handleClaudeSuggestion = useCallback(async () => {
+    if (assessSkills.size === 0) return;
     setClaudeLoading(true);
     setClaudeError(null);
     setClaudeSuggestions(null);
 
-    const res = await getLegendClaudeSuggestion(legendId);
+    // Omit the param when the full taxonomy is selected — backend defaults to all
+    const skillsParam =
+      assessSkills.size === TOTAL_SKILLS ? undefined : Array.from(assessSkills);
+    const res = await getLegendClaudeSuggestion(legendId, skillsParam);
     setClaudeLoading(false);
 
     if (!res.success || !res.data) {
@@ -384,7 +403,7 @@ export default function LegendEditorPage() {
       // Existing profile: enter diff mode
       setClaudeSuggestions(suggestions);
     }
-  }, [legendId, profile, debouncedSave]);
+  }, [legendId, profile, debouncedSave, assessSkills]);
 
   // Accept all disagreements (skills where Claude differs from current rating)
   const acceptAllDisagreements = useCallback(() => {
@@ -638,12 +657,12 @@ export default function LegendEditorPage() {
             />
           </div>
 
-          {/* Get Claude's Take button */}
-          <div>
+          {/* Get Claude's Take + assessment scope */}
+          <div id="legend-claude-panel" className="space-y-1.5">
             <button
               id="legend-claude-btn"
               onClick={handleClaudeSuggestion}
-              disabled={claudeLoading}
+              disabled={claudeLoading || assessSkills.size === 0}
               className="w-full flex items-center justify-center gap-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {claudeLoading ? (
@@ -655,6 +674,90 @@ export default function LegendEditorPage() {
                 "✦ Get Claude's Take"
               )}
             </button>
+
+            {/* Scope disclosure toggle */}
+            <button
+              id="claude-scope-toggle"
+              type="button"
+              onClick={() => setScopeOpen((o) => !o)}
+              aria-expanded={scopeOpen}
+              aria-controls="claude-scope-panel"
+              className="w-full flex items-center justify-between px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <span>
+                Scope:{" "}
+                <span className="font-medium text-foreground">
+                  {assessSkills.size === TOTAL_SKILLS
+                    ? `All ${TOTAL_SKILLS} skills`
+                    : `${assessSkills.size} of ${TOTAL_SKILLS} skills`}
+                </span>
+              </span>
+              <span>{scopeOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {/* Skill scope checklist */}
+            {scopeOpen && (
+              <div id="claude-scope-panel" className="rounded-md border border-border overflow-hidden">
+                <div id="claude-scope-list" className="max-h-64 overflow-y-auto divide-y divide-border">
+                  {SKILL_GROUPS.map(({ label, skills }) => (
+                    <div key={label} className="px-3 py-2">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                        {label}
+                      </p>
+                      {skills.map((skillKey) => (
+                        <label
+                          key={skillKey}
+                          className="flex items-center gap-2 py-0.5 text-sm cursor-pointer text-foreground/90 hover:text-foreground"
+                        >
+                          <input
+                            id={`claude-scope-skill-${skillKey}`}
+                            type="checkbox"
+                            checked={assessSkills.has(skillKey)}
+                            onChange={() => toggleAssessSkill(skillKey)}
+                            className="h-3.5 w-3.5 accent-violet-600"
+                          />
+                          {formatSkillName(skillKey)}
+                        </label>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div
+                  id="claude-scope-footer"
+                  className="flex items-center justify-between border-t border-border bg-muted/40 px-3 py-2"
+                >
+                  <div className="flex gap-3">
+                    <button
+                      id="claude-scope-select-all"
+                      type="button"
+                      onClick={() => setAssessSkills(new Set(ALL_SKILL_NAMES))}
+                      disabled={assessSkills.size === TOTAL_SKILLS}
+                      className="text-xs font-medium text-violet-600 hover:underline disabled:text-muted-foreground/50 disabled:no-underline disabled:cursor-not-allowed"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      id="claude-scope-clear-all"
+                      type="button"
+                      onClick={() => setAssessSkills(new Set())}
+                      disabled={assessSkills.size === 0}
+                      className="text-xs font-medium text-violet-600 hover:underline disabled:text-muted-foreground/50 disabled:no-underline disabled:cursor-not-allowed"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {assessSkills.size} of {TOTAL_SKILLS} selected
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {assessSkills.size === 0 && (
+              <p id="claude-scope-empty-warning" className="text-xs text-destructive">
+                Select at least one skill to assess.
+              </p>
+            )}
             {claudeError && (
               <p className="text-xs text-destructive mt-1">{claudeError}</p>
             )}

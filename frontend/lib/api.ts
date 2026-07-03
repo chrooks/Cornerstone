@@ -698,13 +698,18 @@ export async function updateLegendAttributes(
 /**
  * Get Claude's skill suggestions for a legend.
  * Results are NOT persisted — the client decides what to accept.
+ * Pass `skills` to scope the assessment to a subset; omit for all skills.
  */
 export async function getLegendClaudeSuggestion(
-  legendId: string
+  legendId: string,
+  skills?: string[]
 ): Promise<ApiResponse<LegendClaudeSuggestion>> {
   return apiFetch<LegendClaudeSuggestion>(
     `/api/legends/${encodeURIComponent(legendId)}/claude-suggestion`,
-    { method: "POST" }
+    {
+      method: "POST",
+      ...(skills ? { body: JSON.stringify({ skills }) } : {}),
+    }
   );
 }
 
