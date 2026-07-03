@@ -8,7 +8,9 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const frontendDir = path.resolve(scriptDir, "..");
 const nextCli = path.join(frontendDir, "node_modules", "next", "dist", "bin", "next");
 const nextDir = path.join(frontendDir, ".next");
-const preferredPorts = [3000, 3001, 3002];
+// ponytail: 3000/3001 are permanently owned by the homepage/homepage-dev
+// containers on this host, not orphaned dev servers — never offer to kill them
+const preferredPorts = [3002, 3003, 3004];
 
 let cleaningUp = false;
 let forwardedSignal = null;
@@ -182,7 +184,7 @@ async function selectDevPort() {
     promptState.rl?.close();
   }
 
-  throw new Error("Ports 3000, 3001, and 3002 are all still in use.");
+  throw new Error("Ports 3002, 3003, and 3004 are all still in use.");
 }
 
 let selectedPort;
