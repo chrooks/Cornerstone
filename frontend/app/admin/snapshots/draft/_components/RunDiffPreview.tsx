@@ -4,17 +4,20 @@
  * RunDiffPreview — orchestrates the diff view for a reviewable or terminal staged run.
  *
  * States (priority order):
- * 1. loading — spinner "Loading changes..."
- * 2. error — warm red card + retry
- * 3. terminal guard — read-only notice, diff still shown
- * 4. empty (total_changed===0) — empty state with Discard still available
- * 5. diff — summary or drilldown view + action bar
+ * 1. running — the staging run's background worker hasn't finished yet; no
+ *    diff fetch, no commit/discard actions.
+ * 2. loading — spinner "Loading changes..."
+ * 3. error — warm red card + retry
+ * 4. terminal guard — read-only notice, diff still shown
+ * 5. empty (total_changed===0) — empty state with Discard still available
+ * 6. diff — summary or drilldown view + action bar
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getRunDiff } from "@/lib/api";
-import { isTerminalRun } from "../_lib/runReview";
+import { usePipelineRunsPolling } from "../../_components/usePipelineRunsPolling";
+import { isReviewableRun, isTerminalRun } from "../_lib/runReview";
 import { DiffSummaryView } from "./diff/DiffSummaryView";
 import { DiffDrilldownTable } from "./diff/DiffDrilldownTable";
 import { RunDiffActionBar } from "./diff/RunDiffActionBar";
@@ -71,6 +74,15 @@ export function RunDiffPreview({
   const [viewMode, setViewMode] = useState<ViewMode>("summary");
   const [jumpSkill, setJumpSkill] = useState<string | null>(null);
 
+  // The run prop comes from the parent's run list, fetched once and not
+  // live — the backend stages threshold_edit/skill_evaluation runs on a
+  // background worker, so a freshly-created run is still "running" when we
+  // land here. Poll for the live status instead of trusting the stale prop,
+  // and don't fetch (or offer to commit) a diff that isn't done computing.
+  const { run: polledRun } = usePipelineRunsPolling(runId);
+  const effectiveRun = polledRun ?? run;
+  const isRunning = effectiveRun == null || effectiveRun.status === "running";
+
   const loadDiff = useCallback(async () => {
     setLoadState("loading");
     try {
@@ -87,10 +99,35 @@ export function RunDiffPreview({
   }, [runId]);
 
   useEffect(() => {
+    if (isRunning) return;
     loadDiff();
-  }, [loadDiff]);
+  }, [loadDiff, isRunning]);
 
-  const terminal = run ? isTerminalRun(run) : false;
+  const terminal = effectiveRun ? isTerminalRun(effectiveRun) : false;
+  const canAct = effectiveRun ? isReviewableRun(effectiveRun) : false;
+
+  // ── Running state ──────────────────────────────────────────────────────────
+  if (isRunning) {
+    return (
+      <div id="run-diff-preview">
+        <button
+          id="diff-back-btn"
+          type="button"
+          onClick={onBack}
+          className="text-xs text-neutral-500 hover:text-[#0e0907] underline mb-4 block"
+        >
+          Back to runs
+        </button>
+        <div
+          id="run-diff-preview-running"
+          className="flex items-center gap-2 text-neutral-400 text-sm py-12 justify-center"
+        >
+          <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          Run in progress — re-evaluating players, this can take a moment...
+        </div>
+      </div>
+    );
+  }
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (loadState === "loading") {
@@ -156,7 +193,7 @@ export function RunDiffPreview({
           </button>
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold text-[#0e0907]">
-              {run?.pipeline_name === "threshold_edit" ? "Threshold Edit" : "Skill Evaluation"} Diff
+              {effectiveRun?.pipeline_name === "threshold_edit" ? "Threshold Edit" : "Skill Evaluation"} Diff
             </h2>
             <span className="font-mono text-[11px] text-neutral-400">{runId}</span>
           </div>
@@ -190,18 +227,18 @@ export function RunDiffPreview({
       </div>
 
       {/* Terminal notice (replaces action bar, diff still shown read-only) */}
-      {terminal && run && (
+      {terminal && effectiveRun && (
         <div
           id="diff-terminal-notice"
           className={cn(
             "mb-4 px-4 py-2.5 rounded-[6px] text-xs border",
-            run.committed_at
+            effectiveRun.committed_at
               ? "bg-green-50 border-green-200 text-green-800"
               : "bg-slate-50 border-slate-200 text-slate-600"
           )}
         >
-          {run.committed_at
-            ? `Committed ${new Date(run.committed_at).toLocaleString()}. This run is read-only.`
+          {effectiveRun.committed_at
+            ? `Committed ${new Date(effectiveRun.committed_at).toLocaleString()}. This run is read-only.`
             : "Discarded. This run is read-only."}
         </div>
       )}
@@ -215,7 +252,7 @@ export function RunDiffPreview({
         >
           <p className="text-sm font-medium text-[#0e0907] mb-1">No tier changes in this run.</p>
           <p className="text-xs text-neutral-500 mb-4">Nothing to commit.</p>
-          {!terminal && (
+          {canAct && (
             <RunDiffActionBar
               runId={runId}
               onCommitted={onCommitted}
@@ -242,8 +279,8 @@ export function RunDiffPreview({
             />
           )}
 
-          {/* Action bar — only for non-terminal runs */}
-          {!terminal && (
+          {/* Action bar — only for reviewable (success, uncommitted) runs */}
+          {canAct && (
             <RunDiffActionBar
               runId={runId}
               onCommitted={onCommitted}
