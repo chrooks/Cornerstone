@@ -300,7 +300,7 @@ class TestCompositeHighConfidence:
         # always_flag_for_review rules set review_recommended on the stat result;
         # compositing must surface it as a flag even though Claude never runs.
         stat = {**self._stat_result("Elite"), "review_recommended": True}
-        result = composite_skill("secure_handler", stat, None, 80)
+        result = composite_skill("possession_protector", stat, None, 80)
         assert result["flagged"] is True
         assert result["flag_reason"] == "always_flag_for_review"
 
@@ -310,7 +310,7 @@ class TestCompositeHighConfidence:
             "review_recommended": True,
             "data_missing": True,
         }
-        result = composite_skill("secure_handler", stat, None, 80)
+        result = composite_skill("possession_protector", stat, None, 80)
         assert result["flagged"] is True
         assert result["flag_reason"] == "data_missing"
 
@@ -320,7 +320,7 @@ class TestCompositeHighConfidence:
             "review_recommended": True,
             "tier_bump_applied": True,
         }
-        result = composite_skill("secure_handler", stat, None, 80)
+        result = composite_skill("possession_protector", stat, None, 80)
         assert result["flagged"] is True
         assert result["flag_reason"] == "tier_bump_applied"
 
@@ -579,18 +579,18 @@ class TestSkillSetSizes:
     def test_low_confidence_exactly_3(self):
         assert len(LOW_CONFIDENCE_SKILLS) == 3
 
-    def test_secure_handler_in_taxonomy_and_legend_prompt(self):
-        """secure_handler is a high-confidence skill and reaches the legends
+    def test_possession_protector_in_taxonomy_and_legend_prompt(self):
+        """possession_protector is a high-confidence skill and reaches the legends
         claude-suggestion prompt via SKILL_DEFINITIONS (issue #41)."""
         from services.skills import ALL_SKILLS, SKILL_DEFINITIONS
         from api.legends import _build_legend_prompt
 
-        assert "secure_handler" in HIGH_CONFIDENCE_SKILLS
-        assert "secure_handler" in ALL_SKILLS
-        assert "secure_handler" in SKILL_DEFINITIONS
+        assert "possession_protector" in HIGH_CONFIDENCE_SKILLS
+        assert "possession_protector" in ALL_SKILLS
+        assert "possession_protector" in SKILL_DEFINITIONS
 
         prompt = _build_legend_prompt("Magic Johnson", "1980s", None)
-        assert "secure_handler" in prompt
+        assert "possession_protector" in prompt
 
     def test_no_overlap(self):
         assert HIGH_CONFIDENCE_SKILLS.isdisjoint(MODERATE_CONFIDENCE_SKILLS)

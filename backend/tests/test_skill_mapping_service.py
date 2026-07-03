@@ -1519,7 +1519,9 @@ class TestDriverSkill:
 
 
 # ===========================================================================
-# 11. secure_handler threshold rule (issue #41) — parsed from the migration
+# 11. possession_protector threshold rule (issue #41, renamed in #84) —
+#     parsed from the original seed migration, whose SQL still says
+#     'secure_handler' (historical file; the rename ships as a later migration)
 # ===========================================================================
 
 import json
@@ -1550,11 +1552,11 @@ def _make_handler_blob(*, fga, fta, tov, touches, usage, ast=None) -> dict:
     return blob
 
 
-class TestSecureHandlerRule:
+class TestPossessionProtectorRule:
     def test_haliburton_like_profile_lands_elite(self):
         """Low TOV% (0.0995) + low per-touch at high touches → Elite."""
         blob = _make_handler_blob(fga=15.0, fta=5.0, tov=1.9, touches=85.0, usage=22.0, ast=9.0)
-        result = evaluate_skill("secure_handler", _SECURE_HANDLER_RULE, blob, {})
+        result = evaluate_skill("possession_protector", _SECURE_HANDLER_RULE, blob, {})
         assert result["tier"] == "Elite"
         # always_flag_for_review: first-cycle rule floods the review queue.
         assert result["review_recommended"] is True
@@ -1563,13 +1565,13 @@ class TestSecureHandlerRule:
         """Elite-band rates but touches 20 / usage 12 fail the responsibility
         gate — the player caps at Proficient instead of vanishing."""
         blob = _make_handler_blob(fga=8.0, fta=2.0, tov=0.6, touches=20.0, usage=12.0, ast=2.0)
-        result = evaluate_skill("secure_handler", _SECURE_HANDLER_RULE, blob, {})
+        result = evaluate_skill("possession_protector", _SECURE_HANDLER_RULE, blob, {})
         assert result["tier"] == "Proficient"
 
     def test_high_usage_elite_band_gets_skill_curve_bump(self):
         """Elite-band TOV% held at usage >= 28 bumps Elite → All-Time Great."""
         blob = _make_handler_blob(fga=20.0, fta=8.0, tov=2.6, touches=105.0, usage=29.0, ast=3.0)
-        result = evaluate_skill("secure_handler", _SECURE_HANDLER_RULE, blob, {})
+        result = evaluate_skill("possession_protector", _SECURE_HANDLER_RULE, blob, {})
         assert result["tier"] == "All-Time Great"
         assert result["tier_bump_applied"] is True
 
@@ -1577,14 +1579,14 @@ class TestSecureHandlerRule:
         """AST/TO >= 3.5 above the passing floor bumps one tier (max Elite)."""
         # Proficient-band TOV% (0.111) with strong AST/TO → bumped to Elite.
         blob = _make_handler_blob(fga=12.0, fta=3.0, tov=1.66, touches=70.0, usage=20.0, ast=8.0)
-        result = evaluate_skill("secure_handler", _SECURE_HANDLER_RULE, blob, {})
+        result = evaluate_skill("possession_protector", _SECURE_HANDLER_RULE, blob, {})
         assert result["tier"] == "Elite"
         assert result["tier_bump_applied"] is True
 
     def test_missing_touches_flags_not_silent_none(self):
         """Missing touches data yields an indeterminate flagged result."""
         blob = _make_handler_blob(fga=15.0, fta=5.0, tov=1.9, touches=None, usage=22.0)
-        result = evaluate_skill("secure_handler", _SECURE_HANDLER_RULE, blob, {})
+        result = evaluate_skill("possession_protector", _SECURE_HANDLER_RULE, blob, {})
         assert result["data_missing"] is True
         assert result["review_recommended"] is True
         assert result["volume_gate_passed"] is False

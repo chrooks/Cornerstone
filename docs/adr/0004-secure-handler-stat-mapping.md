@@ -72,3 +72,14 @@ calibration.
   accentuation entries, or other composite coefficients in this slice.
 - Adding the 22nd skill is a taxonomy mutation and ships as a new Evaluation
   Version.
+
+## Rename note (2026-07-03)
+
+The skill shipped here as `secure_handler` was renamed to
+`possession_protector` in
+[#84](https://github.com/chrooks/Cornerstone/issues/84), before the Legends
+backfill, so Legends are rated once under the final name. The rename is
+versioned: migration `20260703000000` moves draft-side rows and profile JSONB
+keys; cohesion-v7 and a fresh Snapshot Release carry the new key. Everything
+above this note describes the skill under its original name and is left as a
+historical record — read `secure_handler` as `possession_protector`.

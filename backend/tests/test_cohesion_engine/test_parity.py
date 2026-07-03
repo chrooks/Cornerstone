@@ -190,19 +190,19 @@ class TestModifiedValuesProduceDifferentOutput:
 
 
 class TestBallSecurityFallbackParity:
-    """Hardcoded and declarative paths agree on all three secure_handler cases."""
+    """Hardcoded and declarative paths agree on all three possession_protector cases."""
 
     @pytest.mark.parametrize(
-        "secure_handler_tier",
+        "possession_protector_tier",
         ["Elite", "None", None],  # rated-Elite / rated-None / key-absent
         ids=["rated_elite", "rated_none", "key_absent"],
     )
-    def test_hardcoded_and_declarative_agree(self, secure_handler_tier):
+    def test_hardcoded_and_declarative_agree(self, possession_protector_tier):
         from services.cohesion_engine.formula_export import export_formulas
 
         skills = {"passer": "Elite", "pnr_ball_handler": "Proficient", "driver": "Capable"}
-        if secure_handler_tier is not None:
-            skills["secure_handler"] = secure_handler_tier
+        if possession_protector_tier is not None:
+            skills["possession_protector"] = possession_protector_tier
 
         values = _load_bootstrap_version().payload["values"]
         hardcoded = compute_raw_composites(skills, values)
@@ -218,11 +218,11 @@ class TestBallSecurityFallbackParity:
         )
 
         tier_values = values["tier_values"]
-        if secure_handler_tier is None:
+        if possession_protector_tier is None:
             # Legend: legacy proxy fires — nonzero because passer is Elite.
             assert hardcoded["ball_security"] > 0.0
         else:
             # Rated player: trait is exactly the skill's tier value.
             assert hardcoded["ball_security"] == pytest.approx(
-                tier_values.get(secure_handler_tier, 0.0)
+                tier_values.get(possession_protector_tier, 0.0)
             )

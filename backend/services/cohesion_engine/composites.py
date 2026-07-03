@@ -131,12 +131,12 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
     )
 
     # Step 3: independent composites (post game, PnR screener, transition, ball security).
-    # ball_security reads the secure_handler skill when the raw profile carries
+    # ball_security reads the possession_protector skill when the raw profile carries
     # the key (even at tier "None" — rated careless is NOT proxied); the legacy
     # 3-skill proxy (passer / pnr_handler / driver) fires only for key-absent
     # profiles (unbackfilled Legends). Mirrors the formula engine's fallback.
-    if "secure_handler" in present_keys:
-        raw_ball_security = _tv("secure_handler")
+    if "possession_protector" in present_keys:
+        raw_ball_security = _tv("possession_protector")
     else:
         raw_ball_security = (
             _tv("passer")
