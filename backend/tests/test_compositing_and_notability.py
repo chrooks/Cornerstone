@@ -296,6 +296,34 @@ class TestCompositeHighConfidence:
         assert result["source"] == "stats_only"
         assert result["flagged"] is False
 
+    def test_high_confidence_honors_review_recommended(self):
+        # always_flag_for_review rules set review_recommended on the stat result;
+        # compositing must surface it as a flag even though Claude never runs.
+        stat = {**self._stat_result("Elite"), "review_recommended": True}
+        result = composite_skill("secure_handler", stat, None, 80)
+        assert result["flagged"] is True
+        assert result["flag_reason"] == "always_flag_for_review"
+
+    def test_high_confidence_review_reason_data_missing_wins(self):
+        stat = {
+            **self._stat_result("None"),
+            "review_recommended": True,
+            "data_missing": True,
+        }
+        result = composite_skill("secure_handler", stat, None, 80)
+        assert result["flagged"] is True
+        assert result["flag_reason"] == "data_missing"
+
+    def test_high_confidence_review_reason_tier_bump(self):
+        stat = {
+            **self._stat_result("Elite"),
+            "review_recommended": True,
+            "tier_bump_applied": True,
+        }
+        result = composite_skill("secure_handler", stat, None, 80)
+        assert result["flagged"] is True
+        assert result["flag_reason"] == "tier_bump_applied"
+
 
 # ===========================================================================
 # Compositing — Moderate confidence skills

@@ -240,6 +240,22 @@ def composite_skill(
     else:
         output_agreement = agreement
 
+    # Honor the stat evaluator's review recommendation even when the compositing
+    # rules didn't flag (they only cover Claude disagreement / notability).
+    # This is what lets always_flag_for_review, data_missing, and borderline
+    # tier bumps reach the review queue for HIGH-confidence skills, where
+    # Claude never runs and outcome.flagged is always False.
+    flagged = outcome.flagged
+    flag_reason = outcome.flag_reason
+    if not flagged and stat_result.get("review_recommended"):
+        flagged = True
+        if stat_result.get("data_missing"):
+            flag_reason = "data_missing"
+        elif stat_result.get("tier_bump_applied"):
+            flag_reason = "tier_bump_applied"
+        else:
+            flag_reason = "always_flag_for_review"
+
     return {
         "final_tier": final_tier,
         "stat_tier": stat_tier,
@@ -248,8 +264,8 @@ def composite_skill(
         "stat_confidence": stat_confidence,
         "claude_confidence": claude_confidence if not is_high_confidence else None,
         "agreement": output_agreement,
-        "flagged": outcome.flagged,
-        "flag_reason": outcome.flag_reason,
+        "flagged": flagged,
+        "flag_reason": flag_reason,
     }
 
 
