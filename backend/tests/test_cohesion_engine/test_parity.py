@@ -17,7 +17,10 @@ from pathlib import Path
 
 import pytest
 
-from services.cohesion_engine.composites import compute_player_composites
+from services.cohesion_engine.composites import (
+    compute_player_composites,
+    compute_raw_composites,
+)
 from services.cohesion_engine.engine import CohesionEngine, EvaluationVersion, LineupContext
 from services.cohesion_engine.types import PlayerComposites
 
@@ -184,3 +187,42 @@ class TestModifiedValuesProduceDifferentOutput:
             "Modified tier values produced identical output — "
             "handlers are not reading from engine.version.values"
         )
+
+
+class TestBallSecurityFallbackParity:
+    """Hardcoded and declarative paths agree on all three secure_handler cases."""
+
+    @pytest.mark.parametrize(
+        "secure_handler_tier",
+        ["Elite", "None", None],  # rated-Elite / rated-None / key-absent
+        ids=["rated_elite", "rated_none", "key_absent"],
+    )
+    def test_hardcoded_and_declarative_agree(self, secure_handler_tier):
+        from services.cohesion_engine.formula_export import export_formulas
+
+        skills = {"passer": "Elite", "pnr_ball_handler": "Proficient", "driver": "Capable"}
+        if secure_handler_tier is not None:
+            skills["secure_handler"] = secure_handler_tier
+
+        values = _load_bootstrap_version().payload["values"]
+        hardcoded = compute_raw_composites(skills, values)
+
+        values_declarative = copy.deepcopy(values)
+        values_declarative["composite_formulas"] = export_formulas(
+            values["composite_coefficients"]
+        )
+        declarative = compute_raw_composites(skills, values_declarative)
+
+        assert hardcoded["ball_security"] == pytest.approx(
+            declarative["ball_security"], abs=1e-9
+        )
+
+        tier_values = values["tier_values"]
+        if secure_handler_tier is None:
+            # Legend: legacy proxy fires — nonzero because passer is Elite.
+            assert hardcoded["ball_security"] > 0.0
+        else:
+            # Rated player: trait is exactly the skill's tier value.
+            assert hardcoded["ball_security"] == pytest.approx(
+                tier_values.get(secure_handler_tier, 0.0)
+            )

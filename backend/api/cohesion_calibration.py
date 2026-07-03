@@ -830,7 +830,7 @@ def distribution_preview() -> tuple:
 
     from services.cohesion_engine.formula_export import export_formulas
     from services.cohesion_engine.formula_engine import compute_raw_from_formulas, topological_sort
-    from services.cohesion_engine.composites import _with_default_skills, _extract_skills
+    from services.cohesion_engine.composites import _extract_skills
     from services.evaluation_versions.validator import _validate_composite_formulas
 
     body = request.get_json(silent=True) or {}
@@ -896,7 +896,9 @@ def distribution_preview() -> tuple:
         from services.supabase_client import run_query
         result = run_query(source_query)
         for row in result.data:
-            skills = _with_default_skills(_extract_skills(row["profile"]))
+            # Raw profile passed as-is: compute_raw_from_formulas default-fills
+            # internally and needs raw key-absence for fallback routing.
+            skills = _extract_skills(row["profile"])
             raw = compute_raw_from_formulas(skills, formulas, tier_values, order=formula_order)
             raw_values.append(raw.get(composite_key, 0.0))
 

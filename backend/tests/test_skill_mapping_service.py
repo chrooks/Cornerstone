@@ -1516,3 +1516,75 @@ class TestDriverSkill:
         result = apply_auto_promotions(skills, thresholds)
         assert result["crafty_finisher"]["tier"] == "Proficient"
         assert result["crafty_finisher"]["auto_promoted"] is True
+
+
+# ===========================================================================
+# 11. secure_handler threshold rule (issue #41) — parsed from the migration
+# ===========================================================================
+
+import json
+import re
+from pathlib import Path
+
+
+def _load_secure_handler_rule() -> dict:
+    """Parse the shipped rule JSON out of the migration so tests exercise
+    exactly what lands in draft_skill_thresholds."""
+    sql = (
+        Path(__file__).resolve().parents[2]
+        / "supabase" / "migrations" / "20260702000000_add_secure_handler_skill.sql"
+    ).read_text()
+    match = re.search(r"'secure_handler',\n'(\{.*?\})'\n\) ON CONFLICT", sql, re.S)
+    assert match, "secure_handler rule JSON not found in migration"
+    return json.loads(match.group(1))
+
+
+_SECURE_HANDLER_RULE = _load_secure_handler_rule()
+
+
+def _make_handler_blob(*, fga, fta, tov, touches, usage, ast=None) -> dict:
+    blob = _make_stats_blob()
+    blob["box_score"].update({"fga": fga, "fta": fta, "tov": tov, "ast": ast})
+    blob["advanced"]["usage_rate"] = usage
+    blob["tracking_possessions"]["touches"] = touches
+    return blob
+
+
+class TestSecureHandlerRule:
+    def test_haliburton_like_profile_lands_elite(self):
+        """Low TOV% (0.0995) + low per-touch at high touches → Elite."""
+        blob = _make_handler_blob(fga=15.0, fta=5.0, tov=1.9, touches=85.0, usage=22.0, ast=9.0)
+        result = evaluate_skill("secure_handler", _SECURE_HANDLER_RULE, blob, {})
+        assert result["tier"] == "Elite"
+        # always_flag_for_review: first-cycle rule floods the review queue.
+        assert result["review_recommended"] is True
+
+    def test_same_rates_low_volume_caps_below_elite(self):
+        """Elite-band rates but touches 20 / usage 12 fail the responsibility
+        gate — the player caps at Proficient instead of vanishing."""
+        blob = _make_handler_blob(fga=8.0, fta=2.0, tov=0.6, touches=20.0, usage=12.0, ast=2.0)
+        result = evaluate_skill("secure_handler", _SECURE_HANDLER_RULE, blob, {})
+        assert result["tier"] == "Proficient"
+
+    def test_high_usage_elite_band_gets_skill_curve_bump(self):
+        """Elite-band TOV% held at usage >= 28 bumps Elite → All-Time Great."""
+        blob = _make_handler_blob(fga=20.0, fta=8.0, tov=2.6, touches=105.0, usage=29.0, ast=3.0)
+        result = evaluate_skill("secure_handler", _SECURE_HANDLER_RULE, blob, {})
+        assert result["tier"] == "All-Time Great"
+        assert result["tier_bump_applied"] is True
+
+    def test_ast_to_bump_lifts_passing_volume_player(self):
+        """AST/TO >= 3.5 above the passing floor bumps one tier (max Elite)."""
+        # Proficient-band TOV% (0.111) with strong AST/TO → bumped to Elite.
+        blob = _make_handler_blob(fga=12.0, fta=3.0, tov=1.66, touches=70.0, usage=20.0, ast=8.0)
+        result = evaluate_skill("secure_handler", _SECURE_HANDLER_RULE, blob, {})
+        assert result["tier"] == "Elite"
+        assert result["tier_bump_applied"] is True
+
+    def test_missing_touches_flags_not_silent_none(self):
+        """Missing touches data yields an indeterminate flagged result."""
+        blob = _make_handler_blob(fga=15.0, fta=5.0, tov=1.9, touches=None, usage=22.0)
+        result = evaluate_skill("secure_handler", _SECURE_HANDLER_RULE, blob, {})
+        assert result["data_missing"] is True
+        assert result["review_recommended"] is True
+        assert result["volume_gate_passed"] is False

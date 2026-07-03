@@ -473,7 +473,7 @@ export default function AdminHubPage() {
             id="admin-hub-card-legends"
             href="/admin/legends"
             title="Legends"
-            description="Curate all-time greats and their 21-skill profiles."
+            description="Curate all-time greats and their 22-skill profiles."
             glyph="L"
           />
         </div>

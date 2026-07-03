@@ -112,7 +112,7 @@ def _validate_uuid(value: str) -> bool:
 
 def _count_rated(profile: dict | None) -> int:
     """
-    Count how many of the 20 skills have been deliberately rated.
+    Count how many of the taxonomy skills have been deliberately rated.
     A skill is 'rated' if its key exists in the profile dict with any non-null value —
     even 'None' (the tier) counts because it's a deliberate choice by the user.
     Null/missing means the skill has not been evaluated yet.
@@ -128,7 +128,7 @@ def _count_rated(profile: dict | None) -> int:
 
 
 def _empty_profile() -> dict:
-    """Return a profile dict with all 20 skills set to null (unrated)."""
+    """Return a profile dict with all taxonomy skills set to null (unrated)."""
     return {skill: None for skill in ALL_SKILLS}
 
 
@@ -150,7 +150,7 @@ def list_legends():
         Surface — used by /admin/legends editor.
 
     Response data: list of {id, name, peak_era, notes, completion, completion_pct}
-    where completion is how many of the 20 skills have been rated.
+    where completion is how many of the taxonomy skills have been rated.
     """
     source = _resolve_source()
 
@@ -258,7 +258,7 @@ def get_legend(legend_id: str):
         Surface — used by /admin/legends editor.
 
     If no skill profile exists yet, returns the legend metadata with an empty profile
-    (all 20 skills as null — distinct from 'None' which is a deliberate rating).
+    (all taxonomy skills as null — distinct from 'None' which is a deliberate rating).
 
     Response data: {id, name, peak_era, notes, profile, completion, completion_pct}
     """
@@ -585,7 +585,7 @@ def _build_legend_prompt(
     existing_profile: dict | None,
 ) -> str:
     """
-    Build the Claude prompt for rating an all-time great on all 20 skills.
+    Build the Claude prompt for rating an all-time great on all taxonomy skills.
 
     When the legend already has ratings the prompt asks Claude to provide an
     independent assessment and explain any disagreements with the existing ratings.
@@ -612,14 +612,14 @@ def _build_legend_prompt(
             "\n## Existing User Ratings\n\n"
             "The user has already rated this player as follows:\n"
             + "\n".join(existing_ratings_lines)
-            + "\n\nPlease provide your INDEPENDENT assessment for all 20 skills below. "
+            + f"\n\nPlease provide your INDEPENDENT assessment for all {_TOTAL_SKILLS} skills below. "
             "Where your assessment differs from the user's ratings, explain clearly why "
             "in your justification — this will surface as a disagreement for the user to review."
         )
     else:
         existing_context = (
             "\n## Context\n\n"
-            "This legend has no existing ratings yet. Please rate this player on all 20 skills "
+            f"This legend has no existing ratings yet. Please rate this player on all {_TOTAL_SKILLS} skills "
             "based solely on your knowledge of their peak abilities, playing style, historical "
             "reputation, and era context. There are no modern stats available — rely on historical "
             "accounts, contemporary records, and your knowledge of how this player is remembered."
@@ -663,7 +663,7 @@ def _build_legend_prompt(
         response_schema,
         "```",
         "",
-        "Include ALL 20 skills in the 'skills' object. Use the snake_case skill keys as "
+        f"Include ALL {_TOTAL_SKILLS} skills in the 'skills' object. Use the snake_case skill keys as "
         "the object keys. Be honest and direct — do not inflate ratings out of reverence.",
     ])
 

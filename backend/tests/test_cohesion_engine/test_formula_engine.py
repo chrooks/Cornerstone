@@ -289,3 +289,56 @@ def test_per_factor_amplifier():
 
     # With amplifier should be >= without (finishing is positive → mult >= 1.0)
     assert result["off_ball_impact"] >= no_amp_result["off_ball_impact"]
+
+
+# ---------------------------------------------------------------------------
+# ball_security fallback — rated vs key-absent (the missing-vs-None trap)
+# ---------------------------------------------------------------------------
+
+
+def _proxy_skills() -> dict[str, str]:
+    """Profile with strong proxy inputs, so any proxy leak is visible."""
+    return {"passer": "Elite", "pnr_ball_handler": "Elite", "driver": "Elite"}
+
+
+def _expected_proxy_value() -> float:
+    e = TIER_VALUES["Elite"]
+    c = VALUES["composite_coefficients"]
+    return (
+        e
+        + c.get("ball_security_pnr_handler", 0.0) * e
+        + c.get("ball_security_driver", 0.0) * e
+    )
+
+
+def test_ball_security_reads_skill_when_rated_elite():
+    """(a) secure_handler present at Elite → trait = Elite tier value, proxy ignored."""
+    skills = {**_proxy_skills(), "secure_handler": "Elite"}
+    result = compute_raw_from_formulas(skills, FORMULAS, TIER_VALUES)
+    assert result["ball_security"] == pytest.approx(TIER_VALUES["Elite"])
+
+
+def test_ball_security_rated_none_stays_zero_no_proxy_leak():
+    """(b) secure_handler present at "None" (rated careless) → 0.0, proxy NOT used."""
+    skills = {**_proxy_skills(), "secure_handler": "None"}
+    result = compute_raw_from_formulas(skills, FORMULAS, TIER_VALUES)
+    assert result["ball_security"] == 0.0
+
+
+def test_ball_security_key_absent_falls_back_to_proxy():
+    """(c) secure_handler key absent (unbackfilled Legend) → legacy proxy value."""
+    skills = _proxy_skills()
+    result = compute_raw_from_formulas(skills, FORMULAS, TIER_VALUES)
+    assert result["ball_security"] == pytest.approx(_expected_proxy_value())
+    assert result["ball_security"] > 0.0
+
+
+def test_ball_security_explicit_present_keys_override():
+    """present_keys parameter wins over the keys of the skills dict."""
+    # Skills dict already default-filled (key present as "None"), but the raw
+    # profile did not carry the key — declared via present_keys.
+    filled = {**_proxy_skills(), "secure_handler": "None"}
+    result = compute_raw_from_formulas(
+        filled, FORMULAS, TIER_VALUES, present_keys=set(_proxy_skills().keys())
+    )
+    assert result["ball_security"] == pytest.approx(_expected_proxy_value())

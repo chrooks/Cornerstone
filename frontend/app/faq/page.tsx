@@ -56,8 +56,8 @@ const MISC_QA: ReadonlyArray<{ q: string; a: React.ReactNode }> = [
     a: "Active Players use their real NBA contract for the current season. Legends are assigned a Cornerstone-equivalent figure for the $54M anchor slot, or a tier-based estimate when slotted into a supporting role. The cap forces tradeoffs: you cannot stack four max Players on one roster and call it a hypothetical.",
   },
   {
-    q: "Why 21 Skills and not 50?",
-    a: "21 is the smallest number that still describes a modern Player honestly. Fewer and the model collapses different roles into the same bucket. More and the Skills start overlapping, which makes evaluation noisier rather than sharper. The taxonomy is treated as immutable: adding or removing a Skill requires a database migration and a new Evaluation Version.",
+    q: "Why 22 Skills and not 50?",
+    a: "22 is close to the smallest number that still describes a modern Player honestly. Fewer and the model collapses different roles into the same bucket. More and the Skills start overlapping, which makes evaluation noisier rather than sharper. The taxonomy is treated as immutable: adding or removing a Skill requires a database migration and a new Evaluation Version.",
   },
   {
     q: "Can a Player be All-Time Great in a Skill that did not exist in their era?",
@@ -273,7 +273,7 @@ export default function FAQPage() {
               </h2>
               <Prose>
                 <p>
-                  A Skill is one atomic basketball ability. Cornerstone maintains a fixed taxonomy of 21 Skills. Every Player gets a rating in every Skill, and that rating lives on one of five Skill Tiers:
+                  A Skill is one atomic basketball ability. Cornerstone maintains a fixed taxonomy of 22 Skills. Every Player gets a rating in every Skill, and that rating lives on one of five Skill Tiers:
                 </p>
               </Prose>
 
@@ -317,7 +317,7 @@ export default function FAQPage() {
                     <strong>Statistical thresholds.</strong> A rules engine reads the Player&apos;s recent stats and grades each Skill against tunable volume gates and tier criteria. Per-game divisors, multi-season blending, and stabilization smoothing are all part of the math.
                   </li>
                   <li>
-                    <strong>Claude assessment.</strong> The same Player is sent to Claude with their context (stats, role, history). Claude returns its own Skill Tiers for the full 21-Skill taxonomy.
+                    <strong>Claude assessment.</strong> The same Player is sent to Claude with their context (stats, role, history). Claude returns its own Skill Tiers for the full 22-Skill taxonomy.
                   </li>
                 </ol>
                 <p>

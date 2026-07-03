@@ -13,6 +13,12 @@ Each composite formula has:
   entire factor sum (when ``applies_to`` is absent/null) or specific factor
   contributions (when ``applies_to`` lists factor indices).
 - **depends_on**: composite keys that must be computed before this one.
+- **fallback** (optional): ``{"when_missing": [skill, ...], "factors": [...]}``.
+  When EVERY skill named in ``when_missing`` is absent from the raw incoming
+  profile (captured before ``_with_default_skills`` erases key-absence), the
+  fallback factors are evaluated instead of the primary factors.
+  All-or-nothing on ``when_missing``; no nested fallbacks. Amplifiers apply
+  to whichever factor set ran.
 """
 
 from __future__ import annotations
@@ -81,6 +87,7 @@ def compute_raw_from_formulas(
     tier_values: dict[str, float],
     *,
     order: list[str] | None = None,
+    present_keys: set[str] | None = None,
 ) -> dict[str, float]:
     """Compute raw composites from declarative formula definitions.
 
@@ -91,10 +98,16 @@ def compute_raw_from_formulas(
         order: Pre-computed topological order. When evaluating many players
             against the same formulas, call ``topological_sort`` once and pass
             the result here to avoid redundant sorting.
+        present_keys: Skill keys present in the RAW incoming profile, captured
+            before default-fill. Drives ``fallback.when_missing`` — a skill
+            rated "None" is present (no fallback), a key-absent skill is not.
+            Defaults to the keys of ``skills`` as passed in.
 
     Returns:
         Dict mapping composite key → raw float value.
     """
+    if present_keys is None:
+        present_keys = set(skills.keys())
     skills = _with_default_skills(skills)
     if order is None:
         order = topological_sort(formulas)
@@ -104,6 +117,14 @@ def compute_raw_from_formulas(
         formula = formulas[composite_key]
         factors = formula.get("factors", [])
         amplifiers = formula.get("amplifiers", [])
+
+        # Fallback: swap in the fallback factor set only when EVERY skill in
+        # when_missing is absent from the raw profile (all-or-nothing).
+        fallback = formula.get("fallback")
+        if fallback:
+            when_missing = fallback.get("when_missing") or []
+            if when_missing and all(k not in present_keys for k in when_missing):
+                factors = fallback.get("factors", [])
 
         # Compute each factor's contribution.
         factor_values: list[float] = []

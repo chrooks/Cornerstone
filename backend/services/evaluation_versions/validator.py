@@ -370,6 +370,26 @@ def _validate_composite_formulas(
                     ))
                 composite_deps.add(f_key)
 
+        # Validate the optional fallback block (when_missing + factor skills).
+        fallback = formula.get("fallback")
+        if isinstance(fallback, dict):
+            for skill_key in fallback.get("when_missing", []):
+                if skill_key not in valid_skills:
+                    violations.append(PublishGateViolation(
+                        layer="L8",
+                        code="formula_invalid_fallback_trigger",
+                        message=f"Fallback of '{comp_key}' has unknown when_missing skill '{skill_key}'.",
+                        target=f"values.composite_formulas.{comp_key}.fallback.when_missing",
+                    ))
+            for i, factor in enumerate(fallback.get("factors", [])):
+                if factor.get("type") == "skill" and factor.get("key", "") not in valid_skills:
+                    violations.append(PublishGateViolation(
+                        layer="L8",
+                        code="formula_invalid_fallback_skill",
+                        message=f"Fallback factor {i} of '{comp_key}' references unknown skill '{factor.get('key', '')}'.",
+                        target=f"values.composite_formulas.{comp_key}.fallback.factors[{i}]",
+                    ))
+
         # Validate amplifier sources and applies_to bounds.
         num_factors = len(formula.get("factors", []))
         for i, amp in enumerate(formula.get("amplifiers", [])):

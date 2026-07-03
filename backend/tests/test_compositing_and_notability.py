@@ -542,14 +542,27 @@ class TestCompositeProfile:
 # ===========================================================================
 
 class TestSkillSetSizes:
-    def test_high_confidence_exactly_6(self):
-        assert len(HIGH_CONFIDENCE_SKILLS) == 6
+    def test_high_confidence_exactly_7(self):
+        assert len(HIGH_CONFIDENCE_SKILLS) == 7
 
     def test_moderate_confidence_exactly_12(self):
         assert len(MODERATE_CONFIDENCE_SKILLS) == 12
 
     def test_low_confidence_exactly_3(self):
         assert len(LOW_CONFIDENCE_SKILLS) == 3
+
+    def test_secure_handler_in_taxonomy_and_legend_prompt(self):
+        """secure_handler is a high-confidence skill and reaches the legends
+        claude-suggestion prompt via SKILL_DEFINITIONS (issue #41)."""
+        from services.skills import ALL_SKILLS, SKILL_DEFINITIONS
+        from api.legends import _build_legend_prompt
+
+        assert "secure_handler" in HIGH_CONFIDENCE_SKILLS
+        assert "secure_handler" in ALL_SKILLS
+        assert "secure_handler" in SKILL_DEFINITIONS
+
+        prompt = _build_legend_prompt("Magic Johnson", "1980s", None)
+        assert "secure_handler" in prompt
 
     def test_no_overlap(self):
         assert HIGH_CONFIDENCE_SKILLS.isdisjoint(MODERATE_CONFIDENCE_SKILLS)

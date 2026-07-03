@@ -76,11 +76,19 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         skills: Player skill map (tier strings or pre-boosted floats).
         values: The ``engine.version.values`` dict from the active Evaluation Version.
     """
+    # Capture key-presence BEFORE default-fill: a skill rated "None" is present
+    # (rated careless — no proxy), a key-absent skill (unbackfilled Legend) is
+    # not. _with_default_skills erases this distinction, so it must be taken here.
+    present_keys = set(skills.keys())
+
     composite_formulas = values.get("composite_formulas")
     if composite_formulas:
         from .formula_engine import compute_raw_from_formulas
 
-        return compute_raw_from_formulas(skills, composite_formulas, values["tier_values"])
+        return compute_raw_from_formulas(
+            skills, composite_formulas, values["tier_values"],
+            present_keys=present_keys,
+        )
 
     skills = _with_default_skills(skills)
     tv = values["tier_values"]
@@ -123,14 +131,18 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
     )
 
     # Step 3: independent composites (post game, PnR screener, transition, ball security).
-    # ball_security expanded from single-skill proxy to 3-skill model:
-    # passer = bad-pass avoidance, pnr_handler = lost-ball avoidance under pressure,
-    # driver = drive turnover avoidance (live-ball TO source).
-    raw_ball_security = (
-        _tv("passer")
-        + c.get("ball_security_pnr_handler", 0.0) * _tv("pnr_ball_handler")
-        + c.get("ball_security_driver", 0.0) * _tv("driver")
-    )
+    # ball_security reads the secure_handler skill when the raw profile carries
+    # the key (even at tier "None" — rated careless is NOT proxied); the legacy
+    # 3-skill proxy (passer / pnr_handler / driver) fires only for key-absent
+    # profiles (unbackfilled Legends). Mirrors the formula engine's fallback.
+    if "secure_handler" in present_keys:
+        raw_ball_security = _tv("secure_handler")
+    else:
+        raw_ball_security = (
+            _tv("passer")
+            + c.get("ball_security_pnr_handler", 0.0) * _tv("pnr_ball_handler")
+            + c.get("ball_security_driver", 0.0) * _tv("driver")
+        )
     raw_post_game = (
         _tv("low_post_player")
         + c["post_game_mid_post"] * _tv("mid_post_player")
@@ -329,7 +341,9 @@ def build_distributions(
         .execute()
     )
     for row in profiles.data:
-        skills = _with_default_skills(_extract_skills(row["skill_profile_snapshot"] or {}))
+        # No default-fill here: compute_raw_composites fills defaults itself and
+        # must see raw key-absence to route ball_security's legend proxy fallback.
+        skills = _extract_skills(row["skill_profile_snapshot"] or {})
         raw = compute_raw_composites(skills, values)
         for name, value in raw.items():
             all_raw[name].append(value)
@@ -343,7 +357,7 @@ def build_distributions(
         .execute()
     )
     for row in legend_profiles.data:
-        skills = _with_default_skills(_extract_skills(row["skill_profile_snapshot"] or {}))
+        skills = _extract_skills(row["skill_profile_snapshot"] or {})
         raw = compute_raw_composites(skills, values)
         for name, value in raw.items():
             all_raw[name].append(value)

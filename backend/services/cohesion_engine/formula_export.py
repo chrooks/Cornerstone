@@ -134,15 +134,23 @@ def export_formulas(coefficients: dict[str, float]) -> dict[str, dict[str, Any]]
             "depends_on": ["finishing"],
         },
         # ── Step 3: independent composites ───────────────────────────
-        # ball_security expanded from single-skill proxy to 3-skill model.
+        # ball_security reads the secure_handler skill; the legacy 3-skill
+        # proxy survives only as a fallback for key-absent profiles
+        # (unbackfilled Legends). Mirrors the hardcoded path.
         "ball_security": {
             "factors": [
-                _skill("passer"),
-                _skill("pnr_ball_handler", c.get("ball_security_pnr_handler", 0.0)),
-                _skill("driver", c.get("ball_security_driver", 0.0)),
+                _skill("secure_handler"),
             ],
             "amplifiers": [],
             "depends_on": [],
+            "fallback": {
+                "when_missing": ["secure_handler"],
+                "factors": [
+                    _skill("passer"),
+                    _skill("pnr_ball_handler", c.get("ball_security_pnr_handler", 0.0)),
+                    _skill("driver", c.get("ball_security_driver", 0.0)),
+                ],
+            },
         },
         "post_game": {
             "factors": [

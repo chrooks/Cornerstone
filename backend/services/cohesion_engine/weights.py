@@ -105,7 +105,7 @@ THEORETICAL_MAX: dict[str, float] = {
     "off_ball_impact": 115.104,
     "shot_creation": 178.26239999999999,
     "pnr_orchestration": 28.8,
-    "ball_security": 28.799999999999997,
+    "ball_security": 16.0,  # secure_handler ATG tier value (proxy only for key-absent legends)
     "defensive_rebounding": 16.0,
     "offensive_rebounding": 16.0,
     "transition": 44.480000000000004,

@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { listPlayersWithSkills } from "@/lib/api";
-import { SKILL_LABELS } from "@/lib/skills";
+import { SKILL_LABELS, TOTAL_SKILLS } from "@/lib/skills";
 import { TIER_BADGE_CLASSES, tierToNum } from "@/lib/tiers";
 import type { PlayerWithSkills, SkillTier } from "@/lib/types";
 
@@ -168,7 +168,7 @@ function FallbackCard() {
       </div>
       <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
-          8 of 21 skills shown
+          8 of {TOTAL_SKILLS} skills shown
         </span>
         <Link
           id="landing-proof-card-cta"
@@ -290,7 +290,7 @@ function LiveCard({ player, fading }: LiveCardProps) {
 
       <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
-          {skills.length} of 21 skills shown
+          {skills.length} of {TOTAL_SKILLS} skills shown
         </span>
         <Link
           id="landing-proof-card-cta"

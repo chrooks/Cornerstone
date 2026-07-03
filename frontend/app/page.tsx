@@ -153,7 +153,7 @@ export default function LandingPage() {
               Skill profiles.
             </h2>
             <p className="mt-4 text-[0.9375rem] leading-relaxed text-muted-foreground max-w-sm">
-              Every active player is evaluated on 21 basketball skills using
+              Every active player is evaluated on 22 basketball skills using
               statistical thresholds cross-checked by AI assessment. Agreements
               auto-accept. Disagreements get flagged for manual review.
             </p>
@@ -165,7 +165,7 @@ export default function LandingPage() {
                   Skills
                 </span>
                 <span className="font-mono text-2xl tabular-nums text-foreground">
-                  21
+                  22
                 </span>
               </div>
               <div className="flex flex-col gap-0.5">
