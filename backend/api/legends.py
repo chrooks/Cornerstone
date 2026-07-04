@@ -76,9 +76,10 @@ _SKILL_DEFINITIONS: dict[str, str] = _SKILL_DEFINITIONS_FROM_MODULE
 _TOTAL_SKILLS = len(ALL_SKILLS)
 
 # Claude API settings — same as Prompt 5 composite assessment
-_DEFAULT_MODEL = "claude-sonnet-4-20250514"
-_MAX_TOKENS = 2500
-_TEMPERATURE = 0
+_DEFAULT_MODEL = "claude-sonnet-5"
+# Sonnet 5's tokenizer spends ~30% more tokens for the same text — 4000 keeps a
+# full 22-skill JSON response (tier + justification each) from truncating.
+_MAX_TOKENS = 4000
 
 
 # ---------------------------------------------------------------------------
@@ -785,7 +786,10 @@ def claude_suggestion(legend_id: str):
                 response = client.messages.create(
                     model=model,
                     max_tokens=_MAX_TOKENS,
-                    temperature=_TEMPERATURE,
+                    # Sonnet 5 rejects non-default sampling params (temperature=0
+                    # was a 400) and runs adaptive thinking unless disabled —
+                    # disabled keeps content[0] the text block our parser reads.
+                    thinking={"type": "disabled"},
                     messages=[{"role": "user", "content": prompt}],
                 )
                 raw_text = response.content[0].text

@@ -17,7 +17,7 @@ become the final ratings directly.
 
 Environment:
   ANTHROPIC_API_KEY — required; fails clearly if absent
-  CLAUDE_MODEL      — optional; defaults to claude-sonnet-4-20250514
+  CLAUDE_MODEL      — optional; defaults to claude-sonnet-5
 """
 
 import json
@@ -72,9 +72,10 @@ _SKILL_DEFINITIONS: dict[str, str] = {
 }
 
 # API configuration
-_DEFAULT_MODEL = "claude-sonnet-4-20250514"
-_MAX_TOKENS = 2500
-_TEMPERATURE = 0
+_DEFAULT_MODEL = "claude-sonnet-5"
+# Sonnet 5's tokenizer spends ~30% more tokens for the same text — 4000 keeps a
+# full 22-skill JSON response (tier + justification each) from truncating.
+_MAX_TOKENS = 4000
 
 # Rate limiter — enforces ≥200ms between Claude API request starts across all threads.
 # Applied immediately before each client.messages.create() call so it covers the
@@ -86,6 +87,7 @@ _MIN_REQUEST_INTERVAL_SEC = 0.2
 # Pricing per million tokens (used for cost estimation in batch endpoint)
 # Key: model name prefix → (input_cost_per_mtok, output_cost_per_mtok)
 _MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "claude-sonnet-5":  (3.0, 15.0),
     "claude-sonnet-4":  (3.0, 15.0),
     "claude-opus-4":    (15.0, 75.0),
     "claude-haiku-4":   (0.8, 4.0),
@@ -464,7 +466,10 @@ def call_claude(prompt: str, client: anthropic.Anthropic) -> tuple[dict[str, dic
             response = client.messages.create(
                 model=model,
                 max_tokens=_MAX_TOKENS,
-                temperature=_TEMPERATURE,
+                # Sonnet 5 rejects non-default sampling params (temperature=0
+                # was a 400) and runs adaptive thinking unless disabled —
+                # disabled keeps content[0] the text block our parser reads.
+                thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": prompt}],
             )
             raw_text = response.content[0].text

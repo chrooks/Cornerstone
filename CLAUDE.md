@@ -212,7 +212,7 @@ frontend/
 | `SUPABASE_JWT_SECRET` | Yes | For HS256 JWT verification (newer projects use JWKS/RS256 auto-fetched) |
 | `ANTHROPIC_API_KEY` | Yes | Claude API key |
 | `FRONTEND_ORIGIN` | No | CORS origin (default: `http://localhost:3000`) |
-| `CLAUDE_MODEL` | No | Model override (default: `claude-sonnet-4-20250514`) |
+| `CLAUDE_MODEL` | No | Model override (default: `claude-sonnet-5`) |
 
 ### frontend/.env.local
 | Variable | Required | Notes |
