@@ -20,7 +20,9 @@ import { useCallback, useState } from "react";
 import type {
   ReleaseDiffChangedPlayer,
   ReleaseDiffEntity,
+  ReleaseDiffSkillRename,
 } from "@/lib/types";
+import { SKILL_LABELS } from "@/lib/skills";
 import { ReleaseDiffPlayerRow, LegendMarker } from "./ReleaseDiffPlayerRow";
 import { formatSalary, nameSlug } from "./releaseDiffFormat";
 
@@ -91,6 +93,33 @@ function EntityRow({
   );
 }
 
+function SkillRenameBanner({ renames }: { renames: ReleaseDiffSkillRename[] }) {
+  return (
+    <div
+      id="diff-rename-banner"
+      className="rounded-[6px] border border-[#d9d0c9] bg-white px-4 py-3 space-y-1"
+    >
+      {renames.map((rename) => (
+        <p
+          key={`${rename.from_skill}:${rename.to_skill}`}
+          className="text-sm text-[#0e0907]"
+        >
+          <span className="font-semibold">Skill renamed:</span>{" "}
+          {SKILL_LABELS[rename.from_skill] ?? rename.from_skill} →{" "}
+          <span className="font-semibold">
+            {SKILL_LABELS[rename.to_skill] ?? rename.to_skill}
+          </span>
+          <span className="text-xs text-neutral-500">
+            {" "}
+            — same tier carried over for {rename.count} player
+            {rename.count !== 1 ? "s" : ""}, collapsed here
+          </span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export interface ReleaseDiffBodyProps {
   summary: { added: number; removed: number; changed: number; unchanged: number };
   playersAdded: ReleaseDiffEntity[];
@@ -98,6 +127,8 @@ export interface ReleaseDiffBodyProps {
   playersChanged: ReleaseDiffChangedPlayer[];
   /** Label of the release being compared against ("vs «label»"). */
   comparedWithLabel: string | null;
+  /** Taxonomy rename events the backend collapsed out of the player rows. */
+  skillRenames?: ReleaseDiffSkillRename[];
   /** Optional surface-specific heading for the zero-changes Empty State. */
   emptyHeading?: string;
   /** Optional surface-specific sentence for the zero-changes Empty State. */
@@ -110,6 +141,7 @@ export function ReleaseDiffBody({
   playersRemoved,
   playersChanged,
   comparedWithLabel,
+  skillRenames = [],
   emptyHeading,
   emptyNote,
 }: ReleaseDiffBodyProps) {
@@ -145,27 +177,39 @@ export function ReleaseDiffBody({
 
   if (totalChanges === 0) {
     return (
-      <div
-        id="diff-empty-state"
-        className="rounded-[6px] border border-[#d9d0c9] px-5 py-6 text-center"
-        style={{ backgroundColor: "#fef9f5" }}
-      >
-        <p className="text-sm font-medium text-[#0e0907] mb-1">
-          <span className="text-green-600" aria-hidden="true">✓</span>{" "}
-          {emptyHeading ?? `No changes${versusLabel}`}
-        </p>
-        <p className="text-xs text-neutral-500">
-          {emptyNote ??
-            `The same ${summary.unchanged} player${
-              summary.unchanged !== 1 ? "s" : ""
-            }${comparedWithLabel ? ` as “${comparedWithLabel}”` : ""}.`}
-        </p>
+      <div className="space-y-4">
+        {skillRenames.length > 0 && <SkillRenameBanner renames={skillRenames} />}
+        <div
+          id="diff-empty-state"
+          className="rounded-[6px] border border-[#d9d0c9] px-5 py-6 text-center"
+          style={{ backgroundColor: "#fef9f5" }}
+        >
+          <p className="text-sm font-medium text-[#0e0907] mb-1">
+            <span className="text-green-600" aria-hidden="true">✓</span>{" "}
+            {skillRenames.length > 0
+              ? "No changes beyond the skill rename"
+              : (emptyHeading ?? `No changes${versusLabel}`)}
+          </p>
+          <p className="text-xs text-neutral-500">
+            {skillRenames.length > 0
+              ? `Every player carried over${
+                  comparedWithLabel ? ` from “${comparedWithLabel}”` : ""
+                } — only the skill key changed.`
+              : (emptyNote ??
+                `The same ${summary.unchanged} player${
+                  summary.unchanged !== 1 ? "s" : ""
+                }${comparedWithLabel ? ` as “${comparedWithLabel}”` : ""}.`)}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div id="diff-content" className="space-y-6">
+      {/* Taxonomy renames — one banner instead of N identical rows */}
+      {skillRenames.length > 0 && <SkillRenameBanner renames={skillRenames} />}
+
       {/* Lead band */}
       <div
         id="diff-summary-strip"

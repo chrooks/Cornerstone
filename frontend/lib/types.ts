@@ -1134,6 +1134,17 @@ export interface ReleaseDiffContractChange {
   new: string | number | null;
 }
 
+/**
+ * A taxonomy rename event detected across the diff (e.g. secure_handler →
+ * possession_protector at the same tier on 20+ players). The backend strips
+ * these pairs from per-player skill_changes; the UI renders one banner.
+ */
+export interface ReleaseDiffSkillRename {
+  from_skill: string;
+  to_skill: string;
+  count: number;
+}
+
 /** A Player present on both sides with at least one delta. */
 export interface ReleaseDiffChangedPlayer {
   canonical_player_id: string;
@@ -1158,6 +1169,7 @@ export interface ReleaseDiff {
   players_added: ReleaseDiffEntity[];
   players_removed: ReleaseDiffEntity[];
   players_changed: ReleaseDiffChangedPlayer[];
+  skill_renames: ReleaseDiffSkillRename[];
 }
 
 /**
@@ -1184,6 +1196,7 @@ export interface PublishedReleaseDiff {
   players_added: ReleaseDiffEntity[];
   players_removed: ReleaseDiffEntity[];
   players_changed: ReleaseDiffChangedPlayer[];
+  skill_renames: ReleaseDiffSkillRename[];
 }
 
 // ---------------------------------------------------------------------------

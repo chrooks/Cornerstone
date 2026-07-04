@@ -342,6 +342,7 @@ class TestComputeReleaseDiff:
 
         assert result["draft"]["id"] == "draft-id"
         assert result["active_release"]["label"] == "2025-26 v3"
+        assert result["skill_renames"] == []
         assert result["summary"]["changed"] == 1
         assert result["players_changed"][0]["name"] == "Changed Guy"
 
@@ -525,6 +526,7 @@ class TestComputePublishedReleaseDiff:
         assert result["players_added"] == []
         assert result["players_removed"] == []
         assert result["players_changed"] == []
+        assert result["skill_renames"] == []
 
     def test_envelope_vs_previous_release(self):
         from services.snapshot_versions.repo import _row_to_release
@@ -579,6 +581,7 @@ class TestComputePublishedReleaseDiff:
         assert result["players_changed"][0]["skill_changes"] == [
             {"skill": "passer", "old_tier": "Capable", "new_tier": "Elite"}
         ]
+        assert result["skill_renames"] == []
 
     def test_previous_lookup_filters_published_before_by_created_at(self):
         # created_at, NOT published_at: the reactivate RPC bumps published_at
@@ -708,3 +711,129 @@ class TestPublicReleaseDiffEndpoint:
             resp = anon_client.get(f"/api/snapshots/releases/{_UUID_D}/diff")
         assert resp.status_code == 500
         assert resp.get_json()["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# collapse_skill_renames — taxonomy rename collapse (#84 follow-up)
+# ---------------------------------------------------------------------------
+
+
+def _rename_changed_player(i: int, extra_skill_changes=None):
+    """A player whose diff is the secure_handler -> possession_protector rename."""
+    changes = [
+        {"skill": "possession_protector", "old_tier": None, "new_tier": "Elite"},
+        {"skill": "secure_handler", "old_tier": "Elite", "new_tier": None},
+    ]
+    if extra_skill_changes:
+        changes = changes + extra_skill_changes
+    return {
+        "canonical_player_id": f"c{i}",
+        "name": f"Player {i}",
+        "is_legend": False,
+        "team": "BOS",
+        "position": "G",
+        "skill_changes": changes,
+        "contract_changes": [],
+    }
+
+
+class TestCollapseSkillRenames:
+    def test_below_threshold_diff_is_untouched(self):
+        diff = {
+            "summary": {"added": 0, "removed": 0, "changed": 2, "unchanged": 5},
+            "players_added": [],
+            "players_removed": [],
+            "players_changed": [_rename_changed_player(1), _rename_changed_player(2)],
+        }
+        result = release_diff.collapse_skill_renames(diff)
+        assert result["skill_renames"] == []
+        assert result["players_changed"] == diff["players_changed"]
+        assert result["summary"]["changed"] == 2
+
+    def test_widespread_rename_is_collapsed(self):
+        players = [_rename_changed_player(i) for i in range(25)]
+        # One player has a real tier change on top of the rename.
+        players.append(
+            _rename_changed_player(
+                99,
+                extra_skill_changes=[
+                    {"skill": "scorer", "old_tier": "Capable", "new_tier": "Elite"}
+                ],
+            )
+        )
+        diff = {
+            "summary": {"added": 0, "removed": 0, "changed": 26, "unchanged": 500},
+            "players_added": [],
+            "players_removed": [],
+            "players_changed": players,
+        }
+        result = release_diff.collapse_skill_renames(diff)
+
+        assert result["skill_renames"] == [
+            {
+                "from_skill": "secure_handler",
+                "to_skill": "possession_protector",
+                "count": 26,
+            }
+        ]
+        # Rename-only players are hidden; the one real change remains,
+        # stripped of its rename pair.
+        assert len(result["players_changed"]) == 1
+        remaining = result["players_changed"][0]
+        assert remaining["name"] == "Player 99"
+        assert remaining["skill_changes"] == [
+            {"skill": "scorer", "old_tier": "Capable", "new_tier": "Elite"}
+        ]
+        assert result["summary"]["changed"] == 1
+        # Untouched fields carry through; input was not mutated.
+        assert result["summary"]["unchanged"] == 500
+        assert len(diff["players_changed"]) == 26
+        assert len(diff["players_changed"][0]["skill_changes"]) == 2
+
+    def test_tier_mismatch_is_not_a_rename(self):
+        # Dropped Elite but appeared Capable — a real change, not a rename.
+        players = [
+            {
+                "canonical_player_id": f"c{i}",
+                "name": f"Player {i}",
+                "is_legend": False,
+                "team": "BOS",
+                "position": "G",
+                "skill_changes": [
+                    {"skill": "possession_protector", "old_tier": None, "new_tier": "Capable"},
+                    {"skill": "secure_handler", "old_tier": "Elite", "new_tier": None},
+                ],
+                "contract_changes": [],
+            }
+            for i in range(25)
+        ]
+        diff = {
+            "summary": {"added": 0, "removed": 0, "changed": 25, "unchanged": 0},
+            "players_added": [],
+            "players_removed": [],
+            "players_changed": players,
+        }
+        result = release_diff.collapse_skill_renames(diff)
+        assert result["skill_renames"] == []
+        assert len(result["players_changed"]) == 25
+
+    def test_contract_change_keeps_player_visible(self):
+        players = [_rename_changed_player(i) for i in range(24)]
+        traded = _rename_changed_player(50)
+        traded = {
+            **traded,
+            "contract_changes": [{"field": "team", "old": "BOS", "new": "NYK"}],
+        }
+        players.append(traded)
+        diff = {
+            "summary": {"added": 0, "removed": 0, "changed": 25, "unchanged": 0},
+            "players_added": [],
+            "players_removed": [],
+            "players_changed": players,
+        }
+        result = release_diff.collapse_skill_renames(diff)
+        assert len(result["players_changed"]) == 1
+        assert result["players_changed"][0]["contract_changes"] == [
+            {"field": "team", "old": "BOS", "new": "NYK"}
+        ]
+        assert result["players_changed"][0]["skill_changes"] == []

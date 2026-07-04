@@ -93,6 +93,7 @@ export function ReleaseDiffView({ draftId }: ReleaseDiffViewProps) {
       playersRemoved={diff.players_removed}
       playersChanged={diff.players_changed}
       comparedWithLabel={active_release.label}
+      skillRenames={diff.skill_renames}
       emptyHeading="No changes vs published release"
       emptyNote={`Publishing this draft would freeze the same ${summary.unchanged} player${
         summary.unchanged !== 1 ? "s" : ""

@@ -218,6 +218,7 @@ function ReleaseDiffSection({ releaseId }: { releaseId: string }) {
           playersRemoved={diff.players_removed}
           playersChanged={diff.players_changed}
           comparedWithLabel={diff.previous.label}
+          skillRenames={diff.skill_renames}
         />
       )}
     </section>

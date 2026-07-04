@@ -360,6 +360,93 @@ def build_diff(
     }
 
 
+# A (dropped skill, appeared skill, same tier) pair seen on at least this many
+# players is a taxonomy rename, not per-player news. Real renames hit hundreds
+# of players; organic coincidences don't reach 20.
+RENAME_COLLAPSE_MIN_PLAYERS = 20
+
+
+def collapse_skill_renames(diff: dict) -> dict:
+    """Collapse taxonomy-rename noise out of a diff. Pure — returns a new dict.
+
+    A skill key rename (e.g. secure_handler → possession_protector) shows up
+    on nearly every player as the same pair: the old key dropped
+    (``new_tier: None``) plus the new key appeared (``old_tier: None``) at the
+    same tier. That is one taxonomy event, not N player changes. Detect pairs
+    supported by >= RENAME_COLLAPSE_MIN_PLAYERS players, strip them from every
+    player's ``skill_changes``, hide players left with no changes at all, and
+    report the events as ``skill_renames`` so the UI can render one banner.
+    """
+    players = diff["players_changed"]
+
+    # Detect: count (dropped, appeared) pairs with matching tiers per player.
+    pair_counts: dict[tuple[str, str], int] = {}
+    for player in players:
+        dropped = {
+            c["skill"]: c["old_tier"]
+            for c in player["skill_changes"]
+            if c["new_tier"] is None and c["old_tier"] is not None
+        }
+        appeared = {
+            c["skill"]: c["new_tier"]
+            for c in player["skill_changes"]
+            if c["old_tier"] is None and c["new_tier"] is not None
+        }
+        for old_skill, old_tier in dropped.items():
+            for new_skill, new_tier in appeared.items():
+                if old_tier == new_tier:
+                    key = (old_skill, new_skill)
+                    pair_counts[key] = pair_counts.get(key, 0) + 1
+
+    renames = sorted(
+        (pair for pair, count in pair_counts.items()
+         if count >= RENAME_COLLAPSE_MIN_PLAYERS),
+    )
+    if not renames:
+        return {**diff, "skill_renames": []}
+
+    def _is_rename_entry(player_changes: list[dict], change: dict) -> bool:
+        by_skill = {c["skill"]: c for c in player_changes}
+        for old_skill, new_skill in renames:
+            old_c = by_skill.get(old_skill)
+            new_c = by_skill.get(new_skill)
+            if (
+                old_c is not None
+                and new_c is not None
+                and old_c["new_tier"] is None
+                and new_c["old_tier"] is None
+                and old_c["old_tier"] == new_c["new_tier"]
+                and change["skill"] in (old_skill, new_skill)
+            ):
+                return True
+        return False
+
+    rename_counts = {pair: 0 for pair in renames}
+    remaining_players: list[dict] = []
+    for player in players:
+        kept = [
+            c for c in player["skill_changes"]
+            if not _is_rename_entry(player["skill_changes"], c)
+        ]
+        if len(kept) < len(player["skill_changes"]):
+            for pair in renames:
+                by_skill = {c["skill"]: c for c in player["skill_changes"]}
+                if pair[0] in by_skill and pair[1] in by_skill:
+                    rename_counts[pair] += 1
+        if kept or player["contract_changes"]:
+            remaining_players.append({**player, "skill_changes": kept})
+
+    return {
+        **diff,
+        "summary": {**diff["summary"], "changed": len(remaining_players)},
+        "players_changed": remaining_players,
+        "skill_renames": [
+            {"from_skill": old, "to_skill": new, "count": rename_counts[(old, new)]}
+            for old, new in renames
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
@@ -392,7 +479,7 @@ def compute_release_diff(client=None) -> dict:
 
     draft_entities = _collect_draft_entities(draft.season, c)
     released_entities = _collect_released_entities(active.id, c)
-    diff = build_diff(draft_entities, released_entities)
+    diff = collapse_skill_renames(build_diff(draft_entities, released_entities))
 
     return {
         "draft": {
@@ -460,9 +547,10 @@ def compute_published_release_diff(release_id: str, client=None) -> dict:
             "players_added": [],
             "players_removed": [],
             "players_changed": [],
+            "skill_renames": [],
         }
     previous_entities = _collect_released_entities(previous.id, c)
-    diff = build_diff(current_entities, previous_entities)
+    diff = collapse_skill_renames(build_diff(current_entities, previous_entities))
     return {
         "release": _release_meta(release),
         "previous": _release_meta(previous),

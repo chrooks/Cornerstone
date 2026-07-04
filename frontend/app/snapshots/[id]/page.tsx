@@ -172,6 +172,7 @@ export default function PublicSnapshotDiffPage() {
               playersRemoved={loadState.diff.players_removed}
               playersChanged={loadState.diff.players_changed}
               comparedWithLabel={loadState.diff.previous.label}
+              skillRenames={loadState.diff.skill_renames}
             />
           )}
         </>
