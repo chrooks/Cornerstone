@@ -29,6 +29,7 @@ from services.snapshot_versions.active import (
 from services.snapshot_versions.released_repo import (
     fetch_legend_profiles_by_nba_api_ids,
     fetch_profiles_by_source_player_ids,
+    fetch_skill_trace_by_source_player_id,
 )
 from api.auth import require_admin, require_open_draft
 
@@ -1027,3 +1028,46 @@ def player_profile(player_id: str):
     except Exception as exc:
         logger.exception("Error in GET /api/players/%s/profile", player_id)
         return _err(str(exc))
+
+
+@players_bp.route("/players/<player_id>/skill-trace", methods=["GET"])
+def player_skill_trace(player_id: str):
+    """
+    Return the frozen stat-to-skill condition trace and resolved override
+    history for a single non-legend player in the active Snapshot Release.
+
+    Intentionally public — no @require_admin. Read-only, derived from data
+    already shown on the same public player profile. See issue #82 and
+    feature_requests/player-skill-provenance-plan.md.
+
+    Path params:
+      player_id — Supabase UUID
+
+    Query params:
+      ?season=2025-26  (default: current season)
+
+    Response data: {"computed": bool, "skills": {skill_name: {condition_results, override}}}
+    404 if the player has no row in the active release, or is a legend (no
+    stat-derived trace applies to them).
+    """
+    if not _validate_uuid(player_id):
+        return _err("Invalid player_id — must be a UUID", status=400)
+
+    try:
+        active_release_id = get_active_release_id()
+    except ActiveReleaseMissingError:
+        return jsonify({"success": False, "data": None, "error": "no_active_release"}), 503
+
+    try:
+        trace = fetch_skill_trace_by_source_player_id(
+            player_id, active_release_id, client=get_supabase()
+        )
+        if trace is None:
+            return _err(
+                "No skill trace for this player — not released, or a legend", status=404
+            )
+        return _ok(trace)
+
+    except Exception:
+        logger.exception("Error in GET /api/players/%s/skill-trace", player_id)
+        return _err("Internal server error", status=500)

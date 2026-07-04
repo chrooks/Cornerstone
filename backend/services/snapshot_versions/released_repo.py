@@ -58,6 +58,34 @@ def fetch_profiles_by_source_player_ids(
     return result
 
 
+def fetch_skill_trace_by_source_player_id(
+    source_player_id: str,
+    active_release_id: str,
+    *,
+    client=None,
+) -> dict | None:
+    """Return the frozen skill_trace_snapshot ({computed, skills}) for a single
+    non-legend player in the active Snapshot Release, or None if no matching
+    row exists (unreleased player, or a legend — legends never get a trace
+    freeze pass, see trace_snapshot.py)."""
+    from services.supabase_client import get_supabase
+
+    c = client or get_supabase()
+    rows = (
+        c.table("released_players")
+        .select("skill_trace_snapshot")
+        .eq("snapshot_release_id", active_release_id)
+        .eq("source_player_id", source_player_id)
+        .eq("is_legend", False)
+        .limit(1)
+        .execute()
+    )
+    data = rows.data or []
+    if not data:
+        return None
+    return data[0].get("skill_trace_snapshot") or {}
+
+
 def fetch_legend_profiles_by_nba_api_ids(
     legend_nba_api_ids: Iterable[int] | None,
     active_release_id: str,

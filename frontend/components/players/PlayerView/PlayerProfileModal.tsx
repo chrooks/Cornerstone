@@ -49,7 +49,7 @@ export function PlayerProfileModal({
       >
         <div
           id="player-profile-modal-content"
-          className="max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-3rem)] w-full overflow-y-auto rounded-md border border-[#d9d0c9] bg-[#f7f7f7] px-4 py-4 md:px-6 md:py-5"
+          className="max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-3rem)] w-full overflow-y-auto rounded-md border border-[#d9d0c9] bg-[#f7f7f7] px-4 pt-4 pb-8 md:px-6 md:pt-5 md:pb-10"
         >
           <div id="player-profile-modal-toolbar" className="mb-3 flex justify-end">
             <button

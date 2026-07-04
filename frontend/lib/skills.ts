@@ -183,10 +183,9 @@ export const SKILL_TYPE_PRIORITY: Record<string, number> = {
 
 export const PUBLIC_SKILL_CATEGORIES: Record<string, string[]> = {
   "Perimeter Scoring":     ["spot_up_shooter", "movement_shooter", "off_dribble_shooter"],
-  "On-Ball Creation":      ["isolation_scorer", "pnr_ball_handler", "driver"],
+  "Creation & Playmaking": ["isolation_scorer", "pnr_ball_handler", "driver", "passer", "possession_protector"],
   "Off-Ball & Transition": ["cutter", "transition_threat", "pnr_finisher"],
   "Interior Scoring":      ["crafty_finisher", "high_flyer", "vertical_spacer", "mid_post_player", "low_post_player"],
-  "Playmaking":            ["passer", "possession_protector"],
   "Physicality":           ["screen_setter", "offensive_rebounder", "rebounder"],
   "Defense":               ["rim_protector", "perimeter_disruptor", "versatile_defender"],
 };

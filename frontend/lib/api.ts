@@ -21,6 +21,7 @@ import type {
   FlaggedPlayerSummary,
   PlayerReviewDetail,
   PlayerProfile,
+  PlayerSkillTrace,
   FlagResolution,
   LegendSummary,
   LegendDetail,
@@ -611,6 +612,19 @@ export async function getPlayerProfile(
 ): Promise<ApiResponse<PlayerProfile>> {
   const qs = season ? `?season=${encodeURIComponent(season)}` : "";
   return apiFetch<PlayerProfile>(`/api/players/${playerId}/profile${qs}`);
+}
+
+/**
+ * Get the frozen stat-to-skill condition trace + resolved override history
+ * for a player (public, no auth). 404s for a legend (no stat-derived trace
+ * applies) or a player with no row in the active release.
+ */
+export async function getPlayerSkillTrace(
+  playerId: string,
+  season?: string
+): Promise<ApiResponse<PlayerSkillTrace>> {
+  const qs = season ? `?season=${encodeURIComponent(season)}` : "";
+  return apiFetch<PlayerSkillTrace>(`/api/players/${playerId}/skill-trace${qs}`);
 }
 
 /** Fast player name search (DB-only, no nba_api calls). */

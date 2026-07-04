@@ -328,6 +328,36 @@ export interface PlayerProfile {
 /** Valid resolution choices for a skill flag */
 export type FlagResolution = "trust_stats" | "trust_claude" | "manual_override";
 
+/**
+ * Resolved manual-override history for one skill, frozen into
+ * released_players.skill_trace_snapshot at publish time. Deliberately omits
+ * the admin-facing `notes` field — see the public skill-trace endpoint,
+ * which never selects it (issue #82).
+ */
+export interface SkillOverride {
+  resolution: FlagResolution;
+  resolved_value: string;
+  resolved_at: string;
+}
+
+/** Per-skill entry in a player's frozen skill trace. */
+export interface SkillTraceEntry {
+  condition_results: ConditionResult[];
+  override: SkillOverride | null;
+}
+
+/**
+ * Full response from GET /api/players/<player_id>/skill-trace.
+ * `computed` is false (or, for a player whose release predates this
+ * feature, the key is simply absent) when the trace couldn't be frozen for
+ * this player — the frontend should show a "trace unavailable" state rather
+ * than an empty-looking breakdown.
+ */
+export interface PlayerSkillTrace {
+  computed: boolean;
+  skills: Record<string, SkillTraceEntry>;
+}
+
 // ---------------------------------------------------------------------------
 // Calibration — Stat Leaders table
 // ---------------------------------------------------------------------------

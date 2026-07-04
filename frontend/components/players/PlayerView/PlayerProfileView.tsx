@@ -1,12 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
+import { SkillTraceDetail } from "./SkillTraceDetail";
 import { PUBLIC_SKILL_CATEGORIES, formatSkillName } from "@/lib/skills";
 import { formatPlayerSalary } from "./playerViewUtils";
-import type { CompositeSkillResult, PlayerProfile, SkillTier } from "@/lib/types";
+import { getPlayerSkillTrace } from "@/lib/api";
+import type { CompositeSkillResult, PlayerProfile, PlayerSkillTrace, SkillTier } from "@/lib/types";
 
 const TIER_ORDER: Record<string, number> = {
   "All-Time Great": 0,
@@ -20,13 +24,25 @@ function tierOrder(tier: string | null | undefined): number {
   return TIER_ORDER[tier ?? "None"] ?? 4;
 }
 
+/** Lazily-loaded, once-per-profile-view trace state shared by every SkillColumn. */
+type TraceStatus = "idle" | "loading" | "unavailable" | "loaded";
+
 interface SkillColumnProps {
   category: string;
   skillNames: string[];
   skills: Record<string, CompositeSkillResult> | null;
+  selectedSkill: string | null;
+  onSelectSkill: (skillName: string) => void;
 }
 
-function SkillColumn({ category, skillNames, skills }: SkillColumnProps) {
+/** A skill's row within its category column. Selecting a row doesn't expand
+ * anything in place — it drives the single shared detail panel rendered
+ * below the whole grid (see PlayerProfileView). A per-row floating popover
+ * used to do this but got clipped by any scrolling ancestor (the profile
+ * modal's own overflow) and had to guess which edge to open from; an
+ * in-flow panel at the bottom has neither problem and works identically
+ * in the full page and the modal. */
+function SkillColumn({ category, skillNames, skills, selectedSkill, onSelectSkill }: SkillColumnProps) {
   const sorted = [...skillNames].sort((a, b) => {
     const tierA = skills?.[a]?.final_tier;
     const tierB = skills?.[b]?.final_tier;
@@ -40,15 +56,83 @@ function SkillColumn({ category, skillNames, skills }: SkillColumnProps) {
       </p>
       {sorted.map((skillName) => {
         const tier = (skills?.[skillName]?.final_tier ?? "None") as SkillTier;
+        const isSelected = selectedSkill === skillName;
+
         return (
-          <div key={skillName} className="flex items-center justify-between gap-1.5 py-0.5">
+          <button
+            key={skillName}
+            type="button"
+            id={`player-profile-skill-toggle-${skillName}`}
+            onClick={() => onSelectSkill(skillName)}
+            aria-expanded={isSelected}
+            className={cn(
+              "flex items-center justify-between gap-1.5 py-0.5 px-1 -mx-1 text-left rounded-sm transition-colors",
+              isSelected ? "bg-[#ffa05c]/15" : "hover:bg-[#0e0907]/[0.03]"
+            )}
+          >
             <span className={cn("text-xs leading-tight truncate", tier === "None" ? "text-[#0e0907]/35" : "text-[#0e0907]")}>
               {formatSkillName(skillName)}
             </span>
-            <SkillTierBadge tier={tier} size="sm" />
-          </div>
+            <span className="flex items-center gap-1 shrink-0">
+              <SkillTierBadge tier={tier} size="sm" />
+              {isSelected ? (
+                <ChevronUp className="h-3 w-3 text-[#0e0907]/45" />
+              ) : (
+                <ChevronDown className="h-3 w-3 text-[#0e0907]/35" />
+              )}
+            </span>
+          </button>
         );
       })}
+    </div>
+  );
+}
+
+interface SkillDetailPanelProps {
+  skillName: string;
+  tier: SkillTier;
+  traceStatus: TraceStatus;
+  trace: PlayerSkillTrace | null;
+  onClose: () => void;
+}
+
+/** The single shared "why" panel for whichever skill is selected — lives in
+ * normal document flow below the grid, full width, so it never needs to
+ * fight a scroll container or guess which edge to open from. */
+function SkillDetailPanel({ skillName, tier, traceStatus, trace, onClose }: SkillDetailPanelProps) {
+  const entry = trace?.skills?.[skillName];
+  const unavailable = traceStatus === "unavailable" || (traceStatus === "loaded" && !trace?.computed);
+
+  return (
+    <div
+      id="player-profile-skill-detail-panel"
+      className="rounded-md border border-[#d9d0c9] bg-[#f7f7f7] p-4"
+    >
+      <div className="mb-3 flex items-center justify-between gap-3 border-b border-[#d9d0c9] pb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-[#0e0907]">{formatSkillName(skillName)}</span>
+          <SkillTierBadge tier={tier} size="sm" />
+        </div>
+        <button
+          type="button"
+          id="player-profile-skill-detail-close"
+          onClick={onClose}
+          aria-label="Close breakdown"
+          className="rounded-sm p-0.5 text-[#0e0907]/40 hover:bg-[#0e0907]/[0.05] hover:text-[#0e0907] transition-colors"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {traceStatus === "loading" && (
+        <p className="text-[12px] text-[#0e0907]/45">Loading breakdown…</p>
+      )}
+      {unavailable && (
+        <p className="text-[12px] text-[#0e0907]/45">Trace temporarily unavailable for this player.</p>
+      )}
+      {traceStatus === "loaded" && trace?.computed && entry && (
+        <SkillTraceDetail conditions={entry.condition_results} override={entry.override} finalTier={tier} />
+      )}
     </div>
   );
 }
@@ -68,6 +152,42 @@ export function PlayerProfileView({
 }: PlayerProfileViewProps) {
   const { player } = profile;
   const backLabel = fromBuilder ? "Builder" : "Players";
+
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  const [traceStatus, setTraceStatus] = useState<TraceStatus>("idle");
+  const [trace, setTrace] = useState<PlayerSkillTrace | null>(null);
+
+  useEffect(() => {
+    if (!selectedSkill) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setSelectedSkill(null);
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [selectedSkill]);
+
+  async function handleSelectSkill(skillName: string) {
+    if (selectedSkill === skillName) {
+      setSelectedSkill(null);
+      return;
+    }
+    setSelectedSkill(skillName);
+
+    if (traceStatus !== "idle") return; // already fetched (or failed) for this profile view
+
+    setTraceStatus("loading");
+    try {
+      const res = await getPlayerSkillTrace(player.id, player.season);
+      if (res.success && res.data) {
+        setTrace(res.data);
+        setTraceStatus("loaded");
+      } else {
+        setTraceStatus("unavailable");
+      }
+    } catch {
+      setTraceStatus("unavailable");
+    }
+  }
 
   return (
     <section id={isModal ? "player-profile-modal-view" : "public-player-profile-view"} className="space-y-8">
@@ -132,18 +252,32 @@ export function PlayerProfileView({
       </header>
 
       {profile.skills ? (
-        <div
-          id="player-profile-view-skills"
-          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4 lg:gap-6"
-        >
-          {Object.entries(PUBLIC_SKILL_CATEGORIES).map(([category, skillNames]) => (
-            <SkillColumn
-              key={category}
-              category={category}
-              skillNames={skillNames}
-              skills={profile.skills}
+        <div className="flex flex-col gap-4">
+          <div
+            id="player-profile-view-skills"
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 lg:gap-6"
+          >
+            {Object.entries(PUBLIC_SKILL_CATEGORIES).map(([category, skillNames]) => (
+              <SkillColumn
+                key={category}
+                category={category}
+                skillNames={skillNames}
+                skills={profile.skills}
+                selectedSkill={selectedSkill}
+                onSelectSkill={handleSelectSkill}
+              />
+            ))}
+          </div>
+
+          {selectedSkill && (
+            <SkillDetailPanel
+              skillName={selectedSkill}
+              tier={(profile.skills[selectedSkill]?.final_tier ?? "None") as SkillTier}
+              traceStatus={traceStatus}
+              trace={trace}
+              onClose={() => setSelectedSkill(null)}
             />
-          ))}
+          )}
         </div>
       ) : (
         <div id="player-profile-view-no-skills" className="rounded-md border border-[#d9d0c9] bg-[#f7f7f7] p-6 text-center">

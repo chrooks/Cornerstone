@@ -386,6 +386,44 @@ class TestPublishDraft:
 
         assert call_order == ["clear", "ensure"]
 
+    def test_publish_draft_tolerates_trace_snapshot_failure(self):
+        """Issue #82: a skill-trace freeze failure must never block publish —
+        publish_draft() still returns the published release even if
+        trace_snapshot.snapshot_skill_traces() raises."""
+        from services.snapshot_versions import repo
+        from services.snapshot_versions import trace_snapshot
+
+        draft_id = "aaaaaaaa-0000-0000-0000-000000000001"
+        published_row = _make_published_row(id=draft_id)
+
+        client = MagicMock()
+        client.rpc.return_value.execute.return_value = _result(None)
+        (
+            client
+            .table.return_value
+            .select.return_value
+            .eq.return_value
+            .single.return_value
+            .execute.return_value
+        ) = _result(published_row)
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with patch.object(
+                trace_snapshot, "snapshot_skill_traces", side_effect=RuntimeError("boom")
+            ) as mock_snapshot:
+                with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
+                    with patch("services.snapshot_versions.distribution_cache.ensure_distributions"):
+                        with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                            from services.cohesion_engine.engine import EvaluationVersion
+                            mock_active.return_value = EvaluationVersion(
+                                id="ev-1", slug="cohesion-v1", status="published",
+                                payload={"values": {}}
+                            )
+                            result = repo.publish_draft(draft_id, "label", allow_missing_composite=True)
+
+        assert result.label == published_row["label"]  # publish_draft did not raise
+        mock_snapshot.assert_called_once()
+
     def test_publish_rewarm_rebuilds_distributions_from_snapshot_rows(self, monkeypatch):
         """Issue #50: the publish rewarm rebuilds normalization distributions
         from the newly active release's released_players.skill_profile_snapshot

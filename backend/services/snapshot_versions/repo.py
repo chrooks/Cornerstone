@@ -318,6 +318,19 @@ def publish_draft(
 
     published = get_release(draft_id, client=c)
 
+    # Issue #82: freeze the per-skill stat trace + resolved override history
+    # into released_players.skill_trace_snapshot for the public "why" surface.
+    # Never allowed to block a publish — see trace_snapshot.py's own docstring.
+    try:
+        from services.snapshot_versions import trace_snapshot
+
+        updated = trace_snapshot.snapshot_skill_traces(published.id, published.season, client=c)
+        logger.info("Froze skill trace snapshots for %d players (release %s)", updated, published.id)
+    except Exception:
+        logger.exception(
+            "Skill trace snapshot freeze failed — public 'why' data will be empty for this release"
+        )
+
     # Rewarm distribution cache against the freshly published snapshot.
     # Issue #72: warm against the published Release's own season, not the
     # hardcoded CURRENT_SEASON, so the cache key matches the freeze scope.
