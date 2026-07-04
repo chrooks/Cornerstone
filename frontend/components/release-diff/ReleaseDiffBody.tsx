@@ -1,31 +1,31 @@
 "use client";
 
 /**
- * ReleaseDiffView — draft-vs-published diff Surface (#8).
+ * ReleaseDiffBody — presentational release diff renderer.
  *
- * Fetches GET /api/snapshots/diff and renders:
+ * Extracted from ReleaseDiffView (#8) so three surfaces share one rendering:
+ *  - the admin draft workspace's draft-vs-active preview,
+ *  - the public /snapshots/[id] release history page,
+ *  - the admin release detail embed.
+ *
+ * Pure props, no fetching:
  *  1. #diff-summary-strip — lead band: total change count, prose breakdown vs
- *     the active release label, quiet unchanged line.
+ *     the compared release label, quiet unchanged line.
  *  2. #diff-changed-section — expandable per-Player rows (the star).
  *  3. #diff-added-section / #diff-removed-section — simple rows.
- *  4. #diff-empty-state — calm "no changes vs published" card.
- *
- * Read-only; changed Players carry the Hierarchy, unchanged is one quiet line.
+ *  4. #diff-empty-state — calm "no changes" card.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { getSnapshotDiff } from "@/lib/api";
-import type { ReleaseDiff, ReleaseDiffEntity } from "@/lib/types";
-import {
-  ReleaseDiffPlayerRow,
-  LegendMarker,
-} from "./ReleaseDiffPlayerRow";
+import { useCallback, useState } from "react";
+import type {
+  ReleaseDiffChangedPlayer,
+  ReleaseDiffEntity,
+} from "@/lib/types";
+import { ReleaseDiffPlayerRow, LegendMarker } from "./ReleaseDiffPlayerRow";
 import { formatSalary, nameSlug } from "./releaseDiffFormat";
 
 /** Auto-expand changed rows when the list is small enough to scan whole. */
 const AUTO_EXPAND_MAX = 5;
-
-type ViewState = "loading" | "error" | "ready";
 
 function SectionHeader({
   id,
@@ -91,48 +91,36 @@ function EntityRow({
   );
 }
 
-export interface ReleaseDiffViewProps {
-  /** Refetch key — the open draft's id. */
-  draftId: string;
+export interface ReleaseDiffBodyProps {
+  summary: { added: number; removed: number; changed: number; unchanged: number };
+  playersAdded: ReleaseDiffEntity[];
+  playersRemoved: ReleaseDiffEntity[];
+  playersChanged: ReleaseDiffChangedPlayer[];
+  /** Label of the release being compared against ("vs «label»"). */
+  comparedWithLabel: string | null;
+  /** Optional surface-specific heading for the zero-changes Empty State. */
+  emptyHeading?: string;
+  /** Optional surface-specific sentence for the zero-changes Empty State. */
+  emptyNote?: string;
 }
 
-export function ReleaseDiffView({ draftId }: ReleaseDiffViewProps) {
-  const [viewState, setViewState] = useState<ViewState>("loading");
-  const [diff, setDiff] = useState<ReleaseDiff | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-
-  const load = useCallback(async () => {
-    setViewState("loading");
-    try {
-      const res = await getSnapshotDiff();
-      if (res.success && res.data) {
-        setDiff(res.data);
-        // Small change sets read best fully open.
-        setExpandedIds(
-          res.data.players_changed.length <= AUTO_EXPAND_MAX
-            ? new Set(
-                res.data.players_changed.map(
-                  (p) => `${p.canonical_player_id}:${p.is_legend}`
-                )
-              )
-            : new Set()
-        );
-        setViewState("ready");
-      } else {
-        setErrorMessage(res.error ?? "Failed to load diff");
-        setViewState("error");
-      }
-    } catch {
-      setErrorMessage("Failed to load diff");
-      setViewState("error");
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-    // draftId is the refetch key: a new draft means a new diff.
-  }, [load, draftId]);
+export function ReleaseDiffBody({
+  summary,
+  playersAdded,
+  playersRemoved,
+  playersChanged,
+  comparedWithLabel,
+  emptyHeading,
+  emptyNote,
+}: ReleaseDiffBodyProps) {
+  // Small change sets read best fully open.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() =>
+    playersChanged.length <= AUTO_EXPAND_MAX
+      ? new Set(
+          playersChanged.map((p) => `${p.canonical_player_id}:${p.is_legend}`),
+        )
+      : new Set(),
+  );
 
   const toggleExpanded = useCallback((key: string) => {
     setExpandedIds((prev) => {
@@ -146,47 +134,14 @@ export function ReleaseDiffView({ draftId }: ReleaseDiffViewProps) {
     });
   }, []);
 
-  if (viewState === "loading") {
-    return (
-      <div id="diff-loading" className="space-y-3">
-        <div
-          className="h-20 rounded-[6px] border border-[#d9d0c9] animate-pulse"
-          style={{ backgroundColor: "#fef9f5" }}
-        />
-        <div className="h-10 rounded-[6px] border border-[#d9d0c9] animate-pulse bg-white" />
-        <div className="h-10 rounded-[6px] border border-[#d9d0c9] animate-pulse bg-white" />
-      </div>
-    );
-  }
-
-  if (viewState === "error" || !diff) {
-    return (
-      <div
-        id="diff-error-state"
-        className="rounded-[6px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800"
-      >
-        <p className="mb-2">
-          Couldn&apos;t compute the diff: {errorMessage ?? "unknown error"}
-        </p>
-        <button
-          id="diff-error-retry-btn"
-          type="button"
-          onClick={() => void load()}
-          className="text-xs font-medium border border-amber-300 rounded-[4px] px-3 py-1.5 bg-white hover:bg-amber-100 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  const { summary, active_release } = diff;
   const totalChanges = summary.added + summary.removed + summary.changed;
 
   const proseParts: string[] = [];
   if (summary.added > 0) proseParts.push(`${summary.added} added`);
   if (summary.removed > 0) proseParts.push(`${summary.removed} removed`);
   if (summary.changed > 0) proseParts.push(`${summary.changed} changed`);
+
+  const versusLabel = comparedWithLabel ? ` vs “${comparedWithLabel}”` : "";
 
   if (totalChanges === 0) {
     return (
@@ -196,12 +151,14 @@ export function ReleaseDiffView({ draftId }: ReleaseDiffViewProps) {
         style={{ backgroundColor: "#fef9f5" }}
       >
         <p className="text-sm font-medium text-[#0e0907] mb-1">
-          <span className="text-green-600" aria-hidden="true">✓</span> No changes vs published release
+          <span className="text-green-600" aria-hidden="true">✓</span>{" "}
+          {emptyHeading ?? `No changes${versusLabel}`}
         </p>
         <p className="text-xs text-neutral-500">
-          Publishing this draft would freeze the same {summary.unchanged} player
-          {summary.unchanged !== 1 ? "s" : ""} as &ldquo;{active_release.label}
-          &rdquo;.
+          {emptyNote ??
+            `The same ${summary.unchanged} player${
+              summary.unchanged !== 1 ? "s" : ""
+            }${comparedWithLabel ? ` as “${comparedWithLabel}”` : ""}.`}
         </p>
       </div>
     );
@@ -224,7 +181,8 @@ export function ReleaseDiffView({ draftId }: ReleaseDiffViewProps) {
             {totalChanges}
           </span>
           <span className="text-sm text-neutral-500">
-            {proseParts.join(", ")} vs &ldquo;{active_release.label}&rdquo;
+            {proseParts.join(", ")}
+            {versusLabel}
           </span>
         </div>
         <p id="diff-summary-unchanged" className="text-[11px] text-neutral-400 mt-1">
@@ -243,7 +201,7 @@ export function ReleaseDiffView({ draftId }: ReleaseDiffViewProps) {
             dominant
           />
           <div className="space-y-1.5">
-            {diff.players_changed.map((player) => {
+            {playersChanged.map((player) => {
               const key = `${player.canonical_player_id}:${player.is_legend}`;
               return (
                 <ReleaseDiffPlayerRow
@@ -268,7 +226,7 @@ export function ReleaseDiffView({ draftId }: ReleaseDiffViewProps) {
             accentClass="text-green-700"
           />
           <div className="space-y-1.5">
-            {diff.players_added.map((entity) => (
+            {playersAdded.map((entity) => (
               <EntityRow
                 key={`${entity.canonical_player_id}:${entity.is_legend}`}
                 entity={entity}
@@ -289,7 +247,7 @@ export function ReleaseDiffView({ draftId }: ReleaseDiffViewProps) {
             accentClass="text-red-700"
           />
           <div className="space-y-1.5">
-            {diff.players_removed.map((entity) => (
+            {playersRemoved.map((entity) => (
               <EntityRow
                 key={`${entity.canonical_player_id}:${entity.is_legend}`}
                 entity={entity}

@@ -162,7 +162,7 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
 
       {entry.link && (
         <span className="mt-3 inline-flex items-center gap-1 font-mono text-[0.75rem] font-medium text-[#0e0907] transition-transform duration-150 group-hover/entry:translate-x-0.5">
-          Open
+          {entry.type === "snapshot_release" ? "See what changed" : "Open"}
           <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
         </span>
       )}

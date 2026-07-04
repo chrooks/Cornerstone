@@ -13,10 +13,19 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast, Toaster } from "sonner";
 import { cn } from "@/lib/utils";
-import { apiFetch, reactivateSnapshotRelease } from "@/lib/api";
-import type { ApiResponse, SnapshotRelease } from "@/lib/types";
+import {
+  apiFetch,
+  getPublishedReleaseDiff,
+  reactivateSnapshotRelease,
+} from "@/lib/api";
+import type {
+  ApiResponse,
+  PublishedReleaseDiff,
+  SnapshotRelease,
+} from "@/lib/types";
 import { StateChip } from "../_components/StateChip";
 import { ReactivateModal } from "../_components/ReactivateModal";
+import { ReleaseDiffBody } from "@/components/release-diff/ReleaseDiffBody";
 
 type LoadState =
   | { status: "loading" }
@@ -138,6 +147,83 @@ function ReleaseDetailCard({ release, onReactivateClick }: ReleaseDetailCardProp
   );
 }
 
+/**
+ * "What changed vs previous release" — the same public release diff the
+ * /snapshots/[id] page shows, embedded below the detail card (#84 follow-up).
+ */
+function ReleaseDiffSection({ releaseId }: { releaseId: string }) {
+  const [diff, setDiff] = useState<PublishedReleaseDiff | null>(null);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    // Reset on release change and ignore out-of-order resolutions — the page
+    // stays mounted across /admin/snapshots/A → B navigations.
+    let ignore = false;
+    setDiff(null);
+    setHasError(false);
+    getPublishedReleaseDiff(releaseId)
+      .then((res) => {
+        if (ignore) return;
+        if (res.success && res.data) {
+          setDiff(res.data);
+        } else {
+          setHasError(true);
+        }
+      })
+      .catch(() => {
+        if (!ignore) setHasError(true);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [releaseId]);
+
+  if (hasError) {
+    return (
+      <p id="snapshot-detail-diff-error" className="mt-8 text-xs text-neutral-500">
+        Couldn&apos;t load the diff vs the previous release.
+      </p>
+    );
+  }
+
+  return (
+    <section id="snapshot-detail-diff" className="mt-8" aria-label="Release diff">
+      <div className="flex items-baseline justify-between gap-4 mb-3">
+        <p className="text-[12px] uppercase tracking-[0.18em] font-semibold text-[#0e0907]">
+          What changed vs previous release
+        </p>
+        {diff?.previous && (
+          <span className="text-xs text-neutral-500">
+            vs &ldquo;{diff.previous.label}&rdquo;
+          </span>
+        )}
+      </div>
+      {diff === null ? (
+        <div
+          id="snapshot-detail-diff-loading"
+          className="h-16 rounded-[6px] border border-[#d9d0c9] animate-pulse"
+          style={{ backgroundColor: "#fef9f5" }}
+        />
+      ) : diff.previous === null ? (
+        <p id="snapshot-detail-diff-first" className="text-xs text-neutral-500">
+          First Snapshot Release — there is no previous release to compare
+          against.
+        </p>
+      ) : (
+        <ReleaseDiffBody
+          // Remount per release so the auto-expand initializer reruns.
+          key={diff.release.id}
+          summary={diff.summary}
+          playersAdded={diff.players_added}
+          playersRemoved={diff.players_removed}
+          playersChanged={diff.players_changed}
+          comparedWithLabel={diff.previous.label}
+        />
+      )}
+    </section>
+  );
+}
+
 export default function SnapshotDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -233,6 +319,7 @@ export default function SnapshotDetailPage() {
             release={loadState.release}
             onReactivateClick={() => setModalOpen(true)}
           />
+          <ReleaseDiffSection releaseId={loadState.release.id} />
           <ReactivateModal
             id="snapshot-detail-reactivate-modal"
             open={modalOpen}

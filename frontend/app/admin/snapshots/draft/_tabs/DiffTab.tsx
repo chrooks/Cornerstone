@@ -15,7 +15,7 @@ import type {
   SnapshotPublishValidation,
 } from "@/lib/types";
 import type { TabSlug } from "../_lib/tabRouting";
-import { ReleaseDiffView } from "../_components/release-diff/ReleaseDiffView";
+import { ReleaseDiffView } from "@/components/release-diff/ReleaseDiffView";
 
 export interface DiffTabProps {
   draft: SnapshotDraftSummary;

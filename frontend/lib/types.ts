@@ -1160,6 +1160,32 @@ export interface ReleaseDiff {
   players_changed: ReleaseDiffChangedPlayer[];
 }
 
+/**
+ * GET /api/snapshots/releases/<id>/diff — a published release vs the release
+ * published right before it (previous = latest earlier created_at, which is
+ * reactivation-proof). `previous` is null for the first-ever release. No
+ * `is_active` here: the payload is cached publicly for a day and activation
+ * is mutable.
+ */
+export interface PublishedReleaseDiff {
+  release: {
+    id: string;
+    label: string;
+    season: string;
+    published_at: string | null;
+  };
+  previous: {
+    id: string;
+    label: string;
+    season: string;
+    published_at: string | null;
+  } | null;
+  summary: { added: number; removed: number; changed: number; unchanged: number };
+  players_added: ReleaseDiffEntity[];
+  players_removed: ReleaseDiffEntity[];
+  players_changed: ReleaseDiffChangedPlayer[];
+}
+
 // ---------------------------------------------------------------------------
 // #76 subset pipeline
 // ---------------------------------------------------------------------------

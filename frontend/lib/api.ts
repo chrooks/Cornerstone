@@ -1247,6 +1247,21 @@ export function getSnapshotDiff(): Promise<ApiResponse<ReleaseDiff>> {
   return apiFetch<ReleaseDiff>("/api/snapshots/diff");
 }
 
+import type { PublishedReleaseDiff } from "./types";
+
+/**
+ * Diff a published Snapshot Release against the previous published release.
+ * Backend route: GET /api/snapshots/releases/<id>/diff (public, cacheable).
+ * 404 envelope error: not_found.
+ */
+export function getPublishedReleaseDiff(
+  id: string,
+): Promise<ApiResponse<PublishedReleaseDiff>> {
+  return apiFetch<PublishedReleaseDiff>(
+    `/api/snapshots/releases/${encodeURIComponent(id)}/diff`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // #76 subset pipeline
 // ---------------------------------------------------------------------------
