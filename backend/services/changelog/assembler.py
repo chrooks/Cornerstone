@@ -93,11 +93,15 @@ def _snapshot_entry(row: dict[str, Any]) -> dict[str, Any] | None:
     season = (row.get("season") or "").strip()
     label = (row.get("label") or "").strip()
 
-    # The season is what users recognize ("the 2025-26 pool"); the label is the
-    # editorial name for that release. Prefer season for the headline, fall back
-    # to the label so an entry never renders blank.
+    # The label is the release's editorial identity — prefer it for the title,
+    # falling back to the generic season form so an entry never renders blank.
     version_label = season or label or "snapshot"
-    title = f"{season} player snapshot".strip() if season else (label or "Player snapshot")
+    if label:
+        title = label
+    elif season:
+        title = f"{season} player snapshot"
+    else:
+        title = "Player snapshot"
     summary = (
         f"A new player snapshot for the {season} season is live — "
         "refreshed ratings and the released player pool."
@@ -105,14 +109,17 @@ def _snapshot_entry(row: dict[str, Any]) -> dict[str, Any] | None:
         else "A new player snapshot is live — refreshed ratings and the released player pool."
     )
 
+    release_id = row.get("id")
+
     return {
         "type": TYPE_SNAPSHOT,
         "date": published_at,
         "version_label": version_label,
         "title": title,
         "summary": summary,
-        # Snapshot Releases surface in the released player pool.
-        "link": "/players",
+        # Snapshot Releases link to their public release diff page; the player
+        # pool is the fallback for rows without an id.
+        "link": f"/snapshots/{release_id}" if release_id else "/players",
     }
 
 

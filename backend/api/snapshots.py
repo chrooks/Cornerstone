@@ -476,6 +476,57 @@ def get_release_diff():
 
 
 # ---------------------------------------------------------------------------
+# GET /api/snapshots/releases/<release_id>/diff — public release history diff
+# ---------------------------------------------------------------------------
+
+
+# Successful diffs keyed by release id. Safe to hold forever: "previous" is
+# selected by created_at (never rewritten), so a published release's diff is
+# immutable. Only successes are cached — 404 probes must not grow this dict.
+# ponytail: naive in-process dict; move to a real cache if multiple workers matter.
+_release_diff_cache: dict[str, dict] = {}
+
+
+@snapshots_bp.route("/releases/<release_id>/diff", methods=["GET"])
+def get_published_release_diff(release_id: str):
+    """Public: what changed in this Release vs the previous published one.
+
+    Deliberately no @require_admin — this Surface backs the landing-page
+    changelog's "See what changed" link. The diff between two published
+    Releases is immutable, hence the long Cache-Control plus the in-process
+    cache (a hostile client ignoring cache headers hits the dict, not two
+    full released_players scans per request).
+    """
+    # Public route: malformed ids are indistinguishable from unknown ones.
+    if _validate_uuid(release_id, "release_id"):
+        return _err("not_found", 404)
+
+    def _respond(data: dict):
+        resp = jsonify({"success": True, "data": data, "error": None})
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp, 200
+
+    cached = _release_diff_cache.get(release_id)
+    if cached is not None:
+        return _respond(cached)
+
+    try:
+        from services.snapshot_versions import release_diff
+        data = release_diff.compute_published_release_diff(release_id)
+        _release_diff_cache[release_id] = data
+        return _respond(data)
+    except ValueError as exc:
+        if str(exc) == "not_found":
+            return _err("not_found", 404)
+        # Anything else is unexpected — don't echo internals to anon clients.
+        logger.exception("Unexpected ValueError in release diff for %s", release_id)
+        return _err("Failed to compute release diff", 500)
+    except Exception:
+        logger.exception("Failed to compute release diff for %s", release_id)
+        return _err("Failed to compute release diff", 500)
+
+
+# ---------------------------------------------------------------------------
 # GET /api/snapshots/draft/player-pool
 # ---------------------------------------------------------------------------
 

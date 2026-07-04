@@ -39,6 +39,7 @@ def _eval_row(**overrides):
 
 def _snapshot_row(**overrides):
     row = {
+        "id": "rel-abc",
         "label": "Opening Night",
         "season": "2025-26",
         "published_at": "2026-05-12T12:00:00+00:00",
@@ -110,11 +111,19 @@ class TestSnapshotEntries:
         entry = entries[0]
         assert entry["type"] == "snapshot_release"
         assert entry["date"] == "2026-05-12T12:00:00+00:00"
-        # The season is surfaced so users see which player pool changed.
-        assert "2025-26" in entry["title"]
+        # The release label is the entry's identity in the changelog.
+        assert entry["title"] == "Opening Night"
         assert entry["summary"]  # non-empty human summary
-        # Snapshot Releases link to the released player pool.
-        assert entry["link"] == "/players"
+        # Snapshot Releases link to their public release diff page.
+        assert entry["link"] == "/snapshots/rel-abc"
+
+    def test_snapshot_title_falls_back_to_generic_without_label(self):
+        entries = assemble_changelog([], [], [_snapshot_row(label="")])
+        assert entries[0]["title"] == "2025-26 player snapshot"
+
+    def test_snapshot_link_falls_back_to_players_without_id(self):
+        entries = assemble_changelog([], [], [_snapshot_row(id=None)])
+        assert entries[0]["link"] == "/players"
 
     def test_snapshot_entry_drops_when_unpublished(self):
         entries = assemble_changelog([], [], [_snapshot_row(published_at=None)])

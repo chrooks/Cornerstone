@@ -41,6 +41,7 @@ EVAL_ROWS = [
 
 SNAPSHOT_ROWS = [
     {
+        "id": "rel-abc",
         "label": "Opening Night",
         "season": "2025-26",
         "published_at": "2026-05-12T12:00:00+00:00",
@@ -85,10 +86,11 @@ class TestChangelogEndpoint:
         # Eval entry uses the admin changelog note as its summary.
         assert data[1]["summary"] == "Rebalanced spacing weights."
 
-        # Snapshot Release entry links to the released player pool.
+        # Snapshot Release entry links to its public release diff page and
+        # carries the release label as its title.
         snapshot_entry = data[0]
-        assert snapshot_entry["link"] == "/players"
-        assert "2025-26" in snapshot_entry["title"]
+        assert snapshot_entry["link"] == "/snapshots/rel-abc"
+        assert snapshot_entry["title"] == "Opening Night"
 
     def test_empty_when_no_published_versions(self, client):
         import api.changelog as changelog_mod

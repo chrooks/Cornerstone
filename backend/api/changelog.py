@@ -87,7 +87,7 @@ def _fetch_published_snapshots() -> list[dict[str, Any]]:
     supabase = get_supabase()
     rows = run_query(
         lambda: supabase.table("snapshot_releases")
-        .select("label, season, published_at")
+        .select("id, label, season, published_at")
         .eq("status", "published")
         .order("published_at", desc=True)
         .execute()

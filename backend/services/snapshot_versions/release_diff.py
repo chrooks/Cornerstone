@@ -409,3 +409,94 @@ def compute_release_diff(client=None) -> dict:
         },
         **diff,
     }
+
+
+def _get_published_release(release_id: str, client):
+    """Fetch a snapshot_releases row by id; only published rows qualify."""
+    from services.snapshot_versions import repo
+
+    result = run_query(
+        lambda: client.table("snapshot_releases")
+        .select("*")
+        .eq("id", release_id)
+        .execute()
+    )
+    rows = result.data or []
+    if not rows or rows[0].get("status") != "published":
+        raise ValueError("not_found")
+    return repo._row_to_release(rows[0])
+
+
+def compute_published_release_diff(release_id: str, client=None) -> dict:
+    """Diff a published release against the previous published release.
+
+    "Previous" is the published release with the greatest ``created_at``
+    strictly before this release's. ``created_at`` (never rewritten) rather
+    than ``published_at``: the reactivate RPC bumps ``published_at`` to now()
+    (supabase/migrations/20260526000003), which would reshuffle publish-date
+    order — ``created_at`` keeps a release's diff stable forever. For
+    published rows creation order equals original publish order, because only
+    one draft is open at a time.
+
+    Raises:
+        ValueError('not_found'): unknown id or release not published.
+    """
+    c = client or _get_client()
+
+    release = _get_published_release(release_id, c)
+    previous = _get_previous_published(release.created_at, c)
+
+    current_entities = _collect_released_entities(release.id, c)
+    if previous is None:
+        return {
+            "release": _release_meta(release),
+            "previous": None,
+            "summary": {
+                "added": 0,
+                "removed": 0,
+                "changed": 0,
+                "unchanged": len(current_entities),
+            },
+            "players_added": [],
+            "players_removed": [],
+            "players_changed": [],
+        }
+    previous_entities = _collect_released_entities(previous.id, c)
+    diff = build_diff(current_entities, previous_entities)
+    return {
+        "release": _release_meta(release),
+        "previous": _release_meta(previous),
+        **diff,
+    }
+
+
+def _get_previous_published(created_at, client):
+    """Latest published release created strictly before ``created_at``, or None.
+
+    Ordered by ``created_at``, not ``published_at`` — see
+    compute_published_release_diff's docstring for why.
+    """
+    from services.snapshot_versions import repo
+
+    result = run_query(
+        lambda: client.table("snapshot_releases")
+        .select("*")
+        .eq("status", "published")
+        .lt("created_at", created_at)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = result.data or []
+    return repo._row_to_release(rows[0]) if rows else None
+
+
+def _release_meta(release) -> dict:
+    # No is_active here: the payload is cached publicly for a day, and
+    # is_active is the one field reactivation can flip under the cache.
+    return {
+        "id": release.id,
+        "label": release.label,
+        "season": release.season,
+        "published_at": release.published_at,
+    }
