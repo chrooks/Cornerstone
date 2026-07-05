@@ -707,7 +707,7 @@ def claude_suggestion(legend_id: str):
     NOT persisted — the user decides what to accept via the diff view.
 
     Optional JSON body:
-      { "skills": ["passer", "possession_protector", ...] }
+      { "skills": ["passer", "steady_hand", ...] }
     When omitted (or null), all taxonomy skills are assessed.
 
     Response data:

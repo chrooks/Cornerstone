@@ -1166,7 +1166,7 @@ export interface ReleaseDiffContractChange {
 
 /**
  * A taxonomy rename event detected across the diff (e.g. secure_handler →
- * possession_protector at the same tier on 20+ players). The backend strips
+ * steady_hand at the same tier on 20+ players). The backend strips
  * these pairs from per-player skill_changes; the UI renders one banner.
  */
 export interface ReleaseDiffSkillRename {

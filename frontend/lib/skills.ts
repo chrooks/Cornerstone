@@ -22,7 +22,7 @@ export const SKILL_CATEGORIES: Record<string, string[]> = {
     "rebounder",
     "rim_protector",
     "isolation_scorer",
-    "possession_protector",
+    "steady_hand",
   ],
   Moderate: [
     "movement_shooter",
@@ -77,7 +77,7 @@ export const SKILL_LABELS: Record<string, string> = {
   versatile_defender:       "Versatile Defender",
   perimeter_disruptor:      "Perimeter Disruptor",
   high_flyer:               "Above the Rim Finishing",
-  possession_protector:     "Possession Protector",
+  steady_hand:     "Steady Hand",
 };
 
 /** Human-readable skill definitions. Mirrors backend/services/skills.py. */
@@ -103,7 +103,7 @@ export const SKILL_DESCRIPTIONS: Record<string, string> = {
   versatile_defender:       "Can guard multiple positional groups effectively when switched.",
   perimeter_disruptor:      "Disrupts ball handlers through active hands, pressure, and contests at the point of attack.",
   high_flyer:               "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, and transition finishes.",
-  possession_protector:     "Protects possessions with a low turnover rate relative to ball responsibility — secure handling, safe decisions, and strong hands under pressure.",
+  steady_hand:     "Protects possessions with a low turnover rate relative to ball responsibility — secure handling, safe decisions, and strong hands under pressure.",
 };
 
 /** Converts a skill key to its display name, with snake_case title-case fallback. */
@@ -140,7 +140,7 @@ export const SKILL_ABBREV: Record<string, string> = {
   versatile_defender:       "Versa Def",
   perimeter_disruptor:      "Perim Disr",
   high_flyer:               "Above Rim",
-  possession_protector:     "Poss Prot",
+  steady_hand:              "Steady Hand",
 };
 
 // ---------------------------------------------------------------------------
@@ -168,7 +168,7 @@ export const SKILL_TYPE_PRIORITY: Record<string, number> = {
   low_post_player:          1,
   high_flyer:               1,
   perimeter_disruptor:      1,
-  possession_protector:     1,
+  steady_hand:     1,
   // Zero-sum (2) — team typically needs just one at a high level
   isolation_scorer:         2,
   pnr_ball_handler:         2,
@@ -183,7 +183,7 @@ export const SKILL_TYPE_PRIORITY: Record<string, number> = {
 
 export const PUBLIC_SKILL_CATEGORIES: Record<string, string[]> = {
   "Perimeter Scoring":     ["spot_up_shooter", "movement_shooter", "off_dribble_shooter"],
-  "Creation & Playmaking": ["isolation_scorer", "pnr_ball_handler", "driver", "passer", "possession_protector"],
+  "Creation & Playmaking": ["isolation_scorer", "pnr_ball_handler", "driver", "passer", "steady_hand"],
   "Off-Ball & Transition": ["cutter", "transition_threat", "pnr_finisher"],
   "Interior Scoring":      ["crafty_finisher", "high_flyer", "vertical_spacer", "mid_post_player", "low_post_player"],
   "Physicality":           ["screen_setter", "offensive_rebounder", "rebounder"],
@@ -211,7 +211,7 @@ export const SKILL_GROUPS: { label: string; skills: string[] }[] = [
       "pnr_finisher",
       "crafty_finisher",
       "passer",
-      "possession_protector",
+      "steady_hand",
       "offensive_rebounder",
       "vertical_spacer",
     ],

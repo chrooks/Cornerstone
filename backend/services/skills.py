@@ -27,7 +27,7 @@ HIGH_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
     "rebounder",
     "offensive_rebounder",
     "isolation_scorer",
-    "possession_protector",
+    "steady_hand",
 })
 
 # Skills where Claude runs blind (sees stats but NOT the stat tier)
@@ -88,5 +88,5 @@ SKILL_DEFINITIONS: dict[str, str] = {
     "versatile_defender":  "Can guard multiple positional groups effectively when switched.",
     "perimeter_disruptor": "Disrupts ball handlers through active hands, pressure, and contest at the point of attack.",
     "high_flyer":          "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, and transition finishes.",
-    "possession_protector":      "Protects possessions with a low turnover rate relative to ball responsibility — secure handling, safe decisions, and strong hands under pressure.",
+    "steady_hand":      "Protects possessions with a low turnover rate relative to ball responsibility — secure handling, safe decisions, and strong hands under pressure.",
 }

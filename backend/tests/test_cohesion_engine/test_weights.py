@@ -50,7 +50,7 @@ def test_theoretical_maxima_match_impl_spec_fallback_table():
     #   paint_touch: 187.968 → 227.565 (floor 0.9→0.9 base, oreb term added)
     #   off_ball_impact: 101.76 → 115.104 (movement_shooter + screen_setter terms)
     #   shot_creation: 158.464 → 178.262 (paint_touch change cascades)
-    #   ball_security: 16.0 (possession_protector ATG; proxy only for key-absent legends)
+    #   ball_security: 16.0 (steady_hand ATG; proxy only for key-absent legends)
     #   transition: 86.4 → 44.48 (passer_mult dropped; flat additive passer/ods)
     assert weights.THEORETICAL_MAX == pytest.approx({
         "spacing": 40.0,

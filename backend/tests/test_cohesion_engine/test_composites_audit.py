@@ -189,13 +189,13 @@ def test_paint_touch_includes_offensive_rebounder():
 
 def test_ball_security_three_skills():
     """
-    Legacy proxy (fires only when possession_protector key is ABSENT from the profile):
+    Legacy proxy (fires only when steady_hand key is ABSENT from the profile):
     passer=Elite(8), pnr_ball_handler=Elite(8), driver=Elite(8):
     raw = 8.0 + 0.45*8.0 + 0.35*8.0 = 8 + 3.6 + 2.8 = 14.4
     """
     vals = _audit_values()
     skills = _skills(passer=ELITE, pnr_ball_handler=ELITE, driver=ELITE)
-    skills.pop("possession_protector")  # key-absent → proxy fallback path
+    skills.pop("steady_hand")  # key-absent → proxy fallback path
     raw = composites.compute_raw_composites(skills, vals)
 
     pnr_c = vals["composite_coefficients"].get("ball_security_pnr_handler", 0.0)
