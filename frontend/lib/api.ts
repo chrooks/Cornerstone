@@ -123,6 +123,18 @@ export function isNoActiveRelease<T>(res: ApiResponse<T>): boolean {
 }
 
 /**
+ * Backend error code returned (with HTTP 409) by draft-scoped write routes
+ * (e.g. legend skill edits) when no Snapshot Release draft is open. See
+ * require_open_draft in backend/api/auth.py.
+ */
+export const NO_OPEN_DRAFT_ERROR = "no_open_draft";
+
+/** True when a response failed specifically because no draft is open. */
+export function isNoOpenDraft<T>(res: ApiResponse<T>): boolean {
+  return !res.success && res.error === NO_OPEN_DRAFT_ERROR;
+}
+
+/**
  * Backend health/readiness response.
  *
  * `status` is "ok" only when boot-time cohesion warmup succeeded; "degraded"

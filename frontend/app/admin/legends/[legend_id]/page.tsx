@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getLegend, listLegends, updateLegendSkills, getLegendClaudeSuggestion, updateLegendAttributes } from "@/lib/api";
+import { getLegend, listLegends, updateLegendSkills, getLegendClaudeSuggestion, updateLegendAttributes, isNoOpenDraft } from "@/lib/api";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import type {
   LegendDetail,
@@ -17,6 +17,10 @@ import { SKILL_TIERS, TIER_SELECTOR_STYLES } from "@/lib/tiers";
 import { ALL_SKILL_NAMES, SKILL_GROUPS, TOTAL_SKILLS, formatSkillName } from "@/lib/skills";
 
 // SKILL_TIERS and TIER_SELECTOR_STYLES imported from @/lib/tiers
+
+// Legend writes are draft-scoped (require_open_draft) — surface that specific
+// cause instead of a generic retry prompt so the admin knows to open a draft.
+const NO_OPEN_DRAFT_SAVE_MESSAGE = "No open draft — open one in Snapshots to save changes";
 
 // All 30 current NBA franchise abbreviations.
 // Historical teams are mapped to their modern successor:
@@ -273,7 +277,7 @@ export default function LegendEditorPage() {
           setTimeout(() => setSaveToast(null), 1500);
         } else {
           // Surface save failures so the user knows to retry (auto-save guarantee broken)
-          setSaveToast("Save failed — please retry");
+          setSaveToast(isNoOpenDraft(res) ? NO_OPEN_DRAFT_SAVE_MESSAGE : "Save failed — please retry");
           setTimeout(() => setSaveToast(null), 3000);
         }
       }, 500);
@@ -323,7 +327,7 @@ export default function LegendEditorPage() {
       setSaveToast("Notes saved");
       setTimeout(() => setSaveToast(null), 1500);
     } else {
-      setSaveToast("Notes save failed — please retry");
+      setSaveToast(isNoOpenDraft(res) ? NO_OPEN_DRAFT_SAVE_MESSAGE : "Notes save failed — please retry");
       setTimeout(() => setSaveToast(null), 3000);
     }
   }, [legendId, notes]);
@@ -346,7 +350,7 @@ export default function LegendEditorPage() {
       setSaveToast("Saved");
       setTimeout(() => setSaveToast(null), 1500);
     } else {
-      setSaveToast("Save failed — please retry");
+      setSaveToast(isNoOpenDraft(res) ? NO_OPEN_DRAFT_SAVE_MESSAGE : "Save failed — please retry");
       setTimeout(() => setSaveToast(null), 3000);
     }
   }, [legendId]);
@@ -476,7 +480,7 @@ export default function LegendEditorPage() {
     return (
       <main className="max-w-6xl mx-auto px-4 py-8">
         <p className="text-destructive">{error ?? "Legend not found"}</p>
-        <Link href="/admin/legends" className="text-sm text-muted-foreground hover:underline mt-2 inline-block">
+        <Link href="/admin/snapshots/draft?tab=legends" className="text-sm text-muted-foreground hover:underline mt-2 inline-block">
           ← Back to Legends
         </Link>
       </main>
@@ -492,7 +496,7 @@ export default function LegendEditorPage() {
     <main id="legend-editor-page" className="max-w-6xl mx-auto px-4 py-8">
       {/* Navigation row */}
       <div id="legend-nav-row" className="flex items-center justify-between mb-6">
-        <Link id="legend-back-link" href="/admin/legends" className="text-sm text-muted-foreground hover:underline">
+        <Link id="legend-back-link" href="/admin/snapshots/draft?tab=legends" className="text-sm text-muted-foreground hover:underline">
           ← Back to Legends
         </Link>
         <div id="legend-nav-arrows" className="flex items-center gap-4">

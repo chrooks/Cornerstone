@@ -38,6 +38,7 @@ import { EmptyDraftCard } from "./EmptyDraftCard";
 import { OverviewTab } from "../_tabs/OverviewTab";
 import { PipelineTab } from "../_tabs/PipelineTab";
 import { ThresholdsTab } from "../_tabs/ThresholdsTab";
+import { LegendsTab } from "../_tabs/LegendsTab";
 import { ReviewTab } from "../_tabs/ReviewTab";
 import { PlayerPoolTab } from "../_tabs/PlayerPoolTab";
 import { DiffTab } from "../_tabs/DiffTab";
@@ -419,6 +420,7 @@ export function DraftWorkspaceShell() {
             <PipelineTab {...tabProps} focusRunId={focusRunId} />
           )}
           {activeTab === "thresholds" && <ThresholdsTab {...tabProps} />}
+          {activeTab === "legends" && <LegendsTab {...tabProps} />}
           {activeTab === "review" && <ReviewTab {...tabProps} />}
           {activeTab === "player-pool" && <PlayerPoolTab {...tabProps} />}
           {activeTab === "diff" && <DiffTab {...tabProps} />}

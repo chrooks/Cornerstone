@@ -91,6 +91,21 @@ test("pipeline still enabled when draft status is 'review'", () => {
   expect(isTabDisabled("pipeline", REVIEW_STATUS)).toBe(false);
 });
 
+test("legends disabled when no draft", () => {
+  const result = isTabDisabled("legends", NO_DRAFT);
+  expect(result).not.toBe(false);
+});
+
+test("legends enabled when draft exists", () => {
+  expect(isTabDisabled("legends", DRAFT_STATUS)).toBe(false);
+});
+
+test("legends still enabled when draft status is 'review'", () => {
+  // Legend writes are gated on an open draft (draft OR review), not frozen
+  // by the review-freeze invariant that locks thresholds/review.
+  expect(isTabDisabled("legends", REVIEW_STATUS)).toBe(false);
+});
+
 // resolveActiveTab
 
 test("resolveActiveTab: null param → default overview", () => {

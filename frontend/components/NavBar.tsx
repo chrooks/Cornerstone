@@ -7,14 +7,13 @@ import { cn } from "@/lib/utils";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 
-// Admin dropdown items. Pipeline/Review/Calibration consolidated into the
-// Snapshots draft workspace (M4); their standalone routes still resolve as
+// Admin dropdown items. Pipeline/Review/Calibration/Legends consolidated into
+// the Snapshots draft workspace; their standalone routes still resolve as
 // thin wrappers for legacy deep-links.
 const ADMIN_LINKS = [
   { href: "/admin/snapshots/draft",       label: "Snapshots"   },
   { href: "/admin/evaluator-calibration", label: "Evaluator"   },
   { href: "/admin/rulesets",              label: "RuleSets"    },
-  { href: "/admin/legends",               label: "Legends"     },
 ];
 
 export function NavBar() {
