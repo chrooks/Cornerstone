@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { gradeForScore } from "@/lib/cohesion-colors";
 import { SUBSCORE_DESCRIPTIONS } from "@/lib/cohesion-constants";
@@ -107,7 +108,12 @@ interface TeamShapeGlyphProps {
   isLineupOnly?: boolean;
   /** Subscore keys touched by the selected Skill trace — their vertices highlight. */
   affectedKeys?: Set<string>;
+  /** #89: vertices land in sequence around the arcs on mount (Final Eval reveal). */
+  staggerReveal?: boolean;
 }
+
+/** Per-vertex reveal spacing; 11 vertices finish within ~550ms. */
+const REVEAL_STEP_MS = 50;
 
 export function TeamShapeGlyph({
   subscores,
@@ -118,6 +124,7 @@ export function TeamShapeGlyph({
   isRecomputing,
   isLineupOnly = false,
   affectedKeys,
+  staggerReveal = false,
 }: TeamShapeGlyphProps) {
   const [hovered, setHovered] = useState<number | null>(null);
 
@@ -320,7 +327,11 @@ export function TeamShapeGlyph({
               const axis = TEAM_SHAPE_AXES[i];
               const isChanged = changed?.keys.has(axis.key) ?? false;
               return (
-                <g key={axis.key}>
+                <g
+                  key={axis.key}
+                  className={cn(staggerReveal && "reveal-pop")}
+                  style={staggerReveal ? { "--reveal-delay": `${i * REVEAL_STEP_MS}ms` } as CSSProperties : undefined}
+                >
                   {isChanged && (
                     <circle
                       key={`ping-${changed?.seq}`}

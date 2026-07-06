@@ -15,8 +15,10 @@
  *   Breakdown (0-1): green (≥0.7), amber (0.4–0.69), red (<0.4)
  */
 
+import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
+import { TeamShapeGlyph } from "@/components/builder/TeamShapeGlyph";
 import { SUBSCORE_DESCRIPTIONS, SUBSCORE_GROUPS, HEADING_TO_CATEGORY_KEY, HEADING_SHOWS_SCORE, categoryScoreColor } from "@/lib/cohesion-constants";
 import { gradeForScore, subscoreColor } from "@/lib/cohesion-colors";
 import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
@@ -210,6 +212,18 @@ interface CohesionScoreDisplayProps {
   teamLabel?: string;
 }
 
+// #89 sequential cause-reveal: glyph vertices land first (0-550ms), factors and
+// tiles follow, the star total lands last — whole sequence under ~1s.
+const FACTOR_REVEAL_BASE_MS = 150;
+const FACTOR_REVEAL_STEP_MS = 70;
+const TILE_REVEAL_BASE_MS = 300;
+const TILE_REVEAL_STEP_MS = 40;
+const SCORE_REVEAL_MS = 800;
+
+function revealStyle(delayMs: number): CSSProperties {
+  return { "--reveal-delay": `${delayMs}ms` } as CSSProperties;
+}
+
 const LINEUP_ONLY_FACTOR_KEYS = new Set(["starting_5", "archetype_diversity"]);
 const LINEUP_ONLY_LABELS: Record<string, string> = {
   starting_5: "Lineup Strength",
@@ -232,12 +246,12 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
   return (
     <div id="cohesion-score-display" className="space-y-5 border border-[#d9d0c9] bg-[#f7f7f7] p-4 sm:p-5">
 
-      {/* Star Rating Hero */}
+      {/* Team Shape Hero — the glyph leads, the star lands last as its caption */}
       <div
         id="cohesion-score-hero"
         role="group"
         aria-label={`Team cohesion: ${star_rating.toFixed(2)} out of 5 stars`}
-        className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+        className="space-y-3"
       >
         <div id="cohesion-score-heading" className="min-w-0">
           <p className="text-xs font-semibold text-[#0e0907]/50">
@@ -252,13 +266,25 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
               : `The engine evaluates the Starting Lineup, then tests the full ${resolvedLabel} across its Lineup Combinations.`}
           </p>
         </div>
-        <CohesionScoreBadge
-          id="cohesion-score-rating"
-          value={star_rating}
-          precision={2}
-          featured
-          ariaLabel={`Team Cohesion score: ${star_rating.toFixed(2)} out of 5`}
+        <TeamShapeGlyph
+          subscores={starting_lineup.subscores}
+          medianSubscores={rotationMedian ?? null}
+          viableLineups={lineup_summary.viable_lineups}
+          totalLineups={lineup_summary.total_lineups}
+          filledCount={5}
+          isRecomputing={false}
+          isLineupOnly={isLineupOnly}
+          staggerReveal
         />
+        <div className="reveal-pop flex justify-center" style={revealStyle(SCORE_REVEAL_MS)}>
+          <CohesionScoreBadge
+            id="cohesion-score-rating"
+            value={star_rating}
+            precision={2}
+            featured
+            ariaLabel={`Team Cohesion score: ${star_rating.toFixed(2)} out of 5`}
+          />
+        </div>
       </div>
 
       <div className="w-full h-px bg-border" />
@@ -300,14 +326,19 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
             Hover a factor for the engine read. A low factor can pull down an otherwise strong Team.
           </p>
         </div>
-        {factorEntries.map((item) => (
-          <BreakdownBar
+        {factorEntries.map((item, index) => (
+          <div
             key={item.key}
-            id={`cohesion-breakdown-${item.key}`}
-            label={item.label}
-            value={item.value}
-            description={item.description}
-          />
+            className="reveal-pop"
+            style={revealStyle(FACTOR_REVEAL_BASE_MS + index * FACTOR_REVEAL_STEP_MS)}
+          >
+            <BreakdownBar
+              id={`cohesion-breakdown-${item.key}`}
+              label={item.label}
+              value={item.value}
+              description={item.description}
+            />
+          </div>
         ))}
       </div>
 
@@ -325,7 +356,10 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
             </p>
           )}
         </div>
-        {SUBSCORE_GROUPS.map((group) => {
+        {SUBSCORE_GROUPS.map((group, groupIndex) => {
+          const tileOffset = SUBSCORE_GROUPS
+            .slice(0, groupIndex)
+            .reduce((count, prior) => count + prior.entries.length, 0);
           const catKey = HEADING_TO_CATEGORY_KEY[group.heading];
           const showScore = HEADING_SHOWS_SCORE[group.heading] && catKey;
           const catScore = showScore ? starting_lineup.category_scores?.[catKey] : undefined;
@@ -342,17 +376,22 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
                 )}
               </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                {group.entries.map((entry) => (
-                  <SubscoreGrade
+                {group.entries.map((entry, entryIndex) => (
+                  <div
                     key={entry.key}
-                    id={`cohesion-subscore-${entry.key}`}
-                    label={entry.label}
-                    score={starting_lineup.subscores[entry.key] ?? 0}
-                    rotationScore={rotationMedian?.[entry.key]}
-                    description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
-                    hideRotation={isLineupOnly}
-                    medianLabel={`${resolvedLabel} Median`}
-                  />
+                    className="reveal-pop"
+                    style={revealStyle(TILE_REVEAL_BASE_MS + (tileOffset + entryIndex) * TILE_REVEAL_STEP_MS)}
+                  >
+                    <SubscoreGrade
+                      id={`cohesion-subscore-${entry.key}`}
+                      label={entry.label}
+                      score={starting_lineup.subscores[entry.key] ?? 0}
+                      rotationScore={rotationMedian?.[entry.key]}
+                      description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
+                      hideRotation={isLineupOnly}
+                      medianLabel={`${resolvedLabel} Median`}
+                    />
+                  </div>
                 ))}
               </div>
             </div>

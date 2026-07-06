@@ -34,6 +34,36 @@
   }
 }
 
+/* #89: sequential cause-reveal — elements land staggered via --reveal-delay.
+   Gated on no-preference: with the animation off, elements are simply visible. */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-pop {
+    animation: reveal-pop 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--reveal-delay, 0ms);
+  }
+  /* SVG transforms default to the viewBox origin — scope them to the element */
+  svg .reveal-pop,
+  svg .shape-fade-in {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+}
+
+@keyframes reveal-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(0) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes eval-flash {
   0%, 25% {
     background-color: var(--flash-color, transparent);
