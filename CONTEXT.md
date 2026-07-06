@@ -146,6 +146,14 @@ _Avoid_: composite (in user-facing language), score component, dimension
 The hierarchical grouping of Subscores into categories (e.g., offense, defense) used for display and rollup. Restructuring the Subscore Tree is a taxonomy mutation that lands as a new Evaluation Version.
 _Avoid_: subscore categories (when referring to the data structure)
 
+**Team Shape**:
+The radar-style glyph that renders a Team's evaluation as a shape: a solid outline of the Starting Lineup's Subscores plus a ghost outline of the Rotation-median Subscores, on a fixed axis order of three arcs mirroring the Subscore Tree groups (offense, defense, rebounding/transition), each arc spanning an equal angle. Axes are drawn only from Subscores that have a matching Player composite, so every spoke supports an honest Player Shape overlay. Derived directly from cohesion engine output — never invented geometry. The gap between solid and ghost outlines is depth made visible.
+_Avoid_: radar, spider chart, glyph, cohesion chart
+
+**Player Shape**:
+A single Player's identity glyph on the same axes and arcs as the Team Shape, drawn from the Player's league-percentile composites. Shown adjacent to (never superimposed on) the Team Shape, because percentile values and Lineup Subscore values are not comparable point-for-point. The visual identity of a Player Archetype. "Who contributes where" on the Team Shape itself requires per-player contribution data (same units as the spokes), not Player Shapes.
+_Avoid_: radar, spider chart, glyph, silhouette (as a term of art)
+
 ## Relationships
 
 ### Naming conventions
