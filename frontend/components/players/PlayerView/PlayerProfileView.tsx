@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SkillTraceDetail } from "./SkillTraceDetail";
+import { PlayerProfileShape } from "./PlayerProfileShape";
 import { PUBLIC_SKILL_CATEGORIES, formatSkillName } from "@/lib/skills";
 import { formatPlayerSalary } from "./playerViewUtils";
 import { getPlayerSkillTrace } from "@/lib/api";
@@ -253,6 +254,7 @@ export function PlayerProfileView({
 
       {profile.skills ? (
         <div className="flex flex-col gap-4">
+          <PlayerProfileShape playerName={player.name} skills={profile.skills} />
           <div
             id="player-profile-view-skills"
             className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 lg:gap-6"
