@@ -34,7 +34,8 @@ from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
 from services.cohesion_engine.types import RosterEvaluation
 from services.evaluation_versions.repo import get_active as get_active_eval_version
 from services.players_service import CURRENT_SEASON
-from services.snapshot_versions.distribution_cache import ensure_distributions
+from services.cohesion_engine.composites import compute_raw_composites, normalize_composites
+from services.snapshot_versions.distribution_cache import ensure_distributions, get_state as get_distribution_state
 
 logger = logging.getLogger(__name__)
 
@@ -408,4 +409,49 @@ def evaluate():
         return _ok(_serialize_evaluation(result, body["players"], engine, values))
     except Exception:
         logger.exception("Error in POST /api/builder/evaluate")
+        return _err("Internal server error", status=500)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/builder/player-composites
+# ---------------------------------------------------------------------------
+
+@builder_bp.route("/player-composites", methods=["POST"])
+def player_composites():
+    """
+    Normalize one player's skill profile into league-percentile composites.
+
+    Lets pre-eval surfaces (profile modal, PlayerPool reads) draw Player Shapes
+    on the same 0-10 percentile scale the cohesion engine uses, instead of the
+    misleading raw/theoretical-max scaling.
+
+    Request body:  { "skills": { "<skill_name>": "<tier>", ... } }
+    Response data: {
+      "composites": { "<composite>": float 0-10, ... },
+      "normalization": "percentile" | "theoretical_max"
+    }
+    """
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _err("JSON body required")
+
+    skills = body.get("skills")
+    if not isinstance(skills, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in skills.items()
+    ):
+        return _err("'skills' must be a map of skill name to tier string")
+
+    try:
+        version = get_active_eval_version()
+        values = version.values
+        ensure_distributions(CURRENT_SEASON, values)
+        state = get_distribution_state()
+        raw = compute_raw_composites(skills, values)
+        normalized = normalize_composites(raw, values, state.distributions)
+        return _ok({
+            "composites": normalized,
+            "normalization": "percentile" if state.ready() else "theoretical_max",
+        })
+    except Exception:
+        logger.exception("Error in POST /api/builder/player-composites")
         return _err("Internal server error", status=500)

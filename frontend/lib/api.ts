@@ -844,6 +844,21 @@ export async function evaluateRoster(
   });
 }
 
+export interface PlayerCompositesResult {
+  composites: Record<string, number>;
+  normalization: "percentile" | "theoretical_max";
+}
+
+/** Normalize one player's skill tiers into league-percentile composites. */
+export async function getPlayerComposites(
+  skills: Record<string, string>,
+): Promise<ApiResponse<PlayerCompositesResult>> {
+  return apiFetch<PlayerCompositesResult>("/api/builder/player-composites", {
+    method: "POST",
+    body: JSON.stringify({ skills }),
+  });
+}
+
 /** Save a valid Team under the active RuleSet and Snapshot Release. */
 export async function saveTeam(
   payload: SaveTeamPayload,
