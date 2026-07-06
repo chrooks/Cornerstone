@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { ALL_SKILL_NAMES } from "@/lib/skills";
 import type { PlayerWithSkills } from "@/lib/types";
@@ -62,6 +63,17 @@ export function PlayerRowView({
   selectCheckboxId,
   renderCell,
 }: PlayerRowViewProps) {
+  // mouseleave never fires when a hovered row unmounts (filter/page change) —
+  // fire the symmetric hover-end ourselves so consumers don't stick.
+  const isHoveredRef = useRef(false);
+  const onHoverEndRef = useRef(onHoverEnd);
+  onHoverEndRef.current = onHoverEnd;
+  useEffect(() => {
+    return () => {
+      if (isHoveredRef.current) onHoverEndRef.current?.();
+    };
+  }, []);
+
   return (
     <tr
       id={`player-row-view-${player.id}`}
@@ -69,8 +81,14 @@ export function PlayerRowView({
       onDragStart={onDragStart && !disabled ? onDragStart : undefined}
       onClick={onClick}
       onContextMenu={onContextMenu}
-      onMouseEnter={onHover}
-      onMouseLeave={onHoverEnd}
+      onMouseEnter={() => {
+        isHoveredRef.current = true;
+        onHover?.();
+      }}
+      onMouseLeave={() => {
+        isHoveredRef.current = false;
+        onHoverEnd?.();
+      }}
       className={cn(
         "border-b border-border transition-colors group",
         disabled

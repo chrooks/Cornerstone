@@ -299,7 +299,13 @@ export function BuilderPage() {
     setHoveredCourtPlayerId(null);
   }, []);
 
+  // #99: transient picker hover reads win over the pinned slot focus, then revert.
+  const [hoveredPickerPlayer, setHoveredPickerPlayer] = useState<PlayerWithSkills | null>(null);
+
   const inspection = useMemo<{ player: PlayerWithSkills | null; source: BuilderInspectionSource }>(() => {
+    if (hoveredPickerPlayer) {
+      return { player: hoveredPickerPlayer, source: "build-player" };
+    }
     if (focusedPlayerName) {
       return {
         player: roster.allSlots.find((player) => player?.name === focusedPlayerName) ?? null,
@@ -307,7 +313,7 @@ export function BuilderPage() {
       };
     }
     return { player: null, source: "build" };
-  }, [focusedPlayerName, roster.allSlots]);
+  }, [hoveredPickerPlayer, focusedPlayerName, roster.allSlots]);
 
   // ── Workspace horizontal resize (PlayerPool | Feedback) ───────────────────
   const [feedbackFrac, setFeedbackFrac] = useState(DEFAULT_FEEDBACK_FRAC);
@@ -520,6 +526,7 @@ export function BuilderPage() {
             onPlayerClick={handlePlayerPick}
             onPlayerHover={(s) => salary.setPickerHoveredSalary(s)}
             onPlayerHoverEnd={() => salary.setPickerHoveredSalary(null)}
+            onPlayerInspect={setHoveredPickerPlayer}
             renderPlayerFit={(player, context) => (
               <BuilderPlayerFit
                 player={player}

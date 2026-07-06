@@ -33,7 +33,8 @@ import { formatSkillName, SKILL_DESCRIPTIONS } from "@/lib/skills";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import { FeedbackTooltip } from "./FeedbackTooltip";
 import { SkillGrid } from "./SkillGrid";
-import { TeamShapeGlyph } from "./TeamShapeGlyph";
+import { PlayerShapeGlyph } from "./PlayerShapeGlyph";
+import { TeamShapeGlyph, TEAM_SHAPE_AXES } from "./TeamShapeGlyph";
 import { useTweenedNumber } from "@/lib/hooks/useTweened";
 import type { ImpactTraitReadEntry, LineupReadContext } from "@/lib/builder-read-model";
 import type { SuggestionFilter } from "@/lib/noteFilters";
@@ -1136,6 +1137,24 @@ function NewFeedbackRead({
               Skill Profile and Impact Traits for the selected Player.
             </p>
           </div>
+
+          {/* #99: Player Shape — same axis vocabulary, adjacent to (never on) the Team Shape */}
+          <PlayerShapeGlyph
+            playerName={targetPlayer.name}
+            axisValues={TEAM_SHAPE_AXES.map((axis) => {
+              const trait = traits.find((entry) => entry.key === axis.key);
+              const hasSkills = !!targetPlayer.skills && Object.keys(targetPlayer.skills).length > 0;
+              // Eval percentiles stand on their own; raw formula reads need a Skill Profile.
+              const value = trait
+                ? trait.normalizedValue ?? (hasSkills ? trait.value : null)
+                : null;
+              return {
+                key: axis.key,
+                value,
+                isRaw: value != null && trait?.normalizedValue == null,
+              };
+            })}
+          />
           <div id="builder-new-feedback-player-ladder" className="grid gap-3 xl:grid-cols-2">
             <SkillProfileTrace
               idBase="builder-new-feedback-skills"

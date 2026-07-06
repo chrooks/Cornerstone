@@ -65,6 +65,8 @@ interface PlayerPickerPanelProps {
   onPlayerHover?: (salary: number | null) => void;
   /** Called on player row/card mouseleave — clears gauge preview. */
   onPlayerHoverEnd?: () => void;
+  /** #99: full hovered player for the Feedback panel's Player Shape read. */
+  onPlayerInspect?: (player: PlayerWithSkills | null) => void;
   /** Builder-specific content for Panel/Profile inspection surfaces. */
   renderPlayerFit?: (player: PlayerWithSkills, context: {
     surface: "panel" | "profile";
@@ -102,6 +104,7 @@ export function PlayerPickerPanel({
   onSkillFilterInjected,
   onPlayerHover,
   onPlayerHoverEnd,
+  onPlayerInspect,
   renderPlayerFit,
   maxRosterSlots = DEFAULT_MAX_ROSTER_SLOTS,
   highlightedPlayerId,
@@ -177,11 +180,13 @@ export function PlayerPickerPanel({
 
   const handlePlayerHover = useCallback((player: PlayerWithSkills) => {
     onPlayerHover?.(player.salary ?? null);
-  }, [onPlayerHover]);
+    onPlayerInspect?.(player);
+  }, [onPlayerHover, onPlayerInspect]);
 
   const handlePlayerHoverEnd = useCallback(() => {
     onPlayerHoverEnd?.();
-  }, [onPlayerHoverEnd]);
+    onPlayerInspect?.(null);
+  }, [onPlayerHoverEnd, onPlayerInspect]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

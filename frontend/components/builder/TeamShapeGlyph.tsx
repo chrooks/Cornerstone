@@ -37,13 +37,13 @@ export const TEAM_SHAPE_AXES: ShapeAxis[] = [
   { key: "transition", label: "Transition", arc: 2 },
 ];
 
-const ARC_LABELS = ["Offense", "Defense", "Reb/Trn"];
-const ARC_SPAN = (2 * Math.PI) / 3;
-const ARC_START = -Math.PI / 2; // offense arc opens at 12 o'clock
-const CENTER = 200;
-const MAX_RADIUS = 128;
-const LABEL_RADIUS = 152;
-const MAX_VALUE = 10;
+export const ARC_LABELS = ["Offense", "Defense", "Reb/Trn"];
+export const ARC_SPAN = (2 * Math.PI) / 3;
+export const ARC_START = -Math.PI / 2; // offense arc opens at 12 o'clock
+export const CENTER = 200;
+export const MAX_RADIUS = 128;
+export const LABEL_RADIUS = 152;
+export const MAX_VALUE = 10;
 /** Morph between consecutive eval results (research band: 300-600ms ease-out). */
 const MORPH_MS = 450;
 /** A vertex counts as "changed" past this delta; its highlight fades after the hold. */
@@ -55,7 +55,7 @@ function axisAngle(axis: ShapeAxis, indexInArc: number, arcCount: number): numbe
   return ARC_START + axis.arc * ARC_SPAN + ((indexInArc + 0.5) / arcCount) * ARC_SPAN;
 }
 
-const AXIS_ANGLES: number[] = (() => {
+export const AXIS_ANGLES: number[] = (() => {
   const counts = [0, 0, 0];
   TEAM_SHAPE_AXES.forEach((axis) => { counts[axis.arc] += 1; });
   const seen = [0, 0, 0];
@@ -66,11 +66,11 @@ const AXIS_ANGLES: number[] = (() => {
   });
 })();
 
-function pointAt(angle: number, radius: number): { x: number; y: number } {
+export function pointAt(angle: number, radius: number): { x: number; y: number } {
   return { x: CENTER + radius * Math.cos(angle), y: CENTER + radius * Math.sin(angle) };
 }
 
-function polygonPoints(values: (number | null)[]): string {
+export function polygonPoints(values: (number | null)[]): string {
   return values
     .map((value, i) => {
       if (value == null) return null;
