@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eye } from "lucide-react";
+import { useUnmountHoverEnd } from "@/lib/hooks/useUnmountHoverEnd";
 import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
@@ -40,6 +41,7 @@ export function PlayerCardView({
   onContextMenu,
 }: PlayerCardViewProps) {
   const [expanded, setExpanded] = useState(false);
+  const hoverGuard = useUnmountHoverEnd(onHoverEnd);
   const allTopSkills = getTopSkills(player.skills);
   const visibleSkills = expanded ? allTopSkills : allTopSkills.slice(0, TOP_SKILL_COUNT);
   const hasMore = allTopSkills.length > TOP_SKILL_COUNT;
@@ -70,8 +72,14 @@ export function PlayerCardView({
           onOpenProfile?.(player);
         }
       }}
-      onMouseEnter={onHover ? () => onHover(player) : undefined}
-      onMouseLeave={onHoverEnd}
+      onMouseEnter={() => {
+        hoverGuard.markEnter();
+        onHover?.(player);
+      }}
+      onMouseLeave={() => {
+        hoverGuard.markLeave();
+        onHoverEnd?.();
+      }}
       className={cn(
         "group rounded-md border border-[#d9d0c9] bg-[#f7f7f7] p-4 flex flex-col gap-3 transition-colors",
         canClickCard && "cursor-pointer hover:border-[#0e0907]/30",

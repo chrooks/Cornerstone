@@ -42,6 +42,7 @@ import { SkillGrid } from "./SkillGrid";
 import { PlayerShapeGlyph } from "./PlayerShapeGlyph";
 import { TeamShapeGlyph, TEAM_SHAPE_AXES } from "./TeamShapeGlyph";
 import { useTweenedNumber } from "@/lib/hooks/useTweened";
+import { usePlayerComposites } from "@/lib/hooks/usePlayerComposites";
 import type { ImpactTraitReadEntry, LineupReadContext } from "@/lib/builder-read-model";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 import type {
@@ -708,10 +709,21 @@ function NewFeedbackRead({
   const affectedLineupEffectKeys = new Set(
     Array.from(affectedTraitKeys).flatMap((traitKey) => lineupEffectsByImpactTrait[traitKey] ?? []),
   );
-  const traits = allImpactTraitEntries(latestEval, targetPlayer, theoreticalMax).map((trait) => ({
-    ...trait,
-    affected: affectedTraitKeys.has(trait.key as CompositeKey),
-  }));
+  const baseTraits = allImpactTraitEntries(latestEval, targetPlayer, theoreticalMax);
+  // Players outside the live eval: fetch league percentiles (debounced) so the
+  // Player Shape and trait tiles upgrade from labeled raw reads to the honest scale.
+  const hasEvalPercentiles = baseTraits.some((trait) => trait.normalizedValue != null);
+  const fetchedPercentiles = usePlayerComposites(targetPlayer, isPlayerRead && !hasEvalPercentiles);
+  const traits = baseTraits.map((trait) => {
+    const percentile = trait.normalizedValue ?? fetchedPercentiles?.[trait.key] ?? null;
+    return {
+      ...trait,
+      normalizedValue: percentile,
+      value: percentile ?? trait.value,
+      valueLabel: percentile == null ? trait.valueLabel : formatScore(percentile),
+      affected: affectedTraitKeys.has(trait.key as CompositeKey),
+    };
+  });
   const displayedTraits = rankImpactTraitEntries(traits, {
     includeZero: true,
   });
@@ -898,14 +910,13 @@ function NewFeedbackRead({
             axisValues={TEAM_SHAPE_AXES.map((axis) => {
               const trait = traits.find((entry) => entry.key === axis.key);
               const hasSkills = !!targetPlayer.skills && Object.keys(targetPlayer.skills).length > 0;
-              // Eval percentiles stand on their own; raw formula reads need a Skill Profile.
-              const value = trait
-                ? trait.normalizedValue ?? (hasSkills ? trait.value : null)
-                : null;
+              const percentile = trait?.normalizedValue ?? fetchedPercentiles?.[axis.key] ?? null;
+              // Percentiles stand on their own; raw formula reads need a Skill Profile.
+              const value = percentile ?? (trait && hasSkills ? trait.value : null);
               return {
                 key: axis.key,
                 value,
-                isRaw: value != null && trait?.normalizedValue == null,
+                isRaw: value != null && percentile == null,
               };
             })}
           />

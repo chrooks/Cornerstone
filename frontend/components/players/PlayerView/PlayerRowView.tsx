@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { useUnmountHoverEnd } from "@/lib/hooks/useUnmountHoverEnd";
 import { ALL_SKILL_NAMES } from "@/lib/skills";
 import type { PlayerWithSkills } from "@/lib/types";
 
@@ -63,16 +63,7 @@ export function PlayerRowView({
   selectCheckboxId,
   renderCell,
 }: PlayerRowViewProps) {
-  // mouseleave never fires when a hovered row unmounts (filter/page change) —
-  // fire the symmetric hover-end ourselves so consumers don't stick.
-  const isHoveredRef = useRef(false);
-  const onHoverEndRef = useRef(onHoverEnd);
-  onHoverEndRef.current = onHoverEnd;
-  useEffect(() => {
-    return () => {
-      if (isHoveredRef.current) onHoverEndRef.current?.();
-    };
-  }, []);
+  const hoverGuard = useUnmountHoverEnd(onHoverEnd);
 
   return (
     <tr
@@ -82,11 +73,11 @@ export function PlayerRowView({
       onClick={onClick}
       onContextMenu={onContextMenu}
       onMouseEnter={() => {
-        isHoveredRef.current = true;
+        hoverGuard.markEnter();
         onHover?.();
       }}
       onMouseLeave={() => {
-        isHoveredRef.current = false;
+        hoverGuard.markLeave();
         onHoverEnd?.();
       }}
       className={cn(

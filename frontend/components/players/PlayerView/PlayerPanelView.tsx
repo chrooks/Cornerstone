@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { useUnmountHoverEnd } from "@/lib/hooks/useUnmountHoverEnd";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { formatSkillName, PUBLIC_SKILL_CATEGORIES } from "@/lib/skills";
@@ -48,6 +49,7 @@ export function PlayerPanelView({
   onContextMenu,
   fitContent,
 }: PlayerPanelViewProps) {
+  const hoverGuard = useUnmountHoverEnd(onHoverEnd);
   const [activeTab, setActiveTab] = useState<"player" | "build-fit">("player");
   const profile = skills ?? player.skills;
   const isLegend = player.is_legend === true;
@@ -86,8 +88,14 @@ export function PlayerPanelView({
           onOpenProfile?.(player);
         }
       }}
-      onMouseEnter={onHover ? () => onHover(player) : undefined}
-      onMouseLeave={onHoverEnd}
+      onMouseEnter={() => {
+        hoverGuard.markEnter();
+        onHover?.(player);
+      }}
+      onMouseLeave={() => {
+        hoverGuard.markLeave();
+        onHoverEnd?.();
+      }}
       onClick={canClickPanel ? () => {
         if (canAct) {
           onPrimaryAction?.(player);
