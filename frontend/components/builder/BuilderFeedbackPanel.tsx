@@ -23,8 +23,6 @@ import {
   COMPOSITE_COLUMNS,
   deriveLineupEffectsByImpactTrait,
   IMPACT_TRAIT_DESCRIPTIONS,
-  SUBSCORE_DESCRIPTIONS,
-  SUBSCORE_LABELS,
   theoreticalMaxFromEvaluationValues,
 } from "@/lib/cohesion-constants";
 import { qualityTextColor } from "@/lib/cohesion-colors";
@@ -35,6 +33,7 @@ import { formatSkillName, SKILL_DESCRIPTIONS } from "@/lib/skills";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import { FeedbackTooltip } from "./FeedbackTooltip";
 import { SkillGrid } from "./SkillGrid";
+import { TeamShapeGlyph } from "./TeamShapeGlyph";
 import type { ImpactTraitReadEntry, LineupReadContext } from "@/lib/builder-read-model";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 import type {
@@ -120,6 +119,8 @@ interface BuilderFeedbackPanelProps {
   collapsed: boolean;
   hasUnreadFeedback: boolean;
   latestEval: RosterEvaluation | null;
+  /** True while the debounced live eval request is in flight. */
+  isEvaluating: boolean;
   /** Max roster slots from rules_json. When 5 (Lineup), rotation sections are hidden. */
   maxRosterSlots?: number;
   inspectedPlayer: PlayerWithSkills | null;
@@ -865,13 +866,14 @@ function LineupImpactSummary({ evaluation, isLineupOnly = false }: { evaluation:
 function NewFeedbackRead({
   allSlots,
   latestEval,
+  isEvaluating,
   inspectedPlayer,
   inspectionSource,
   isLineupOnly = false,
   theoreticalMax,
   lineupEffectsByImpactTrait,
   onSuggestionFilter,
-}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "inspectedPlayer" | "inspectionSource" | "onSuggestionFilter"> & {
+}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "isEvaluating" | "inspectedPlayer" | "inspectionSource" | "onSuggestionFilter"> & {
   isLineupOnly?: boolean;
   theoreticalMax: Record<string, number>;
   lineupEffectsByImpactTrait: Record<string, string[]>;
@@ -910,19 +912,8 @@ function NewFeedbackRead({
   const suggestions = normalizedNotes.filter((note) => note.severity === "suggestion").slice(0, 3);
   const strengths = normalizedNotes.filter((note) => note.severity === "strength").slice(0, 2);
   const warnings = normalizedNotes.filter((note) => note.severity === "warning").slice(0, 2);
-  const lineupSubscores = latestEval
-    ? Object.entries(latestEval.starting_lineup.subscores)
-      .map(([key, value]) => ({
-        key,
-        label: SUBSCORE_LABELS[key] ?? key.replaceAll("_", " "),
-        value,
-        isAffected: affectedLineupEffectKeys.has(key),
-      }))
-      .sort((a, b) => {
-        if (a.isAffected !== b.isAffected) return a.isAffected ? -1 : 1;
-        return b.value - a.value;
-      })
-    : [];
+  // Starters only — a filled bench can't stand in for an incomplete starting five.
+  const filledCount = allSlots.slice(0, 5).filter(Boolean).length;
   const LINEUP_ONLY_FACTOR_KEYS = new Set(["starting_5", "archetype_diversity"]);
   const LINEUP_ONLY_LABELS: Record<string, string> = {
     starting_5: "Lineup Strength",
@@ -1002,37 +993,42 @@ function NewFeedbackRead({
         id="builder-new-feedback-current-read"
         className="border border-[#d9d0c9] bg-[#f0f0f0]/55 px-3 py-3"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <SectionLabel id="builder-new-feedback-current-read-label">Feedback Read</SectionLabel>
-            <h3 id="builder-new-feedback-current-read-title" className="mt-1 text-[1rem] font-semibold text-[#0e0907]">
-              Build Cohesion
-            </h3>
-            <p id="builder-new-feedback-current-read-copy" className="mt-1 text-[0.8125rem] leading-snug text-[#0e0907]/55">
-              Current Build snapshot.
+        <div className="min-w-0">
+          <SectionLabel id="builder-new-feedback-current-read-label">Feedback Read</SectionLabel>
+          <h3 id="builder-new-feedback-current-read-title" className="mt-1 text-[1rem] font-semibold text-[#0e0907]">
+            Team Shape
+          </h3>
+          {isBuildPlayerRead && (
+            <p id="builder-new-feedback-current-read-focus" className="mt-1 text-[0.75rem] leading-snug text-[#0e0907]/55">
+              Focus: <span className="font-medium text-[#0e0907]/70">{targetPlayer.name}</span>
             </p>
-            {isBuildPlayerRead && (
-              <p id="builder-new-feedback-current-read-focus" className="mt-1 text-[0.75rem] leading-snug text-[#0e0907]/55">
-                Focus: <span className="font-medium text-[#0e0907]/70">{targetPlayer.name}</span>
-              </p>
-            )}
-          </div>
-          {latestEval ? (
+          )}
+        </div>
+
+        <div id="builder-new-feedback-shape" className="mt-2">
+          <TeamShapeGlyph
+            subscores={latestEval?.starting_lineup.subscores ?? null}
+            medianSubscores={latestEval?.lineup_summary.rotation_median_subscores ?? null}
+            viableLineups={latestEval?.lineup_summary.viable_lineups}
+            totalLineups={latestEval?.lineup_summary.total_lineups}
+            filledCount={filledCount}
+            isRecomputing={isEvaluating}
+            isLineupOnly={isLineupOnly}
+            affectedKeys={affectedLineupEffectKeys}
+          />
+        </div>
+
+        {latestEval && (
+          <div id="builder-new-feedback-score-caption" className="mt-2 flex justify-center">
             <CohesionScoreBadge
               id="builder-new-feedback-score"
               value={latestEval.star_rating}
               precision={2}
               featured
               ariaLabel={`Team Cohesion score: ${latestEval.star_rating.toFixed(2)} out of 5`}
-              className="shrink-0"
             />
-          ) : (
-            <div id="builder-new-feedback-score" className="shrink-0 border border-[#d9d0c9]/80 bg-[#f7f7f7] px-3 py-2 text-right">
-              <p className="text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-[#0e0907]/40">Score</p>
-              <p className="font-mono text-[1rem] font-semibold tabular-nums text-[#0e0907]">--</p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </section>
 
       <FeedbackNotesSection
@@ -1164,51 +1160,6 @@ function NewFeedbackRead({
         />
       )}
 
-      <section id="builder-new-feedback-lineup-effects" className="border border-[#d9d0c9]/70 bg-[#f7f7f7] px-3 py-3">
-        <SectionLabel id="builder-new-feedback-lineup-effects-label">Lineup Effects</SectionLabel>
-        {latestEval ? (
-          <>
-            <p id="builder-new-feedback-lineup-effects-copy" className="mt-2 text-[0.75rem] text-[#0e0907]/50">
-              {isPlayerRead && selectedSkill ? "Amber rows touched by selected Skill path." : "Strongest current Lineup Subscores."}
-            </p>
-            <div
-              id="builder-new-feedback-lineup-effects-scroll"
-              className="mt-2 grid gap-2 pr-1 sm:grid-cols-2 lg:max-h-[164px] lg:overflow-y-auto lg:[scrollbar-color:rgba(14,9,7,0.18)_transparent] lg:[scrollbar-width:thin] lg:[&::-webkit-scrollbar]:w-1.5 lg:[&::-webkit-scrollbar-track]:bg-transparent lg:[&::-webkit-scrollbar-thumb]:rounded-sm lg:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/15 lg:hover:[&::-webkit-scrollbar-thumb]:bg-[#0e0907]/25"
-            >
-              {lineupSubscores.map((subscore) => (
-                <FeedbackTooltip
-                  key={subscore.key}
-                  id={`builder-new-feedback-lineup-effect-${subscore.key}-tooltip`}
-                  as="div"
-                  content={(
-                    <LineupMetricTooltip label={subscore.label}>
-                      {SUBSCORE_DESCRIPTIONS[subscore.key] ?? "Lineup Subscore description not written yet."}
-                    </LineupMetricTooltip>
-                  )}
-                  className="w-full"
-                >
-                  <div
-                    id={`builder-new-feedback-lineup-effect-${subscore.key}`}
-                    className={cn(
-                      "flex w-full items-center justify-between gap-3 border px-2.5 py-1.5 transition-colors",
-                      subscore.isAffected
-                        ? "border-[#ffa05c]/70 bg-[#ffa05c]/10"
-                        : "border-[#d9d0c9]/55 bg-[#f0f0f0]/45",
-                    )}
-                  >
-                    <span className="min-w-0 truncate text-[0.75rem] capitalize text-[#0e0907]/65">{subscore.label}</span>
-                    <span className={cn("shrink-0 font-mono text-[0.6875rem] font-semibold tabular-nums", qualityTextColor(subscore.value, "lineupSubscore"))}>{subscore.value.toFixed(1)}</span>
-                  </div>
-                </FeedbackTooltip>
-              ))}
-            </div>
-          </>
-        ) : (
-          <p id="builder-new-feedback-lineup-effects-empty" className="mt-2 text-[0.8125rem] text-[#0e0907]/50">
-            Lineup effects after eval.
-          </p>
-        )}
-      </section>
     </div>
   );
 }
@@ -1333,6 +1284,7 @@ export function BuilderFeedbackPanel({
   collapsed,
   hasUnreadFeedback,
   latestEval,
+  isEvaluating,
   maxRosterSlots,
   inspectedPlayer,
   inspectionSource,
@@ -1459,6 +1411,7 @@ export function BuilderFeedbackPanel({
           <NewFeedbackRead
             allSlots={allSlots}
             latestEval={latestEval}
+            isEvaluating={isEvaluating}
             inspectedPlayer={inspectedPlayer}
             inspectionSource={inspectionSource}
             isLineupOnly={isLineupOnly}

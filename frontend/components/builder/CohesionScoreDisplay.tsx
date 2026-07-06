@@ -18,7 +18,7 @@
 import { cn } from "@/lib/utils";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
 import { SUBSCORE_DESCRIPTIONS, SUBSCORE_GROUPS, HEADING_TO_CATEGORY_KEY, HEADING_SHOWS_SCORE, categoryScoreColor } from "@/lib/cohesion-constants";
-import { subscoreColor } from "@/lib/cohesion-colors";
+import { gradeForScore, subscoreColor } from "@/lib/cohesion-colors";
 import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
 import type { RosterEvaluation } from "@/lib/types";
 
@@ -100,22 +100,6 @@ function SummaryMetric({
       </p>
     </div>
   );
-}
-
-function gradeForScore(score: number): string {
-  if (score >= 9.7) return "A+";
-  if (score >= 9.3) return "A";
-  if (score >= 9.0) return "A-";
-  if (score >= 8.7) return "B+";
-  if (score >= 8.3) return "B";
-  if (score >= 8.0) return "B-";
-  if (score >= 7.7) return "C+";
-  if (score >= 7.3) return "C";
-  if (score >= 7.0) return "C-";
-  if (score >= 6.7) return "D+";
-  if (score >= 6.3) return "D";
-  if (score >= 6.0) return "D-";
-  return "F";
 }
 
 function gradeToneClass(score: number): string {

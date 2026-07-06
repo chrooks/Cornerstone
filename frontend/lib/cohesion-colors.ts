@@ -16,6 +16,23 @@ export function subscoreColor(score: number): string {
   return "text-red-400";
 }
 
+/** Scouting letter grade for a 0-10 subscore value. */
+export function gradeForScore(score: number): string {
+  if (score >= 9.7) return "A+";
+  if (score >= 9.3) return "A";
+  if (score >= 9.0) return "A-";
+  if (score >= 8.7) return "B+";
+  if (score >= 8.3) return "B";
+  if (score >= 8.0) return "B-";
+  if (score >= 7.7) return "C+";
+  if (score >= 7.3) return "C";
+  if (score >= 7.0) return "C-";
+  if (score >= 6.7) return "D+";
+  if (score >= 6.3) return "D";
+  if (score >= 6.0) return "D-";
+  return "F";
+}
+
 /** Bar fill class for a 0-10 subscore value. */
 export function subscoreBarFill(score: number): string {
   if (score >= 7) return "bg-green-500";
