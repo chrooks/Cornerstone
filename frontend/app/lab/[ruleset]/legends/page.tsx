@@ -10,7 +10,7 @@
 
 import Link from "next/link";
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { listLegends, getLegend, listPlayersWithSkills, listRuleSets } from "@/lib/api";
 import { useNoActiveReleaseRetry } from "@/lib/hooks/useNoActiveReleaseRetry";
 import { resolveRuleSetRules } from "@/lib/rulesets";
@@ -90,6 +90,7 @@ const LEGENDS_PANEL_PAGE_SIZE = 8;
 /* ── Main page component ── */
 export default function LegendsPage() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const ruleset = (params.ruleset as string) ?? "standard";
 
@@ -216,9 +217,9 @@ export default function LegendsPage() {
         const value = searchParams.get(`s${slot}`);
         if (value) params.set(`s${slot}`, value);
       }
-      window.location.href = `/lab/${ruleset}/build?${params.toString()}`;
+      router.push(`/lab/${ruleset}/build?${params.toString()}`);
     },
-    [ruleset, searchParams, maxSlots],
+    [router, ruleset, searchParams, maxSlots],
   );
 
   return (
