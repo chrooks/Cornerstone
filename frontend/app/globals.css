@@ -9,6 +9,74 @@
   }
 }
 
+/* Eval feedback juice — gated on prefers-reduced-motion (research: lab-juice-game-feel.md §2) */
+@media (prefers-reduced-motion: no-preference) {
+  .eval-flash {
+    animation: eval-flash 600ms ease-out both;
+  }
+  .eval-flash-pulse {
+    animation: eval-flash 600ms ease-out both, eval-pulse 250ms ease-out;
+  }
+  .shape-ping {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: shape-ping 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .shape-fade-in {
+    animation: shape-fade-in 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Reduced motion: no travel or scaling — pings vanish, flash is color-only via the delta chip */
+  .shape-ping {
+    display: none;
+  }
+}
+
+@keyframes eval-flash {
+  0%, 25% {
+    background-color: var(--flash-color, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes eval-pulse {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes shape-ping {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes shape-fade-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* shadcn/ui CSS variables — mapped to HSL values for Tailwind v3 compatibility */
 /* Palette source: new_palette.css (warm orange/amber tones) */
 @layer base {

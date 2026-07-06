@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { gradeForScore } from "@/lib/cohesion-colors";
 import { SUBSCORE_DESCRIPTIONS } from "@/lib/cohesion-constants";
+import { useTweenedValues } from "@/lib/hooks/useTweened";
 
 /**
  * Team Shape — the engine's Lineup Subscores rendered as a radar glyph.
@@ -42,6 +43,11 @@ const CENTER = 200;
 const MAX_RADIUS = 128;
 const LABEL_RADIUS = 152;
 const MAX_VALUE = 10;
+/** Morph between consecutive eval results (research band: 300-600ms ease-out). */
+const MORPH_MS = 450;
+/** A vertex counts as "changed" past this delta; its highlight fades after the hold. */
+const CHANGED_THRESHOLD = 0.1;
+const CHANGED_HOLD_MS = 2200;
 
 /** Angle for axis i: centered within its arc's equal angular span. */
 function axisAngle(axis: ShapeAxis, indexInArc: number, arcCount: number): number {
@@ -122,18 +128,51 @@ export function TeamShapeGlyph({
 
   const isUnderFilled = filledCount < 5;
   const hasShape = subscores !== null && !isUnderFilled;
-  const values = hasShape ? axisValues(subscores) : null;
+  const targetValues = hasShape ? axisValues(subscores) : null;
   const hasViable = (viableLineups ?? 0) > 0;
   const showGhost = hasShape && !isLineupOnly && hasViable && medianSubscores != null;
-  const ghostValues = showGhost ? axisValues(medianSubscores) : null;
+  const ghostTargets = showGhost ? axisValues(medianSubscores) : null;
+
+  // #98: outlines travel between consecutive real eval results — never anticipatory.
+  const values = useTweenedValues(targetValues, MORPH_MS);
+  const ghostValues = useTweenedValues(ghostTargets, MORPH_MS);
+
+  // Changed-vertex highlight: diff consecutive engine results, hold, then fade.
+  const prevSubscoresRef = useRef<Record<string, number> | null>(null);
+  const [changed, setChanged] = useState<{ seq: number; keys: Set<string> } | null>(null);
+  useEffect(() => {
+    const prev = prevSubscoresRef.current;
+    prevSubscoresRef.current = subscores;
+    if (!subscores || !prev) return;
+    const keys = new Set(
+      TEAM_SHAPE_AXES
+        .filter((axis) => {
+          const before = prev[axis.key];
+          const after = subscores[axis.key];
+          return before != null && after != null && Math.abs(after - before) >= CHANGED_THRESHOLD;
+        })
+        .map((axis) => axis.key),
+    );
+    if (keys.size === 0) return;
+    setChanged((current) => ({ seq: (current?.seq ?? 0) + 1, keys }));
+  }, [subscores]);
+
+  // Fade follows the highlight itself, so a no-change eval can't strand it.
+  useEffect(() => {
+    if (!changed) return;
+    const timeout = setTimeout(() => setChanged(null), CHANGED_HOLD_MS);
+    return () => clearTimeout(timeout);
+  }, [changed]);
   const showZeroViableBadge =
     hasShape && !isLineupOnly && !hasViable && (totalLineups ?? 0) > 0;
 
   const hoveredAxis = hovered != null ? TEAM_SHAPE_AXES[hovered] : null;
-  const hoveredValue = hovered != null && values ? values[hovered] : null;
+  // Tooltip text is engine truth (target values); position follows the drawn vertex.
+  const hoveredValue = hovered != null && targetValues ? targetValues[hovered] : null;
+  const hoveredDrawn = hovered != null && values ? values[hovered] : null;
   const hoveredPoint =
-    hovered != null && hoveredValue != null
-      ? pointAt(AXIS_ANGLES[hovered], (hoveredValue / MAX_VALUE) * MAX_RADIUS)
+    hovered != null && hoveredDrawn != null
+      ? pointAt(AXIS_ANGLES[hovered], (hoveredDrawn / MAX_VALUE) * MAX_RADIUS)
       : null;
 
   return (
@@ -250,7 +289,7 @@ export function TeamShapeGlyph({
         )}
 
         {hasShape && values && (
-          <g className={cn(isRecomputing && "motion-safe:animate-pulse opacity-60")}>
+          <g className={cn("shape-fade-in", isRecomputing && "motion-safe:animate-pulse opacity-60")}>
             {/* Ghost: rotation median across viable Lineup Combinations */}
             {ghostValues && (
               <polygon
@@ -271,23 +310,36 @@ export function TeamShapeGlyph({
               stroke="#fe6d34"
               strokeWidth={2}
               strokeLinejoin="round"
-              className="transition-all duration-300 ease-out motion-reduce:transition-none"
             />
 
             {/* Vertex dots + hover/focus hit areas */}
             {values.map((value, i) => {
               if (value == null) return null;
+              const engineValue = targetValues?.[i] ?? value;
               const { x, y } = pointAt(AXIS_ANGLES[i], (value / MAX_VALUE) * MAX_RADIUS);
               const axis = TEAM_SHAPE_AXES[i];
+              const isChanged = changed?.keys.has(axis.key) ?? false;
               return (
                 <g key={axis.key}>
+                  {isChanged && (
+                    <circle
+                      key={`ping-${changed?.seq}`}
+                      cx={x}
+                      cy={y}
+                      r={7}
+                      fill="none"
+                      stroke="#fe6d34"
+                      strokeWidth={1.5}
+                      className="shape-ping pointer-events-none"
+                    />
+                  )}
                   <circle
                     cx={x}
                     cy={y}
                     r={hovered === i ? 5 : 3.5}
-                    fill={vertexTone(value)}
-                    stroke="#f7f7f7"
-                    strokeWidth={1.25}
+                    fill={vertexTone(engineValue)}
+                    stroke={isChanged ? "#fe6d34" : "#f7f7f7"}
+                    strokeWidth={isChanged ? 2 : 1.25}
                     className="transition-all motion-reduce:transition-none"
                   />
                   <circle
@@ -298,7 +350,7 @@ export function TeamShapeGlyph({
                     fill="transparent"
                     tabIndex={0}
                     role="img"
-                    aria-label={`${axis.label}: ${value.toFixed(1)} out of 10, grade ${gradeForScore(value)}`}
+                    aria-label={`${axis.label}: ${engineValue.toFixed(1)} out of 10, grade ${gradeForScore(engineValue)}`}
                     className="cursor-pointer outline-none focus-visible:stroke-[#ffa05c] focus-visible:stroke-2"
                     onMouseEnter={() => setHovered(i)}
                     onMouseLeave={() => setHovered(null)}

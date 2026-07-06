@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getActiveEvaluationVersion } from "@/lib/api/evaluation-versions";
@@ -34,6 +34,7 @@ import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import { FeedbackTooltip } from "./FeedbackTooltip";
 import { SkillGrid } from "./SkillGrid";
 import { TeamShapeGlyph } from "./TeamShapeGlyph";
+import { useTweenedNumber } from "@/lib/hooks/useTweened";
 import type { ImpactTraitReadEntry, LineupReadContext } from "@/lib/builder-read-model";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 import type {
@@ -863,6 +864,70 @@ function LineupImpactSummary({ evaluation, isLineupOnly = false }: { evaluation:
   );
 }
 
+/** Flash + pulse past this delta; below it, flash only (delta-scaled emphasis). */
+const SCORE_PULSE_THRESHOLD = 0.25;
+const SCORE_MIN_DELTA = 0.005;
+
+/**
+ * #88: the star caption rolls between consecutive engine scores with a signed
+ * delta chip and a delta-scaled flash. First eval rolls up from 0 (full
+ * treatment); later tweaks use shorter rolls. Reduced motion snaps instantly.
+ */
+function AnimatedScoreCaption({ score }: { score: number }) {
+  const [target, setTarget] = useState(0);
+  const prevScoreRef = useRef<number | null>(null);
+  const [delta, setDelta] = useState<{ value: number; seq: number } | null>(null);
+
+  useEffect(() => {
+    const prev = prevScoreRef.current;
+    prevScoreRef.current = score;
+    setTarget(score);
+    if (prev == null || Math.abs(score - prev) < SCORE_MIN_DELTA) return;
+    setDelta((current) => ({ value: score - prev, seq: (current?.seq ?? 0) + 1 }));
+  }, [score]);
+
+  const magnitude = Math.abs(delta?.value ?? 0);
+  // Delta-scaled roll length, capped under Nielsen's ~1s flow limit.
+  const rollMs = delta == null ? 800 : Math.min(900, 300 + magnitude * 1200);
+  const displayed = useTweenedNumber(target, rollMs) ?? score;
+  const isGain = (delta?.value ?? 0) > 0;
+
+  return (
+    <div id="builder-new-feedback-score-caption" className="mt-2 flex items-center justify-center gap-2">
+      <div
+        key={delta?.seq ?? 0}
+        className={cn(
+          "rounded-sm",
+          delta && (magnitude >= SCORE_PULSE_THRESHOLD ? "eval-flash-pulse" : "eval-flash"),
+        )}
+        style={{
+          "--flash-color": isGain ? "rgba(5, 150, 105, 0.22)" : "rgba(229, 62, 62, 0.18)",
+        } as CSSProperties}
+      >
+        <CohesionScoreBadge
+          id="builder-new-feedback-score"
+          value={displayed}
+          precision={2}
+          featured
+          ariaLabel={`Team Cohesion score: ${score.toFixed(2)} out of 5`}
+        />
+      </div>
+      {/* Always mounted so the live region announces the first delta too. */}
+      <span
+        id="builder-new-feedback-score-delta"
+        aria-live="polite"
+        className={cn(
+          "font-mono text-[0.8125rem] font-semibold tabular-nums",
+          isGain ? "text-[#047857]" : "text-[#b91c1c]",
+          !delta && "invisible",
+        )}
+      >
+        {delta ? `${isGain ? "+" : ""}${delta.value.toFixed(2)}` : ""}
+      </span>
+    </div>
+  );
+}
+
 function NewFeedbackRead({
   allSlots,
   latestEval,
@@ -1018,17 +1083,7 @@ function NewFeedbackRead({
           />
         </div>
 
-        {latestEval && (
-          <div id="builder-new-feedback-score-caption" className="mt-2 flex justify-center">
-            <CohesionScoreBadge
-              id="builder-new-feedback-score"
-              value={latestEval.star_rating}
-              precision={2}
-              featured
-              ariaLabel={`Team Cohesion score: ${latestEval.star_rating.toFixed(2)} out of 5`}
-            />
-          </div>
-        )}
+        {latestEval && <AnimatedScoreCaption score={latestEval.star_rating} />}
       </section>
 
       <FeedbackNotesSection
