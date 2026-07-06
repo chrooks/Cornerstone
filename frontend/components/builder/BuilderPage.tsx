@@ -28,6 +28,7 @@ import { PlayerPickerPanel } from "./PlayerPickerPanel";
 import { BuilderFeedbackPanel, type BuilderInspectionSource } from "./BuilderFeedbackPanel";
 import { BuilderPlayerFit } from "./BuilderPlayerFit";
 import { PlayerProfileModal, playerWithSkillsToProfile } from "@/components/players/PlayerView";
+import { Modal } from "@/components/ui/Modal";
 import type { SuggestionFilter } from "@/lib/noteFilters";
 import type { LegendDetail, PlayerWithSkills, RuleSetSummary } from "@/lib/types";
 
@@ -183,6 +184,20 @@ export function BuilderPage() {
     setFeedbackCollapsed(false);
     setHasUnreadFeedback(false);
   }, []);
+
+  // ── Cornerstone-removal confirm (#91): the one destructive drafting act ──
+  const [confirmRemoveSlot, setConfirmRemoveSlot] = useState<number | null>(null);
+
+  const handleRemoveSlotGuarded = useCallback(
+    (slotIndex: number) => {
+      if (roster.allSlots[slotIndex - 1]?.id === cornerstoneId) {
+        setConfirmRemoveSlot(slotIndex);
+        return;
+      }
+      roster.handleRemoveSlot(slotIndex);
+    },
+    [roster, cornerstoneId],
+  );
 
   // ── Player-scoped note filtering (slot click → filter Feedback) ──────────
   const [focusedPlayerName, setFocusedPlayerName] = useState<string | null>(null);
@@ -416,7 +431,7 @@ export function BuilderPage() {
         rookieDealLimit={rookieDealLimit}
         rosterRookieDealCount={rosterRookieDealCount}
         onSlotClick={handleSlotClick}
-        onRemoveSlot={roster.handleRemoveSlot}
+        onRemoveSlot={handleRemoveSlotGuarded}
         onDropPlayer={handleDropPlayer}
         onSwapSlots={roster.handleSwapSlots}
         onSlotHover={handleSlotHover}
@@ -595,6 +610,62 @@ export function BuilderPage() {
           }
         />
       )}
+
+      {/* #91: Transparent Friction on the one destructive drafting act */}
+      <Modal
+        id="builder-remove-cornerstone-confirm"
+        open={confirmRemoveSlot != null}
+        onClose={() => setConfirmRemoveSlot(null)}
+        maxWidthClass="max-w-md"
+        ariaLabelledBy="builder-remove-cornerstone-title"
+      >
+        {(() => {
+          const cornerstoneName =
+            (confirmRemoveSlot != null ? roster.allSlots[confirmRemoveSlot - 1]?.name : null) ??
+            legendDetail?.name ??
+            "the Cornerstone";
+          const otherCount = roster.allSlots.filter(Boolean).length - 1;
+          return (
+            <div className="space-y-4">
+              <h2
+                id="builder-remove-cornerstone-title"
+                className="text-lg font-semibold text-[#0e0907]"
+              >
+                Remove {cornerstoneName}?
+              </h2>
+              <p className="text-sm leading-6 text-[#0e0907]/65">
+                {cornerstoneName} is your Cornerstone. Removing them clears{" "}
+                {otherCount > 0
+                  ? `the other ${otherCount} filled slot${otherCount === 1 ? "" : "s"}`
+                  : "the Build"}{" "}
+                and returns you to the Cornerstone picker.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  id="builder-remove-cornerstone-keep"
+                  type="button"
+                  onClick={() => setConfirmRemoveSlot(null)}
+                  className="border border-[#d9d0c9] bg-[#f7f7f7] px-4 py-2 text-sm font-medium text-[#0e0907] transition-colors hover:bg-[#f0f0f0]"
+                >
+                  Keep {cornerstoneName}
+                </button>
+                <button
+                  id="builder-remove-cornerstone-remove"
+                  type="button"
+                  onClick={() => {
+                    const slot = confirmRemoveSlot;
+                    setConfirmRemoveSlot(null);
+                    if (slot != null) roster.handleRemoveSlot(slot);
+                  }}
+                  className="border border-[#e53e3e]/40 bg-[#e53e3e]/10 px-4 py-2 text-sm font-semibold text-[#b91c1c] transition-colors hover:bg-[#e53e3e]/20"
+                >
+                  Remove {cornerstoneName}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
     </main>
   );
 }

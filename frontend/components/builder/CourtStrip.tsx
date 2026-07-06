@@ -183,7 +183,8 @@ function SlotCircle({
           </span>
         )}
 
-        {!isEmpty && !isCornerstone && (
+        {/* Cornerstone removal is destructive (clears the Build) — BuilderPage gates it behind a confirm (#91) */}
+        {!isEmpty && (
           <button
             id={`builder-slot-${slotIndex}-remove`}
             type="button"
