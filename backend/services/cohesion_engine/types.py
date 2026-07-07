@@ -61,6 +61,9 @@ class LineupCohesion:
     accentuation_weakness: float
     accentuation_details: dict = field(default_factory=dict)
     category_scores: dict[str, float] = field(default_factory=dict)
+    # Attribution Ledgers (#93): populated only when evaluate_lineup runs with
+    # with_attribution=True (the Starting Lineup); None for score-only combos.
+    subscore_breakdowns: dict[str, dict] | None = None
 
 
 @dataclass(frozen=True)

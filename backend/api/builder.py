@@ -169,6 +169,9 @@ def _serialize_lineup(lineup, starting_players: list[dict[str, Any]], values: di
             "weakness_coverage": lineup.accentuation_weakness,
         },
         "accentuation_details": lineup.accentuation_details,
+        # Attribution Ledgers (#93): present on the Starting Lineup only;
+        # None on score-only Lineup Combinations.
+        "subscore_breakdowns": lineup.subscore_breakdowns,
         "boosted_bell_curves": boosted_bell_curves,
         "rp_pd_boosts": rp_pd_boosts,
     }

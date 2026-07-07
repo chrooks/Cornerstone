@@ -15,14 +15,16 @@
  *   Breakdown (0-1): green (≥0.7), amber (0.4–0.69), red (<0.4)
  */
 
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { CohesionScoreBadge } from "@/components/cohesion/CohesionScoreBadge";
-import { TeamShapeGlyph } from "@/components/builder/TeamShapeGlyph";
+import { AttributionLedgerPanel } from "@/components/builder/AttributionLedgerPanel";
+import { TeamShapeGlyph, TEAM_SHAPE_AXES } from "@/components/builder/TeamShapeGlyph";
 import { SUBSCORE_DESCRIPTIONS, SUBSCORE_GROUPS, HEADING_TO_CATEGORY_KEY, HEADING_SHOWS_SCORE, categoryScoreColor } from "@/lib/cohesion-constants";
 import { gradeForScore, subscoreColor } from "@/lib/cohesion-colors";
 import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
-import type { RosterEvaluation } from "@/lib/types";
+import type { AttributionLedger, RosterEvaluation } from "@/lib/types";
 
 
 // ---------------------------------------------------------------------------
@@ -134,6 +136,9 @@ function SubscoreGrade({
   description,
   hideRotation = false,
   medianLabel = "Rotation Median",
+  isExpandable = false,
+  isExpanded = false,
+  onToggle,
 }: {
   id: string;
   label: string;
@@ -142,6 +147,10 @@ function SubscoreGrade({
   description: string;
   hideRotation?: boolean;
   medianLabel?: string;
+  /** #93: the tile opens its Attribution Ledger on click. */
+  isExpandable?: boolean;
+  isExpanded?: boolean;
+  onToggle?: () => void;
 }) {
   const rounded = Math.round(score * 10) / 10;
   const hasRotation = rotationScore != null;
@@ -150,8 +159,27 @@ function SubscoreGrade({
   return (
     <div
       id={id}
-      className="grid min-h-[88px] grid-cols-[3.25rem_minmax(0,1fr)] border border-[#d9d0c9]/70 bg-[#f7f7f7] transition-colors hover:border-[#ffa05c]/55"
-      title={description}
+      className={cn(
+        "grid min-h-[88px] grid-cols-[3.25rem_minmax(0,1fr)] border border-[#d9d0c9]/70 bg-[#f7f7f7] transition-colors hover:border-[#ffa05c]/55",
+        isExpandable && "cursor-pointer",
+        isExpanded && "border-[#ffa05c]/70",
+      )}
+      title={isExpandable ? description : `${description} Attribution breakdown not available for this formula shape.`}
+      role={isExpandable ? "button" : undefined}
+      tabIndex={isExpandable ? 0 : undefined}
+      aria-label={isExpandable ? `${label}: open attribution breakdown` : undefined}
+      aria-expanded={isExpandable ? isExpanded : undefined}
+      onClick={onToggle}
+      onKeyDown={
+        isExpandable && onToggle
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onToggle();
+              }
+            }
+          : undefined
+      }
     >
       <div
         id={`${id}-grade`}
@@ -163,8 +191,20 @@ function SubscoreGrade({
         {grade}
       </div>
       <div className="min-w-0 px-3 py-2">
-        <p id={`${id}-label`} className="truncate text-xs font-semibold text-[#0e0907]">
-          {label}
+        <p id={`${id}-label`} className="flex items-center justify-between gap-2 text-xs font-semibold text-[#0e0907]">
+          <span className="truncate">{label}</span>
+          {isExpandable && (
+            <span
+              id={`${id}-why`}
+              className={cn(
+                "shrink-0 font-mono text-[0.625rem] font-normal",
+                isExpanded ? "text-[#a34400]" : "text-[#0e0907]/40",
+              )}
+              aria-hidden="true"
+            >
+              {isExpanded ? "why ▾" : "why ▸"}
+            </span>
+          )}
         </p>
         <div className="mt-2 grid gap-1">
           <div className="flex items-center justify-between gap-3">
@@ -230,9 +270,65 @@ const LINEUP_ONLY_LABELS: Record<string, string> = {
   archetype_diversity: "Versatility",
 };
 
+/** Starting five derivable from ledger player lines, in first-appearance order. */
+function ledgerPlayers(
+  breakdowns: Record<string, AttributionLedger> | null | undefined,
+): { id: string; name: string }[] {
+  if (!breakdowns) return [];
+  const seen = new Map<string, string>();
+  for (const ledger of Object.values(breakdowns)) {
+    for (const line of ledger.lines) {
+      if (line.kind === "player" && line.player_id && line.player_name && !seen.has(line.player_id)) {
+        seen.set(line.player_id, line.player_name);
+      }
+    }
+  }
+  return Array.from(seen, ([id, name]) => ({ id, name }));
+}
+
 export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLabel }: CohesionScoreDisplayProps) {
   const resolvedLabel = teamLabel ?? (isLineupOnly ? "Lineup" : "Rotation");
   const { star_rating, star_rating_breakdown, starting_lineup, lineup_summary } = evaluation;
+
+  // #93 Attribution Ledger state: one expanded subscore, one selected Player.
+  const breakdowns = starting_lineup.subscore_breakdowns ?? null;
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; name: string } | null>(null);
+
+  // A re-eval can swap players out from under the drilldown state — a stale
+  // selection would dim the glyph for a departed player with zero markers.
+  useEffect(() => {
+    setExpandedKey(null);
+    setSelectedPlayer(null);
+  }, [evaluation]);
+
+  const players = ledgerPlayers(breakdowns);
+  const contribution = selectedPlayer && breakdowns
+    ? {
+        playerName: selectedPlayer.name,
+        values: TEAM_SHAPE_AXES.map((axis) => {
+          const line = breakdowns[axis.key]?.lines.find(
+            (l) => l.kind === "player" && l.player_id === selectedPlayer.id,
+          );
+          return line ? line.value : null;
+        }),
+      }
+    : null;
+
+  const toggleExpanded = (key: string) => {
+    setExpandedKey((current) => (current === key ? null : key));
+  };
+
+  const handleVertexSelect = (key: string) => {
+    if (!breakdowns?.[key]) return;
+    setExpandedKey(key);
+    // The ledger opens inside the subscore grid — bring it into view.
+    document.getElementById(`cohesion-subscore-${key}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const handleSelectPlayer = (id: string, name: string) => {
+    setSelectedPlayer((current) => (current?.id === id ? null : { id, name }));
+  };
   const rotationMedian = isLineupOnly ? undefined : lineup_summary.rotation_median_subscores;
   const factorEntries = Object.entries(star_rating_breakdown)
     .filter(([key]) => !isLineupOnly || LINEUP_ONLY_FACTOR_KEYS.has(key))
@@ -275,7 +371,40 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
           isRecomputing={false}
           isLineupOnly={isLineupOnly}
           staggerReveal
+          onVertexSelect={breakdowns ? handleVertexSelect : undefined}
+          contribution={contribution}
         />
+        {/* #93 Contribution Overlay: pick a starter to mark their ledger inputs on the spokes */}
+        {players.length > 0 && (
+          <div id="cohesion-contribution-picker" className="flex flex-wrap items-center justify-center gap-1.5">
+            <span
+              className="text-[0.625rem] text-[#0e0907]/40"
+              title="Markers show the player's weighted share of each subscore — their role-weighted input, not a 0-10 rating."
+            >
+              Who contributes where:
+            </span>
+            {players.map((player) => {
+              const isSelected = selectedPlayer?.id === player.id;
+              return (
+                <button
+                  key={player.id}
+                  id={`cohesion-contribution-chip-${player.id}`}
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => handleSelectPlayer(player.id, player.name)}
+                  className={cn(
+                    "border px-2 py-0.5 text-[0.6875rem] transition-colors",
+                    isSelected
+                      ? "border-[#0e0907] bg-[#0e0907] text-[#f7f7f7]"
+                      : "border-[#d9d0c9] bg-[#f0f0f0]/60 text-[#0e0907]/65 hover:border-[#ffa05c]/70 hover:text-[#0e0907]",
+                  )}
+                >
+                  {player.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="reveal-pop flex justify-center" style={revealStyle(SCORE_REVEAL_MS)}>
           <CohesionScoreBadge
             id="cohesion-score-rating"
@@ -376,23 +505,39 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
                 )}
               </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                {group.entries.map((entry, entryIndex) => (
-                  <div
-                    key={entry.key}
-                    className="reveal-pop"
-                    style={revealStyle(TILE_REVEAL_BASE_MS + (tileOffset + entryIndex) * TILE_REVEAL_STEP_MS)}
-                  >
-                    <SubscoreGrade
-                      id={`cohesion-subscore-${entry.key}`}
-                      label={entry.label}
-                      score={starting_lineup.subscores[entry.key] ?? 0}
-                      rotationScore={rotationMedian?.[entry.key]}
-                      description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
-                      hideRotation={isLineupOnly}
-                      medianLabel={`${resolvedLabel} Median`}
-                    />
-                  </div>
-                ))}
+                {group.entries.map((entry, entryIndex) => {
+                  const ledger = breakdowns?.[entry.key];
+                  const isExpanded = expandedKey === entry.key && !!ledger;
+                  return (
+                    <div
+                      key={entry.key}
+                      className={cn("reveal-pop", isExpanded && "col-span-2")}
+                      style={revealStyle(TILE_REVEAL_BASE_MS + (tileOffset + entryIndex) * TILE_REVEAL_STEP_MS)}
+                    >
+                      <SubscoreGrade
+                        id={`cohesion-subscore-${entry.key}`}
+                        label={entry.label}
+                        score={starting_lineup.subscores[entry.key] ?? 0}
+                        rotationScore={rotationMedian?.[entry.key]}
+                        description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
+                        hideRotation={isLineupOnly}
+                        medianLabel={`${resolvedLabel} Median`}
+                        isExpandable={!!ledger}
+                        isExpanded={isExpanded}
+                        onToggle={ledger ? () => toggleExpanded(entry.key) : undefined}
+                      />
+                      {isExpanded && ledger && (
+                        <AttributionLedgerPanel
+                          id={`cohesion-ledger-${entry.key}`}
+                          subscoreLabel={entry.label}
+                          ledger={ledger}
+                          selectedPlayerId={selectedPlayer?.id ?? null}
+                          onSelectPlayer={handleSelectPlayer}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );

@@ -110,6 +110,10 @@ interface TeamShapeGlyphProps {
   affectedKeys?: Set<string>;
   /** #89: vertices land in sequence around the arcs on mount (Final Eval reveal). */
   staggerReveal?: boolean;
+  /** #93: clicking a vertex opens that subscore's Attribution Ledger. */
+  onVertexSelect?: (subscoreKey: string) => void;
+  /** #93 Contribution Overlay: a selected Player's ledger input value per axis. */
+  contribution?: { playerName: string; values: (number | null)[] } | null;
 }
 
 /** Per-vertex reveal spacing; 11 vertices finish within ~550ms. */
@@ -125,6 +129,8 @@ export function TeamShapeGlyph({
   isLineupOnly = false,
   affectedKeys,
   staggerReveal = false,
+  onVertexSelect,
+  contribution = null,
 }: TeamShapeGlyphProps) {
   const [hovered, setHovered] = useState<number | null>(null);
 
@@ -309,15 +315,45 @@ export function TeamShapeGlyph({
               />
             )}
 
-            {/* Solid: Starting Lineup */}
+            {/* Solid: Starting Lineup — recedes while a Contribution Overlay is active */}
             <polygon
               points={polygonPoints(values)}
               fill="#ffa05c"
-              fillOpacity={0.22}
+              fillOpacity={contribution ? 0.08 : 0.22}
               stroke="#fe6d34"
               strokeWidth={2}
+              strokeOpacity={contribution ? 0.45 : 1}
               strokeLinejoin="round"
             />
+
+            {/* #93 Contribution Overlay: the selected Player's ledger input
+                value marked on each spoke, in true subscore units. Markers
+                only — adjustments can be negative or gated, so stacked
+                segments would lie (ADR 0006). */}
+            {contribution &&
+              contribution.values.map((value, i) => {
+                if (value == null) return null;
+                const r = (Math.min(MAX_VALUE, Math.max(0, value)) / MAX_VALUE) * MAX_RADIUS;
+                const { x, y } = pointAt(AXIS_ANGLES[i], r);
+                const axis = TEAM_SHAPE_AXES[i];
+                return (
+                  <rect
+                    key={`contribution-${axis.key}`}
+                    id={`team-shape-contribution-${axis.key}`}
+                    x={x - 3.5}
+                    y={y - 3.5}
+                    width={7}
+                    height={7}
+                    transform={`rotate(45 ${x} ${y})`}
+                    fill="#0e0907"
+                    stroke="#f7f7f7"
+                    strokeWidth={1}
+                    className="pointer-events-none"
+                  >
+                    <title>{`${contribution.playerName} → ${axis.label}: ${value.toFixed(2)}`}</title>
+                  </rect>
+                );
+              })}
 
             {/* Vertex dots + hover/focus hit areas */}
             {values.map((value, i) => {
@@ -360,13 +396,24 @@ export function TeamShapeGlyph({
                     r={14}
                     fill="transparent"
                     tabIndex={0}
-                    role="img"
-                    aria-label={`${axis.label}: ${engineValue.toFixed(1)} out of 10, grade ${gradeForScore(engineValue)}`}
+                    role={onVertexSelect ? "button" : "img"}
+                    aria-label={`${axis.label}: ${engineValue.toFixed(1)} out of 10, grade ${gradeForScore(engineValue)}${onVertexSelect ? ". Open attribution breakdown" : ""}`}
                     className="cursor-pointer outline-none focus-visible:stroke-[#ffa05c] focus-visible:stroke-2"
                     onMouseEnter={() => setHovered(i)}
                     onMouseLeave={() => setHovered(null)}
                     onFocus={() => setHovered(i)}
                     onBlur={() => setHovered(null)}
+                    onClick={onVertexSelect ? () => onVertexSelect(axis.key) : undefined}
+                    onKeyDown={
+                      onVertexSelect
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              onVertexSelect(axis.key);
+                            }
+                          }
+                        : undefined
+                    }
                   />
                 </g>
               );
@@ -431,6 +478,11 @@ export function TeamShapeGlyph({
           {showGhost && (
             <>
               <span className="ml-3 text-[#0e0907]/45">╌╌</span> Rotation median
+            </>
+          )}
+          {contribution && (
+            <>
+              <span className="ml-3 text-[#0e0907]">◆</span> {contribution.playerName} weighted inputs
             </>
           )}
         </p>

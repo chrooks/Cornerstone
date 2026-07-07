@@ -263,7 +263,9 @@ def evaluate_roster(
         return evaluation
 
     starting_players = ordered_players[:5]
-    starting_lineup = evaluate_lineup(starting_players, engine)
+    # Attribution Ledgers only for the Starting Lineup (ADR 0006) — the
+    # combination sweep below stays score-only.
+    starting_lineup = evaluate_lineup(starting_players, engine, with_attribution=True)
 
     lineups: list[LineupCohesion] = []
     archetypes: set[str] = set()

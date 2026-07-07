@@ -14,6 +14,24 @@ from services.cohesion_engine.engine import CohesionEngine, LineupContext
 from services.cohesion_engine.handlers.composites_v1 import _average
 
 
+def spacer_count(lineup: list[dict], values: dict) -> int:
+    """Count players whose raw spacing composite clears the gate."""
+    tv = values["tier_values"]
+    c = values["composite_coefficients"]
+    gate = values["spacing_raw_gate"]
+    count = 0
+    for player in lineup:
+        skills = player.get("skills", {})
+        raw = (
+            tier_value(skills, "spot_up_shooter", tv)
+            + tier_value(skills, "movement_shooter", tv)
+            + c["spacing_off_dribble"] * tier_value(skills, "off_dribble_shooter", tv)
+        )
+        if raw >= gate:
+            count += 1
+    return count
+
+
 @CohesionEngine.handler("spacing_v2")
 def spacing_v2(engine: CohesionEngine, ctx: LineupContext) -> float:
     """Count-gated average: penalizes lineups with fewer than 3 capable shooters.
@@ -23,52 +41,23 @@ def spacing_v2(engine: CohesionEngine, ctx: LineupContext) -> float:
     Multiplier curve stored in Evaluation Version values.
     """
     v = engine.version.values
-    tv = v["tier_values"]
-    c = v["composite_coefficients"]
-    gate = v["spacing_raw_gate"]
     multipliers = v["spacing_multipliers"]
 
     if not multipliers:
         raise ValueError("spacing_multipliers must be a non-empty list")
 
-    spacer_count = 0
-    for player in ctx.lineup:
-        skills = player.get("skills", {})
-        raw = (
-            tier_value(skills, "spot_up_shooter", tv)
-            + tier_value(skills, "movement_shooter", tv)
-            + c["spacing_off_dribble"] * tier_value(skills, "off_dribble_shooter", tv)
-        )
-        if raw >= gate:
-            spacer_count += 1
-
     avg = _average(ctx.composites, "spacing")
-    multiplier = multipliers[min(spacer_count, len(multipliers) - 1)]
+    multiplier = multipliers[min(spacer_count(ctx.lineup, v), len(multipliers) - 1)]
     return avg * multiplier
 
 
-@CohesionEngine.handler("shot_creation_v2")
-def shot_creation_v2(engine: CohesionEngine, ctx: LineupContext) -> float:
-    """Count-gated top-two-plus-depth: rewards concentrated creation.
-
-    Gate: raw shot_creation composite >= threshold (default 2.0).
-    Scoring uses top-two-plus-depth with creator-heavy weights (0.6/0.25/0.15).
-    Multiplier curve penalizes lineups with zero creators catastrophically.
-    """
-    v = engine.version.values
-    tv = v["tier_values"]
-    c = v["composite_coefficients"]
-    gate = v["shot_creation_raw_gate"]
-    multipliers = v["shot_creation_multipliers"]
-    primary_w = v["shot_creation_primary_weight"]
-    secondary_w = v["shot_creation_secondary_weight"]
-    depth_w = v["shot_creation_depth_weight"]
-
-    if not multipliers:
-        raise ValueError("shot_creation_multipliers must be a non-empty list")
-
-    creator_count = 0
-    for player in ctx.lineup:
+def creator_count(lineup: list[dict], values: dict) -> int:
+    """Count players whose raw shot_creation composite clears the gate."""
+    tv = values["tier_values"]
+    c = values["composite_coefficients"]
+    gate = values["shot_creation_raw_gate"]
+    count = 0
+    for player in lineup:
         skills = player.get("skills", {})
 
         # Compute raw spacing and paint_touch per player for the gate formula
@@ -103,7 +92,26 @@ def shot_creation_v2(engine: CohesionEngine, ctx: LineupContext) -> float:
             + c["shot_creation_paint_touch"] * raw_paint_touch
         )
         if raw_shot_creation >= gate:
-            creator_count += 1
+            count += 1
+    return count
+
+
+@CohesionEngine.handler("shot_creation_v2")
+def shot_creation_v2(engine: CohesionEngine, ctx: LineupContext) -> float:
+    """Count-gated top-two-plus-depth: rewards concentrated creation.
+
+    Gate: raw shot_creation composite >= threshold (default 2.0).
+    Scoring uses top-two-plus-depth with creator-heavy weights (0.6/0.25/0.15).
+    Multiplier curve penalizes lineups with zero creators catastrophically.
+    """
+    v = engine.version.values
+    multipliers = v["shot_creation_multipliers"]
+    primary_w = v["shot_creation_primary_weight"]
+    secondary_w = v["shot_creation_secondary_weight"]
+    depth_w = v["shot_creation_depth_weight"]
+
+    if not multipliers:
+        raise ValueError("shot_creation_multipliers must be a non-empty list")
 
     # Top-two-plus-depth on normalized composites
     sorted_values = sorted(
@@ -114,5 +122,5 @@ def shot_creation_v2(engine: CohesionEngine, ctx: LineupContext) -> float:
     depth = sum(sorted_values) / len(sorted_values) if sorted_values else 0.0
     t2pd = primary * primary_w + secondary * secondary_w + depth * depth_w
 
-    multiplier = multipliers[min(creator_count, len(multipliers) - 1)]
+    multiplier = multipliers[min(creator_count(ctx.lineup, v), len(multipliers) - 1)]
     return t2pd * multiplier

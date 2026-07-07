@@ -556,10 +556,31 @@ export interface CohesionPlayerComposites {
   bell_curve: CohesionBellCurve;
 }
 
+/** One line of an Attribution Ledger (#93): a captured formula intermediate. */
+export interface AttributionLedgerLine {
+  kind: "player" | "adjustment" | "context";
+  label: string;
+  value: number;
+  player_id?: string;
+  player_name?: string;
+  /** Driving skill behind a player line, engine skill key (may be null). */
+  skill?: string | null;
+  role?: "primary" | "secondary" | "depth";
+  weight?: number;
+}
+
+/** Attribution Ledger for one subscore: lines reconcile to the total. */
+export interface AttributionLedger {
+  lines: AttributionLedgerLine[];
+  total: number;
+}
+
 /** One evaluated starting lineup in the cohesion response. */
 export interface CohesionLineupData {
   cohesion_score: number;
   subscores: Record<string, number>;
+  /** Attribution Ledgers (#93) — Starting Lineup only; null on combos. */
+  subscore_breakdowns?: Record<string, AttributionLedger> | null;
   category_scores?: Record<string, number>;
   synergies_applied: string[];
   archetype_labels?: string[];

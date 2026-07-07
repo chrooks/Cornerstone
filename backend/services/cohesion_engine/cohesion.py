@@ -103,10 +103,14 @@ def _pnr_handler_value(player: dict[str, Any], values: dict[str, Any]) -> float:
     return min(10.0, base * (1.0 + values["pnr_handler_support_scale"] * support / 10.0))
 
 
-def _pnr_pairing(
+def _pnr_pairing_details(
     lineup: list[dict[str, Any]], composites: list[PlayerComposites], values: dict[str, Any]
-) -> float:
-    """Score whether PnR handlers and screeners are both good and balanced."""
+) -> dict[str, float]:
+    """Score whether PnR handlers and screeners are both good and balanced.
+
+    Returns the captured intermediates alongside the score so the Attribution
+    Ledger (#93) can render them without re-deriving the math.
+    """
     handler_quality = _top_two_plus_depth(
         composites, "pnr_orchestration",
         values["pnr_handler_primary_weight"],
@@ -121,8 +125,15 @@ def _pnr_pairing(
         values["pnr_screener_depth_weight"],
     )
 
+    details = {
+        "handler_quality": handler_quality,
+        "screener_quality": screener_quality,
+        "balance": 0.0,
+        "quality_gate": 0.0,
+        "score": 0.0,
+    }
     if handler_quality <= 0 or screener_quality <= 0:
-        return 0.0
+        return details
 
     balance = ratio_score(handler_quality, screener_quality, values)
     raw_quality_gate = sqrt(handler_quality * screener_quality) / 10.0
@@ -131,7 +142,12 @@ def _pnr_pairing(
         values["pnr_pairing_quality_gate_floor"]
         + values["pnr_pairing_quality_gate_scale"] * raw_quality_gate,
     )
-    return min(10.0, balance * quality_gate)
+    return {
+        **details,
+        "balance": balance,
+        "quality_gate": quality_gate,
+        "score": min(10.0, balance * quality_gate),
+    }
 
 
 def _defensive_transition_boost(
@@ -258,7 +274,9 @@ def _rollup_score(
     return final, category_scores
 
 
-def evaluate_lineup(players: list[dict[str, Any]], engine: CohesionEngine) -> LineupCohesion:
+def evaluate_lineup(
+    players: list[dict[str, Any]], engine: CohesionEngine, with_attribution: bool = False
+) -> LineupCohesion:
     """Evaluate one lineup and return its cohesion score plus explanations.
 
     Two-level rollup: Subscores → category scores → final star rating.
@@ -283,7 +301,8 @@ def evaluate_lineup(players: list[dict[str, Any]], engine: CohesionEngine) -> Li
     post_game = engine.dispatch(formula_refs["post_game"], ctx)
 
     # Offense quality Subscores (complex logic, not dispatched)
-    pnr_pairing = _pnr_pairing(synergy_players, player_composites, values)
+    pnr_details = _pnr_pairing_details(synergy_players, player_composites, values)
+    pnr_pairing = pnr_details["score"]
     collective_passing = _collective_passing(synergy_players, values)
 
     # --- Defense Subscores ---
@@ -301,7 +320,8 @@ def evaluate_lineup(players: list[dict[str, Any]], engine: CohesionEngine) -> Li
     defensive_rebounding = engine.dispatch(formula_refs["defensive_rebounding"], ctx)
     offensive_rebounding = engine.dispatch(formula_refs["offensive_rebounding"], ctx)
     transition = engine.dispatch(formula_refs["transition"], ctx)
-    transition += _defensive_transition_boost(synergy_players, perimeter_defense, values)
+    transition_boost = _defensive_transition_boost(synergy_players, perimeter_defense, values)
+    transition += transition_boost
 
     # --- Accentuation ---
     accentuation_details = compute_accentuation_details(player_composites, values)
@@ -341,6 +361,20 @@ def evaluate_lineup(players: list[dict[str, Any]], engine: CohesionEngine) -> Li
         subscores, accentuation_strength, accentuation_weakness, values
     )
 
+    subscore_breakdowns = None
+    if with_attribution:
+        from .attribution import build_subscore_ledgers
+
+        subscore_breakdowns = build_subscore_ledgers(
+            subscores=subscores,
+            composites=player_composites,
+            lineup=synergy_players,
+            values=values,
+            formula_refs=formula_refs,
+            transition_boost=transition_boost,
+            pnr_details=pnr_details,
+        )
+
     return LineupCohesion(
         score=final_score,
         subscores=subscores,
@@ -349,4 +383,5 @@ def evaluate_lineup(players: list[dict[str, Any]], engine: CohesionEngine) -> Li
         accentuation_strength=accentuation_strength,
         accentuation_weakness=accentuation_weakness,
         accentuation_details=accentuation_details,
+        subscore_breakdowns=subscore_breakdowns,
     )
