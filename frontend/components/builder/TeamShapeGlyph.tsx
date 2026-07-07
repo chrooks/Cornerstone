@@ -398,7 +398,10 @@ export function TeamShapeGlyph({
                     tabIndex={0}
                     role={onVertexSelect ? "button" : "img"}
                     aria-label={`${axis.label}: ${engineValue.toFixed(1)} out of 10, grade ${gradeForScore(engineValue)}${onVertexSelect ? ". Open attribution breakdown" : ""}`}
-                    className="cursor-pointer outline-none focus-visible:stroke-[#ffa05c] focus-visible:stroke-2"
+                    className={cn(
+                      "outline-none focus-visible:stroke-[#ffa05c] focus-visible:stroke-2",
+                      onVertexSelect ? "cursor-pointer" : "cursor-help",
+                    )}
                     onMouseEnter={() => setHovered(i)}
                     onMouseLeave={() => setHovered(null)}
                     onFocus={() => setHovered(i)}
