@@ -154,6 +154,14 @@ _Avoid_: radar, spider chart, glyph, cohesion chart
 A single Player's identity glyph on the same axes and arcs as the Team Shape, drawn from the Player's league-percentile composites. Shown adjacent to (never superimposed on) the Team Shape, because percentile values and Lineup Subscore values are not comparable point-for-point. The visual identity of a Player Archetype. "Who contributes where" on the Team Shape itself requires per-player contribution data (same units as the spokes), not Player Shapes.
 _Avoid_: radar, spider chart, glyph, silhouette (as a term of art)
 
+**Attribution Ledger**:
+The per-Subscore drilldown structure: per-player input lines (each naming the driving Skill and role weight) followed by labeled adjustment lines (bell curve, gates, synergy boosts, ratio balance), reconciling exactly to the Subscore's total. Ledger lines are captured intermediates of the real formula run — never marginal or proportional re-derivations. Gated Subscores show the gate as a line ("no rated screener → zeroed") rather than an unexplained zero.
+_Avoid_: breakdown, contribution split, per-player scores
+
+**Contribution Overlay**:
+The player-select highlight on the Team Shape: selecting a Player marks that Player's Attribution Ledger input value on each spoke, in true Subscore units. Renders only real ledger numbers — no stacked segments, since adjustments can be negative or gated and would make stacking lie.
+_Avoid_: stacked spokes, player overlay (ambiguous with Player Shape)
+
 ## Relationships
 
 ### Naming conventions
