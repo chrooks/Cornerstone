@@ -26,6 +26,9 @@ interface AttributionLedgerPanelProps {
   id: string;
   subscoreLabel: string;
   ledger: AttributionLedger;
+  /** #103: Rotation Median context read — informational, outside the sum
+   * (the ledger reconciles the Starting Lineup subscore only, ADR 0006). */
+  rotationMedian?: { value: number; explainer?: string } | null;
   selectedPlayerId?: string | null;
   onSelectPlayer?: (playerId: string, playerName: string) => void;
 }
@@ -94,6 +97,7 @@ export function AttributionLedgerPanel({
   id,
   subscoreLabel,
   ledger,
+  rotationMedian = null,
   selectedPlayerId,
   onSelectPlayer,
 }: AttributionLedgerPanelProps) {
@@ -144,11 +148,28 @@ export function AttributionLedgerPanel({
       )}
 
       <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 border-t border-[#0e0907]/20 px-2 pt-1.5">
-        <span className="text-[0.75rem] font-semibold text-[#0e0907]">{subscoreLabel} total</span>
+        <span className="text-[0.75rem] font-semibold text-[#0e0907]">{subscoreLabel} — Starting Lineup</span>
         <span className="font-mono text-[0.8125rem] font-bold tabular-nums text-[#0e0907]">
           {ledger.total.toFixed(1)}
         </span>
       </div>
+      {rotationMedian && (
+        <div
+          id={`${id}-rotation-median`}
+          className={cn(
+            "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 px-2 pt-0.5",
+            rotationMedian.explainer && "cursor-help",
+          )}
+          title={rotationMedian.explainer}
+        >
+          <span className="text-[0.6875rem] italic text-[#0e0907]/45">
+            Rotation Median (bench Lineup Combinations included — not part of this sum)
+          </span>
+          <span className="font-mono text-[0.75rem] tabular-nums text-[#0e0907]/45">
+            {rotationMedian.value.toFixed(1)}
+          </span>
+        </div>
+      )}
       {onSelectPlayer && playerLines.length > 0 && (
         <p className="mt-1 px-2 text-[0.625rem] text-[#0e0907]/40">
           Select a Player to mark their inputs on the Team Shape.

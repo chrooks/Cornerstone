@@ -545,6 +545,11 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
                           id={`cohesion-ledger-${entry.key}`}
                           subscoreLabel={entry.label}
                           ledger={ledger}
+                          rotationMedian={
+                            rotationMedian?.[entry.key] != null
+                              ? { value: rotationMedian[entry.key], explainer: explainerFor(entry.key) }
+                              : null
+                          }
                           selectedPlayerId={selectedPlayer?.id ?? null}
                           onSelectPlayer={handleSelectPlayer}
                         />
