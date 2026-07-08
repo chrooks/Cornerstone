@@ -23,7 +23,7 @@ import { AttributionLedgerPanel } from "@/components/builder/AttributionLedgerPa
 import { TeamShapeGlyph, TEAM_SHAPE_AXES } from "@/components/builder/TeamShapeGlyph";
 import { SUBSCORE_DESCRIPTIONS, SUBSCORE_GROUPS, HEADING_TO_CATEGORY_KEY, HEADING_SHOWS_SCORE, categoryScoreColor } from "@/lib/cohesion-constants";
 import { gradeForScore, subscoreColor } from "@/lib/cohesion-colors";
-import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
+import { rotationMedianExplainer, scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
 import type { AttributionLedger, RosterEvaluation } from "@/lib/types";
 
 
@@ -136,6 +136,7 @@ function SubscoreGrade({
   description,
   hideRotation = false,
   medianLabel = "Rotation Median",
+  medianExplainer,
   isExpandable = false,
   isExpanded = false,
   onToggle,
@@ -147,6 +148,8 @@ function SubscoreGrade({
   description: string;
   hideRotation?: boolean;
   medianLabel?: string;
+  /** #103 (ADR 0007): hover read naming what the Rotation Median is made of. */
+  medianExplainer?: string;
   /** #93: the tile opens its Attribution Ledger on click. */
   isExpandable?: boolean;
   isExpanded?: boolean;
@@ -215,7 +218,11 @@ function SubscoreGrade({
           </div>
           {!hideRotation && (
             <>
-              <div className="flex items-center justify-between gap-3">
+              <div
+                id={`${id}-rotation-row`}
+                className={cn("flex items-center justify-between gap-3", medianExplainer && "cursor-help")}
+                title={medianExplainer}
+              >
                 <span className="text-[0.6875rem] text-[#0e0907]/48">{medianLabel}</span>
                 <span
                   id={`${id}-rotation`}
@@ -330,6 +337,11 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
     setSelectedPlayer((current) => (current?.id === id ? null : { id, name }));
   };
   const rotationMedian = isLineupOnly ? undefined : lineup_summary.rotation_median_subscores;
+  const rotationSpread = isLineupOnly ? undefined : lineup_summary.rotation_median_spread;
+  const explainerFor = (key: string): string | undefined => {
+    const spread = rotationSpread?.[key];
+    return spread ? rotationMedianExplainer(lineup_summary.viable_lineups, spread) : undefined;
+  };
   const factorEntries = Object.entries(star_rating_breakdown)
     .filter(([key]) => !isLineupOnly || LINEUP_ONLY_FACTOR_KEYS.has(key))
     .map(([key, value]) => ({
@@ -365,6 +377,7 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
         <TeamShapeGlyph
           subscores={starting_lineup.subscores}
           medianSubscores={rotationMedian ?? null}
+          medianSpread={rotationSpread ?? null}
           viableLineups={lineup_summary.viable_lineups}
           totalLineups={lineup_summary.total_lineups}
           filledCount={5}
@@ -522,6 +535,7 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
                         description={SUBSCORE_DESCRIPTIONS[entry.key] ?? "Cohesion subscore used in the lineup rollup."}
                         hideRotation={isLineupOnly}
                         medianLabel={`${resolvedLabel} Median`}
+                        medianExplainer={explainerFor(entry.key)}
                         isExpandable={!!ledger}
                         isExpanded={isExpanded}
                         onToggle={ledger ? () => toggleExpanded(entry.key) : undefined}
@@ -560,6 +574,7 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
             description={SUBSCORE_DESCRIPTIONS.accentuation_strength}
             hideRotation={isLineupOnly}
             medianLabel={`${resolvedLabel} Median`}
+            medianExplainer={explainerFor("accentuation_strength")}
           />
           <SubscoreGrade
             id="cohesion-accentuation-weakness"
@@ -569,6 +584,7 @@ export function CohesionScoreDisplay({ evaluation, isLineupOnly = false, teamLab
             description={SUBSCORE_DESCRIPTIONS.accentuation_weakness}
             hideRotation={isLineupOnly}
             medianLabel={`${resolvedLabel} Median`}
+            medianExplainer={explainerFor("accentuation_weakness")}
           />
         </div>
       </div>

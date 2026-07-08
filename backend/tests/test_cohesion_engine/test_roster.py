@@ -176,3 +176,27 @@ def test_evaluate_roster_final_mode_attaches_team_description(monkeypatch):
 
     assert result.notes
     assert result.team_description == "A crisp GM memo."
+
+def test_rotation_median_spread_names_the_aggregates_bite():
+    """#103 / ADR 0007 — each Rotation Median carries its min/median/max
+    across viable Lineup Combinations so the UI can name what it is made of."""
+    players = [balanced_player(f"P{i}", i) for i in range(1, 10)]
+
+    result = evaluate_roster(players, ENGINE)
+
+    medians = result.lineup_summary["rotation_median_subscores"]
+    spread = result.lineup_summary["rotation_median_spread"]
+    assert set(spread) == set(medians)
+    for key, entry in spread.items():
+        assert entry["min"] <= entry["median"] <= entry["max"]
+        assert entry["median"] == medians[key]
+
+def test_rotation_median_spread_empty_but_present_when_zero_viable():
+    """0 viable Lineup Combinations → both median maps are empty dicts, never None."""
+    players = [make_player(f"Z{i}", i) for i in range(1, 10)]  # unrated: nothing clears the floor
+
+    result = evaluate_roster(players, ENGINE)
+
+    assert result.lineup_summary["viable_lineups"] == 0
+    assert result.lineup_summary["rotation_median_subscores"] == {}
+    assert result.lineup_summary["rotation_median_spread"] == {}

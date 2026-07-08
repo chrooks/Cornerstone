@@ -98,6 +98,8 @@ interface TeamShapeGlyphProps {
   subscores: Record<string, number> | null;
   /** Median subscores across viable Lineup Combinations; null/undefined hides the ghost. */
   medianSubscores?: Record<string, number> | null;
+  /** #103 (ADR 0007): per-subscore min/median/max across viable Lineup Combinations. */
+  medianSpread?: Record<string, { min: number; median: number; max: number }> | null;
   viableLineups?: number;
   totalLineups?: number;
   /** Filled roster slots — under 5 renders the not-yet-scorable state. */
@@ -122,6 +124,7 @@ const REVEAL_STEP_MS = 50;
 export function TeamShapeGlyph({
   subscores,
   medianSubscores,
+  medianSpread = null,
   viableLineups,
   totalLineups,
   filledCount,
@@ -449,6 +452,17 @@ export function TeamShapeGlyph({
           <p className="mt-1 text-[0.6875rem] leading-snug text-[#0e0907]/60">
             {SUBSCORE_DESCRIPTIONS[hoveredAxis.key] ?? ""}
           </p>
+          {/* #103 (ADR 0007): the ghost outline names what it is made of */}
+          {showGhost && medianSpread?.[hoveredAxis.key] && (
+            <p
+              id="team-shape-tooltip-rotation-median"
+              className="mt-1 border-t border-[#d9d0c9]/70 pt-1 text-[0.625rem] leading-snug text-[#0e0907]/50"
+            >
+              ╌╌ Rotation Median {medianSpread[hoveredAxis.key].median.toFixed(1)} — median of the{" "}
+              {viableLineups} viable Lineup Combinations (min {medianSpread[hoveredAxis.key].min.toFixed(1)},
+              max {medianSpread[hoveredAxis.key].max.toFixed(1)}).
+            </p>
+          )}
         </div>
       )}
 

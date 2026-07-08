@@ -23,3 +23,11 @@ export function scoreFactorLabel(key: string): string {
 export function scoreFactorExplainer(key: string): string {
   return SCORE_FACTOR_EXPLAINERS[key] ?? "How this score factor affects the current Eval.";
 }
+
+/** #103 (ADR 0007): name what a Rotation Median is made of. */
+export function rotationMedianExplainer(
+  viableLineups: number,
+  spread: { min: number; median: number; max: number },
+): string {
+  return `Median across the ${viableLineups} viable Lineup Combinations (min ${spread.min.toFixed(1)}, median ${spread.median.toFixed(1)}, max ${spread.max.toFixed(1)}).`;
+}

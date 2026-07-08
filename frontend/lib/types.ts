@@ -652,6 +652,14 @@ export interface CohesionLineupSummary {
   depth_quality?: number;
   depth_score?: number;
   rotation_median_subscores?: Record<string, number>;
+  rotation_median_spread?: Record<string, RotationMedianSpread>;
+}
+
+/** #103 (ADR 0007): a Rotation Median's spread across viable Lineup Combinations. */
+export interface RotationMedianSpread {
+  min: number;
+  median: number;
+  max: number;
 }
 
 /** Full evaluation result from POST /api/builder/evaluate. */

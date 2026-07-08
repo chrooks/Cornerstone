@@ -135,27 +135,37 @@ def _archetypes_for_lineup(lineup: LineupCohesion) -> list[str]:
     return labels or ["balanced"]
 
 
+def _spread(series: list[float]) -> dict[str, float]:
+    return {
+        "min": round(min(series), 2),
+        "median": round(median(series), 2),
+        "max": round(max(series), 2),
+    }
+
+
 def _rotation_median_subscores(
     lineups: list[LineupCohesion], values: dict[str, Any]
-) -> dict[str, float]:
+) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
+    """Rotation Median per subscore plus its min/median/max spread across
+    viable Lineup Combinations (#103, ADR 0007 — name the aggregate's bite)."""
     viable_threshold: float = values["viable_lineup_threshold"]
     viable = [lu for lu in lineups if lu.score >= viable_threshold]
     if not viable:
-        return {}
+        return {}, {}
 
     all_keys: set[str] = set()
     for lu in viable:
         all_keys.update(lu.subscores.keys())
 
-    medians: dict[str, float] = {}
+    spreads: dict[str, dict[str, float]] = {}
     for key in sorted(all_keys):
-        key_values = [lu.subscores.get(key, 0.0) for lu in viable]
-        medians[key] = round(median(key_values), 2)
+        spreads[key] = _spread([lu.subscores.get(key, 0.0) for lu in viable])
 
-    medians["accentuation_strength"] = round(median([lu.accentuation_strength for lu in viable]), 2)
-    medians["accentuation_weakness"] = round(median([lu.accentuation_weakness for lu in viable]), 2)
+    spreads["accentuation_strength"] = _spread([lu.accentuation_strength for lu in viable])
+    spreads["accentuation_weakness"] = _spread([lu.accentuation_weakness for lu in viable])
 
-    return medians
+    medians = {key: entry["median"] for key, entry in spreads.items()}
+    return medians, spreads
 
 
 def _lineup_summary(
@@ -165,6 +175,7 @@ def _lineup_summary(
     scores = [lineup.score for lineup in lineups]
     viable_count = sum(1 for score in scores if score >= viable_threshold)
     depth = _depth_components(lineups, values)
+    medians, spreads = _rotation_median_subscores(lineups, values)
     return {
         "total_lineups": len(lineups),
         "viable_lineups": viable_count,
@@ -176,7 +187,8 @@ def _lineup_summary(
         "depth_viable_ratio": depth["viable_ratio"],
         "depth_quality": depth["quality"],
         "depth_score": depth["score"],
-        "rotation_median_subscores": _rotation_median_subscores(lineups, values),
+        "rotation_median_subscores": medians,
+        "rotation_median_spread": spreads,
     }
 
 

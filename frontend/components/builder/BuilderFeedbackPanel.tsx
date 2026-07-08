@@ -841,6 +841,7 @@ function NewFeedbackRead({
           <TeamShapeGlyph
             subscores={latestEval?.starting_lineup.subscores ?? null}
             medianSubscores={latestEval?.lineup_summary.rotation_median_subscores ?? null}
+            medianSpread={latestEval?.lineup_summary.rotation_median_spread ?? null}
             viableLineups={latestEval?.lineup_summary.viable_lineups}
             totalLineups={latestEval?.lineup_summary.total_lineups}
             filledCount={filledCount}
