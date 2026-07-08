@@ -21,7 +21,9 @@ interface UseBuilderEvaluationResult {
 
 const STARTER_BOUNDARY = 5;
 
-function buildEvalPayload(
+// Exported for the eval-impact hover preview (#92): the preview must build a
+// byte-identical payload to the one the post-add live eval sends.
+export function buildEvalPayload(
   allSlots: (PlayerWithSkills | null)[],
   legendDetail: LegendDetail | null,
   cornerstoneId: string | null,

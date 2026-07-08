@@ -23,8 +23,10 @@ import {
   COMPOSITE_COLUMNS,
   deriveLineupEffectsByImpactTrait,
   IMPACT_TRAIT_DESCRIPTIONS,
+  SUBSCORE_LABELS,
   theoreticalMaxFromEvaluationValues,
 } from "@/lib/cohesion-constants";
+import { topMovers } from "@/lib/eval-preview-movers";
 import { qualityTextColor } from "@/lib/cohesion-colors";
 import { scoreFactorExplainer, scoreFactorLabel } from "@/lib/cohesionScoreExplainers";
 import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
@@ -36,6 +38,7 @@ import {
   rawToTenPointScale,
 } from "@/lib/player-composites";
 import type { CompositeKey, RawCompositeBreakdown } from "@/lib/player-composites";
+import type { EvalPreview } from "@/lib/hooks/useEvalPreview";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import { FeedbackTooltip } from "./FeedbackTooltip";
 import { SkillGrid } from "./SkillGrid";
@@ -84,6 +87,8 @@ interface BuilderFeedbackPanelProps {
   collapsed: boolean;
   hasUnreadFeedback: boolean;
   latestEval: RosterEvaluation | null;
+  /** #92: feedforward preview of the eval after adding the hovered candidate. */
+  evalPreview?: EvalPreview | null;
   /** True while the debounced live eval request is in flight. */
   isEvaluating: boolean;
   /** Max roster slots from rules_json. When 5 (Lineup), rotation sections are hidden. */
@@ -687,6 +692,7 @@ function AnimatedScoreCaption({ score }: { score: number }) {
 function NewFeedbackRead({
   allSlots,
   latestEval,
+  evalPreview = null,
   isEvaluating,
   inspectedPlayer,
   inspectionSource,
@@ -694,7 +700,7 @@ function NewFeedbackRead({
   theoreticalMax,
   lineupEffectsByImpactTrait,
   onSuggestionFilter,
-}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "isEvaluating" | "inspectedPlayer" | "inspectionSource" | "onSuggestionFilter"> & {
+}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "evalPreview" | "isEvaluating" | "inspectedPlayer" | "inspectionSource" | "onSuggestionFilter"> & {
   isLineupOnly?: boolean;
   theoreticalMax: Record<string, number>;
   lineupEffectsByImpactTrait: Record<string, string[]>;
@@ -703,6 +709,18 @@ function NewFeedbackRead({
   const targetPlayer = inspectedPlayer;
   const isPlayerRead = targetPlayer !== null;
   const isBuildPlayerRead = inspectionSource === "build-player" && targetPlayer !== null;
+  // #92: the preview only reads while the hover it was computed for is live,
+  // and never while the committed eval is still catching up — a lagging
+  // "before" against a fresh "after" is exactly the drift ADR 0005 bans.
+  const activePreview =
+    evalPreview &&
+    !isEvaluating &&
+    isBuildPlayerRead &&
+    evalPreview.forPlayerId === targetPlayer.id
+      ? evalPreview
+      : null;
+  const previewMovers =
+    activePreview && latestEval ? topMovers(latestEval, activePreview.evaluation) : [];
   const skills = buildSkillTraceEntries(targetPlayer?.skills);
   const selectedSkill = skills.find((skill) => skill.skill === selectedSkillKey) ?? null;
   const affectedTraitKeys = new Set(getImpactTraitKeysForSkill(selectedSkill?.skill));
@@ -842,6 +860,14 @@ function NewFeedbackRead({
             subscores={latestEval?.starting_lineup.subscores ?? null}
             medianSubscores={latestEval?.lineup_summary.rotation_median_subscores ?? null}
             medianSpread={latestEval?.lineup_summary.rotation_median_spread ?? null}
+            candidatePreview={
+              activePreview && targetPlayer
+                ? {
+                    subscores: activePreview.evaluation.starting_lineup.subscores,
+                    playerName: targetPlayer.name,
+                  }
+                : null
+            }
             viableLineups={latestEval?.lineup_summary.viable_lineups}
             totalLineups={latestEval?.lineup_summary.total_lineups}
             filledCount={filledCount}
@@ -852,6 +878,34 @@ function NewFeedbackRead({
         </div>
 
         {latestEval && <AnimatedScoreCaption score={latestEval.star_rating} />}
+
+        {/* #92 feedforward: ghost preview of the eval after adding the hovered candidate */}
+        {latestEval &&
+          activePreview &&
+          (
+            <div id="builder-eval-preview" aria-live="polite" className="mt-1.5 border-t border-[#d9d0c9]/60 pt-1.5">
+              <p id="builder-eval-preview-delta" className="text-[0.75rem] italic text-[#0e0907]/55">
+                With <span className="font-medium not-italic text-[#0e0907]/75">{targetPlayer?.name}</span>:{" "}
+                <span className="font-mono not-italic tabular-nums">
+                  ★ {latestEval.star_rating.toFixed(2)} → {activePreview.evaluation.star_rating.toFixed(2)}
+                </span>
+              </p>
+              {previewMovers.length > 0 && (
+                <p id="builder-eval-preview-movers" className="mt-0.5 text-[0.6875rem] italic text-[#0e0907]/45">
+                  {previewMovers[0].source === "rotation" && "Rotation: "}
+                  {previewMovers.map((mover, index) => (
+                    <span key={mover.key}>
+                      {index > 0 && " · "}
+                      {SUBSCORE_LABELS[mover.key] ?? mover.key}{" "}
+                      <span className="font-mono not-italic tabular-nums">
+                        {mover.delta > 0 ? "+" : "−"}{Math.abs(mover.delta).toFixed(1)}
+                      </span>
+                    </span>
+                  ))}
+                </p>
+              )}
+            </div>
+          )}
       </section>
 
       <FeedbackNotesSection
@@ -1124,6 +1178,7 @@ export function BuilderFeedbackPanel({
   collapsed,
   hasUnreadFeedback,
   latestEval,
+  evalPreview = null,
   isEvaluating,
   maxRosterSlots,
   inspectedPlayer,
@@ -1251,6 +1306,7 @@ export function BuilderFeedbackPanel({
           <NewFeedbackRead
             allSlots={allSlots}
             latestEval={latestEval}
+            evalPreview={evalPreview}
             isEvaluating={isEvaluating}
             inspectedPlayer={inspectedPlayer}
             inspectionSource={inspectionSource}

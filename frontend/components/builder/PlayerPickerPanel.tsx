@@ -67,6 +67,9 @@ interface PlayerPickerPanelProps {
   onPlayerHoverEnd?: () => void;
   /** #99: full hovered player for the Feedback panel's Player Shape read. */
   onPlayerInspect?: (player: PlayerWithSkills | null) => void;
+  /** #92: hovered player ONLY when a click would actually add them (passes the
+   * same isUnavailable gate as the click) — feeds the eval-impact preview. */
+  onCandidateHover?: (player: PlayerWithSkills | null) => void;
   /** Builder-specific content for Panel/Profile inspection surfaces. */
   renderPlayerFit?: (player: PlayerWithSkills, context: {
     surface: "panel" | "profile";
@@ -105,6 +108,7 @@ export function PlayerPickerPanel({
   onPlayerHover,
   onPlayerHoverEnd,
   onPlayerInspect,
+  onCandidateHover,
   renderPlayerFit,
   maxRosterSlots = DEFAULT_MAX_ROSTER_SLOTS,
   highlightedPlayerId,
@@ -181,12 +185,15 @@ export function PlayerPickerPanel({
   const handlePlayerHover = useCallback((player: PlayerWithSkills) => {
     onPlayerHover?.(player.salary ?? null);
     onPlayerInspect?.(player);
-  }, [onPlayerHover, onPlayerInspect]);
+    // #92: the preview only fires for a player the click would actually add.
+    onCandidateHover?.(isUnavailable(player) ? null : player);
+  }, [onPlayerHover, onPlayerInspect, onCandidateHover, isUnavailable]);
 
   const handlePlayerHoverEnd = useCallback(() => {
     onPlayerHoverEnd?.();
     onPlayerInspect?.(null);
-  }, [onPlayerHoverEnd, onPlayerInspect]);
+    onCandidateHover?.(null);
+  }, [onPlayerHoverEnd, onPlayerInspect, onCandidateHover]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

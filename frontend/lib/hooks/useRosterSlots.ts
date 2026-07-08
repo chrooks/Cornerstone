@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DEFAULT_MAX_ROSTER_SLOTS } from "@/lib/builder-config";
 import { readSlotsFromParams, buildSlotsParams } from "@/lib/roster-utils";
+import { targetSlotForCandidate } from "@/lib/candidate-placement";
 import type { PlayerWithSkills } from "@/lib/types";
 
 export interface UseRosterSlotsReturn {
@@ -158,16 +159,13 @@ export function useRosterSlots(
   );
 
   // ── Player click from picker ────────────────────────────────────────────
+  // Placement decision shared with the eval-impact hover preview (#92) so the
+  // preview simulates exactly the slot the click fills.
   const handlePlayerClick = useCallback(
     (player: PlayerWithSkills) => {
-      // Use selected slot if available; otherwise find first empty
-      if (selectedSlot != null && allSlots[selectedSlot - 1]?.id !== cornerstoneId) {
-        fillSlot(selectedSlot, player);
-        return;
-      }
-      const firstFreeIdx = allSlots.findIndex((p) => p === null);
-      if (firstFreeIdx !== -1) {
-        fillSlot(firstFreeIdx + 1, player);
+      const target = targetSlotForCandidate(allSlots, { selectedSlot, cornerstoneId });
+      if (target != null) {
+        fillSlot(target, player);
       }
     },
     [selectedSlot, allSlots, cornerstoneId, fillSlot],

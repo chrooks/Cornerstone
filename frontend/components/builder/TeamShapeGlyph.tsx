@@ -100,6 +100,9 @@ interface TeamShapeGlyphProps {
   medianSubscores?: Record<string, number> | null;
   /** #103 (ADR 0007): per-subscore min/median/max across viable Lineup Combinations. */
   medianSpread?: Record<string, { min: number; median: number; max: number }> | null;
+  /** #92 (ADR 0005): candidate-preview shape from a real evaluate response.
+   * While present it REPLACES the Rotation Median ghost — one ghost at a time. */
+  candidatePreview?: { subscores: Record<string, number>; playerName: string } | null;
   viableLineups?: number;
   totalLineups?: number;
   /** Filled roster slots — under 5 renders the not-yet-scorable state. */
@@ -125,6 +128,7 @@ export function TeamShapeGlyph({
   subscores,
   medianSubscores,
   medianSpread = null,
+  candidatePreview = null,
   viableLineups,
   totalLineups,
   filledCount,
@@ -146,12 +150,16 @@ export function TeamShapeGlyph({
   const hasShape = subscores !== null && !isUnderFilled;
   const targetValues = hasShape ? axisValues(subscores) : null;
   const hasViable = (viableLineups ?? 0) > 0;
-  const showGhost = hasShape && !isLineupOnly && hasViable && medianSubscores != null;
+  // #92: a live candidate preview replaces the median ghost — one ghost at a time.
+  const candidateActive = hasShape && candidatePreview != null;
+  const showGhost = hasShape && !isLineupOnly && hasViable && medianSubscores != null && !candidateActive;
   const ghostTargets = showGhost ? axisValues(medianSubscores) : null;
+  const candidateTargets = candidateActive ? axisValues(candidatePreview.subscores) : null;
 
   // #98: outlines travel between consecutive real eval results — never anticipatory.
   const values = useTweenedValues(targetValues, MORPH_MS);
   const ghostValues = useTweenedValues(ghostTargets, MORPH_MS);
+  const candidateValues = useTweenedValues(candidateTargets, MORPH_MS);
 
   // Changed-vertex highlight: diff consecutive engine results, hold, then fade.
   const prevSubscoresRef = useRef<Record<string, number> | null>(null);
@@ -313,6 +321,20 @@ export function TeamShapeGlyph({
                 fill="none"
                 stroke="#0e0907"
                 strokeOpacity={0.35}
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+            )}
+
+            {/* #92 candidate ghost: the shape after adding the hovered candidate —
+                drawn only from a real evaluate response (ADR 0005) */}
+            {candidateActive && candidateValues && (
+              <polygon
+                id="team-shape-candidate-ghost"
+                points={polygonPoints(candidateValues)}
+                fill="none"
+                stroke="#fe6d34"
+                strokeOpacity={0.65}
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
               />
@@ -495,6 +517,11 @@ export function TeamShapeGlyph({
           {showGhost && (
             <>
               <span className="ml-3 text-[#0e0907]/45">╌╌</span> Rotation median
+            </>
+          )}
+          {candidateActive && (
+            <>
+              <span className="ml-3 text-[#fe6d34]/80">╌╌</span> With {candidatePreview.playerName}
             </>
           )}
           {contribution && (

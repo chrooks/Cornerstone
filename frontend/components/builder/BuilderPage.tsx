@@ -21,6 +21,7 @@ import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { useRosterSlots } from "@/lib/hooks/useRosterSlots";
 import { useBuilderSalary } from "@/lib/hooks/useBuilderSalary";
 import { useBuilderEvaluation } from "@/lib/hooks/useBuilderEvaluation";
+import { useEvalPreview } from "@/lib/hooks/useEvalPreview";
 import { resolveRuleSetRules } from "@/lib/rulesets";
 import { BuilderHeader } from "./BuilderHeader";
 import { CourtStrip } from "./CourtStrip";
@@ -302,6 +303,19 @@ export function BuilderPage() {
   // #99: transient picker hover reads win over the pinned slot focus, then revert.
   const [hoveredPickerPlayer, setHoveredPickerPlayer] = useState<PlayerWithSkills | null>(null);
 
+  // #92: eval-impact feedforward — after a deliberate hover pause, preview the
+  // exact live eval the click would produce (shared placement, same endpoint).
+  // Fed by the picker's availability-gated hover, never the raw inspect hover:
+  // a preview for a player the click would refuse is a lying Signifier.
+  const [hoveredCandidate, setHoveredCandidate] = useState<PlayerWithSkills | null>(null);
+  const { preview: evalPreview } = useEvalPreview({
+    allSlots: roster.allSlots,
+    legendDetail,
+    cornerstoneId,
+    selectedSlot: roster.selectedSlot,
+    hoveredPlayer: hoveredCandidate,
+  });
+
   const inspection = useMemo<{ player: PlayerWithSkills | null; source: BuilderInspectionSource }>(() => {
     if (hoveredPickerPlayer) {
       return { player: hoveredPickerPlayer, source: "build-player" };
@@ -527,6 +541,7 @@ export function BuilderPage() {
             onPlayerHover={(s) => salary.setPickerHoveredSalary(s)}
             onPlayerHoverEnd={() => salary.setPickerHoveredSalary(null)}
             onPlayerInspect={setHoveredPickerPlayer}
+            onCandidateHover={setHoveredCandidate}
             renderPlayerFit={(player, context) => (
               <BuilderPlayerFit
                 player={player}
@@ -583,6 +598,7 @@ export function BuilderPage() {
             collapsed={feedbackCollapsed}
             hasUnreadFeedback={hasUnreadFeedback}
             latestEval={latestEval}
+            evalPreview={evalPreview}
             isEvaluating={evalState === "analyzing"}
             maxRosterSlots={maxRosterSlots}
             inspectedPlayer={inspection.player}
