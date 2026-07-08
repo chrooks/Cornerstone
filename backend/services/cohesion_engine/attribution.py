@@ -40,17 +40,27 @@ COMPOSITE_DRIVING_SKILLS: dict[str, list[str]] = {
 }
 
 
-def _driving_skill(player: dict[str, Any], composite: str, values: dict[str, Any]) -> str | None:
-    """Name the player's strongest skill among the composite's formula inputs."""
+# #105: labels only, never amounts — percentile normalization makes per-skill
+# splits of a normalized composite a non-quantity (ADR 0006 / ADR 0007 dec. 2).
+_DRIVING_SKILL_LIMIT = 3
+
+
+def _driving_skills(player: dict[str, Any], composite: str, values: dict[str, Any]) -> list[str]:
+    """The player's top contributing skills among the composite's formula
+    inputs, ordered by input size (formula order breaks ties). Zero-input
+    skills never appear."""
     skills = player.get("skills", {})
     tv = values["tier_values"]
     candidates = COMPOSITE_DRIVING_SKILLS.get(composite, [])
-    best: tuple[float, str] | None = None
-    for skill in candidates:
-        value = tier_value(skills, skill, tv)
-        if value > 0 and (best is None or value > best[0]):
-            best = (value, skill)
-    return best[1] if best else None
+    scored = [
+        (skill, tier_value(skills, skill, tv))
+        for skill in candidates
+    ]
+    ranked = sorted(
+        (entry for entry in scored if entry[1] > 0),
+        key=lambda entry: -entry[1],
+    )
+    return [skill for skill, _value in ranked[:_DRIVING_SKILL_LIMIT]]
 
 
 def _player_line(
@@ -65,11 +75,13 @@ def _player_line(
 ) -> dict[str, Any]:
     player_id = str(player.get("id") or player.get("player_id") or f"lineup-player-{index}")
     name = str(player.get("name") or player_id)
+    driving = _driving_skills(player, composite, values)
     return {
         "kind": "player",
         "player_id": player_id,
         "player_name": name,
-        "skill": _driving_skill(player, composite, values),
+        "skill": driving[0] if driving else None,
+        "skills": driving,
         "role": role,
         "weight": round(weight, 4),
         "label": name,

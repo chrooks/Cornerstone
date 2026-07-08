@@ -161,3 +161,41 @@ def test_roster_attribution_only_on_starting_lineup():
     evaluation = evaluate_roster(players, ENGINE)
     assert evaluation.starting_lineup.subscore_breakdowns is not None
     assert LEDGER_KEYS <= set(evaluation.starting_lineup.subscore_breakdowns)
+
+
+def test_player_lines_label_top_skills_ordered_by_input():
+    """#105 — up to 3 contributing skills, ordered by input size; labels only,
+    zero-input skills never appear."""
+    lineup = _fixture_lineup()
+    result = evaluate_lineup(lineup, ENGINE, with_attribution=True)
+
+    shooter_line = next(
+        l for l in result.subscore_breakdowns["spacing"]["lines"]
+        if l["kind"] == "player" and l["player_name"] == "Shooter"
+    )
+    skills = shooter_line["skills"]
+    assert 1 <= len(skills) <= 3
+    assert skills[0] == shooter_line["skill"]  # first label stays the argmax
+    assert len(skills) == len(set(skills))
+    # Every labeled skill is a real nonzero input the player actually has
+    shooter = next(p for p in lineup if p["name"] == "Shooter")
+    for skill in skills:
+        assert shooter["skills"].get(skill, "None") != "None"
+
+
+def test_driving_skills_caps_at_three_ordered_with_stable_ties():
+    """#105 — 4 nonzero transition inputs: top 3 by tier value, formula order
+    breaks the tie, zero-input skills excluded."""
+    from services.cohesion_engine.attribution import _driving_skills
+
+    player = make_player("Combo", "6-6", {
+        "transition_threat": "Proficient",   # tie ─┐ formula order: threat first
+        "high_flyer": "Proficient",          # tie ─┘
+        "driver": "Elite",                   # largest input
+        "spot_up_shooter": "Capable",        # 4th — capped out
+        "off_dribble_shooter": "None",       # zero input — never labeled
+    })
+
+    result = _driving_skills(player, "transition", ENGINE.version.values)
+
+    assert result == ["driver", "transition_threat", "high_flyer"]

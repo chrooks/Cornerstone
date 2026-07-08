@@ -47,7 +47,12 @@ function PlayerLine({
   isSelected: boolean;
   onSelect?: () => void;
 }) {
-  const skillLabel = line.skill ? SKILL_LABELS[line.skill] ?? line.skill : null;
+  // #105: up to 3 driving-skill labels ("Driver · Mid-Post") — labels only,
+  // never amounts; falls back to the single legacy `skill` field.
+  const drivingSkills = line.skills?.length ? line.skills : line.skill ? [line.skill] : [];
+  const skillLabel = drivingSkills.length
+    ? drivingSkills.map((skill) => SKILL_LABELS[skill] ?? skill).join(" · ")
+    : null;
   return (
     <button
       id={id}
@@ -61,7 +66,7 @@ function PlayerLine({
         isSelected && "bg-[#ffa05c]/15 outline outline-1 outline-[#ffa05c]/60",
       )}
     >
-      <span className="min-w-0 truncate text-[0.75rem] text-[#0e0907]">
+      <span className="min-w-0 truncate text-[0.75rem] text-[#0e0907]" title={skillLabel ?? undefined}>
         <span className="font-medium">{line.player_name}</span>
         {skillLabel && (
           <span className="ml-1.5 text-[0.6875rem] text-[#0e0907]/50">{skillLabel}</span>

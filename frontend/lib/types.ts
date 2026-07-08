@@ -565,6 +565,8 @@ export interface AttributionLedgerLine {
   player_name?: string;
   /** Driving skill behind a player line, engine skill key (may be null). */
   skill?: string | null;
+  /** #105: top contributing skills (≤3), ordered by input size — labels only. */
+  skills?: string[];
   role?: "primary" | "secondary" | "depth";
   weight?: number;
 }
