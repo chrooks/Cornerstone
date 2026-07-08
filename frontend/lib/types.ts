@@ -567,6 +567,8 @@ export interface AttributionLedgerLine {
   skill?: string | null;
   /** #105: top contributing skills (≤3), ordered by input size — labels only. */
   skills?: string[];
+  /** #105 follow-up: tier name behind each labeled skill, for tier coloring. */
+  skill_tiers?: Record<string, string | null>;
   role?: "primary" | "secondary" | "depth";
   weight?: number;
 }

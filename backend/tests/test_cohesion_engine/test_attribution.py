@@ -199,3 +199,20 @@ def test_driving_skills_caps_at_three_ordered_with_stable_ties():
     result = _driving_skills(player, "transition", ENGINE.version.values)
 
     assert result == ["driver", "transition_threat", "high_flyer"]
+
+
+def test_player_lines_carry_the_tier_behind_each_skill_label():
+    """#105 follow-up — each driving-skill label ships the player's tier so the
+    UI can color it (tiers are engine truth, not a frontend lookup)."""
+    lineup = _fixture_lineup()
+    result = evaluate_lineup(lineup, ENGINE, with_attribution=True)
+
+    shooter_line = next(
+        l for l in result.subscore_breakdowns["spacing"]["lines"]
+        if l["kind"] == "player" and l["player_name"] == "Shooter"
+    )
+    shooter = next(p for p in lineup if p["name"] == "Shooter")
+    tiers = shooter_line["skill_tiers"]
+    assert set(tiers) == set(shooter_line["skills"])
+    for skill, tier in tiers.items():
+        assert tier == shooter["skills"][skill]

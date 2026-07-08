@@ -63,6 +63,18 @@ def _driving_skills(player: dict[str, Any], composite: str, values: dict[str, An
     return [skill for skill, _value in ranked[:_DRIVING_SKILL_LIMIT]]
 
 
+def _tier_name(raw: Any, tier_values: dict[str, float]) -> str | None:
+    """Tier name behind a skill input. Skills reach attribution either as tier
+    strings or as (possibly boosted) numerics — for numerics, name the highest
+    tier the value reaches, which is what actually fed the composite."""
+    if isinstance(raw, str):
+        return raw
+    if not isinstance(raw, int | float):
+        return None
+    reached = [(value, tier) for tier, value in tier_values.items() if value <= float(raw) + 1e-9]
+    return max(reached)[1] if reached else None
+
+
 def _player_line(
     player: dict[str, Any],
     composite: str,
@@ -76,12 +88,19 @@ def _player_line(
     player_id = str(player.get("id") or player.get("player_id") or f"lineup-player-{index}")
     name = str(player.get("name") or player_id)
     driving = _driving_skills(player, composite, values)
+    player_skills = player.get("skills", {})
     return {
         "kind": "player",
         "player_id": player_id,
         "player_name": name,
         "skill": driving[0] if driving else None,
         "skills": driving,
+        # Tier behind each label — engine truth so the UI can color labels
+        # without a roster lookup. Still labels, never amounts.
+        "skill_tiers": {
+            skill: _tier_name(player_skills.get(skill), values["tier_values"])
+            for skill in driving
+        },
         "role": role,
         "weight": round(weight, 4),
         "label": name,

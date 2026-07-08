@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { SKILL_LABELS } from "@/lib/skills";
+import { TIER_TEXT_CLASSES } from "@/lib/tiers";
 import type { AttributionLedger, AttributionLedgerLine } from "@/lib/types";
 
 /**
@@ -48,11 +49,18 @@ function PlayerLine({
   onSelect?: () => void;
 }) {
   // #105: up to 3 driving-skill labels ("Driver · Mid-Post") — labels only,
-  // never amounts; falls back to the single legacy `skill` field.
+  // never amounts; falls back to the single legacy `skill` field. Each label
+  // is colored by the tier the engine saw behind that input.
   const drivingSkills = line.skills?.length ? line.skills : line.skill ? [line.skill] : [];
   const skillLabel = drivingSkills.length
     ? drivingSkills.map((skill) => SKILL_LABELS[skill] ?? skill).join(" · ")
     : null;
+  const tierClassFor = (skill: string): string => {
+    const tier = line.skill_tiers?.[skill];
+    return tier && tier in TIER_TEXT_CLASSES
+      ? TIER_TEXT_CLASSES[tier as keyof typeof TIER_TEXT_CLASSES]
+      : "text-[#0e0907]/50";
+  };
   return (
     <button
       id={id}
@@ -68,8 +76,15 @@ function PlayerLine({
     >
       <span className="min-w-0 truncate text-[0.75rem] text-[#0e0907]" title={skillLabel ?? undefined}>
         <span className="font-medium">{line.player_name}</span>
-        {skillLabel && (
-          <span className="ml-1.5 text-[0.6875rem] text-[#0e0907]/50">{skillLabel}</span>
+        {drivingSkills.length > 0 && (
+          <span className="ml-1.5 text-[0.6875rem]">
+            {drivingSkills.map((skill, index) => (
+              <span key={skill}>
+                {index > 0 && <span className="text-[#0e0907]/35"> · </span>}
+                <span className={tierClassFor(skill)}>{SKILL_LABELS[skill] ?? skill}</span>
+              </span>
+            ))}
+          </span>
         )}
       </span>
       <span className="font-mono text-[0.625rem] uppercase tracking-wide text-[#0e0907]/40">

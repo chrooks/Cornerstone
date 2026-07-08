@@ -69,6 +69,15 @@ export const TIER_PICKER_ACTIVE_CLASS: Record<SkillTier, string> = {
   None:             "bg-slate-100 border-slate-300 text-slate-700",
 };
 
+/** Text-only classes for inline tier-colored labels (#105: ledger skill labels). */
+export const TIER_TEXT_CLASSES: Record<SkillTier, string> = {
+  "All-Time Great": "text-violet-700",
+  Elite:            "text-emerald-700",
+  Proficient:       "text-sky-700",
+  Capable:          "text-amber-700",
+  None:             "text-slate-500",
+};
+
 /** Text and hover classes for right-click context menu tier items (PlayerTable). */
 export const TIER_CONTEXT_COLORS: Record<SkillTier, string> = {
   "All-Time Great": "text-violet-800 hover:bg-violet-50",
