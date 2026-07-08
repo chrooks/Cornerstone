@@ -416,6 +416,50 @@ def evaluate():
 
 
 # ---------------------------------------------------------------------------
+# POST /api/builder/lineup-ledger
+# ---------------------------------------------------------------------------
+
+@builder_bp.route("/lineup-ledger", methods=["POST"])
+def lineup_ledger():
+    """
+    Attribution Ledgers for one five-player Lineup Combination (#104).
+
+    Runs the exact evaluate path — the same evaluate_lineup call that scored
+    the combo in /evaluate, now with with_attribution=True — so the ledger
+    lines reconcile to that combo's subscore totals (ADR 0006: no second
+    source of truth). No cornerstone requirement: bench combos may have none.
+
+    Request body:  { "players": [exactly 5 player objects] }
+    Response data: serialized lineup with populated subscore_breakdowns.
+    """
+    body = request.get_json(silent=True) or {}
+
+    players = body.get("players")
+    if not isinstance(players, list):
+        return _err("'players' must be an array")
+    if len(players) != _MAX_LINEUP_SIZE:
+        return _err(f"'players' must contain exactly {_MAX_LINEUP_SIZE} entries")
+    for player in players:
+        err = _validate_player(player)
+        if err:
+            return _err(err)
+    keys = [_player_key(player, index) for index, player in enumerate(players)]
+    if len(set(keys)) != _MAX_LINEUP_SIZE:
+        return _err("'players' must not contain duplicate players")
+
+    try:
+        version = get_active_eval_version()
+        values = version.values
+        engine = CohesionEngine(version)
+        ensure_distributions(CURRENT_SEASON, values)
+        lineup = evaluate_lineup(players, engine, with_attribution=True)
+        return _ok(_serialize_lineup(lineup, players, values))
+    except Exception:
+        logger.exception("Error in POST /api/builder/lineup-ledger")
+        return _err("Internal server error", status=500)
+
+
+# ---------------------------------------------------------------------------
 # POST /api/builder/player-composites
 # ---------------------------------------------------------------------------
 

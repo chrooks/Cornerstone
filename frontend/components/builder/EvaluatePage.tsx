@@ -25,6 +25,7 @@ import { resolveRuleSetRules } from "@/lib/rulesets";
 import { LEGEND_SALARY } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
+import { LineupCombinationsSection } from "./LineupCombinationsSection";
 import { NotesList } from "./NotesList";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
 import type { LegendDetail, PlayerWithSkills, RosterEvaluation, RuleSetSummary, SaveTeamPayload, SavedTeamSummary } from "@/lib/types";
@@ -603,6 +604,14 @@ export function EvaluatePage() {
             isLineupOnly={evaluation.player_composites.length <= 5}
             teamLabel={resolvedRuleSet?.rules?.team_label as string | undefined}
           />
+
+          {/* #104: ranked combination list — Attribution Ledgers on demand */}
+          {dataReady && (evaluation.lineup_combinations?.length ?? 0) > 1 && (
+            <LineupCombinationsSection
+              combinations={evaluation.lineup_combinations!}
+              players={buildPlayerPayload(dataReady.slots, dataReady.legend, cornerstoneId)}
+            />
+          )}
 
           {/* Team Identity — LLM GM-memo narrative (final mode only) */}
           <TeamDescriptionCard

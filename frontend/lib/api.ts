@@ -28,6 +28,7 @@ import type {
   LegendProfile,
   LegendClaudeSuggestion,
   EvaluatePayload,
+  CohesionLineupData,
   RosterEvaluation,
   CohesionRotationEvaluation,
   SaveTeamPayload,
@@ -841,6 +842,16 @@ export async function evaluateRoster(
   return apiFetch<RosterEvaluation>("/api/builder/evaluate", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+/** #104: Attribution Ledgers for one five-player Lineup Combination, on demand. */
+export async function getLineupLedger(
+  players: EvaluatePayload["players"],
+): Promise<ApiResponse<CohesionLineupData>> {
+  return apiFetch<CohesionLineupData>("/api/builder/lineup-ledger", {
+    method: "POST",
+    body: JSON.stringify({ players }),
   });
 }
 

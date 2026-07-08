@@ -29,6 +29,9 @@ interface AttributionLedgerPanelProps {
   /** #103: Rotation Median context read — informational, outside the sum
    * (the ledger reconciles the Starting Lineup subscore only, ADR 0006). */
   rotationMedian?: { value: number; explainer?: string } | null;
+  /** #104: what the total reconciles to — "Starting Lineup" by default,
+   * or a Lineup Combination label when the ledger is for a selected combo. */
+  totalSuffix?: string;
   selectedPlayerId?: string | null;
   onSelectPlayer?: (playerId: string, playerName: string) => void;
 }
@@ -98,6 +101,7 @@ export function AttributionLedgerPanel({
   subscoreLabel,
   ledger,
   rotationMedian = null,
+  totalSuffix = "Starting Lineup",
   selectedPlayerId,
   onSelectPlayer,
 }: AttributionLedgerPanelProps) {
@@ -148,7 +152,7 @@ export function AttributionLedgerPanel({
       )}
 
       <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 border-t border-[#0e0907]/20 px-2 pt-1.5">
-        <span className="text-[0.75rem] font-semibold text-[#0e0907]">{subscoreLabel} — Starting Lineup</span>
+        <span className="text-[0.75rem] font-semibold text-[#0e0907]">{subscoreLabel} — {totalSuffix}</span>
         <span className="font-mono text-[0.8125rem] font-bold tabular-nums text-[#0e0907]">
           {ledger.total.toFixed(1)}
         </span>

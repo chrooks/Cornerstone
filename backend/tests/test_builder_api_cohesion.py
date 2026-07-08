@@ -117,3 +117,94 @@ def test_evaluate_returns_ranked_lineup_combinations_for_current_selection(clien
     assert {"rank", "player_names", "player_ids", "subscores", "is_viable"}.issubset(combinations[0])
     assert all(lineup["is_viable"] is (lineup["cohesion_score"] >= VIABLE_LINEUP_THRESHOLD) for lineup in combinations)
     assert sum(1 for lineup in combinations if lineup["is_viable"]) == payload["lineup_summary"]["viable_lineups"]
+
+# ---------------------------------------------------------------------------
+# POST /api/builder/lineup-ledger (#104) — per-combo Attribution Ledger
+# ---------------------------------------------------------------------------
+
+def post_lineup_ledger(client, body: dict) -> tuple:
+    resp = client.post(
+        "/api/builder/lineup-ledger",
+        data=json.dumps(body),
+        content_type="application/json",
+    )
+    return resp, resp.get_json()
+
+
+def test_lineup_ledger_matches_the_combos_evaluate_scores(client):
+    """#104 / ADR 0006 — the on-demand ledger runs the exact evaluate path:
+    same cohesion score and subscores as the combo in /evaluate, with ledgers
+    that reconcile to those subscores."""
+    roster = [
+        *cohesion_roster(),
+        make_player("Bench", 5, {"rebounder": "Elite", "spot_up_shooter": "Proficient"}, "6-9"),
+    ]
+    _, eval_data = post_evaluate(client, {"players": roster, "mode": "live", "debug": False})
+    bench_combo = next(
+        combo for combo in eval_data["data"]["lineup_combinations"]
+        if "Bench" in combo["player_names"]
+    )
+    combo_players = [p for p in roster if p["name"] in bench_combo["player_names"]]
+
+    resp, data = post_lineup_ledger(client, {"players": combo_players})
+
+    assert resp.status_code == 200
+    payload = data["data"]
+    assert payload["cohesion_score"] == bench_combo["cohesion_score"]
+    assert payload["subscores"] == bench_combo["subscores"]
+    breakdowns = payload["subscore_breakdowns"]
+    assert breakdowns
+    for key, ledger in breakdowns.items():
+        assert ledger["total"] == pytest.approx(payload["subscores"][key], abs=0.05)
+
+
+def test_lineup_ledger_names_bench_players_with_driving_skills(client):
+    """#104 / ADR 0007 — bench players get their "name your bite" surface:
+    ledger player lines in a bench-including combo carry driving-skill labels."""
+    roster = [
+        *cohesion_roster(),
+        make_player("Bench", 5, {"rebounder": "Elite", "spot_up_shooter": "Proficient"}, "6-9"),
+    ]
+    combo_players = roster[1:]  # the five that include Bench
+
+    resp, data = post_lineup_ledger(client, {"players": combo_players})
+
+    assert resp.status_code == 200
+    bench_lines = [
+        line
+        for ledger in data["data"]["subscore_breakdowns"].values()
+        for line in ledger["lines"]
+        if line.get("player_name") == "Bench" and line["kind"] == "player"
+    ]
+    assert bench_lines
+    assert any(line.get("skill") for line in bench_lines)
+
+
+def test_evaluate_keeps_lineup_combinations_score_only(client):
+    """#104 AC4 — no ledger payload bloat: combos in the default /evaluate
+    response stay score-only until one is selected."""
+    roster = [
+        *cohesion_roster(),
+        make_player("Bench", 5, {"rebounder": "Elite", "spot_up_shooter": "Proficient"}, "6-9"),
+    ]
+
+    _, data = post_evaluate(client, {"players": roster, "mode": "live", "debug": False})
+
+    assert all(
+        combo["subscore_breakdowns"] is None
+        for combo in data["data"]["lineup_combinations"]
+    )
+
+
+def test_lineup_ledger_rejects_wrong_size(client):
+    resp, data = post_lineup_ledger(client, {"players": cohesion_roster()[:4]})
+
+    assert resp.status_code == 400
+    assert "exactly 5" in data["error"]
+
+
+def test_lineup_ledger_rejects_duplicate_players(client):
+    resp, data = post_lineup_ledger(client, {"players": [cohesion_roster()[0]] * 5})
+
+    assert resp.status_code == 400
+    assert "duplicate" in data["error"]
