@@ -81,6 +81,21 @@ def test_evaluate_returns_cohesion_response_shape(client):
     assert isinstance(payload["notes"], list)
 
 
+def test_evaluate_names_the_evaluation_version_that_scored_it(client):
+    """#94 — the commit moment pins the Evaluation Version, so the engine that
+    produced the score has to name itself in the response it produced."""
+    from services.evaluation_versions.repo import get_active
+
+    resp, data = post_evaluate(
+        client,
+        {"players": cohesion_roster(), "mode": "live", "debug": False},
+    )
+
+    assert resp.status_code == 200
+    active = get_active()
+    assert data["data"]["evaluation_version"] == {"id": active.id, "slug": active.slug}
+
+
 def test_partial_roster_returns_mode_a_notes(client):
     players = [
         make_player("Cornerstone", 0, {"spot_up_shooter": "Elite"}, "6-6"),

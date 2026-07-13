@@ -880,6 +880,12 @@ def create_saved_team():
     if not client_rules_hash or not isinstance(client_rules_hash, str):
         return _err("rules_hash is required")
 
+    # #94: the commit moment chooses visibility, and the leaderboard shows only
+    # public/unlisted — so the choice has to land here, not default silently.
+    visibility = body.get("visibility", "private")
+    if visibility not in VALID_VISIBILITIES:
+        return _err(f"visibility must be one of: {', '.join(VALID_VISIBILITIES)}")
+
     try:
         supabase = get_supabase()
 
@@ -950,7 +956,7 @@ def create_saved_team():
             "ruleset_version_hash": client_rules_hash,
             "snapshot_release_id": published_snapshot_id,
             "name": _auto_name(body, players, team_size, rules_json),
-            "visibility": "private",
+            "visibility": visibility,
             "cornerstone_legend_id": body.get("cornerstone_legend_id"),
             "total_salary": total_salary,
             "team_size": team_size,

@@ -22,12 +22,13 @@ import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { readSlotsFromParams, buildPlayerPayload } from "@/lib/roster-utils";
 import { resolveRuleSetRules } from "@/lib/rulesets";
-import { LEGEND_SALARY } from "@/lib/builder-config";
+import { LEGEND_SALARY, teamLabelForSize } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { LineupCombinationsSection } from "./LineupCombinationsSection";
 import { NotesList } from "./NotesList";
 import { CohesionDebugPanel } from "./CohesionDebugPanel";
+import { PublishTeamModal, type TeamVisibility } from "./PublishTeamModal";
 import type { LegendDetail, PlayerWithSkills, RosterEvaluation, RuleSetSummary, SaveTeamPayload, SavedTeamSummary } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -266,6 +267,7 @@ export function EvaluatePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedTeam, setSavedTeam] = useState<SavedTeamSummary | null>(null);
   const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
+  const [isPublishOpen, setIsPublishOpen] = useState(false);
 
   /* Shared no_active_release Error State + retry bookkeeping (#62) */
   const { noActiveRelease, retryToken, retrying, detectNoActiveRelease, retry, settleRetry } =
@@ -455,7 +457,10 @@ export function EvaluatePage() {
     router.push(`/login?redirectTo=${encodeURIComponent(current)}`);
   }
 
-  async function handleSaveTeam() {
+  // #94: the save button no longer commits — it opens the commit moment. The
+  // POST fires only from the modal's Publish Team button, carrying the
+  // visibility chosen there.
+  function handleSaveClick() {
     setSaveError(null);
 
     if (adminLoading) return;
@@ -464,24 +469,39 @@ export function EvaluatePage() {
       return;
     }
 
-    const payload = buildSavePayload();
-    if (!payload) {
+    if (!buildSavePayload()) {
       setSaveState("error");
       const label = (resolvedRuleSet?.rules?.team_label as string | undefined) ?? "Rotation";
       setSaveError(`Complete this ${label} before saving.`);
       return;
     }
 
+    setIsPublishOpen(true);
+  }
+
+  async function handlePublishTeam(visibility: TeamVisibility) {
+    setSaveError(null);
+
+    const payload = buildSavePayload();
+    if (!payload) {
+      setIsPublishOpen(false);
+      setSaveState("error");
+      setSaveError("This Team can no longer be saved.");
+      return;
+    }
+
     setSaveState("saving");
-    const res = await saveTeam(payload);
+    const res = await saveTeam({ ...payload, visibility });
     if (res.success && res.data) {
       setSavedTeam(res.data);
       setSaveState("saved");
+      setIsPublishOpen(false);
       return;
     }
 
     setSaveState("error");
     setSaveError(res.error ?? "Team could not be saved.");
+    setIsPublishOpen(false);
   }
 
   const saveButtonLabel = saveState === "saving"
@@ -493,8 +513,37 @@ export function EvaluatePage() {
       : "Sign In To Save";
   const saveDisabled = adminLoading || evalState !== "ready" || saveState === "saving" || saveState === "saved";
 
+  // #94: the name the commit moment shows is the same one the server will
+  // auto-assign — cornerstone plus the team-size label (see _auto_name).
+  const publishTeamName = (() => {
+    const cornerstoneName =
+      dataReady?.legend?.name ?? dataReady?.slots.find((player) => player !== null)?.name ?? "This Team";
+    const teamSize = resolveRuleSetRules(
+      resolvedRuleSet?.rules ?? {},
+      new URLSearchParams(paramsRef.current),
+    ).teamSize;
+    return `${cornerstoneName} ${teamLabelForSize(teamSize)}`;
+  })();
+
   return (
     <main id="eval-page" className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+
+      {/* Mounted only while open, so the visibility choice never survives a
+          Keep Tuning — each commit moment starts from Private. */}
+      {evaluation && isPublishOpen && (
+        <PublishTeamModal
+          open={isPublishOpen}
+          onClose={() => setIsPublishOpen(false)}
+          onPublish={handlePublishTeam}
+          isSaving={saveState === "saving"}
+          teamName={publishTeamName}
+          starRating={evaluation.star_rating}
+          startingLineupScore={evaluation.starting_lineup.cohesion_score}
+          ruleSetLabel={resolvedRuleSet?.name ?? ruleset ?? "standard"}
+          ruleSetVersionLabel={resolvedRuleSet?.current_version?.version_label ?? "—"}
+          evaluationVersionSlug={evaluation.evaluation_version?.slug ?? null}
+        />
+      )}
 
       {/* Header */}
       <div id="eval-header" className="relative flex items-center">
@@ -513,7 +562,7 @@ export function EvaluatePage() {
           id="eval-save-btn"
           type="button"
           disabled={saveDisabled}
-          onClick={handleSaveTeam}
+          onClick={handleSaveClick}
           className="ml-auto shrink-0 rounded-[4px] border border-[#0e0907] bg-[#ffa05c] px-3 py-1.5 text-sm font-medium text-[#0e0907] transition-colors hover:bg-[#fe6d34] disabled:cursor-not-allowed disabled:border-[#d9d0c9] disabled:bg-[#f0f0f0] disabled:text-[#0e0907]/40"
         >
           {saveButtonLabel}

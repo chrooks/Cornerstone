@@ -271,6 +271,9 @@ def _serialize_evaluation(evaluation: RosterEvaluation, players: list[dict[str, 
     ordered_players = _cohesion_players_in_slot_order(players)
     starting_players = ordered_players[:5]
     return {
+        # #94: the engine that produced this score names itself, so the commit
+        # moment can pin the Evaluation Version from engine truth, not a guess.
+        "evaluation_version": {"id": engine.version.id, "slug": engine.version.slug},
         "star_rating": evaluation.star_rating,
         "star_rating_breakdown": evaluation.star_breakdown,
         "starting_lineup": _serialize_lineup(evaluation.starting_lineup, starting_players, values),

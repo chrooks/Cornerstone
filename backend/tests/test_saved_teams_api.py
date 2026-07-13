@@ -587,6 +587,30 @@ def test_save_team_rejects_rules_hash_mismatch(client):
     assert "changed" in data["error"]
 
 
+def test_save_team_persists_public_visibility_chosen_at_publish(client, fake_supabase):
+    """#94 — the commit moment carries the visibility choice, so the leaderboard
+    consequence it names is the one that actually happens."""
+    body = valid_payload()
+    body["visibility"] = "public"
+
+    resp, data = post_saved_team(client, body)
+
+    assert resp.status_code == 201
+    assert data["data"]["visibility"] == "public"
+    assert fake_supabase.rows["saved_teams"][0]["visibility"] == "public"
+
+
+def test_save_team_rejects_unknown_visibility(client):
+    body = valid_payload()
+    body["visibility"] = "leaderboard"
+
+    resp, data = post_saved_team(client, body)
+
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "visibility" in data["error"]
+
+
 CURRENT_SNAPSHOT_RELEASE_ID = "99999999-9999-9999-9999-999999999999"
 
 

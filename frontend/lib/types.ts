@@ -668,6 +668,8 @@ export interface RotationMedianSpread {
 
 /** Full evaluation result from POST /api/builder/evaluate. */
 export interface RosterEvaluation {
+  /** #94: the Evaluation Version whose engine produced this score. */
+  evaluation_version?: { id: string; slug: string };
   star_rating: number;
   star_rating_breakdown: {
     starting_5: number;
@@ -814,6 +816,8 @@ export interface SaveTeamPayload {
   snapshot_release_id?: string;
   name?: string;
   cornerstone_legend_id: string | null;
+  /** #94: chosen in the commit moment. Omitted → server defaults to private. */
+  visibility?: "private" | "unlisted" | "public";
   players: SaveTeamPlayerPayload[];
   evaluation: RosterEvaluation & {
     starting_lineup_score?: number;
