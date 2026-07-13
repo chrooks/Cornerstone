@@ -52,7 +52,7 @@
       "group": "done",
       "x": -700,
       "y": 0,
-      "description": "Team Shape glyphs, attribution ledger, eval-impact preview, score animation, drilldowns — shipped. 2 open (#100, #94).",
+      "description": "Team Shape glyphs, attribution ledger, eval-impact preview, score animation, drilldowns, Save & Publish ceremony (#94 — commit moment: restated eval, version pins, visibility choice, sealed copy) — shipped. 1 open (#100).",
       "meta": {
         "state": "mostly closed",
         "milestone": "Lab UI/UX Improvements"
@@ -107,19 +107,6 @@
         "state": "open · hitl",
         "priority": "p2",
         "url": "https://github.com/chrooks/Cornerstone/issues/100"
-      }
-    },
-    {
-      "id": "i94",
-      "label": "🧍 #94 Save & Publish ceremony\n(Lab, P2)",
-      "group": "lab",
-      "x": 0,
-      "y": -200,
-      "description": "Commit-moment UX for saving/publishing a team — the ceremonial end of the Lab lifecycle. Waiting on human.",
-      "meta": {
-        "state": "open · hitl",
-        "priority": "p2",
-        "url": "https://github.com/chrooks/Cornerstone/issues/94"
       }
     },
     {
@@ -410,12 +397,6 @@
     {
       "from": "m-lab",
       "to": "i100",
-      "label": "straggler",
-      "description": "Open feature left in an otherwise-shipped milestone."
-    },
-    {
-      "from": "m-lab",
-      "to": "i94",
       "label": "straggler",
       "description": "Open feature left in an otherwise-shipped milestone."
     },
