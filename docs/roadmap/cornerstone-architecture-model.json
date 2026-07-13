@@ -1,0 +1,80 @@
+{
+  "title": "Cornerstone Architecture — layered view",
+  "kind": "architecture",
+  "options": { "layout": { "hierarchical": { "enabled": false } }, "physics": false },
+  "zones": [
+    { "label": "Client", "x0": -760, "y0": -640, "x1": 560, "y1": -510, "color": "rgba(124, 58, 237, 0.05)" },
+    { "label": "Frontend — Next.js", "x0": -760, "y0": -480, "x1": 560, "y1": -330, "color": "rgba(79, 70, 229, 0.05)" },
+    { "label": "API — Flask", "x0": -760, "y0": -300, "x1": 560, "y1": -170, "color": "rgba(13, 148, 136, 0.05)" },
+    { "label": "Services", "x0": -760, "y0": -140, "x1": 560, "y1": 10, "color": "rgba(180, 83, 9, 0.06)" },
+    { "label": "Data — Supabase", "x0": -760, "y0": 40, "x1": 560, "y1": 170, "color": "rgba(190, 24, 93, 0.05)" },
+    { "label": "Infra", "x0": -760, "y0": 200, "x1": 560, "y1": 330, "color": "rgba(71, 85, 105, 0.06)" },
+    { "label": "External", "x0": 620, "y0": -640, "x1": 960, "y1": 170, "color": "rgba(124, 58, 237, 0.04)" }
+  ],
+  "nodes": [
+    { "id": "user", "label": "User\n(browser)", "group": "client", "x": -450, "y": -570,
+      "description": "Builders and admins. Auth via Supabase JWT.", "meta": { "tech": "browser" } },
+    { "id": "auth", "label": "Supabase Auth\n(JWT)", "group": "client", "x": 200, "y": -570,
+      "description": "Issues JWTs the frontend attaches via apiFetch; backend verifies (HS256/RS256/ES256) and checks user_roles for admin.", "meta": { "tech": "Supabase Auth" } },
+
+    { "id": "lab", "label": "Lab lifecycle\n/lab/<ruleset>/*", "group": "frontend", "x": -580, "y": -400,
+      "description": "legends → build → eval. RuleSet-scoped team building and evaluation. The core user surface.", "meta": { "tech": "Next.js", "dir": "frontend/app/lab" } },
+    { "id": "community", "label": "Community + profile\n+ players explorer", "group": "frontend", "x": -300, "y": -400,
+      "description": "Leaderboard of public Saved Teams, user profile, player explorer.", "meta": { "tech": "Next.js" } },
+    { "id": "admin", "label": "Admin surfaces\n/admin/*", "group": "frontend", "x": -30, "y": -400,
+      "description": "Calibration (threshold editor), pipeline dashboard, review queue, legends editor, rulesets, cohesion calibration. Requires user_roles.role = 'admin'.", "meta": { "tech": "Next.js + Monaco" } },
+    { "id": "apifetch", "label": "apiFetch<T>()\nlib/api.ts", "group": "frontend", "x": 250, "y": -400,
+      "description": "Single chokepoint for all backend calls — injects JWT + base URL. Types in lib/types.ts mirror backend shapes. Envelope: { success, data, error }.", "meta": { "tech": "TypeScript" } },
+
+    { "id": "flask", "label": "Flask app — 17 blueprints", "group": "backend-api", "x": -100, "y": -230,
+      "description": "app.py factory. Blueprints: builder, calibration, players, legends, pipeline, review, rulesets, saved_teams, community, evaluation_versions, snapshots… @require_admin guards admin writes (JWT + user_roles).", "meta": { "tech": "Flask", "dir": "backend/api" } },
+
+    { "id": "skill-engine", "label": "skill_engine/\nstat → skill", "group": "backend-services", "x": -600, "y": -65,
+      "description": "Evaluates 21 skills against JSONB threshold rules: conditions, tier bumps, auto-promotions, stabilization, pre-adjustments (deepcopy is load-bearing). Writes skill_profiles (source: stats).", "meta": { "dir": "backend/services/skill_engine" } },
+    { "id": "pipeline-svc", "label": "Pipeline orchestration\nstats_assembler + nba_api_client", "group": "backend-services", "x": -320, "y": -65,
+      "description": "Fetch → assemble player_stats JSONB → evaluate → persist. Plus salary_scraper for salary ingestion.", "meta": { "dir": "backend/services" } },
+    { "id": "claude-assess", "label": "claude_assessment\n+ compositing", "group": "backend-services", "x": -30, "y": -65,
+      "description": "Claude rates the same 21 skills; compositing merges vs stat ratings — agreements auto-accepted, disagreements become skill_flags for the review queue.", "meta": { "dir": "backend/services" } },
+    { "id": "cohesion", "label": "cohesion_engine/\nteam evaluation", "group": "backend-services", "x": 230, "y": -65,
+      "description": "Sole evaluation engine: lineup subscores, composites, synergies, accentuation, rotation combos, bell-curve normalization, Claude narrative. Warmed from the active Evaluation Version at startup.", "meta": { "dir": "backend/services/cohesion_engine" } },
+    { "id": "eval-versions", "label": "evaluation_versions/\nimmutable snapshots", "group": "backend-services", "x": 460, "y": -65,
+      "description": "Publishes cohesion weights + composites as immutable versions. One active at a time; Saved Teams pin a version.", "meta": { "dir": "backend/services/evaluation_versions" } },
+
+    { "id": "db", "label": "Supabase PostgreSQL", "group": "data", "x": -100, "y": 105,
+      "description": "player_stats, skill_profiles, skill_flags, legends, rulesets + versions, evaluation_versions, saved_teams, rosters, snapshot tables, user_roles. SECURITY DEFINER RPCs locked to service_role (linted).", "meta": { "tech": "Supabase" } },
+
+    { "id": "deploy", "label": "Dev deploy — develop → hestia", "group": "infra", "x": -100, "y": 265,
+      "description": "Push to develop → self-hosted GH Actions runner builds both Docker images (frontend + backend) → dev stack at cornerstone-dev.hestia.chrooks.com with its own self-hosted Supabase. Deploy-time only — not part of the runtime request path.", "meta": { "tech": "GH Actions + Docker", "runbook": "hearth 17" } },
+
+    { "id": "nba", "label": "NBA.com Stats", "group": "external", "x": 790, "y": -170,
+      "description": "Live season stats, fetched via the nba_api Python client.", "meta": { "tech": "nba_api" } },
+    { "id": "claude", "label": "Claude API", "group": "external", "x": 790, "y": -20,
+      "description": "Skill ratings (second opinion vs stats engine), legend suggestions, team narratives.", "meta": { "tech": "Anthropic API" } }
+  ],
+  "edges": [
+    { "from": "user", "to": "lab", "description": "Main product journey: pick RuleSet, pick legend, build, evaluate." },
+    { "from": "user", "to": "admin", "label": "admin only", "description": "Requires user_roles.role = 'admin'." },
+    { "from": "user", "to": "auth", "label": "login", "description": "Supabase auth forms (login/signup) issue the session JWT." },
+    { "from": "auth", "to": "apifetch", "label": "JWT", "description": "apiFetch injects the session token on every backend call." },
+    { "from": "lab", "to": "apifetch" },
+    { "from": "community", "to": "apifetch" },
+    { "from": "admin", "to": "apifetch" },
+    { "from": "apifetch", "to": "flask", "label": "HTTP + JWT", "description": "REST calls; every response uses the { success, data, error } envelope." },
+    { "from": "flask", "to": "skill-engine", "label": "evaluate", "description": "Calibration + pipeline blueprints drive stat→skill evaluation." },
+    { "from": "flask", "to": "pipeline-svc", "label": "fetch stats", "description": "POST /pipeline/fetch-stats triggers the ingestion run." },
+    { "from": "flask", "to": "claude-assess", "label": "assess / suggest", "description": "Composite profiles, review-queue flags, legend suggestions." },
+    { "from": "flask", "to": "cohesion", "label": "POST /builder/evaluate", "description": "The Lab eval path — subscores, synergies, narrative." },
+    { "from": "flask", "to": "eval-versions", "label": "publish / activate" },
+    { "from": "pipeline-svc", "to": "nba", "label": "fetch", "description": "nba_api client pulls live stats from NBA.com." },
+    { "from": "pipeline-svc", "to": "skill-engine", "label": "assembled stats", "description": "player_stats JSONB feeds threshold evaluation." },
+    { "from": "claude-assess", "to": "claude", "label": "rate 21 skills" },
+    { "from": "cohesion", "to": "claude", "label": "team narrative", "description": "Claude-powered cohesion narrative (issues #79/#80/#81 aim to move this off the request path)." },
+    { "from": "eval-versions", "to": "cohesion", "label": "active version config", "description": "Weights/composites loaded at startup (_warm_cohesion_distributions)." },
+    { "from": "skill-engine", "to": "db", "label": "skill_profiles" },
+    { "from": "claude-assess", "to": "db", "label": "profiles + flags" },
+    { "from": "pipeline-svc", "to": "db", "label": "player_stats" },
+    { "from": "cohesion", "to": "db", "label": "reads snapshots", "description": "Production cohesion reads skill profiles from the active Snapshot Release." },
+    { "from": "eval-versions", "to": "db", "label": "versions" },
+    { "from": "flask", "to": "db", "label": "CRUD", "description": "Rosters, saved teams, legends, rulesets via supabase_client singleton." }
+  ]
+}

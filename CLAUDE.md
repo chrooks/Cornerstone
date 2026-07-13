@@ -245,6 +245,12 @@ Full operating procedure — ports, secrets, re-seeding the DB, runner setup: **
 
 ---
 
+## Living diagrams (roadmap + architecture)
+
+Two interactive diagrams. Source of truth: `docs/roadmap/cornerstone-roadmap-model.json` (open issues by workstream) and `docs/roadmap/cornerstone-architecture-model.json` (container/component view); HTML build products in `.diagram-exports/` (not committed). **Update the matching model and rebuild in the same pass whenever issues change (roadmap) or components/data flows change (architecture).** Access, rebuild command, and conventions: `docs/roadmap/README.md`.
+
+---
+
 ## Agent skills
 
 ### Issue tracker

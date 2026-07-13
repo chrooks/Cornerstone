@@ -1,0 +1,478 @@
+{
+  "title": "Cornerstone Roadmap — open work by workstream",
+  "kind": "roadmap",
+  "options": {
+    "layout": {
+      "hierarchical": {
+        "enabled": false
+      }
+    },
+    "physics": false,
+    "groups": {
+      "value": {
+        "color": {
+          "background": "#fde8d0",
+          "border": "#b45c1e",
+          "highlight": {
+            "background": "#fbd9b0",
+            "border": "#8f4715"
+          }
+        }
+      }
+    }
+  },
+  "nodes": [
+    {
+      "id": "m-lineup",
+      "label": "✅ Lineup Engine v2\n(milestone done)",
+      "group": "done",
+      "x": -700,
+      "y": -300,
+      "description": "All 7 issues closed: lineup-aware Formula Handlers, category rollup, PnR Ball Handler trait, tier retune 0/1/4/8/16, off/def rebounding split.",
+      "meta": {
+        "state": "closed",
+        "milestone": "Lineup Engine v2"
+      }
+    },
+    {
+      "id": "m-snapshot",
+      "label": "✅ Snapshot Version Publishing\n(milestone ~done)",
+      "group": "done",
+      "x": -700,
+      "y": -150,
+      "description": "Draft lifecycle, review queue, subset pipeline, publish gates, changelog — shipped. 3 stragglers remain (#86, #85, #51).",
+      "meta": {
+        "state": "mostly closed",
+        "milestone": "Snapshot Version Publishing"
+      }
+    },
+    {
+      "id": "m-lab",
+      "label": "✅ Lab UI/UX Improvements\n(milestone ~done)",
+      "group": "done",
+      "x": -700,
+      "y": 0,
+      "description": "Team Shape glyphs, attribution ledger, eval-impact preview, score animation, drilldowns — shipped. 2 open (#100, #94).",
+      "meta": {
+        "state": "mostly closed",
+        "milestone": "Lab UI/UX Improvements"
+      }
+    },
+    {
+      "id": "i86",
+      "label": "🧍 #86 Giannis Elite OReb\nregression (Snapshot, P1 bug)",
+      "group": "snapshot",
+      "x": -350,
+      "y": -350,
+      "description": "Giannis shows Elite Offensive Rebounder; re-running the pipeline today changes results. Reproducibility bug in the stat→skill pipeline. Waiting on human.",
+      "meta": {
+        "state": "open · hitl",
+        "priority": "p1",
+        "url": "https://github.com/chrooks/Cornerstone/issues/86"
+      }
+    },
+    {
+      "id": "i85",
+      "label": "🧍 #85 Missing input nulls\na rating (Snapshot, P2 bug)",
+      "group": "snapshot",
+      "x": -350,
+      "y": -200,
+      "description": "Movement Shooter (and likely others): a missing stat input nulls the whole rating instead of degrading gracefully. Waiting on human.",
+      "meta": {
+        "state": "open · hitl",
+        "priority": "p2",
+        "url": "https://github.com/chrooks/Cornerstone/issues/85"
+      }
+    },
+    {
+      "id": "i51",
+      "label": "#51 pipeline_runs retention\n(TTL or archival)",
+      "group": "snapshot",
+      "x": -350,
+      "y": -50,
+      "description": "pipeline_runs table grows unbounded — pick TTL or archival policy. Agent-ready.",
+      "meta": {
+        "state": "open · afk",
+        "url": "https://github.com/chrooks/Cornerstone/issues/51"
+      }
+    },
+    {
+      "id": "i100",
+      "label": "🧍 #100 Player passing composite\n(Lab, P2)",
+      "group": "lab",
+      "x": 0,
+      "y": -350,
+      "description": "Earn collective_passing its Team Shape spoke — needs a player-level passing composite first. Waiting on human.",
+      "meta": {
+        "state": "open · hitl",
+        "priority": "p2",
+        "url": "https://github.com/chrooks/Cornerstone/issues/100"
+      }
+    },
+    {
+      "id": "i94",
+      "label": "🧍 #94 Save & Publish ceremony\n(Lab, P2)",
+      "group": "lab",
+      "x": 0,
+      "y": -200,
+      "description": "Commit-moment UX for saving/publishing a team — the ceremonial end of the Lab lifecycle. Waiting on human.",
+      "meta": {
+        "state": "open · hitl",
+        "priority": "p2",
+        "url": "https://github.com/chrooks/Cornerstone/issues/94"
+      }
+    },
+    {
+      "id": "i95",
+      "label": "🧍 #95 Lineup viability threshold\ninvestigation (P2 chore)",
+      "group": "lab",
+      "x": 0,
+      "y": -50,
+      "description": "Plausible rotations score 0/1 viable — threshold likely miscalibrated. Investigation, waiting on human.",
+      "meta": {
+        "state": "open · hitl",
+        "priority": "p2",
+        "url": "https://github.com/chrooks/Cornerstone/issues/95"
+      }
+    },
+    {
+      "id": "i81",
+      "label": "#81 Claude pipeline off the\nrequest path (P2 refactor)",
+      "group": "engine",
+      "x": 350,
+      "y": -350,
+      "description": "Move the Claude skill-evaluation pipeline to background execution instead of blocking requests. Agent-ready.",
+      "meta": {
+        "state": "open · afk",
+        "priority": "p2",
+        "url": "https://github.com/chrooks/Cornerstone/issues/81"
+      }
+    },
+    {
+      "id": "i80",
+      "label": "🧍 #80 Decouple scores from\nLLM narrative (P2)",
+      "group": "engine",
+      "x": 350,
+      "y": -200,
+      "description": "Deterministic scores return immediately; narrative generated async. Waiting on human.",
+      "meta": {
+        "state": "open · hitl",
+        "priority": "p2",
+        "url": "https://github.com/chrooks/Cornerstone/issues/80"
+      }
+    },
+    {
+      "id": "i79",
+      "label": "#79 Cache cohesion team\nnarratives (P2)",
+      "group": "engine",
+      "x": 350,
+      "y": -50,
+      "description": "Cache narratives keyed on player-set + ruleset version — avoids re-paying Claude for identical rosters. Agent-ready.",
+      "meta": {
+        "state": "open · afk",
+        "priority": "p2",
+        "url": "https://github.com/chrooks/Cornerstone/issues/79"
+      }
+    },
+    {
+      "id": "i58",
+      "label": "#58 M2 backend refactors\n(P3, deferred)",
+      "group": "engine",
+      "x": 350,
+      "y": 100,
+      "description": "Backend refactors deferred from the M2 review-fanout. Low priority cleanup batch.",
+      "meta": {
+        "state": "open",
+        "priority": "p3",
+        "url": "https://github.com/chrooks/Cornerstone/issues/58"
+      }
+    },
+    {
+      "id": "i15",
+      "label": "🧍 #15 Define Player Archetype\ntaxonomy",
+      "group": "archetypes",
+      "x": 700,
+      "y": -350,
+      "description": "Design the archetype taxonomy (definitional work — human). Blocks #17.",
+      "meta": {
+        "state": "open · hitl",
+        "milestone": "Player Archetypes",
+        "url": "https://github.com/chrooks/Cornerstone/issues/15"
+      }
+    },
+    {
+      "id": "i17",
+      "label": "#17 Compute & display\nPlayer Archetypes",
+      "group": "archetypes",
+      "x": 700,
+      "y": -200,
+      "description": "Implement archetype computation and surface it in the UI. Agent-ready once taxonomy exists.",
+      "meta": {
+        "state": "open · afk",
+        "milestone": "Player Archetypes",
+        "url": "https://github.com/chrooks/Cornerstone/issues/17"
+      }
+    },
+    {
+      "id": "i5",
+      "label": "#5 Saved Teams comparison\nview (Public Surface)",
+      "group": "public",
+      "x": 700,
+      "y": 0,
+      "description": "Compare Saved Teams on the public surface. Agent-ready.",
+      "meta": {
+        "state": "open · afk",
+        "milestone": "Public Surface polish",
+        "url": "https://github.com/chrooks/Cornerstone/issues/5"
+      }
+    },
+    {
+      "id": "i102",
+      "label": "#102 Compare two Builds /\nSaved Teams side by side (P3)",
+      "group": "public",
+      "x": 700,
+      "y": 150,
+      "description": "Side-by-side Build comparison in the Lab. Needs triage; overlaps #5 — likely one comparison surface serves both.",
+      "meta": {
+        "state": "open · needs-triage",
+        "priority": "p3",
+        "url": "https://github.com/chrooks/Cornerstone/issues/102"
+      }
+    },
+    {
+      "id": "i12",
+      "label": "#12 Redo live tips system\n(Eval Version Publishing)",
+      "group": "public",
+      "x": 350,
+      "y": 250,
+      "description": "Rebuild the live tips system under the Evaluation Version Publishing milestone. Agent-ready.",
+      "meta": {
+        "state": "open · afk",
+        "milestone": "Evaluation Version Publishing",
+        "url": "https://github.com/chrooks/Cornerstone/issues/12"
+      }
+    },
+    {
+      "id": "e107",
+      "label": "🧍 #107 VALUE CURRENCY (epic)\nprice players by skill",
+      "group": "value",
+      "x": -700,
+      "y": 450,
+      "description": "Epic. IRL salary makes the standard RuleSet a solved puzzle — Wemby is a top-3 skillset at $13.4M. Replace contract dollars with skill-derived prices: rank-pair players by an `overall` score against the real NBA salary curve. Legends get ladder prices too; the rookie-scale patch dies.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/107"
+      }
+    },
+    {
+      "id": "i112",
+      "label": "#112 ball_security formula\nis stale (P1)",
+      "group": "value",
+      "x": -350,
+      "y": 330,
+      "description": "The composite doesn't factor `steady_hand` — went stale across skill renames. Luka reads 0.0 ball security. Blocks weight calibration.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/112"
+      }
+    },
+    {
+      "id": "i114",
+      "label": "🧍 #114 None tier scores 0.0\n(P1)",
+      "group": "value",
+      "x": -350,
+      "y": 470,
+      "description": "A `None` tier scores 0.0 = 'worst in the league', not 'doesn't do this'. Every guard — Shai included — takes automatic zeros on pnr_screener and both rebounding axes. Structural penalty for being a guard; inflates bigs.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/114"
+      }
+    },
+    {
+      "id": "i113",
+      "label": "🧍 #113 steady_hand thresholds\n(P2)",
+      "group": "value",
+      "x": -350,
+      "y": 610,
+      "description": "Luka rates `None` at steady_hand. Threshold retune via the calibration API, never a migration.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/113"
+      }
+    },
+    {
+      "id": "i108",
+      "label": "🧍 #108 Weighted `overall`\nfrom composites (P1)",
+      "group": "value",
+      "x": 0,
+      "y": 450,
+      "description": "One 0-100 score per player from weighted percentile composites. 7 of 14 axes reward size; only 2 reward creation, so equal weights float rebounding bigs. Creation-first weights move the Ringer top 10 from 5/10 to 8/10 inside the top 15. Convexity was tried and failed.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/108"
+      }
+    },
+    {
+      "id": "i115",
+      "label": "🧍 #115 Brunson 31st, Edwards 18th\n(P1)",
+      "group": "value",
+      "x": 0,
+      "y": 620,
+      "description": "Ringer has them 5th and 6th. Brunson carries FIVE zeros incl. 0.0 on BOTH defensive axes. Elite creation guards are understated — sharpest test of whether the weights are right.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/115"
+      }
+    },
+    {
+      "id": "i109",
+      "label": "#109 Rank-pair price ladder\n→ value_price (P1)",
+      "group": "value",
+      "x": 350,
+      "y": 450,
+      "description": "Sort players by `overall`, sort real salaries desc, pair them. NBA's own pay curve becomes the price ladder — no curve to tune, prices stay in dollars. OPEN: how legends sit above the top rung.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/109"
+      }
+    },
+    {
+      "id": "i110",
+      "label": "🧍 #110 RuleSet `currency` flag\n(P1)",
+      "group": "value",
+      "x": 700,
+      "y": 380,
+      "description": "rules_json.currency: market | value. Builder reads value_price under `value`. Cap, gauge, and picker filter keep working since units stay dollars.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/110"
+      }
+    },
+    {
+      "id": "i111",
+      "label": "🧍 #111 Flip standard; retire\nrookie-scale rule (P1)",
+      "group": "value",
+      "x": 700,
+      "y": 530,
+      "description": "The payoff. standard goes to value currency, flat legend_salary dies, the 2-rookie-scale-contract patch is deleted. Verify roster diversity actually improved.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/111"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "i15",
+      "to": "i17",
+      "label": "taxonomy first",
+      "description": "Archetype computation can't start until the taxonomy is defined."
+    },
+    {
+      "from": "i80",
+      "to": "i79",
+      "label": "shapes the cache",
+      "description": "Decoupling narrative generation decides what the narrative cache keys and stores."
+    },
+    {
+      "from": "i80",
+      "to": "i81",
+      "label": "same async pattern",
+      "description": "Both move Claude calls off the request path — share the background-execution mechanism."
+    },
+    {
+      "from": "i5",
+      "to": "i102",
+      "label": "overlapping scope",
+      "description": "Both are team-comparison views; triage #102 against #5 before building either."
+    },
+    {
+      "from": "m-snapshot",
+      "to": "i86",
+      "label": "straggler",
+      "description": "Open bug left in an otherwise-shipped milestone."
+    },
+    {
+      "from": "m-snapshot",
+      "to": "i85",
+      "label": "straggler",
+      "description": "Open bug left in an otherwise-shipped milestone."
+    },
+    {
+      "from": "m-lab",
+      "to": "i100",
+      "label": "straggler",
+      "description": "Open feature left in an otherwise-shipped milestone."
+    },
+    {
+      "from": "m-lab",
+      "to": "i94",
+      "label": "straggler",
+      "description": "Open feature left in an otherwise-shipped milestone."
+    },
+    {
+      "from": "e107",
+      "to": "i108",
+      "label": "needs a score"
+    },
+    {
+      "from": "i108",
+      "to": "i109",
+      "label": "score ranks the ladder"
+    },
+    {
+      "from": "i109",
+      "to": "i110",
+      "label": "price before the switch"
+    },
+    {
+      "from": "i110",
+      "to": "i111",
+      "label": "switch before the flip"
+    },
+    {
+      "from": "i112",
+      "to": "i108",
+      "label": "blocks: dead skill key"
+    },
+    {
+      "from": "i114",
+      "to": "i108",
+      "label": "blocks: phantom zeros"
+    },
+    {
+      "from": "i85",
+      "to": "i108",
+      "label": "blocks: None hard-cap"
+    },
+    {
+      "from": "i114",
+      "to": "i115",
+      "label": "clear structural zeros first"
+    },
+    {
+      "from": "i85",
+      "to": "i115",
+      "label": "phantom None tiers"
+    },
+    {
+      "from": "i100",
+      "to": "i108",
+      "label": "shifts every composite"
+    },
+    {
+      "from": "i108",
+      "to": "i17",
+      "label": "overall feeds archetypes"
+    }
+  ]
+}
