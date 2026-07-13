@@ -202,6 +202,27 @@ frontend/
 
 ---
 
+## Dev Environment (auto-deploy)
+
+**Pushing to `develop` auto-deploys.** A self-hosted GitHub Actions runner on hestia builds both
+images and redeploys the dev stack — nothing to run by hand.
+
+- **App**: `https://cornerstone-dev.hestia.chrooks.com` (LAN/Tailscale only, never public)
+- **Database**: its own **self-hosted Supabase** on hestia — *not* the production cloud project.
+  Dev data and migrations can't touch prod.
+- **Branching**: `develop` is a deliberate exception to the usual commit-straight-to-`main` habit.
+  It exists as the deploy gate, so half-finished work doesn't ship to the dev box.
+- **Workflow**: `.github/workflows/deploy-dev.yml`. Compose files and secrets live on hestia under
+  `/srv/compose/cornerstone-dev*` (never committed).
+
+Full operating procedure — ports, secrets, re-seeding the DB, runner setup: **hearth runbook 17**
+(`~/projects/hearth/docs/runbooks/17-cornerstone-dev-deploy.md`).
+
+> `NEXT_PUBLIC_*` vars are inlined by Next.js **at build time**, so the workflow passes them as
+> Docker `--build-arg`s. Adding a new one means editing the Dockerfile *and* the workflow, not just `.env`.
+
+---
+
 ## Environment Variables
 
 ### backend/.env
