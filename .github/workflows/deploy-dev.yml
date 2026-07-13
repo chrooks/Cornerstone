@@ -1,0 +1,29 @@
+name: Deploy dev
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, hestia]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t cornerstone-backend:dev ./backend
+
+      - name: Build frontend image
+        run: |
+          set -a
+          source /srv/compose/cornerstone-dev/.env
+          set +a
+          docker build \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
+            --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
+            --build-arg NEXT_PUBLIC_CALIBRATION_API_KEY="$NEXT_PUBLIC_CALIBRATION_API_KEY" \
+            -t cornerstone-frontend:dev ./frontend
+
+      - name: Deploy
+        run: docker compose -f /srv/compose/cornerstone-dev/docker-compose.yml up -d --force-recreate
