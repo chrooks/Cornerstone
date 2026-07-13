@@ -25,5 +25,10 @@ jobs:
             --build-arg NEXT_PUBLIC_CALIBRATION_API_KEY="$NEXT_PUBLIC_CALIBRATION_API_KEY" \
             -t cornerstone-frontend:dev ./frontend
 
+      # Keeps the dev DB in step with supabase/migrations/. Runs before the app
+      # comes up so the new code never meets an old schema.
+      - name: Apply pending migrations
+        run: bash scripts/apply-dev-migrations.sh
+
       - name: Deploy
         run: docker compose -f /srv/compose/cornerstone-dev/docker-compose.yml up -d --force-recreate
