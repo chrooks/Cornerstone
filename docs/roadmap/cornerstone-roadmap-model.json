@@ -332,13 +332,13 @@
   },
   {
    "id": "i110",
-   "label": "🧍 #110 RuleSet `currency` flag\n(P1)",
-   "group": "value",
+   "label": "✅ #110 RuleSet currency flag\n— CLOSED (2044999)",
+   "group": "done",
    "x": 700,
    "y": 380,
-   "description": "rules_json.currency: market | value. Builder reads value_price under `value`. Cap, gauge, and picker filter keep working since units stay dollars.",
+   "description": "currency: market|value validated (default market); getPlayerPrice(player, currency) is the single builder price seam (cap, gauge, filter, hover). Existing RuleSets untouched. Discovery: cap enforcement is frontend-only.",
    "meta": {
-    "state": "open",
+    "state": "closed",
     "milestone": "Value Economy",
     "url": "https://github.com/chrooks/Cornerstone/issues/110"
    }
