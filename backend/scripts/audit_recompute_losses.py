@@ -47,8 +47,17 @@ Two independent detection methods, run in sequence:
 STRICTLY READ-ONLY: SELECT-only queries. No writes, no pipeline triggers, no
 publishes, no draft resets.
 
+--draft mode (issue #121): after a loss is remediated in the draft (see
+scripts/restore_rebounder_decisions.py), the published-release snapshots
+Method B compares are immutable and will always show the historical loss —
+that's expected, the release history isn't rewritten. --draft instead diffs
+each recompute_commit group's prior published release against the CURRENT
+DRAFT's live draft_skill_profiles composite (season=CURRENT_SEASON), so it
+answers "is the draft clean now?" rather than "was a release ever wrong?".
+
 Run:
     cd backend && source venv/bin/activate && python scripts/audit_recompute_losses.py
+    cd backend && source venv/bin/activate && python scripts/audit_recompute_losses.py --draft
 """
 
 from __future__ import annotations
@@ -64,6 +73,7 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+from services.players_service import CURRENT_SEASON  # noqa: E402
 from services.supabase_client import get_supabase, run_query  # noqa: E402
 
 _PAGE = 1000  # PostgREST's per-request row cap — every read below pages past it.
@@ -180,6 +190,55 @@ def fetch_released_skill(client, release_id: str, skill: str) -> dict[str, dict]
     return result
 
 
+def fetch_player_names(client, player_ids: list[str]) -> dict[str, str]:
+    """player_id -> name, chunked (players table has no upper bound guarantee)."""
+    names: dict[str, str] = {}
+    ids = [i for i in player_ids if i]
+    for i in range(0, len(ids), _CHUNK):
+        chunk = ids[i : i + _CHUNK]
+        rows = _paginate(
+            lambda c=chunk: client.table("players").select("id, name").in_("id", c).order("id")
+        )
+        for r in rows:
+            names[r["id"]] = r.get("name")
+    return names
+
+
+def fetch_draft_skill_for_players(
+    client, season: str, skill: str, player_ids: list[str]
+) -> dict[str, dict]:
+    """player_id -> {name, source, final_tier, stat_tier} for one skill, from the
+    CURRENT DRAFT's composite profile (draft_skill_profiles), scoped to the given
+    players — this is the --draft-mode counterpart to fetch_released_skill."""
+    result: dict[str, dict] = {}
+    ids = [i for i in player_ids if i]
+    profile_rows: list[dict] = []
+    for i in range(0, len(ids), _CHUNK):
+        chunk = ids[i : i + _CHUNK]
+        profile_rows.extend(
+            _paginate(
+                lambda c=chunk: client.table("draft_skill_profiles")
+                .select("player_id, profile")
+                .eq("source", "composite")
+                .eq("season", season)
+                .in_("player_id", c)
+                .order("player_id")
+            )
+        )
+    names = fetch_player_names(client, ids)
+    for row in profile_rows:
+        pid = row.get("player_id")
+        entry = (row.get("profile") or {}).get(skill)
+        if pid and isinstance(entry, dict):
+            result[pid] = {
+                "name": names.get(pid),
+                "source": entry.get("source"),
+                "final_tier": entry.get("final_tier"),
+                "stat_tier": entry.get("stat_tier"),
+            }
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Classification
 # ---------------------------------------------------------------------------
@@ -220,6 +279,7 @@ def _skill_name_for_run(run: dict) -> str | None:
 
 
 def main() -> None:
+    draft_mode = "--draft" in sys.argv
     client = get_supabase()
 
     print("=" * 79)
@@ -305,13 +365,25 @@ def main() -> None:
     print()
 
     print("=" * 79)
-    print("STEP 4 — METHOD B: release-pair snapshot diff (primary evidence)")
+    if draft_mode:
+        print("STEP 4 — METHOD B (--draft): prior published release vs. the CURRENT DRAFT")
+    else:
+        print("STEP 4 — METHOD B: release-pair snapshot diff (primary evidence)")
     print("=" * 79)
-    print(
-        "For each skill touched by a recompute_commit run, diff that skill's frozen "
-        "released_players entries between the run's published release and the published "
-        "release immediately before it."
-    )
+    if draft_mode:
+        print(
+            "For each skill touched by a recompute_commit run, diff that skill's frozen "
+            "released_players entries in the published release immediately before the run's "
+            f"target release against the CURRENT DRAFT's live composite (season={CURRENT_SEASON!r}). "
+            "Released-players snapshots are immutable, so this answers 'is the draft clean now', "
+            "not 'was a release ever wrong' — remediation (e.g. #121) lands in the draft only."
+        )
+    else:
+        print(
+            "For each skill touched by a recompute_commit run, diff that skill's frozen "
+            "released_players entries between the run's published release and the published "
+            "release immediately before it."
+        )
     print()
 
     # Group recompute_commit runs by (skill, target release) — several runs can
@@ -347,9 +419,17 @@ def main() -> None:
             continue
 
         before = fetch_released_skill(client, prior_release["id"], skill)
-        after = fetch_released_skill(client, release_id, skill)
-
         before_human = {pid: v for pid, v in before.items() if v["source"] in _HUMAN_SOURCES}
+
+        if draft_mode:
+            after = fetch_draft_skill_for_players(client, CURRENT_SEASON, skill, list(before_human.keys()))
+            target_label = f"CURRENT DRAFT (season={CURRENT_SEASON})"
+            target_published_at = "n/a"
+        else:
+            after = fetch_released_skill(client, release_id, skill)
+            target_label = release["label"]
+            target_published_at = release["published_at"]
+
         losses = []
         preserved = []
         for pid, v in before_human.items():
@@ -363,8 +443,8 @@ def main() -> None:
 
         print(
             f"Skill={skill!r}: prior release={prior_release['label']!r} "
-            f"({prior_release['published_at']}) -> target release={release['label']!r} "
-            f"({release['published_at']}) [runs {run_ids}]"
+            f"({prior_release['published_at']}) -> target={target_label!r} "
+            f"({target_published_at}) [runs {run_ids}]"
         )
         print(
             f"  human-decided entries in prior release: {len(before_human)}  |  "
@@ -379,7 +459,7 @@ def main() -> None:
                 "prior_release": prior_release["label"],
                 "prior_source": v["source"],
                 "prior_tier": v["final_tier"],
-                "target_release": release["label"],
+                "target_release": target_label,
                 "target_source": a["source"],
                 "target_tier": a["final_tier"],
                 "run_ids": run_ids,
@@ -414,12 +494,13 @@ def main() -> None:
     print(f"Skill could not be resolved for {len(unresolved_skill_groups)} run group(s) — needs human review")
 
     print()
+    target_desc = "the current draft" if draft_mode else "a published Snapshot Release"
     if all_candidate_losses:
-        print(f"VERDICT: {len(all_candidate_losses)} confirmed loss(es) shipped to a published Snapshot Release.")
+        print(f"VERDICT: {len(all_candidate_losses)} confirmed loss(es) unremediated in {target_desc}.")
     elif unresolved_skill_groups:
         print("VERDICT: no confirmed losses, but some runs could not be classified — needs human review.")
     else:
-        print("VERDICT: no losses found in any published Snapshot Release.")
+        print(f"VERDICT: no losses found in {target_desc}.")
 
 
 if __name__ == "__main__":
