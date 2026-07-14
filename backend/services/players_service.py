@@ -424,6 +424,21 @@ def get_or_fetch_career(player_id: str, supabase: Client) -> dict | None:
     career_raw = nba_api_client.get_player_career_stats(nba_api_id)
     awards_df  = nba_api_client.get_player_awards(nba_api_id)
 
+    # A failed fetch must NEVER be persisted — same trap as the season path.
+    # get_player_career_stats returns None when NBA.com fails, and
+    # _build_career_dict happily turns that into a well-formed dict of zeros:
+    # no games, no seasons, no All-Stars. INSERTed, that row becomes the newest
+    # and shadows the player's real career — LeBron reads as a rookie with no
+    # accolades. An expired cache is infinitely better than zeroes, so fall back
+    # to the stale row when one exists rather than overwriting it.
+    if career_raw is None:
+        logger.error(
+            "Career fetch failed for player %s (nba_api_id=%d) — refusing to persist "
+            "an all-zero career. Falling back to the stale cached row.",
+            player_id, nba_api_id,
+        )
+        return cached.data[0]["stats"] if cached.data else None
+
     career_data = _build_career_dict(career_raw, awards_df)
 
     # Persist

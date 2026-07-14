@@ -159,3 +159,35 @@ def test_a_blob_with_no_box_score_key_at_all_falls_back_to_any_data():
     assert players_service._blob_has_data({"pts": 28.0}) is True
     assert players_service._blob_has_data({"tracking_defense": {"deflections": 2.0}}) is True
     assert players_service._blob_has_data({"metadata": {"season": "2025-26"}}) is False
+
+
+def test_a_failed_career_fetch_falls_back_to_stale_cache(monkeypatch):
+    """The same trap, in the career path — and it bites harder.
+
+    get_player_career_stats returns None when NBA.com fails, and
+    _build_career_dict happily turns that into a well-formed dict of ZEROES: no
+    games, no seasons, no All-Stars. INSERTed, that row becomes the newest and
+    shadows the player's real career — LeBron reads as a rookie with no accolades.
+
+    An expired cache is infinitely better than zeroes.
+    """
+    supabase = MagicMock()
+    stale = {"career_games_played": 1622, "seasons_played": 23, "all_star_appearances": 25}
+
+    monkeypatch.setattr(
+        players_service, "_get_player_by_id",
+        lambda pid, sb: {"id": pid, "nba_api_id": 2544},
+    )
+    # A cached row exists but is past its 30-day TTL, so the code goes out to fetch.
+    supabase.table.return_value.select.return_value.eq.return_value.eq.return_value \
+        .order.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[{"stats": stale, "fetched_at": "2026-04-03T01:12:47+00:00"}]
+        )
+    # ...and NBA.com is down.
+    monkeypatch.setattr(players_service.nba_api_client, "get_player_career_stats", lambda i: None)
+    monkeypatch.setattr(players_service.nba_api_client, "get_player_awards", lambda i: None)
+
+    result = players_service.get_or_fetch_career("lebron-uuid", supabase)
+
+    assert result == stale, "a failed career fetch must fall back to the stale row"
+    supabase.table.return_value.insert.assert_not_called()
