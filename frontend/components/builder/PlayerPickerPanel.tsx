@@ -19,7 +19,8 @@ import {
   type PlayerPoolViewMode,
 } from "@/components/players/PlayerPoolBrowser";
 import { PlayerViewSizeToggle, type PlayerViewSize } from "@/components/players/PlayerView";
-import { DEFAULT_MAX_ROSTER_SLOTS } from "@/lib/builder-config";
+import { DEFAULT_CURRENCY, DEFAULT_MAX_ROSTER_SLOTS, getPlayerPrice } from "@/lib/builder-config";
+import type { RuleSetCurrency } from "@/lib/builder-config";
 import { randomId } from "@/lib/utils";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SuggestionFilter } from "@/lib/noteFilters";
@@ -91,6 +92,8 @@ interface PlayerPickerPanelProps {
   rookieDealLimit?: number;
   /** Current count of rookie deal players in the roster. */
   rosterRookieDealCount?: number;
+  /** Pricing currency from the active RuleSet (#110). Defaults to "market". */
+  currency?: RuleSetCurrency;
 }
 
 export function PlayerPickerPanel({
@@ -115,6 +118,7 @@ export function PlayerPickerPanel({
   isAdmin,
   rookieDealLimit,
   rosterRookieDealCount = 0,
+  currency = DEFAULT_CURRENCY,
 }: PlayerPickerPanelProps) {
   const [filterRequest, setFilterRequest] = useState<PlayerPoolFilterRequest | null>(null);
   const [viewSize, setViewSize] = useState<PlayerViewSize>("row");
@@ -158,10 +162,11 @@ export function PlayerPickerPanel({
   const isUnavailable = useCallback((player: PlayerWithSkills): boolean => {
     if (rosterPlayerIds.has(player.id)) return true;
     if (!hasAvailableBuildSlot) return true;
-    if (remainingSalary !== null && player.salary != null && player.salary > remainingSalary) return true;
+    const price = getPlayerPrice(player, currency);
+    if (remainingSalary !== null && price != null && price > remainingSalary) return true;
     if (player.is_rookie_deal && rookieDealLimitReached) return true;
     return false;
-  }, [hasAvailableBuildSlot, rosterPlayerIds, remainingSalary, rookieDealLimitReached]);
+  }, [hasAvailableBuildSlot, rosterPlayerIds, remainingSalary, rookieDealLimitReached, currency]);
 
   // ── Drag-and-drop ─────────────────────────────────────────────────────────
   const handleRowDragStart = useCallback((e: React.DragEvent, player: PlayerWithSkills) => {
@@ -183,11 +188,11 @@ export function PlayerPickerPanel({
   }, [filterRequest, onSalaryFilterInjected, onSkillFilterInjected]);
 
   const handlePlayerHover = useCallback((player: PlayerWithSkills) => {
-    onPlayerHover?.(player.salary ?? null);
+    onPlayerHover?.(getPlayerPrice(player, currency));
     onPlayerInspect?.(player);
     // #92: the preview only fires for a player the click would actually add.
     onCandidateHover?.(isUnavailable(player) ? null : player);
-  }, [onPlayerHover, onPlayerInspect, onCandidateHover, isUnavailable]);
+  }, [onPlayerHover, onPlayerInspect, onCandidateHover, isUnavailable, currency]);
 
   const handlePlayerHoverEnd = useCallback(() => {
     onPlayerHoverEnd?.();

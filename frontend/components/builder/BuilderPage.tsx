@@ -148,6 +148,7 @@ export function BuilderPage() {
     ? (rulesJson.rookie_deal_limit as number)
     : undefined;
   const cornerstoneSource = resolvedRules.cornerstoneSource;
+  const currency = resolvedRules.currency;
   const teamLabel = resolvedRules.teamLabel;
 
   // ── No cornerstone → redirect to cornerstone picker (legend-only RuleSets)
@@ -168,6 +169,7 @@ export function BuilderPage() {
   const salary = useBuilderSalary(roster.allSlots, cornerstoneId, hoveredSlotIndex, {
     salaryCap,
     legendSalary,
+    currency,
   });
 
   // ── Feedback collapse state ───────────────────────────────────────────────
@@ -530,6 +532,7 @@ export function BuilderPage() {
             loading={false}
             error={null}
             remainingSalary={salary.remainingSalary}
+            currency={currency}
             maxRosterSlots={maxRosterSlots}
             salaryFilterTrigger={salary.salaryCapFilter}
             onSalaryFilterInjected={() => salary.setSalaryCapFilter(null)}

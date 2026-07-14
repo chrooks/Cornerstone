@@ -6,7 +6,8 @@
  */
 
 import { useMemo, useState } from "react";
-import { DEFAULT_LEGEND_SALARY } from "@/lib/builder-config";
+import { DEFAULT_CURRENCY, DEFAULT_LEGEND_SALARY, getPlayerPrice } from "@/lib/builder-config";
+import type { RuleSetCurrency } from "@/lib/builder-config";
 import type { PlayerWithSkills } from "@/lib/types";
 
 export interface UseBuilderSalaryReturn {
@@ -33,6 +34,8 @@ export interface UseBuilderSalaryOptions {
   salaryCap?: number;
   /** Cornerstone legend salary from rules_json (falls back to DEFAULT_legendSalary). */
   legendSalary?: number;
+  /** Pricing currency from the active RuleSet (#110). Defaults to "market". */
+  currency?: RuleSetCurrency;
 }
 
 /**
@@ -51,6 +54,7 @@ export function useBuilderSalary(
 ): UseBuilderSalaryReturn {
   const salaryCap = options?.salaryCap ?? null;
   const legendSalary = options?.legendSalary ?? DEFAULT_LEGEND_SALARY;
+  const currency = options?.currency ?? DEFAULT_CURRENCY;
   // ── Salary cap filter for player picker ──────────────────────────────────
   const [salaryCapFilter, setSalaryCapFilter] = useState<number | null>(null);
 
@@ -63,9 +67,9 @@ export function useBuilderSalary(
       if (!p) return sum;
       // Cornerstone legend has a fixed cap cost regardless of market salary
       if (p.id === cornerstoneId) return sum + legendSalary;
-      return sum + (p.salary ?? 0);
+      return sum + (getPlayerPrice(p, currency) ?? 0);
     }, 0);
-  }, [allSlots, cornerstoneId, legendSalary]);
+  }, [allSlots, cornerstoneId, legendSalary, currency]);
 
   const remainingSalary = salaryCap !== null ? salaryCap - usedSalary : null;
 
@@ -76,7 +80,7 @@ export function useBuilderSalary(
     const orderedSalaries = allSlots.map((p) => {
       if (!p) return 0;
       if (p.id === cornerstoneId) return legendSalary;
-      return p.salary ?? 0;
+      return getPlayerPrice(p, currency) ?? 0;
     });
 
     const idx = hoveredSlotIndex - 1;
@@ -87,7 +91,7 @@ export function useBuilderSalary(
     const endDollars = startDollars + slotSalary;
 
     return { startFrac: startDollars / salaryCap, endFrac: endDollars / salaryCap };
-  }, [hoveredSlotIndex, allSlots, cornerstoneId, legendSalary, salaryCap]);
+  }, [hoveredSlotIndex, allSlots, cornerstoneId, legendSalary, salaryCap, currency]);
 
   return {
     usedSalary,

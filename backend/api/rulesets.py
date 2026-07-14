@@ -161,10 +161,21 @@ VALID_STATUSES = {"active", "coming_soon", "archived"}
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 VALID_TEAM_SIZES = {5, 9, 12}
 TEAM_SIZE_LABELS = {5: "Lineup", 9: "Rotation", 12: "Roster"}
+# #110: a RuleSet prices players either by real NBA salary ("market") or by
+# skill-derived value_price ("value", the #109 ladder). Both are dollars, so the
+# cap/gauge/filter math is unit-identical — only the source field changes.
+VALID_CURRENCIES = {"market", "value"}
+DEFAULT_CURRENCY = "market"
 
 
 def _normalize_rules_json(rules_json: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     normalized = dict(rules_json)
+
+    currency = normalized.get("currency")
+    if currency is None:
+        normalized["currency"] = DEFAULT_CURRENCY
+    elif currency not in VALID_CURRENCIES:
+        return None, f"currency must be one of: {sorted(VALID_CURRENCIES)}"
 
     team_size = normalized.get("team_size")
     if team_size is not None:

@@ -1,4 +1,5 @@
-import { DEFAULT_MAX_ROSTER_SLOTS, teamLabelForSize, VALID_TEAM_SIZES } from "@/lib/builder-config";
+import { DEFAULT_CURRENCY, DEFAULT_MAX_ROSTER_SLOTS, teamLabelForSize, VALID_TEAM_SIZES } from "@/lib/builder-config";
+import type { RuleSetCurrency } from "@/lib/builder-config";
 
 export type CornerstoneSource = "legend" | "all";
 
@@ -8,6 +9,8 @@ export interface ResolvedRuleSetRules {
   allowedTeamSizes: number[];
   requiresTeamSizeChoice: boolean;
   cornerstoneSource: CornerstoneSource;
+  /** Pricing currency for this RuleSet (#110). Defaults to "market". */
+  currency: RuleSetCurrency;
   isValidTeamSizeParam: boolean;
 }
 
@@ -45,6 +48,7 @@ export function resolveRuleSetRules(
     allowedTeamSizes,
     requiresTeamSizeChoice: allowedTeamSizes.length > 1,
     cornerstoneSource: rules?.cornerstone_source === "all" ? "all" : "legend",
+    currency: rules?.currency === "value" ? "value" : DEFAULT_CURRENCY,
     isValidTeamSizeParam,
   };
 }

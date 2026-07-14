@@ -479,3 +479,49 @@ def test_publish_version_returns_404_for_unknown_version(admin_client):
     data = resp.get_json()
     assert resp.status_code == 404
     assert data["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# #110 — RuleSet currency flag (market | value)
+# ---------------------------------------------------------------------------
+
+def test_create_version_defaults_currency_to_market(admin_client):
+    """Absent currency normalizes to "market" so existing RuleSets stay unchanged."""
+    resp = admin_client.post(
+        "/api/rulesets/standard/versions",
+        json={"version_label": "no-currency", "rules_json": {"team_size": 5, "salary_cap": 100_000_000}},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    data = resp.get_json()
+    assert resp.status_code == 201
+    assert data["data"]["rules_json"]["currency"] == "market"
+
+
+def test_create_version_accepts_value_currency(admin_client):
+    """A RuleSet fixture on "value" validates and persists end to end (#110 ac4)."""
+    resp = admin_client.post(
+        "/api/rulesets/standard/versions",
+        json={
+            "version_label": "value-economy",
+            "rules_json": {"team_size": 5, "salary_cap": 100_000_000, "currency": "value"},
+        },
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    data = resp.get_json()
+    assert resp.status_code == 201
+    assert data["data"]["rules_json"]["currency"] == "value"
+
+
+def test_create_version_rejects_unknown_currency(admin_client):
+    resp = admin_client.post(
+        "/api/rulesets/standard/versions",
+        json={"version_label": "bad-currency", "rules_json": {"team_size": 5, "currency": "monopoly"}},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    data = resp.get_json()
+    assert resp.status_code == 400
+    assert data["success"] is False
+    assert "currency" in data["error"]
