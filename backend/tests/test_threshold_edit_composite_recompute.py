@@ -60,8 +60,10 @@ def test_extract_tier_final_tier_null_wins_over_tier_key():
 def _mock_client(stats_rows, composite_rows):
     """Mock client: player_stats query (one .eq) vs draft_skill_profiles (two .eq)."""
     sb = MagicMock()
-    # player_stats: .select().eq(season).in_(player_id).execute()
-    sb.table.return_value.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+    # player_stats: .select().eq(season).in_(player_id).order(fetched_at desc).execute()
+    # The .order() is load-bearing in the real query — player_stats is INSERTed, so
+    # a player has many rows and the newest must win. Keep this chain in step with it.
+    sb.table.return_value.select.return_value.eq.return_value.in_.return_value.order.return_value.execute.return_value = MagicMock(
         data=stats_rows
     )
     # draft_skill_profiles composite: .select().eq(source).eq(season).in_(player_id).execute()

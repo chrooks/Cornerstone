@@ -29,9 +29,13 @@ def _mock_supabase_with_player_stats(player_ids: list[str], stats_blob: dict):
     def table_router(name):
         mock = MagicMock()
         if name == "player_stats":
-            mock.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+            # Mirrors the real query: player_stats is INSERTed (never upserted), so
+            # the batch read MUST order newest-first — see evaluate_skills_for_run.
+            # Keep this chain in step with it, or the mock silently stops matching.
+            mock.select.return_value.eq.return_value.in_.return_value.order.return_value.execute.return_value = MagicMock(
                 data=[
-                    {"player_id": pid, "season": "2025-26", "stats": stats_blob}
+                    {"player_id": pid, "season": "2025-26", "stats": stats_blob,
+                     "fetched_at": "2026-07-13T16:44:07"}
                     for pid in player_ids
                 ]
             )
@@ -65,7 +69,7 @@ def test_evaluate_skills_for_run_does_not_call_nba_api():
             with patch("services.skill_engine.evaluation_only.get_league_averages", return_value={}):
                 with patch("services.skill_engine.evaluation_only._get_client") as mock_client:
                     mock_sb = MagicMock()
-                    mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(data=[])
+                    mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.order.return_value.execute.return_value = MagicMock(data=[])
                     mock_client.return_value = mock_sb
 
                     evaluate_skills_for_run(
@@ -96,7 +100,7 @@ def test_evaluate_skills_for_run_stages_profile_rows():
                     with patch("services.skill_engine.evaluation_only._get_client") as mock_client:
                         mock_sb = MagicMock()
                         # player_stats lookup returns one row
-                        mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+                        mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.order.return_value.execute.return_value = MagicMock(
                             data=[{"player_id": "p1", "season": "2025-26", "stats": stats_blob}]
                         )
                         mock_client.return_value = mock_sb
@@ -136,7 +140,7 @@ def test_evaluate_skills_for_run_respects_skill_filter():
                 with patch("services.skill_engine.evaluation_only.apply_auto_promotions", return_value=full_skills):
                     with patch("services.skill_engine.evaluation_only._get_client") as mock_client:
                         mock_sb = MagicMock()
-                        mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+                        mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.order.return_value.execute.return_value = MagicMock(
                             data=[{"player_id": "p1", "season": "2025-26", "stats": stats_blob}]
                         )
                         mock_client.return_value = mock_sb
@@ -171,7 +175,7 @@ def test_evaluate_skills_for_run_skips_player_with_no_stats():
             with patch("services.skill_engine.evaluation_only._get_client") as mock_client:
                 mock_sb = MagicMock()
                 # Empty stats — no rows returned
-                mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(data=[])
+                mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.order.return_value.execute.return_value = MagicMock(data=[])
                 mock_client.return_value = mock_sb
 
                 with patch("services.skill_engine.evaluation_only.stage_profile_rows") as mock_stage:
@@ -206,7 +210,7 @@ def test_evaluate_skills_for_run_uses_thresholds_override():
                 with patch("services.skill_engine.evaluation_only.apply_auto_promotions", return_value={}):
                     with patch("services.skill_engine.evaluation_only._get_client") as mock_client:
                         mock_sb = MagicMock()
-                        mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+                        mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.order.return_value.execute.return_value = MagicMock(
                             data=[{"player_id": "p1", "season": "2025-26", "stats": stats_blob}]
                         )
                         mock_client.return_value = mock_sb
@@ -242,7 +246,7 @@ def test_evaluate_skills_for_run_passes_thresholds_to_evaluator():
                 with patch("services.skill_engine.evaluation_only.apply_auto_promotions", return_value={}):
                     with patch("services.skill_engine.evaluation_only._get_client") as mock_client:
                         mock_sb = MagicMock()
-                        mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+                        mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.order.return_value.execute.return_value = MagicMock(
                             data=[{"player_id": "p1", "season": "2025-26", "stats": stats_blob}]
                         )
                         mock_client.return_value = mock_sb
@@ -278,7 +282,7 @@ def test_evaluate_skills_for_run_handles_multiple_players():
                 with patch("services.skill_engine.evaluation_only.apply_auto_promotions", return_value=fake_skills):
                     with patch("services.skill_engine.evaluation_only._get_client") as mock_client:
                         mock_sb = MagicMock()
-                        mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+                        mock_sb.table.return_value.select.return_value.eq.return_value.in_.return_value.order.return_value.execute.return_value = MagicMock(
                             data=[
                                 {"player_id": "p1", "season": "2025-26", "stats": stats_blob},
                                 {"player_id": "p2", "season": "2025-26", "stats": stats_blob},

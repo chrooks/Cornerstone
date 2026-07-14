@@ -278,14 +278,65 @@ def get_or_fetch_player_stats(
     # a partial fetch like LeagueSeasonMatchups times out and leaves NaN in the data).
     blob = _sanitize_floats(blob)
 
-    # Persist stats blob to Supabase (blob already contains salary section)
+    # A fetch that came back with nothing must NEVER be written. This insert
+    # appends a row, and every reader takes the newest one — so persisting an
+    # all-null blob does not merely fail, it SHADOWS the player's real stats.
+    # When get_bulk_stats() returns empty (rate limit, timeout, NBA.com hiccup)
+    # assemble_stats_blob still returns a well-formed blob with every field null,
+    # and it used to sail straight into the table. That is how Luka, Giannis and
+    # Wembanyama each ended up looking like players with no stats at all, minutes
+    # after a perfectly good row had been written for them.
+    if not _blob_has_data(blob):
+        logger.error(
+            "Empty stats fetch for player %s (nba_api_id=%d, season=%s) — refusing to "
+            "persist. The cached row is left intact; treat this as a failed fetch.",
+            player_id, nba_api_id, season,
+        )
+        return None
+
+    _persist_stats_blob(player_id, season, blob, supabase)
+
+    return blob
+
+
+# metadata (season, nba_api_id, ...) is populated even by a failed fetch, and
+# salary comes from our own players table rather than NBA.com — so neither is
+# evidence that any stats actually arrived.
+_NON_STAT_SECTIONS = frozenset({"metadata", "salary"})
+
+
+def _blob_has_data(blob: dict) -> bool:
+    """True when a fetched stats blob actually carries at least one stat.
+
+    When the NBA.com bulk call comes back empty, assemble_stats_blob still
+    returns a well-formed blob — every one of its seventeen stat sections is
+    present, and every field inside is null. So "did we get anything?" has to
+    mean "is any field, anywhere outside metadata, non-null?".
+
+    Deliberately permissive about shape: a section may be a dict of fields or a
+    bare scalar, and either counts. The job here is to catch the all-null blob a
+    failed fetch produces, and only that. When in doubt this must answer True —
+    a false negative silently discards a player's real stats, which is the very
+    failure it exists to prevent.
+    """
+    for section, value in blob.items():
+        if section in _NON_STAT_SECTIONS:
+            continue
+        if isinstance(value, dict):
+            if any(field is not None for field in value.values()):
+                return True
+        elif value is not None:
+            return True
+    return False
+
+
+def _persist_stats_blob(player_id: str, season: str, blob: dict, supabase: Client) -> None:
+    """Append a player_stats row. Separated so the empty-fetch guard is testable."""
     run_query(lambda: supabase.table("player_stats").insert({
         "player_id": player_id,
         "season":    season,
         "stats":     blob,
     }).execute())
-
-    return blob
 
 
 # ---------------------------------------------------------------------------

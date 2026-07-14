@@ -28,7 +28,7 @@ from services.pipeline_run_results.repo import (
 )
 
 # Import referenced here only for patching in tests (never called in this module)
-from services.players_service import get_or_fetch_player_stats  # noqa: F401
+from services.players_service import _blob_has_data, get_or_fetch_player_stats  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -159,22 +159,50 @@ def evaluate_skills_for_run(
 
     league_avgs = get_league_averages(season, client)
 
-    # Batch-fetch stats for all players in one query
+    # Batch-fetch stats for all players in one query.
+    #
+    # ORDER BY fetched_at DESC is load-bearing, not decoration. player_stats is
+    # INSERTed (not upserted), so a player accumulates a row per fetch —
+    # Wembanyama has fourteen. Without an explicit order, Postgres returns them
+    # in whatever order it likes and the "first row wins" loop below picks one
+    # ARBITRARILY: skill evaluation was silently nondeterministic, and could rate
+    # a player off a stale April row, or off an all-null failed-fetch row.
+    # Newest-first makes "first row wins" mean "newest row wins".
     stats_result = run_query(
         lambda: client.table("player_stats")
-        .select("player_id, season, stats")
+        .select("player_id, season, stats, fetched_at")
         .eq("season", season)
         .in_("player_id", player_ids)
+        .order("fetched_at", desc=True)
         .execute()
     )
     stats_rows = stats_result.data or []
 
-    # Build lookup: player_id -> stats_blob
+    # Build lookup: player_id -> stats_blob. Newest USABLE row wins.
+    #
+    # Skipping all-null rows is defence in depth. get_or_fetch_player_stats now
+    # refuses to persist an empty fetch, but rows written before that guard are
+    # still in the table — and an empty row is newest for Luka, Jokic, Giannis
+    # and Wembanyama right now. Without this skip, ordering newest-first would
+    # hand the evaluator a blob with no stats and quietly wipe their profiles.
     stats_by_player: dict[str, dict] = {}
+    skipped_empty = 0
     for row in stats_rows:
         pid = row["player_id"]
-        if pid not in stats_by_player:
-            stats_by_player[pid] = row.get("stats") or {}
+        if pid in stats_by_player:
+            continue
+        blob = row.get("stats") or {}
+        if not _blob_has_data(blob):
+            skipped_empty += 1
+            continue
+        stats_by_player[pid] = blob
+
+    if skipped_empty:
+        logger.warning(
+            "evaluate_skills_for_run: skipped %d all-null stats row(s) — failed fetches "
+            "shadowing real data. Purge them from player_stats.",
+            skipped_empty,
+        )
 
     # When recomputing composite, batch-fetch each player's existing composite
     # profile to merge the affected skills into (preserving untouched skills).
