@@ -159,6 +159,17 @@ def _warm_cohesion_distributions() -> None:
         if ready:
             logger.info("Cohesion composite distributions loaded")
             warmup_state.record_warmup_ok()
+            # #109: the value price ladder ranks on these distributions — warm it
+            # now so the first player read serves value_price without a cold build.
+            try:
+                from services.snapshot_versions.value_ladder_cache import ensure_ladder
+
+                if ensure_ladder(CURRENT_SEASON):
+                    logger.info("Value price ladder loaded")
+                else:
+                    logger.warning("Value price ladder unavailable at boot — reads will retry lazily")
+            except Exception:
+                logger.exception("Unable to warm the value price ladder")
         else:
             logger.warning(
                 "Cohesion warmup degraded: distributions unavailable — "

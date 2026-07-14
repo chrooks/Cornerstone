@@ -31,6 +31,7 @@ from services.snapshot_versions.released_repo import (
     fetch_profiles_by_source_player_ids,
     fetch_skill_trace_by_source_player_id,
 )
+from services.snapshot_versions.value_ladder_cache import ensure_ladder, get_ladder
 from api.auth import require_admin, require_open_draft
 
 
@@ -56,6 +57,22 @@ def release_integrity_missing() -> dict:
     return {"missing_from_release": True}
 
 players_bp = Blueprint("players", __name__, url_prefix="/api")
+
+
+def _value_ladder(season: str):
+    """Warm + return the value price ladder (#109), degrading to empty on failure.
+
+    value_price is additive metadata alongside salary — a cold or failed ladder
+    must never break a player read, so a rebuild failure just omits the field.
+    """
+    try:
+        ensure_ladder(season)
+        return get_ladder()
+    except Exception:
+        logger.exception("value ladder unavailable for season %s — omitting value_price", season)
+        from services.cohesion_engine.value_price import ValueLadder
+
+        return ValueLadder(active_prices={}, legend_prices={})
 
 
 def _ok(data) -> tuple:
@@ -556,6 +573,9 @@ def _fetch_legends_for_bulk() -> list:
         client=supabase,
     )
 
+    # #109: legends are priced in their own tier, keyed by nba_api_id.
+    ladder = _value_ladder(CURRENT_SEASON)
+
     result = []
     for legend in legends:
         nba_api_id = legend.get("nba_api_id")
@@ -589,6 +609,7 @@ def _fetch_legends_for_bulk() -> list:
             "nba_api_id":       nba_api_id,
             "skills":           skills,
             "flag_summary":     {"total": 0, "unresolved": 0},
+            "value_price":      ladder.legend_prices.get(str(nba_api_id)),
         })
 
     return result
@@ -642,6 +663,7 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
     )
 
     # 3. Join and build the response list
+    ladder = _value_ladder(season)
     result = []
     missing_from_release: list[str] = []
     for player in players_data:
@@ -663,6 +685,9 @@ def _fetch_bulk_players(season: str, min_mpg: float) -> list:
                 player.get("draft_round") == 1
                 and (player.get("season_exp") or 99) <= 3
             ),
+            # #109: skill-derived price alongside the real salary. None when the
+            # player has no ladder rank (e.g. no real salary to rank-pair).
+            "value_price": ladder.active_prices.get(player["id"]),
         }
         if skills is None:
             # Issue #64: a Player with no row in the active Snapshot Release is
@@ -986,7 +1011,8 @@ def player_profile(player_id: str):
         )
         if not player_row.data:
             return _err(f"Player {player_id} not found for season {season}", status=404)
-        player = player_row.data[0]
+        # #109: attach the skill-derived value_price alongside the real salary.
+        player = {**player_row.data[0], "value_price": _value_ladder(season).active_prices.get(player_id)}
 
         # Fetch composite skill profile from released_players (active Snapshot Release).
         # After M3: draft_skill_profiles is admin-only; Lab reads use released_players.

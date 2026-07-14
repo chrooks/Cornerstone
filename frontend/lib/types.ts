@@ -313,6 +313,8 @@ export interface PlayerProfile {
     games_played: number | null;
     minutes_per_game: number | null;
     salary: number | null;
+    /** Skill-derived dollar price from the value ladder (#109), alongside `salary`. */
+    value_price?: number | null;
     height: string | null;
     weight: number | null;
     season: string;
@@ -412,6 +414,13 @@ export interface PlayerWithSkills {
   nba_api_id?: number | null;
   /** True when the player is on a rookie scale contract (first round pick, ≤3 years experience). */
   is_rookie_deal?: boolean;
+  /**
+   * Skill-derived dollar price from the value ladder (#109), served alongside
+   * `salary`. Actives are rank-paired against real NBA salaries; legends sit in
+   * an extrapolated tier above the max real salary. Null when the player has no
+   * ladder rank (e.g. no real salary, or the ladder is cold).
+   */
+  value_price?: number | null;
   /** Composite skill profile condensed to final_tier per skill, or null if no profile exists yet. */
   skills: PlayerSkillMap | null;
   /** Aggregate flag status — used to surface review badges in the explorer. */

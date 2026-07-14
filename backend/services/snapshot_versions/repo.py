@@ -344,6 +344,12 @@ def publish_draft(
         distribution_cache.ensure_distributions(
             published.season, active_version.payload.get("values", {}), force=True
         )
+        # #109: the value price ladder is derived from these distributions, so
+        # rewarm it against the new active release in the same pass.
+        from services.snapshot_versions import value_ladder_cache
+
+        value_ladder_cache.force_clear_ladder()
+        value_ladder_cache.ensure_ladder(published.season, force=True)
     except Exception:
         logger.exception(
             "Cache rewarm after publish failed — next evaluation will retry lazily"
@@ -443,6 +449,11 @@ def reactivate_release(
             active_version.payload.get("values", {}),
             force=True,
         )
+        # #109: rewarm the value price ladder against the reactivated release.
+        from services.snapshot_versions import value_ladder_cache
+
+        value_ladder_cache.force_clear_ladder()
+        value_ladder_cache.ensure_ladder(reactivated.season, force=True)
     except Exception:
         logger.exception(
             "Cache rewarm after reactivate failed — next evaluation will retry lazily"

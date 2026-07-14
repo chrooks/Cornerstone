@@ -376,7 +376,9 @@ class TestPublishDraft:
                     "services.snapshot_versions.distribution_cache.ensure_distributions",
                     side_effect=lambda *a, **kw: call_order.append("ensure"),
                 ):
-                    with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                    with patch("services.evaluation_versions.repo.get_active") as mock_active, \
+                        patch("services.snapshot_versions.value_ladder_cache.force_clear_ladder") as clear_ladder, \
+                        patch("services.snapshot_versions.value_ladder_cache.ensure_ladder") as ensure_ladder:
                         from services.cohesion_engine.engine import EvaluationVersion
                         mock_active.return_value = EvaluationVersion(
                             id="ev-1", slug="cohesion-v1", status="published",
@@ -385,6 +387,9 @@ class TestPublishDraft:
                         repo.publish_draft(draft_id, "label", allow_missing_composite=True)
 
         assert call_order == ["clear", "ensure"]
+        # #109: the value price ladder is rebuilt in the same pass.
+        clear_ladder.assert_called_once()
+        ensure_ladder.assert_called_once()
 
     def test_publish_draft_tolerates_trace_snapshot_failure(self):
         """Issue #82: a skill-trace freeze failure must never block publish —
@@ -882,7 +887,9 @@ class TestReactivateRelease:
                     "services.snapshot_versions.distribution_cache.ensure_distributions",
                     side_effect=lambda *a, **kw: call_order.append("ensure"),
                 ):
-                    with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                    with patch("services.evaluation_versions.repo.get_active") as mock_active, \
+                        patch("services.snapshot_versions.value_ladder_cache.force_clear_ladder") as clear_ladder, \
+                        patch("services.snapshot_versions.value_ladder_cache.ensure_ladder") as ensure_ladder:
                         from services.cohesion_engine.engine import EvaluationVersion
                         mock_active.return_value = EvaluationVersion(
                             id="ev-1", slug="cohesion-v1", status="published",
@@ -891,6 +898,9 @@ class TestReactivateRelease:
                         repo.reactivate_release(self._RELEASE_ID)
 
         assert call_order == ["clear", "ensure"]
+        # #109: the value price ladder is rebuilt in the same pass.
+        clear_ladder.assert_called_once()
+        ensure_ladder.assert_called_once()
 
     @pytest.mark.parametrize(
         "rpc_message,expected_code",
