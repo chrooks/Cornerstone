@@ -319,13 +319,13 @@
   },
   {
    "id": "i109",
-   "label": "#109 Rank-pair price ladder\n→ value_price (P1)",
-   "group": "value",
+   "label": "✅ #109 value_price ladder\n— CLOSED (056a375)",
+   "group": "done",
    "x": 350,
    "y": 450,
-   "description": "Sort players by `overall`, sort real salaries desc, pair them. NBA's own pay curve becomes the price ladder — no curve to tune, prices stay in dollars. OPEN: how legends sit above the top rung.",
+   "description": "Rank-pair ladder shipped: actives pair with real salaries, Legends extrapolate above the top ($60.2M–$80.2M). Wemby $13.4M→$55.2M. 3&D dollars measured and parked for the #119 design conversation (HITL).",
    "meta": {
-    "state": "open",
+    "state": "closed",
     "milestone": "Value Economy",
     "url": "https://github.com/chrooks/Cornerstone/issues/109"
    }
