@@ -17,7 +17,7 @@ from typing import Optional
 from services.supabase_client import get_supabase, run_query
 from services.skill_engine.cache import get_thresholds, get_league_averages
 from services.skill_engine.evaluator import evaluate_all_skills, apply_auto_promotions
-from services.compositing import composite_skill
+from services.compositing import composite_skill, _tier_index
 from services.notability import get_notability_score
 from services.skills import HIGH_CONFIDENCE_SKILLS
 from services.pipeline_run_results.repo import (
@@ -32,6 +32,12 @@ from services.players_service import _blob_has_data, get_or_fetch_player_stats  
 
 logger = logging.getLogger(__name__)
 
+# Composite entries whose `source` records a human review decision (issue #120).
+# A recompute must never silently overwrite these — resolved (a flag adjudicated
+# in /admin/review) and manual_override (an admin's direct tier) are people's
+# calls, not stat output.
+_HUMAN_DECISION_SOURCES = frozenset({"resolved", "manual_override"})
+
 
 def _get_client():
     """Indirection point so tests can patch without touching get_supabase."""
@@ -43,7 +49,9 @@ def _merge_composite_for_skills(
     affected_skills: list[str],
     existing_composite: dict,
     notability_score: int,
-) -> dict:
+    player_id: str,
+    season: str,
+) -> tuple[dict, list[StagedFlagRow]]:
     """Recompute the affected skills' composite entries, merged into the existing profile.
 
     The commit RPC replaces the whole composite JSONB, so the returned profile
@@ -51,26 +59,56 @@ def _merge_composite_for_skills(
     overwrite only the affected skills. Claude context is reconstructed from the
     existing composite entry (None for high-confidence skills, which composite
     purely from stats).
+
+    Issue #120 guardrail: an entry whose `source` is a recorded human decision
+    (resolved / manual_override) is kept EXACTLY as-is — never overwritten. The
+    recompute still runs so we can compare; if the fresh stat-derived final_tier
+    contradicts the human's final_tier, a review flag is raised so a human
+    re-adjudicates in /admin/review instead of the decision silently standing
+    against new thresholds. Returns (merged_profile, human_contradiction_flags).
     """
     merged = dict(existing_composite)
+    protected_flags: list[StagedFlagRow] = []
     for skill_name in affected_skills:
         stat_result = skills_result.get(skill_name)
         if stat_result is None:
             continue
+        existing_entry = existing_composite.get(skill_name) or {}
         if skill_name in HIGH_CONFIDENCE_SKILLS:
             claude_result = None
         else:
-            existing_entry = existing_composite.get(skill_name) or {}
             claude_tier = existing_entry.get("claude_tier")
             claude_result = {
                 "tier": claude_tier,
                 "confidence": existing_entry.get("claude_confidence"),
                 "claude_failed": claude_tier is None,
             }
-        merged[skill_name] = composite_skill(
+        recomputed = composite_skill(
             skill_name, stat_result, claude_result, notability_score
         )
-    return merged
+
+        if existing_entry.get("source") in _HUMAN_DECISION_SOURCES:
+            # Human decision — keep the entry verbatim. Flag only when the fresh
+            # recompute disagrees with the human's final_tier (agreement = no-op).
+            merged[skill_name] = existing_entry
+            human_tier = existing_entry.get("final_tier")
+            fresh_tier = recomputed.get("final_tier")
+            if _tier_index(fresh_tier) != _tier_index(human_tier):
+                protected_flags.append(StagedFlagRow(
+                    player_id=player_id,
+                    skill_name=skill_name,
+                    flag_reason=(
+                        f"human_decision_contradicted:"
+                        f"{existing_entry.get('source')}:{human_tier}"
+                    ),
+                    season=season,
+                    claude_tier=existing_entry.get("claude_tier"),
+                    stats_tier=fresh_tier,
+                ))
+            continue
+
+        merged[skill_name] = recomputed
+    return merged, protected_flags
 
 
 def _stage_composite_for_player(
@@ -82,8 +120,9 @@ def _stage_composite_for_player(
     notability_score: int,
 ) -> tuple[StagedProfileRow, list[StagedFlagRow]]:
     """Build the merged composite profile row + any review flags for one player."""
-    merged_composite = _merge_composite_for_skills(
-        skills_result, affected_skills, existing_composite, notability_score
+    merged_composite, protected_flags = _merge_composite_for_skills(
+        skills_result, affected_skills, existing_composite, notability_score,
+        player_id, season,
     )
     profile_row = StagedProfileRow(
         player_id=player_id,
@@ -91,11 +130,17 @@ def _stage_composite_for_player(
         source="composite",
         profile=merged_composite,
     )
-    # Stage a review flag for any affected skill the composite flagged (Claude
-    # disagreement / low-notability). The commit RPC persists these into
+    # Human-decision contradictions (issue #120) are flagged inside the merge —
+    # start from those. The commit RPC persists all staged flags into
     # draft_skill_flags and marks the profile review_required.
-    flag_rows: list[StagedFlagRow] = []
+    flag_rows: list[StagedFlagRow] = list(protected_flags)
     for skill_name in affected_skills:
+        # Protected (resolved / manual_override) skills are handled above — skip
+        # them here so a single player+skill never gets two flags for one run.
+        if (existing_composite.get(skill_name) or {}).get("source") in _HUMAN_DECISION_SOURCES:
+            continue
+        # Stage a review flag for any affected skill the composite flagged (Claude
+        # disagreement / low-notability).
         entry = merged_composite.get(skill_name) or {}
         if entry.get("flagged"):
             flag_rows.append(StagedFlagRow(

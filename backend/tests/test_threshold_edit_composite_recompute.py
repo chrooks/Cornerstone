@@ -256,3 +256,147 @@ def test_recompute_high_confidence_skill_passes_claude_none():
     assert claude_result is None
     # High-confidence → notability never fetched.
     mock_notability.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Issue #120 — recompute must NOT silently destroy human review decisions
+# ---------------------------------------------------------------------------
+
+
+def _run_worker_capturing_profile_and_flags(
+    stats_rows, composite_rows, skill_filter, fake_skills, recomputed_entry
+):
+    """Run recompute with composite_skill stubbed; capture staged profile AND flag rows."""
+    from services.skill_engine.evaluation_only import evaluate_skills_for_run
+
+    with patch("services.skill_engine.evaluation_only.get_thresholds", return_value={}), \
+         patch("services.skill_engine.evaluation_only.get_league_averages", return_value={}), \
+         patch("services.skill_engine.evaluation_only.evaluate_all_skills", return_value=fake_skills), \
+         patch("services.skill_engine.evaluation_only.apply_auto_promotions", return_value=fake_skills), \
+         patch("services.skill_engine.evaluation_only.get_notability_score", return_value=80), \
+         patch("services.skill_engine.evaluation_only.composite_skill", return_value=recomputed_entry), \
+         patch("services.skill_engine.evaluation_only._get_client", return_value=_mock_client(stats_rows, composite_rows)), \
+         patch("services.skill_engine.evaluation_only.stage_profile_rows") as mock_stage, \
+         patch("services.skill_engine.evaluation_only.stage_flag_rows") as mock_flags:
+        evaluate_skills_for_run(
+            run_id="run-comp",
+            player_ids=["p1"],
+            season="2025-26",
+            skill_filter=skill_filter,
+            recompute_composite=True,
+        )
+    return mock_stage, mock_flags
+
+
+def test_manual_override_survives_threshold_retune():
+    """#120 named regression: a manual_override entry (e.g. Wembanyama rim_protector
+    All-Time Great) is NOT collapsed by a threshold retune that recomputes it lower."""
+    fake_skills = {"rim_protector": {"tier": "Elite", "stat_confidence": "high"}}
+    stats_rows = [{"player_id": "p1", "season": "2025-26", "stats": {"x": 1}}]
+    composite_rows = [{"player_id": "p1", "profile": {
+        "rim_protector": {
+            "final_tier": "All-Time Great", "stat_tier": "Elite",
+            "source": "manual_override",
+        },
+    }}]
+    # The retune would recompute rim_protector down to Proficient.
+    recomputed = {"final_tier": "Proficient", "stat_tier": "Proficient",
+                  "source": "stats_only", "flagged": False}
+
+    mock_stage, _ = _run_worker_capturing_profile_and_flags(
+        stats_rows, composite_rows, ["rim_protector"], fake_skills, recomputed,
+    )
+
+    entry = mock_stage.call_args[0][1][0].profile["rim_protector"]
+    assert entry["final_tier"] == "All-Time Great"   # human decision survives
+    assert entry["source"] == "manual_override"       # entry kept verbatim
+
+
+def test_resolved_entry_survives_recompute():
+    """#120: a resolved entry is kept exactly as-is, never overwritten by recompute."""
+    fake_skills = {"cutter": {"tier": "Elite", "stat_confidence": "high"}}
+    stats_rows = [{"player_id": "p1", "season": "2025-26", "stats": {"x": 1}}]
+    composite_rows = [{"player_id": "p1", "profile": {
+        "cutter": {
+            "final_tier": "Capable", "stat_tier": "Elite",
+            "claude_tier": "Capable", "source": "resolved",
+        },
+    }}]
+    recomputed = {"final_tier": "Elite", "stat_tier": "Elite",
+                  "source": "stats_only", "flagged": False}
+
+    mock_stage, _ = _run_worker_capturing_profile_and_flags(
+        stats_rows, composite_rows, ["cutter"], fake_skills, recomputed,
+    )
+
+    entry = mock_stage.call_args[0][1][0].profile["cutter"]
+    assert entry["final_tier"] == "Capable"
+    assert entry["source"] == "resolved"
+
+
+def test_recompute_flags_when_it_contradicts_human_decision():
+    """#120: a retune that contradicts a human decision raises a review flag recording
+    the skill, human's source + current tier, and the freshly recomputed tier."""
+    fake_skills = {"rim_protector": {"tier": "Proficient", "stat_confidence": "high"}}
+    stats_rows = [{"player_id": "p1", "season": "2025-26", "stats": {"x": 1}}]
+    composite_rows = [{"player_id": "p1", "profile": {
+        "rim_protector": {
+            "final_tier": "All-Time Great", "claude_tier": None,
+            "source": "manual_override",
+        },
+    }}]
+    recomputed = {"final_tier": "Proficient", "stat_tier": "Proficient",
+                  "source": "stats_only", "flagged": False}
+
+    _, mock_flags = _run_worker_capturing_profile_and_flags(
+        stats_rows, composite_rows, ["rim_protector"], fake_skills, recomputed,
+    )
+
+    mock_flags.assert_called_once()
+    rows = mock_flags.call_args[0][1]
+    assert len(rows) == 1
+    flag = rows[0]
+    assert flag.skill_name == "rim_protector"
+    assert flag.stats_tier == "Proficient"           # freshly recomputed tier
+    assert "manual_override" in flag.flag_reason      # records human source
+    assert "All-Time Great" in flag.flag_reason       # records human's current tier
+    assert flag.season == "2025-26"
+
+
+def test_recompute_no_flag_when_it_agrees_with_human_decision():
+    """#120: when the recompute agrees with the human's final_tier, no flag is raised."""
+    fake_skills = {"rim_protector": {"tier": "All-Time Great", "stat_confidence": "high"}}
+    stats_rows = [{"player_id": "p1", "season": "2025-26", "stats": {"x": 1}}]
+    composite_rows = [{"player_id": "p1", "profile": {
+        "rim_protector": {"final_tier": "All-Time Great", "source": "manual_override"},
+    }}]
+    recomputed = {"final_tier": "All-Time Great", "stat_tier": "All-Time Great",
+                  "source": "stats_only", "flagged": False}
+
+    mock_stage, mock_flags = _run_worker_capturing_profile_and_flags(
+        stats_rows, composite_rows, ["rim_protector"], fake_skills, recomputed,
+    )
+
+    # Entry preserved AND no flag.
+    assert mock_stage.call_args[0][1][0].profile["rim_protector"]["final_tier"] == "All-Time Great"
+    mock_flags.assert_not_called()
+
+
+def test_recompute_overwrites_non_human_sources_normally():
+    """#120: stats_only and auto_accepted entries keep today's recompute behavior."""
+    for source in ("stats_only", "auto_accepted"):
+        fake_skills = {"cutter": {"tier": "Elite", "stat_confidence": "high"}}
+        stats_rows = [{"player_id": "p1", "season": "2025-26", "stats": {"x": 1}}]
+        composite_rows = [{"player_id": "p1", "profile": {
+            "cutter": {"final_tier": "Capable", "source": source},
+        }}]
+        recomputed = {"final_tier": "Elite", "stat_tier": "Elite",
+                      "source": "stats_only", "flagged": False}
+
+        mock_stage, mock_flags = _run_worker_capturing_profile_and_flags(
+            stats_rows, composite_rows, ["cutter"], fake_skills, recomputed,
+        )
+
+        entry = mock_stage.call_args[0][1][0].profile["cutter"]
+        assert entry["final_tier"] == "Elite", source   # overwritten, not protected
+        mock_flags.assert_not_called()
