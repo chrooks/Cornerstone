@@ -655,6 +655,58 @@ class TestComputeDerivedStats:
         result = compute_derived_stats(rule, blob)
         assert result["computed"]["passer_composite"] == pytest.approx(11.0)
 
+    def test_sum_treats_missing_component_as_zero_when_opted_in(self):
+        """#85: "0.052 + unknown" is not "unknown".
+
+        NBA.com omits a play type entirely once a player falls below its
+        reporting floor, so an absent play-type frequency means zero volume, not
+        unknown volume. Jokic has offscreen_freq 0.052 and no handoff data at
+        all; nulling the whole sum threw away the 0.052 he actually has.
+        """
+        blob = _make_stats_blob(play_type__offscreen_freq=0.052)
+        blob["play_type"].pop("handoff_freq", None)  # NBA.com reported no handoff play type
+        rule = {
+            "computed_stats": [
+                {
+                    "name": "movement_shooter_combined_freq",
+                    "formula": "sum",
+                    "missing_as_zero": True,
+                    "components": [
+                        {"stat": "play_type.offscreen_freq", "weight": 1.0},
+                        {"stat": "play_type.handoff_freq", "weight": 1.0},
+                    ],
+                }
+            ]
+        }
+        result = compute_derived_stats(rule, blob)
+        assert result["computed"]["movement_shooter_combined_freq"] == pytest.approx(0.052)
+
+    def test_sum_still_nulls_a_missing_component_by_default(self):
+        """Opt-in only. Where a null is genuinely unknown, it must keep propagating.
+
+        `oliver_denominator` sums fga + 0.44*fta + tov. A missing `fga` is not
+        zero shots — it is unknown — and coercing it to 0 would drive tov_pct to
+        1.0 and brand the player the worst ball-handler alive. That is the exact
+        class of bug #114 just removed; do not reintroduce it here.
+        """
+        blob = _make_stats_blob(box_score__fta=4.0, box_score__tov=2.0)
+        blob["box_score"].pop("fga", None)  # genuinely unknown, not zero shots
+        rule = {
+            "computed_stats": [
+                {
+                    "name": "oliver_denominator",
+                    "formula": "sum",
+                    "components": [
+                        {"stat": "box_score.fga", "weight": 1.0},
+                        {"stat": "box_score.fta", "weight": 0.44},
+                        {"stat": "box_score.tov", "weight": 1.0},
+                    ],
+                }
+            ]
+        }
+        result = compute_derived_stats(rule, blob)
+        assert result["computed"]["oliver_denominator"] is None
+
     def test_sum_formula_with_all_weight_one(self):
         """Sum of two equal-weight components."""
         blob = _make_stats_blob(

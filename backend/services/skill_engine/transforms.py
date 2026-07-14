@@ -134,14 +134,30 @@ def compute_derived_stats(rule: dict, stats_map: dict) -> dict:
 
         if formula == "sum":
             # Weighted sum: result = sum(component_val * weight)
-            # If any component is None, the whole composite is None.
+            #
+            # A missing component nulls the whole composite by default, because a
+            # null is normally genuinely unknown: `oliver_denominator` sums
+            # fga + 0.44*fta + tov, and reading a missing `fga` as zero shots
+            # would drive tov_pct to 1.0 and brand the player the worst
+            # ball-handler alive.
+            #
+            # "missing_as_zero" opts a derived stat out of that, for the case
+            # where absent really does mean zero (#85). NBA.com drops a play type
+            # from its feed entirely once a player falls below its reporting
+            # floor, so an absent play-type frequency is zero volume, not unknown
+            # volume — and nulling the sum threw away the frequency the player
+            # *does* have. Jokic carries offscreen_freq 0.052 with no handoff data
+            # at all; "0.052 + unknown" is not "unknown".
+            missing_as_zero = bool(derived.get("missing_as_zero", False))
             total = 0.0
             all_present = True
             for component in derived.get("components", []):
                 c_val = resolve_stat(modified, component.get("stat", ""))
                 if c_val is None:
-                    all_present = False
-                    break
+                    if not missing_as_zero:
+                        all_present = False
+                        break
+                    continue
                 weight = float(component.get("weight", 1.0))
                 total += c_val * weight
 
