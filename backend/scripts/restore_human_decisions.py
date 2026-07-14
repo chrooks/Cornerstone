@@ -1,57 +1,58 @@
 """
-scripts/restore_rebounder_decisions.py — restore the 12 human decisions #120's
-rebounder recompute bug destroyed (issue #121).
+scripts/restore_human_decisions.py — surgically restore a human decision that a
+threshold_edit recompute_commit run (#120's disease) silently clobbered back to
+`stats_only`, found by scripts/audit_recompute_losses.py --draft.
 
-#120's audit (scripts/audit_recompute_losses.py) proved the four `rebounder`
-recompute runs of 2026-06-12 reverted 12 `manual_override`/`resolved`
-composite entries to `stats_only`, shipped in the "Defensive Rebounding
-Update" release, and carried into every later release including the current
-active one. This restores the 12 in the DRAFT only — the release history is
-immutable and untouched; the fix reaches the live engine on the next
-deliberate publish.
+Generalized from the one-off `restore_rebounder_decisions.py` (issue #121, the
+12 rebounder losses) to take `--skill` / `--players` / `--source-release`, so
+the same surgical-write discipline covers any future loss (e.g. #122's LeBron
+James spot_up_shooter loss) without a new script per skill.
 
-The 12: Josh Hart, Evan Mobley, Kenrich Williams, Steven Adams, Stephen Curry,
-Jayson Tatum, Jalen Smith, Kevin Love, Luke Kornet, Joel Embiid,
-Russell Westbrook, Jalen Johnson.
+Default args (no flags) reproduce the original #121 rebounder restoration
+exactly, for reproducibility:
+  --skill rebounder
+  --players "Josh Hart,Evan Mobley,Kenrich Williams,Steven Adams,Stephen Curry,
+             Jayson Tatum,Jalen Smith,Kevin Love,Luke Kornet,Joel Embiid,
+             Russell Westbrook,Jalen Johnson"
+  --source-release "Finals Refresh"
 
-Source of truth for the restored value: the "Finals Refresh" published
-release — the last release that carried the correct human decision before
-"Defensive Rebounding Update" clobbered it (confirmed by
-scripts/audit_recompute_losses.py's Method B).
+Source of truth for the restored value: the named published release — the
+last release that carried the correct human decision before a recompute
+clobbered it (confirmed by scripts/audit_recompute_losses.py's Method B).
 
 Safety: never guesses. A player is skipped and reported "needs human" when:
   - the players table doesn't resolve to exactly one row for their name,
-  - Finals Refresh has no rebounder entry for them, or that entry's source
-    isn't resolved/manual_override (unexpected — would mean Finals Refresh
-    itself wasn't clean),
+  - the source release has no entry for them for this skill, or that entry's
+    source isn't resolved/manual_override (unexpected — would mean the source
+    release itself wasn't clean),
   - no current draft composite profile exists, or
   - the CURRENT draft entry is ALREADY a human decision (resolved /
-    manual_override) that disagrees with Finals Refresh — someone re-decided
-    it since; restoring over that would be the same silent-overwrite bug
-    this issue exists to fix.
+    manual_override) that disagrees with the source release — someone
+    re-decided it since; restoring over that would be the same silent-
+    overwrite bug this script exists to fix.
 
 Modes:
-    python scripts/restore_rebounder_decisions.py                 # dry run (default)
-    python scripts/restore_rebounder_decisions.py --apply          # write + verify
-    python scripts/restore_rebounder_decisions.py --verify-guard   # guarded-recompute
-                                                                     # dry-run evidence
-                                                                     # (issue #121 AC3);
-                                                                     # read-only, run
-                                                                     # after --apply
+    python scripts/restore_human_decisions.py [--skill S --players "A,B"]         # dry run (default)
+    python scripts/restore_human_decisions.py [...] --apply                       # write + verify
+    python scripts/restore_human_decisions.py [...] --verify-guard                # guarded-recompute
+                                                                                      dry-run evidence;
+                                                                                      read-only, run
+                                                                                      after --apply
 
 --verify-guard drives services.skill_engine.evaluation_only._merge_composite_for_skills
 directly, in-memory, against real current thresholds — the same function every
 recompute_composite=True call site routes through. It never creates a
 pipeline_runs row and never writes to the database.
 
-Writes (--apply only): exactly one JSONB field — the `rebounder` key inside
-each of the 12 players' draft_skill_profiles.profile (source='composite',
+Writes (--apply only): exactly one JSONB field — the skill's key inside each
+named player's draft_skill_profiles.profile (source='composite',
 season='2025-26'). Nothing else in the profile is touched. No other skill, no
 released table, no publish.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -65,12 +66,13 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 from services.supabase_client import get_supabase, run_query  # noqa: E402
 
 SEASON = "2025-26"
-SKILL = "rebounder"
-FINALS_REFRESH_LABEL = "Finals Refresh"
 _HUMAN_SOURCES = ("resolved", "manual_override")
 _PAGE = 1000  # PostgREST's per-request row cap — every read below pages past it.
 
-PLAYERS = [
+# Defaults reproduce the original #121 rebounder restoration verbatim.
+DEFAULT_SKILL = "rebounder"
+DEFAULT_SOURCE_RELEASE = "Finals Refresh"
+DEFAULT_PLAYERS = [
     "Josh Hart", "Evan Mobley", "Kenrich Williams", "Steven Adams", "Stephen Curry",
     "Jayson Tatum", "Jalen Smith", "Kevin Love", "Luke Kornet", "Joel Embiid",
     "Russell Westbrook", "Jalen Johnson",
@@ -97,25 +99,25 @@ def _paginate(build_query) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def _find_finals_refresh(client) -> dict:
+def _find_source_release(client, label: str) -> dict:
     releases = _paginate(
         lambda: client.table("snapshot_releases")
         .select("id, label, status, published_at")
-        .eq("label", FINALS_REFRESH_LABEL)
+        .eq("label", label)
         .order("published_at")
     )
     published = [r for r in releases if r["status"] == "published"]
     if not published:
-        raise RuntimeError(f"No published release labeled {FINALS_REFRESH_LABEL!r} found")
+        raise RuntimeError(f"No published release labeled {label!r} found")
     if len(published) > 1:
-        raise RuntimeError(f"Multiple published releases labeled {FINALS_REFRESH_LABEL!r} — ambiguous")
+        raise RuntimeError(f"Multiple published releases labeled {label!r} — ambiguous")
     return published[0]
 
 
-def _fetch_player_ids_by_name(client) -> dict[str, list[str]]:
+def _fetch_player_ids_by_name(client, players: list[str]) -> dict[str, list[str]]:
     """name -> [player_id, ...] — a list so ambiguous names are visible, not silently picked."""
     rows = _paginate(
-        lambda: client.table("players").select("id, name").in_("name", PLAYERS).order("id")
+        lambda: client.table("players").select("id, name").in_("name", players).order("id")
     )
     by_name: dict[str, list[str]] = {}
     for r in rows:
@@ -123,8 +125,8 @@ def _fetch_player_ids_by_name(client) -> dict[str, list[str]]:
     return by_name
 
 
-def _fetch_finals_refresh_entries(client, release_id: str, player_ids: list[str]) -> dict[str, dict]:
-    """source_player_id -> full rebounder entry, copied verbatim from the frozen snapshot."""
+def _fetch_source_entries(client, release_id: str, skill: str, player_ids: list[str]) -> dict[str, dict]:
+    """source_player_id -> full skill entry, copied verbatim from the frozen snapshot."""
     rows = _paginate(
         lambda: client.table("released_players")
         .select("source_player_id, is_legend, skill_profile_snapshot")
@@ -136,7 +138,7 @@ def _fetch_finals_refresh_entries(client, release_id: str, player_ids: list[str]
     result: dict[str, dict] = {}
     for r in rows:
         pid = r.get("source_player_id")
-        entry = (r.get("skill_profile_snapshot") or {}).get(SKILL)
+        entry = (r.get("skill_profile_snapshot") or {}).get(skill)
         if pid and isinstance(entry, dict):
             result[pid] = entry
     return result
@@ -160,19 +162,19 @@ def _fetch_draft_composites(client, player_ids: list[str]) -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 
-def build_plan(client) -> tuple[list[dict], list[dict]]:
+def build_plan(client, skill: str, players: list[str], source_label: str) -> tuple[list[dict], list[dict]]:
     """Returns (restorable, needs_human)."""
-    finals_refresh = _find_finals_refresh(client)
-    print(f"Finals Refresh release: {finals_refresh['id']} (published {finals_refresh['published_at']})\n")
+    source_release = _find_source_release(client, source_label)
+    print(f"Source release {source_label!r}: {source_release['id']} (published {source_release['published_at']})\n")
 
-    name_to_ids = _fetch_player_ids_by_name(client)
+    name_to_ids = _fetch_player_ids_by_name(client, players)
 
     restorable: list[dict] = []
     needs_human: list[dict] = []
     resolved_ids: list[str] = []
     id_to_name: dict[str, str] = {}
 
-    for name in PLAYERS:
+    for name in players:
         ids = name_to_ids.get(name, [])
         if len(ids) != 1:
             needs_human.append({"name": name, "reason": f"expected exactly 1 players row, found {len(ids)}: {ids}"})
@@ -180,21 +182,21 @@ def build_plan(client) -> tuple[list[dict], list[dict]]:
         resolved_ids.append(ids[0])
         id_to_name[ids[0]] = name
 
-    finals_entries = _fetch_finals_refresh_entries(client, finals_refresh["id"], resolved_ids)
+    source_entries = _fetch_source_entries(client, source_release["id"], skill, resolved_ids)
     draft_rows = _fetch_draft_composites(client, resolved_ids)
 
     for player_id in resolved_ids:
         name = id_to_name[player_id]
 
-        finals_entry = finals_entries.get(player_id)
-        if finals_entry is None:
+        source_entry = source_entries.get(player_id)
+        if source_entry is None:
             needs_human.append({"name": name, "player_id": player_id,
-                                 "reason": "no rebounder entry in Finals Refresh snapshot"})
+                                 "reason": f"no {skill} entry in {source_label!r} snapshot"})
             continue
-        if finals_entry.get("source") not in _HUMAN_SOURCES:
+        if source_entry.get("source") not in _HUMAN_SOURCES:
             needs_human.append({
                 "name": name, "player_id": player_id,
-                "reason": f"Finals Refresh entry source={finals_entry.get('source')!r} — not a human decision",
+                "reason": f"{source_label!r} entry source={source_entry.get('source')!r} — not a human decision",
             })
             continue
 
@@ -204,43 +206,43 @@ def build_plan(client) -> tuple[list[dict], list[dict]]:
                                  "reason": "no draft composite profile found"})
             continue
 
-        current_entry = (draft_row.get("profile") or {}).get(SKILL)
+        current_entry = (draft_row.get("profile") or {}).get(skill)
 
-        if current_entry == finals_entry:
+        if current_entry == source_entry:
             restorable.append({
                 "name": name, "player_id": player_id, "profile_id": draft_row["id"],
-                "before": current_entry, "after": finals_entry, "noop": True,
+                "before": current_entry, "after": source_entry, "noop": True,
             })
             continue
 
         if isinstance(current_entry, dict) and current_entry.get("source") in _HUMAN_SOURCES:
-            # The draft already carries a human decision that disagrees with Finals
-            # Refresh — someone re-decided it since. Do not guess; overwriting this
-            # would be exactly the bug #120/#121 exist to fix.
+            # The draft already carries a human decision that disagrees with the
+            # source release — someone re-decided it since. Do not guess;
+            # overwriting this would be exactly the bug this script exists to fix.
             needs_human.append({
                 "name": name, "player_id": player_id,
                 "reason": (
                     f"draft already has a human decision (source={current_entry.get('source')!r}, "
-                    f"final_tier={current_entry.get('final_tier')!r}) that differs from Finals Refresh "
-                    f"(final_tier={finals_entry.get('final_tier')!r}) — needs human adjudication"
+                    f"final_tier={current_entry.get('final_tier')!r}) that differs from {source_label!r} "
+                    f"(final_tier={source_entry.get('final_tier')!r}) — needs human adjudication"
                 ),
             })
             continue
 
         restorable.append({
             "name": name, "player_id": player_id, "profile_id": draft_row["id"],
-            "before": current_entry, "after": finals_entry, "noop": False,
+            "before": current_entry, "after": source_entry, "noop": False,
         })
 
     return restorable, needs_human
 
 
-def print_plan(restorable: list[dict], needs_human: list[dict]) -> None:
+def print_plan(restorable: list[dict], needs_human: list[dict], source_label: str) -> None:
     print("=" * 79)
     print(f"RESTORABLE ({len(restorable)})  — this printout is the backup record of the pre-restore state")
     print("=" * 79)
     for r in restorable:
-        tag = "NO-OP (already matches Finals Refresh)" if r["noop"] else "RESTORE"
+        tag = f"NO-OP (already matches {source_label!r})" if r["noop"] else "RESTORE"
         print(f"\n{r['name']} [{tag}]")
         print(f"    before: {json.dumps(r['before'], sort_keys=True)}")
         print(f"    after : {json.dumps(r['after'], sort_keys=True)}")
@@ -258,7 +260,7 @@ def print_plan(restorable: list[dict], needs_human: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def apply_restoration(client, restorable: list[dict]) -> None:
+def apply_restoration(client, restorable: list[dict], skill: str) -> None:
     for r in restorable:
         if r["noop"]:
             print(f"  SKIP (no-op): {r['name']}")
@@ -271,7 +273,7 @@ def apply_restoration(client, restorable: list[dict]) -> None:
         )
         current_profile = (profile_row.data or [{}])[0].get("profile") or {}
 
-        updated_profile = {**current_profile, SKILL: dict(r["after"])}
+        updated_profile = {**current_profile, skill: dict(r["after"])}
         client.table("draft_skill_profiles").update(
             {"profile": updated_profile}
         ).eq("id", r["profile_id"]).execute()
@@ -282,23 +284,23 @@ def apply_restoration(client, restorable: list[dict]) -> None:
             .select("profile").eq("id", pid).limit(1).execute()
         )
         verify_profile = (verify_row.data or [{}])[0].get("profile") or {}
-        assert verify_profile.get(SKILL) == r["after"], f"verify mismatch for {r['name']}"
+        assert verify_profile.get(skill) == r["after"], f"verify mismatch for {r['name']}"
 
         # Surgical write check: every other skill in the profile is byte-identical.
-        untouched_before = {k: v for k, v in current_profile.items() if k != SKILL}
-        untouched_after = {k: v for k, v in verify_profile.items() if k != SKILL}
-        assert untouched_before == untouched_after, f"non-rebounder field mutated for {r['name']}"
+        untouched_before = {k: v for k, v in current_profile.items() if k != skill}
+        untouched_after = {k: v for k, v in verify_profile.items() if k != skill}
+        assert untouched_before == untouched_after, f"non-{skill} field mutated for {r['name']}"
 
         print(f"  APPLIED + VERIFIED: {r['name']} -> final_tier={r['after'].get('final_tier')!r} "
               f"source={r['after'].get('source')!r}")
 
 
 # ---------------------------------------------------------------------------
-# Guarded-recompute dry-run evidence (issue #121 AC3) — read-only, in-memory
+# Guarded-recompute dry-run evidence — read-only, in-memory
 # ---------------------------------------------------------------------------
 
 
-def verify_guard(client) -> None:
+def verify_guard(client, skill: str, players: list[str]) -> None:
     """
     Drive _merge_composite_for_skills directly against the (now restored) draft
     entries with real current thresholds — the same function every
@@ -310,10 +312,10 @@ def verify_guard(client) -> None:
     from services.skill_engine.evaluation_only import _merge_composite_for_skills
     from services.players_service import _blob_has_data
 
-    name_to_ids = _fetch_player_ids_by_name(client)
+    name_to_ids = _fetch_player_ids_by_name(client, players)
     player_ids: list[str] = []
     id_to_name: dict[str, str] = {}
-    for name in PLAYERS:
+    for name in players:
         ids = name_to_ids.get(name, [])
         if len(ids) != 1:
             print(f"  SKIP {name}: ambiguous/missing players row ({ids})")
@@ -323,7 +325,7 @@ def verify_guard(client) -> None:
 
     thresholds = get_thresholds(client)
     league_avgs = get_league_averages(SEASON, client)
-    thresholds_scoped = {SKILL: thresholds[SKILL]} if SKILL in thresholds else thresholds
+    thresholds_scoped = {skill: thresholds[skill]} if skill in thresholds else thresholds
 
     stats_rows = _paginate(
         lambda: client.table("player_stats")
@@ -355,7 +357,7 @@ def verify_guard(client) -> None:
             print(f"  {name}: no draft composite profile — skip")
             continue
         existing_composite = draft_row.get("profile") or {}
-        human_entry = existing_composite.get(SKILL) or {}
+        human_entry = existing_composite.get(skill) or {}
         human_source = human_entry.get("source")
         human_tier = human_entry.get("final_tier")
 
@@ -368,13 +370,13 @@ def verify_guard(client) -> None:
         skills_result = apply_auto_promotions(skills_result, thresholds_scoped)
 
         merged, flags = _merge_composite_for_skills(
-            skills_result, [SKILL], existing_composite, notability_score=0,
+            skills_result, [skill], existing_composite, notability_score=0,
             player_id=player_id, season=SEASON,
         )
 
-        preserved = merged.get(SKILL) == human_entry
+        preserved = merged.get(skill) == human_entry
         all_preserved = all_preserved and preserved
-        fresh_tier = skills_result.get(SKILL, {}).get("tier")
+        fresh_tier = skills_result.get(skill, {}).get("tier")
         flagged = len(flags) > 0
 
         status = "preserved" if preserved else "*** NOT PRESERVED ***"
@@ -386,11 +388,11 @@ def verify_guard(client) -> None:
             print(f"      flag_reason={flags[0].flag_reason!r}")
         if not preserved:
             print(f"      BEFORE: {json.dumps(human_entry, sort_keys=True)}")
-            print(f"      AFTER : {json.dumps(merged.get(SKILL), sort_keys=True)}")
+            print(f"      AFTER : {json.dumps(merged.get(skill), sort_keys=True)}")
 
     print()
     if all_preserved:
-        print("VERDICT: all restored entries survive a real-threshold rebounder recompute verbatim.")
+        print(f"VERDICT: all restored entries survive a real-threshold {skill} recompute verbatim.")
     else:
         print("VERDICT: *** at least one restored entry was NOT preserved — investigate before publishing. ***")
         sys.exit(1)
@@ -401,17 +403,37 @@ def verify_guard(client) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--skill", default=DEFAULT_SKILL, help=f"skill key to restore (default: {DEFAULT_SKILL!r})")
+    parser.add_argument(
+        "--players", default=None,
+        help="comma-separated player names (default: the original 12 rebounder-loss players)",
+    )
+    parser.add_argument(
+        "--source-release", default=None,
+        help=f"published release label to restore from (default: {DEFAULT_SOURCE_RELEASE!r} when "
+             "--skill is unset; required alongside --players for a non-default skill)",
+    )
+    parser.add_argument("--apply", action="store_true", help="write + verify")
+    parser.add_argument("--verify-guard", action="store_true", help="guarded-recompute dry-run evidence")
+    args = parser.parse_args()
+
+    args.players = [p.strip() for p in args.players.split(",")] if args.players else DEFAULT_PLAYERS
+    args.source_release = args.source_release or DEFAULT_SOURCE_RELEASE
+    return args
+
+
 def main() -> None:
-    apply = "--apply" in sys.argv
-    guard = "--verify-guard" in sys.argv
+    args = _parse_args()
     client = get_supabase()
 
-    if guard:
-        verify_guard(client)
+    if args.verify_guard:
+        verify_guard(client, args.skill, args.players)
         return
 
-    restorable, needs_human = build_plan(client)
-    print_plan(restorable, needs_human)
+    restorable, needs_human = build_plan(client, args.skill, args.players, args.source_release)
+    print_plan(restorable, needs_human, args.source_release)
 
     to_write = [r for r in restorable if not r["noop"]]
     print(
@@ -419,12 +441,12 @@ def main() -> None:
         f"{len(needs_human)} need human review.\n"
     )
 
-    if not apply:
+    if not args.apply:
         print("Dry run — nothing written. Re-run with --apply to persist, "
               "then --verify-guard for the guarded-recompute evidence.")
         return
 
-    apply_restoration(client, restorable)
+    apply_restoration(client, restorable, args.skill)
     print("\nApplied and verified. Nothing published — this is a draft-only change.")
 
 

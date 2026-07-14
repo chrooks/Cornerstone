@@ -48,7 +48,7 @@ STRICTLY READ-ONLY: SELECT-only queries. No writes, no pipeline triggers, no
 publishes, no draft resets.
 
 --draft mode (issue #121): after a loss is remediated in the draft (see
-scripts/restore_rebounder_decisions.py), the published-release snapshots
+scripts/restore_human_decisions.py), the published-release snapshots
 Method B compares are immutable and will always show the historical loss —
 that's expected, the release history isn't rewritten. --draft instead diffs
 each recompute_commit group's prior published release against the CURRENT
