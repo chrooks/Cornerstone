@@ -94,6 +94,8 @@ def build_v1_payload() -> dict:
             "normalization_breakpoint_percentile": W.NORMALIZATION_BREAKPOINT_PERCENTILE,
             "normalization_breakpoint_score": W.NORMALIZATION_BREAKPOINT_SCORE,
             "min_distribution_size": W.MIN_DISTRIBUTION_SIZE,
+            "overall_composite_weights": W.OVERALL_COMPOSITE_WEIGHTS,
+            "overall_mean_peak_blend": W.OVERALL_MEAN_PEAK_BLEND,
             "amplitude_map": W.AMPLITUDE_MAP,
             "warm_body": W.WARM_BODY,
             "vd_ext": W.VD_EXT,

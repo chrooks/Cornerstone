@@ -123,6 +123,68 @@ MIN_DISTRIBUTION_SIZE: int = 20                    # need ≥20 players to build
 
 
 # ---------------------------------------------------------------------------
+# Player `overall` (#108) — the score the value price ladder ranks on
+# ---------------------------------------------------------------------------
+#
+# The composites CANNOT be weighted equally. Seven of the fourteen reward size
+# and physicality; elite creation — the hardest and scarcest job in the sport —
+# gets two. Under an equal-weight mean, being an offensive engine is worth 14%
+# of a player's score while a rim-running big collects partial credit on seven
+# axes just by existing. Equal weights put the Ringer's top 10 at 6/10 inside
+# our top 15, with Mitchell Robinson and Steven Adams floating into the top 12.
+#
+# Design principle (Chris): offense leads, because being a team's offensive
+# engine is the hardest job in the NBA. Defense breaks ties — a better defender
+# beats an otherwise-identical offensive player — but it does not lead.
+#
+# These weights were FIT against the Ringer 100 top 10, on clean data (after
+# #114 stopped scoring a `None` as "worst in the league" and #85 stopped one
+# missing input nulling a derived stat). They put 10 of the Ringer's top 10
+# inside our top 15, mean rank 6.7, with no rebounding-first big above them.
+#
+# The ordering is a CONSTRAINT, not an accident of the fit: creation outweighs
+# every other axis, defense is meaningful but never outweighs the supporting
+# offensive axes, and pure-volume big axes trail defense. Left unconstrained the
+# search returns post_game as the third-most-valuable thing a player can do —
+# it memorises that Jokic, Giannis and Embiid post up rather than learning the
+# rule. Keep the ordering when retuning.
+#
+# Convexity was tried and FAILED — raising values to a power before averaging did
+# not improve the fit and pulled Mitchell Robinson and Steven Adams straight back
+# into the top 12. Rewarding spikes rewards specialists, and the loudest
+# specialists here are exactly the bigs the weighting exists to demote. Use the
+# mean/peak blend below for the "high level" effect, not convexity.
+OVERALL_COMPOSITE_WEIGHTS: dict[str, float] = {
+    # Creation — the scarcest, hardest thing a player can do. Leads outright.
+    "shot_creation": 4.00,
+    "pnr_orchestration": 3.45,
+    # Supporting offense.
+    "finishing": 1.63,
+    "spacing": 1.46,
+    "off_ball_impact": 1.19,
+    "paint_touch": 1.10,
+    "transition": 0.71,
+    "ball_security": 0.40,
+    # Defense — real, and it breaks ties, but it does not lead.
+    "perimeter_defense": 1.18,
+    "interior_defense": 1.00,
+    # Pure volume. Rebounding is not a value driver.
+    "offensive_rebounding": 0.98,
+    "post_game": 0.93,
+    "pnr_screener": 0.24,
+    "defensive_rebounding": 0.20,
+}
+
+# overall = blend * weighted_mean + (1 - blend) * best_axis
+#
+# The peak term is what makes "high level" creation pay: a star's best axis
+# carries weight the mean alone would dilute. Pure peak (blend 0.0) is degenerate
+# — every legend peaks at 10.0, so they all tie at 100. Pure mean (blend 1.0)
+# crushes specialists: it drops Curry to 41.6.
+OVERALL_MEAN_PEAK_BLEND: float = 0.75
+
+
+# ---------------------------------------------------------------------------
 # Defensive bell curve constants
 # ---------------------------------------------------------------------------
 
