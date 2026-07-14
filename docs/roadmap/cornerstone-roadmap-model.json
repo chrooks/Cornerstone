@@ -423,15 +423,26 @@
   },
   {
    "id": "i121",
-   "label": "#121 restore 12 lost rebounder\ndecisions (P1, AFK)",
-   "group": "value",
+   "label": "✅ #121 rebounder decisions\nrestored — CLOSED (786f1a6)",
+   "group": "done",
    "x": 270,
    "y": 690,
-   "description": "Copy the 12 human-decided rebounder entries from the Finals Refresh snapshot back into the draft; guarded recompute re-flags genuine contradictions. No publish from this issue. Found by #120's audit; 6 real tier drops live in the active release (Curry, Adams, Kenrich Williams...).",
+   "description": "All 12 human-decided rebounder entries restored in the draft from the Finals Refresh snapshot; guarded recompute preserves them (7 would flag for review); --draft audit: 0 losses. Surfaced #122 (LeBron spot_up_shooter).",
+   "meta": {
+    "state": "closed",
+    "milestone": "Value Economy",
+    "priority": "p1"
+   }
+  },
+  {
+   "id": "i122",
+   "label": "#122 LeBron spot_up_shooter\noverride lost in draft (P2, AFK)",
+   "group": "value",
+   "description": "manual_override:Capable -> stats_only:None in the current draft (pre-guardrail run 7be8be31). Restore per the #121 pattern; must land before the next Snapshot Release publish.",
    "meta": {
     "state": "open",
     "milestone": "Value Economy",
-    "priority": "p1"
+    "priority": "p2"
    }
   }
  ],
@@ -589,6 +600,12 @@
    "to": "i121",
    "label": "audit found the losses",
    "description": "#120's AC4 audit surfaced the 12 destroyed decisions; the guardrail makes the restoration recompute safe."
+  },
+  {
+   "from": "i121",
+   "to": "i122",
+   "label": "--draft audit found it",
+   "description": "#121's full-draft audit re-run surfaced this second pre-guardrail loss."
   }
  ]
 }
