@@ -254,11 +254,11 @@
     },
     {
       "id": "i112",
-      "label": "#112 ball_security formula\nis stale (P1)",
+      "label": "#112 ball_security \"stale\"\n— PHANTOM, close",
       "group": "value",
       "x": -350,
       "y": 330,
-      "description": "The composite doesn't factor `steady_hand` — went stale across skill renames. Luka reads 0.0 ball security. Blocks weight calibration.",
+      "description": "RESOLVED as a no-op. The formula DOES read `steady_hand` (composites.py:139); the dead-key audit came back clean (22/22 skills referenced, 0 orphan coefficients). Luka's 0.0 was the steady_hand threshold (#113), not the formula. Real finding: thin composites are step functions with huge zero-mass — defensive_rebounding puts 60% of the NBA at 0.0. Folds into #114.",
       "meta": {
         "state": "open",
         "milestone": "Value Economy",
@@ -267,11 +267,11 @@
     },
     {
       "id": "i114",
-      "label": "🧍 #114 None tier scores 0.0\n(P1)",
+      "label": "🧍 #114 None scores 0.0\n— SCOPED, tie-rank (P1)",
       "group": "value",
       "x": -350,
       "y": 470,
-      "description": "A `None` tier scores 0.0 = 'worst in the league', not 'doesn't do this'. Every guard — Shai included — takes automatic zeros on pnr_screener and both rebounding axes. Structural penalty for being a guard; inflates bigs.",
+      "description": "DECIDED: tie-rank the zeros. Delete the `raw <= 0` short-circuit in _percentile_normalize — the percentile math already handles ties, so a zero self-calibrates by how unusual it is: shot_creation 0.1 (3% zeros), post_game 3.8 (76% zeros). One line, no new constant. NOTE: does NOT improve the Ringer fit (8/10 -> 7/10) — this is a CORRECTNESS fix, not a ranking fix. The weights (#108) drive ranking. Refit #108 after, since 8/10 was tuned against the bug.",
       "meta": {
         "state": "open",
         "milestone": "Value Economy",
@@ -280,11 +280,11 @@
     },
     {
       "id": "i113",
-      "label": "🧍 #113 steady_hand thresholds\n(P2)",
+      "label": "✅ #113 steady_hand thresholds\n— SHIPPED",
       "group": "value",
       "x": -350,
       "y": 610,
-      "description": "Luka rates `None` at steady_hand. Threshold retune via the calibration API, never a migration.",
+      "description": "SHIPPED. Six elite engines rated `None`, not just Luka — Jokic, Harden, Trae, Cade, Giannis, Luka. Capable's `tov_per_touch <= 0.045` floor bisected the creator cluster; Giannis missed by 0.0001. Fix: load-aware relief bump (usage >= 0.27 AND tov_pct <= 0.16 -> max Capable). 22 tier upgrades, no regressions. Snapshot Release published.",
       "meta": {
         "state": "open",
         "milestone": "Value Economy",
@@ -355,6 +355,45 @@
         "milestone": "Value Economy",
         "url": "https://github.com/chrooks/Cornerstone/issues/111"
       }
+    },
+    {
+      "id": "i117",
+      "label": "🧍 #117 No-data ≠ rated None\n(P2)",
+      "group": "value",
+      "x": -350,
+      "y": 750,
+      "description": "An unrated player and a player rated `None` are different claims. Injured players fail the volume gate -> `None` -> 0.0. ball_security's proxy fires only on key-ABSENCE, so the missing key is all that protects them: Haliburton 9.2 -> 0.0 if backfilled. 14 players held back from #113's rollout live here.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/117"
+      }
+    },
+    {
+      "id": "i118",
+      "label": "🧍 #118 Archetype-relative\n`overall` (explore, P3)",
+      "group": "value",
+      "x": 0,
+      "y": 280,
+      "description": "Exploratory. Score a player only on the axes his archetype plays — Curry is never scored on post_game at all. Tie-ranking (#114) makes a zero honest; this makes it unnecessary. Parked behind the Archetype taxonomy (#15, #17). Must be reconciled with #108's weights — the two overlap.",
+      "meta": {
+        "state": "open",
+        "milestone": null,
+        "url": "https://github.com/chrooks/Cornerstone/issues/118"
+      }
+    },
+    {
+      "id": "i116",
+      "label": "#116 Tests write to live DB;\n3 fail on develop (P2)",
+      "group": "value",
+      "x": -700,
+      "y": 750,
+      "description": "pytest inserted real threshold_edit audit rows into the live Supabase — the calibration tests exercise the force-write path unmocked. Plus 3 tests already fail on develop (two pass a literal 'draft-uuid' to real Postgres; one calls _build_legend_prompt() with a stale signature).",
+      "meta": {
+        "state": "open",
+        "milestone": null,
+        "url": "https://github.com/chrooks/Cornerstone/issues/116"
+      }
     }
   ],
   "edges": [
@@ -421,11 +460,6 @@
       "label": "switch before the flip"
     },
     {
-      "from": "i112",
-      "to": "i108",
-      "label": "blocks: dead skill key"
-    },
-    {
       "from": "i114",
       "to": "i108",
       "label": "blocks: phantom zeros"
@@ -454,6 +488,38 @@
       "from": "i108",
       "to": "i17",
       "label": "overall feeds archetypes"
+    },
+    {
+      "from": "i112",
+      "to": "i114",
+      "label": "folds into",
+      "dashes": true
+    },
+    {
+      "from": "i114",
+      "to": "i117",
+      "label": "split from"
+    },
+    {
+      "from": "i114",
+      "to": "i118",
+      "label": "alt approach",
+      "dashes": true
+    },
+    {
+      "from": "i113",
+      "to": "i117",
+      "label": "14 players held back"
+    },
+    {
+      "from": "i15",
+      "to": "i118",
+      "label": "blocks"
+    },
+    {
+      "from": "i17",
+      "to": "i118",
+      "label": "blocks"
     }
   ]
 }
