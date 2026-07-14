@@ -436,11 +436,11 @@
   },
   {
    "id": "i122",
-   "label": "#122 LeBron spot_up_shooter\noverride lost in draft (P2, AFK)",
-   "group": "value",
-   "description": "manual_override:Capable -> stats_only:None in the current draft (pre-guardrail run 7be8be31). Restore per the #121 pattern; must land before the next Snapshot Release publish.",
+   "label": "✅ #122 LeBron spot_up_shooter\nrestored — CLOSED (80c0a49)",
+   "group": "done",
+   "description": "Restored manual_override:Capable from the Happy Path snapshot; script generalized to restore_human_decisions.py (--skill/--players). --draft audit: zero losses across all skills — draft fully remediated.",
    "meta": {
-    "state": "open",
+    "state": "closed",
     "milestone": "Value Economy",
     "priority": "p2"
    }
