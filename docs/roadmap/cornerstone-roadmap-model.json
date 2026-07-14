@@ -267,11 +267,11 @@
     },
     {
       "id": "i114",
-      "label": "🧍 #114 None scores 0.0\n— SCOPED, tie-rank (P1)",
+      "label": "✅ #114 None scores 0.0\n— SHIPPED (tie-rank)",
       "group": "value",
       "x": -350,
       "y": 470,
-      "description": "DECIDED: tie-rank the zeros. Delete the `raw <= 0` short-circuit in _percentile_normalize — the percentile math already handles ties, so a zero self-calibrates by how unusual it is: shot_creation 0.1 (3% zeros), post_game 3.8 (76% zeros). One line, no new constant. NOTE: does NOT improve the Ringer fit (8/10 -> 7/10) — this is a CORRECTNESS fix, not a ranking fix. The weights (#108) drive ranking. Refit #108 after, since 8/10 was tuned against the bug.",
+      "description": "SHIPPED (9c97b8c). Deleted the `raw <= 0` short-circuit in _percentile_normalize — the percentile math already there now ranks a zero, self-calibrating it: shot_creation 0.1 (3% zeros), defensive_rebounding 3.0 (60%), post_game 3.8 (76%). No player scores 0.0 on any axis. Brunson keeps bad defense (1.2/0.9) but loses the structural rebounding penalty. TRAP IT SET: the PnR gate asked 'is there a screener?' via normalized == 0 — a lineup with no screener was scoring 7.99. Gate now reads RAW.",
       "meta": {
         "state": "open",
         "milestone": "Value Economy",
@@ -293,11 +293,11 @@
     },
     {
       "id": "i108",
-      "label": "🧍 #108 Weighted `overall`\nfrom composites (P1)",
+      "label": "🧍 #108 Weighted `overall`\n— REFIT needed (P1)",
       "group": "value",
       "x": 0,
       "y": 450,
-      "description": "One 0-100 score per player from weighted percentile composites. 7 of 14 axes reward size; only 2 reward creation, so equal weights float rebounding bigs. Creation-first weights move the Ringer top 10 from 5/10 to 8/10 inside the top 15. Convexity was tried and failed.",
+      "description": "One 0-100 score per player from weighted percentile composites. 7 of 14 axes reward size; only 2 reward creation, so equal weights float rebounding bigs. WEIGHTS DRIVE RANKING, not the zeros: equal -> creation-first moved the Ringer fit 6/10 -> 8/10, while fixing the zeros (#114) moved it 8/10 -> 7/10. The 8/10 was tuned AGAINST the zeros, so it must be REFIT on the clean data now #114 has landed. Convexity was tried and failed.",
       "meta": {
         "state": "open",
         "milestone": "Value Economy",
