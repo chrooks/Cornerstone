@@ -73,11 +73,11 @@
     },
     {
       "id": "i85",
-      "label": "🧍 #85 Missing input nulls\na rating (Snapshot, P2 bug)",
+      "label": "✅ #85 Missing input caps tier\n— SHIPPED (narrow)",
       "group": "snapshot",
       "x": -350,
       "y": -200,
-      "description": "Movement Shooter (and likely others): a missing stat input nulls the whole rating instead of degrading gracefully. Waiting on human.",
+      "description": "SHIPPED (a0799e1). Added opt-in `missing_as_zero` to derived stats: an absent play-type frequency is zero volume (NBA.com drops a play type below its reporting floor), not unknown. Default keeps null-propagation where a null IS unknown (oliver_denominator's fga). Real scope: ONE tier league-wide (Max Strus). Jokic correctly stays None — 0.052 freq is below the 0.10 floor. The ~1,300 other 'phantom' Nones were not phantoms; Curry rates None at pnr_finisher because he is not a roll man.",
       "meta": {
         "state": "open · hitl",
         "priority": "p2",
@@ -293,11 +293,11 @@
     },
     {
       "id": "i108",
-      "label": "🧍 #108 Weighted `overall`\n— REFIT needed (P1)",
+      "label": "✅ #108 Weighted `overall`\n— SHIPPED (10/10)",
       "group": "value",
       "x": 0,
       "y": 450,
-      "description": "One 0-100 score per player from weighted percentile composites. 7 of 14 axes reward size; only 2 reward creation, so equal weights float rebounding bigs. WEIGHTS DRIVE RANKING, not the zeros: equal -> creation-first moved the Ringer fit 6/10 -> 8/10, while fixing the zeros (#114) moved it 8/10 -> 7/10. The 8/10 was tuned AGAINST the zeros, so it must be REFIT on the clean data now #114 has landed. Convexity was tried and failed.",
+      "description": "SHIPPED (5df7362). Weighted percentile composites + 0.75 mean / 0.25 peak blend. Fit on CLEAN data (post-#114/#85): equal 6/10 -> prototype 7/10 -> shipped 10/10 of the Ringer top 10 inside our top 15. Mitchell Robinson 140th, Adams 184th, Gobert 228th. Weight ORDERING is a pinned constraint — left free, the search returns post_game as the 3rd most valuable thing in basketball. Convexity tried and failed.",
       "meta": {
         "state": "open",
         "milestone": "Value Economy",
@@ -306,11 +306,11 @@
     },
     {
       "id": "i115",
-      "label": "🧍 #115 Brunson 31st, Edwards 18th\n(P1)",
+      "label": "✅ #115 Brunson / Edwards\n— RESOLVED by #114 + #108",
       "group": "value",
       "x": 0,
       "y": 620,
-      "description": "Ringer has them 5th and 6th. Brunson carries FIVE zeros incl. 0.0 on BOTH defensive axes. Elite creation guards are understated — sharpest test of whether the weights are right.",
+      "description": "RESOLVED. Brunson 31st -> 15th, Edwards 18th -> 13th, no data change. Was a symptom, exactly as the sequencing note predicted: #114 killed the phantom zeros (he read 'worst defender in the NBA' on BOTH axes), #108's creation-first weights did the rest.",
       "meta": {
         "state": "open",
         "milestone": "Value Economy",
@@ -394,6 +394,19 @@
         "milestone": null,
         "url": "https://github.com/chrooks/Cornerstone/issues/116"
       }
+    },
+    {
+      "id": "i119",
+      "label": "🧍 #119 Taxonomy can't see\n3&D value (P2)",
+      "group": "value",
+      "x": 350,
+      "y": 280,
+      "description": "OG Anunoby scores 74th against a real 21st. NOT a weighting problem — adding him as a fit anchor costs the top-10 fit and still leaves him 60th. His creation is 5.4/4.5; the model has nothing to reward him FOR. Matchup versatility, playoff scalability and role scarcity are things the 21-skill taxonomy never measures. Becomes a PRICING EXPLOIT once #109 lands: 3&D wings get systematically underpriced — the same bug as Wemby-at-$13.4M in different clothes.",
+      "meta": {
+        "state": "open",
+        "milestone": "Value Economy",
+        "url": "https://github.com/chrooks/Cornerstone/issues/119"
+      }
     }
   ],
   "edges": [
@@ -465,11 +478,6 @@
       "label": "blocks: phantom zeros"
     },
     {
-      "from": "i85",
-      "to": "i108",
-      "label": "blocks: None hard-cap"
-    },
-    {
       "from": "i114",
       "to": "i115",
       "label": "clear structural zeros first"
@@ -520,6 +528,23 @@
       "from": "i17",
       "to": "i118",
       "label": "blocks"
+    },
+    {
+      "from": "i108",
+      "to": "i119",
+      "label": "found"
+    },
+    {
+      "from": "i119",
+      "to": "i109",
+      "label": "pricing exploit",
+      "dashes": true
+    },
+    {
+      "from": "i119",
+      "to": "i118",
+      "label": "would dissolve",
+      "dashes": true
     }
   ]
 }
