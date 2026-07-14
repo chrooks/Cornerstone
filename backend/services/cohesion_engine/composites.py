@@ -17,6 +17,7 @@ never the reverse.
 from __future__ import annotations
 
 import logging
+from bisect import bisect_left, bisect_right
 from typing import Any, Mapping
 
 from services.skills import ALL_SKILLS
@@ -220,19 +221,37 @@ def _percentile_normalize(
     breakpoint_percentile: float,
     breakpoint_score: float,
 ) -> float:
-    """Hybrid percentile normalization from the implementation spec."""
-    if not distribution or raw <= 0:
+    """Hybrid percentile normalization from the implementation spec.
+
+    A raw 0 is ranked like any other value, not short-circuited to 0.0 (#114).
+    On a percentile scale 0.0 asserts "worst in the NBA at this", which is a far
+    stronger claim than "doesn't do this" — and it was landing on every guard,
+    who takes a structural zero on the big-man axes just by being a guard.
+
+    Ranking a zero against the league self-calibrates it: the tie-percentile of
+    the zero mass sets the score, so a zero costs what it is worth on that axis.
+    Where almost nobody is a zero it is damning (shot_creation, 3% zeros -> 0.1);
+    where most of the league is a zero it barely registers (post_game, 76% -> 3.8).
+    A negative raw still lands at 0.0 — it ranks below the whole distribution.
+
+    ``distribution`` must be sorted ascending. build_distributions returns sorted
+    lists and the cache stores them as-is, so this holds for every production
+    caller. Ranking a zero (rather than short-circuiting it) means the hot path
+    now runs for the 24-76% of values that are zeros, so this walks the list with
+    bisect instead of re-sorting and re-scanning it on every one of the
+    126 lineups x 14 axes calls a roster evaluation makes.
+    """
+    if not distribution:
         return 0.0
 
-    sorted_distribution = sorted(distribution)
-    n = len(sorted_distribution)
-    below = sum(1 for value in sorted_distribution if value < raw)
-    equal = sum(1 for value in sorted_distribution if value == raw)
+    n = len(distribution)
+    below = bisect_left(distribution, raw)
+    equal = bisect_right(distribution, raw) - below
     percentile = (below + equal / 2) / n
 
     p_break_index = int(n * breakpoint_percentile)
-    p_break_value = sorted_distribution[min(p_break_index, n - 1)]
-    empirical_max = sorted_distribution[-1]
+    p_break_value = distribution[min(p_break_index, n - 1)]
+    empirical_max = distribution[-1]
 
     if percentile <= breakpoint_percentile:
         result = percentile / breakpoint_percentile * breakpoint_score
@@ -393,6 +412,7 @@ def compute_player_composites(
     return PlayerComposites(
         player_id=player_id,
         name=name,
+        raw=raw,
         **{name: normalized[name] for name in COMPOSITE_NAMES},
         bell_amplitude=float(bell["amplitude"]),
         bell_peak=int(bell["peak_center"]),

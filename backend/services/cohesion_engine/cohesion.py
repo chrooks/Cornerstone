@@ -125,14 +125,24 @@ def _pnr_pairing_details(
         values["pnr_screener_depth_weight"],
     )
 
+    # "Is there anybody here who screens at all?" must be asked of the RAW
+    # composite, not the normalized one. Since #114 a normalized 0.0 no longer
+    # means absent — a lineup of five non-screeners still scores ~3.3 on
+    # pnr_screener, because two thirds of the league never screens either.
+    # Raw is where absent is still literally 0.0. No screener, no pick-and-roll.
+    has_handler = any(pc.raw.get("pnr_orchestration", 0.0) > 0 for pc in composites)
+    has_screener = any(pc.raw.get("pnr_screener", 0.0) > 0 for pc in composites)
+
     details = {
         "handler_quality": handler_quality,
         "screener_quality": screener_quality,
+        "has_handler": has_handler,
+        "has_screener": has_screener,
         "balance": 0.0,
         "quality_gate": 0.0,
         "score": 0.0,
     }
-    if handler_quality <= 0 or screener_quality <= 0:
+    if not has_handler or not has_screener:
         return details
 
     balance = ratio_score(handler_quality, screener_quality, values)

@@ -143,6 +143,77 @@ def test_percentile_normalize_uses_sixtieth_percentile_breakpoint():
     assert composites._percentile_normalize(19.0, distribution, 0.6, 6.0) == 10.0
 
 
+def test_percentile_normalize_scores_a_zero_by_how_common_zeros_are():
+    """A raw 0 means "doesn't do this", not "worst in the NBA" (#114).
+
+    It takes its true tie-percentile like any other value, so the score it earns
+    is set by how unusual it is to be a zero on that axis. Where almost everyone
+    can do the thing, a zero is damning; where most of the league can't either,
+    it barely costs anything.
+    """
+    # 60% of the league at zero (defensive_rebounding's real shape).
+    # tie-percentile = (0 below + 60/2 equal) / 100 = 0.30 -> 0.30/0.6 * 6.0 = 3.0
+    common = [0.0] * 60 + [float(v) for v in range(1, 41)]
+    assert composites._percentile_normalize(0.0, common, 0.6, 6.0) == 3.0
+
+    # 4% of the league at zero (off_ball_impact's real shape).
+    # tie-percentile = (0 + 4/2) / 100 = 0.02 -> 0.02/0.6 * 6.0 = 0.2
+    rare = [0.0] * 4 + [float(v) for v in range(1, 97)]
+    assert composites._percentile_normalize(0.0, rare, 0.6, 6.0) == 0.2
+
+
+def test_percentile_normalize_keeps_a_zero_below_every_positive_value():
+    """Tie-ranking a zero must not let it outrank a player who actually does the thing."""
+    distribution = [0.0] * 60 + [float(v) for v in range(1, 41)]
+
+    zero = composites._percentile_normalize(0.0, distribution, 0.6, 6.0)
+    smallest_positive = composites._percentile_normalize(1.0, distribution, 0.6, 6.0)
+
+    assert zero < smallest_positive
+
+
+def test_percentile_normalize_floors_at_zero_without_a_distribution():
+    """No population to rank against, and a negative raw, still bottom out at 0.0."""
+    assert composites._percentile_normalize(0.0, [], 0.6, 6.0) == 0.0
+    assert composites._percentile_normalize(-1.0, [0.0] * 60 + [1.0] * 40, 0.6, 6.0) == 0.0
+
+
+def test_pnr_gate_reads_raw_not_normalized_when_nobody_screens():
+    """No screener means no pick-and-roll — even though tie-ranking hands a
+    non-screener a healthy normalized score (#114).
+
+    This is the trap tie-ranking sets: a normalized 0.0 used to mean "absent",
+    and the PnR gate relied on that. It no longer does — two thirds of the league
+    never screens, so a non-screener tie-ranks around 3.3. The gate has to ask
+    the raw composite, where absent is still literally 0.0.
+    """
+    from backend.services.cohesion_engine.cohesion import _pnr_pairing_details
+
+    def _pc(name: str, raw: dict[str, float]) -> PlayerComposites:
+        # Normalized pnr_screener is deliberately HIGH while raw is 0 — exactly
+        # the state tie-ranking produces for a lineup of non-screeners.
+        return PlayerComposites(
+            player_id=name, name=name,
+            **{key: 3.3 for key in composites.COMPOSITE_NAMES},
+            bell_amplitude=1.0, bell_peak=78, bell_range_down=4, bell_range_up=4,
+            bell_flat_down=1, bell_flat_up=1,
+            raw=raw,
+        )
+
+    handler_only = [
+        _pc("Handler", {"pnr_orchestration": 8.0, "pnr_screener": 0.0}),
+        *(_pc(f"Shooter{i}", {"pnr_orchestration": 0.0, "pnr_screener": 0.0}) for i in range(4)),
+    ]
+    assert _pnr_pairing_details(handler_only, handler_only, VALUES)["score"] == 0.0
+
+    # Add one real screener and the pairing scores.
+    with_screener = [
+        *handler_only[:4],
+        _pc("Screener", {"pnr_orchestration": 0.0, "pnr_screener": 9.0}),
+    ]
+    assert _pnr_pairing_details(with_screener, with_screener, VALUES)["score"] > 0.0
+
+
 def test_normalize_composites_uses_explicit_distributions_when_large_enough():
     distributions = {name: [float(value) for value in range(20)] for name in composites.COMPOSITE_NAMES}
 

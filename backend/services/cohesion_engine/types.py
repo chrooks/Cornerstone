@@ -19,6 +19,12 @@ class PlayerComposites:
 
     Composite fields are normalized to 0.0-10.0. Bell fields are geometric
     parameters used by lineup defense and are not themselves composite scores.
+
+    ``raw`` carries the pre-normalization values. Since #114 a normalized 0.0 no
+    longer means "absent" — a zero is ranked against the league, so a player who
+    never screens still scores ~3.3 on pnr_screener because two thirds of the
+    league never screens either. Gates that need to ask "does anybody here do
+    this *at all*?" must read ``raw``, where absent really is 0.0.
     """
 
     player_id: str
@@ -43,6 +49,7 @@ class PlayerComposites:
     bell_range_up: int
     bell_flat_down: int
     bell_flat_up: int
+    raw: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

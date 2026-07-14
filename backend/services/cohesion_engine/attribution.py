@@ -298,8 +298,14 @@ def _pnr_pairing_ledger(pnr_details: dict[str, float], total: float) -> dict[str
         _context("Handler quality (top-two-plus-depth)", round(handler_quality, 2)),
         _context("Screener quality (top-two-plus-depth)", round(screener_quality, 2)),
     ]
-    if handler_quality <= 0 or screener_quality <= 0:
-        missing = "PnR handler" if handler_quality <= 0 else "screener"
+    # Read the gate's own verdict rather than re-deriving it from the normalized
+    # qualities — since #114 those are never 0 for an absent skill (see cohesion
+    # ._pnr_pairing_details). Defaults keep older cached details dicts working.
+    has_handler = pnr_details.get("has_handler", handler_quality > 0)
+    has_screener = pnr_details.get("has_screener", screener_quality > 0)
+
+    if not has_handler or not has_screener:
+        missing = "PnR handler" if not has_handler else "screener"
         lines.append(_adjustment(f"No rated {missing} → subscore zeroed", 0.0))
     else:
         lines.append(_adjustment("Handler/screener balance", balance))
