@@ -131,3 +131,31 @@ def test_evaluator_picks_the_newest_USABLE_row_not_a_poisoned_one(monkeypatch):
         "the evaluator was handed the wrong row: it must take the newest row that "
         "HAS data, never the all-null failed fetch and never the stale April row"
     )
+
+
+def test_a_partial_fetch_with_no_box_score_is_rejected():
+    """The nastiest case, and the one a naive check waves through.
+
+    box_score and advanced come from the single bulk call; play_type, matchup and
+    shot data come from separate per-player calls. When only the bulk call fails,
+    the blob still arrives full of play types and matchups — but with box_score
+    entirely null. Jokic had exactly this row. Every volume gate and nearly every
+    threshold condition reads null off it, so it is not usable, however much other
+    data it happens to carry.
+    """
+    partial = {
+        "box_score": {"pts": None, "reb": None, "ast": None},   # bulk call failed
+        "advanced": {"usage_rate": None},                       # bulk call failed
+        "play_type": {"cut_ppp": 1.395, "cut_freq": 0.083},     # per-player call worked
+        "matchup_defense": {"total_matchup_poss": 410.0},       # per-player call worked
+    }
+    assert players_service._blob_has_data(partial) is False, (
+        "a blob with no box_score is unusable even when other sections are full"
+    )
+
+
+def test_a_blob_with_no_box_score_key_at_all_falls_back_to_any_data():
+    """Non-assembled shapes (older rows, fixtures) must not be thrown away."""
+    assert players_service._blob_has_data({"pts": 28.0}) is True
+    assert players_service._blob_has_data({"tracking_defense": {"deflections": 2.0}}) is True
+    assert players_service._blob_has_data({"metadata": {"season": "2025-26"}}) is False

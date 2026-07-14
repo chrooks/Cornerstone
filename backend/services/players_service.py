@@ -306,19 +306,24 @@ _NON_STAT_SECTIONS = frozenset({"metadata", "salary"})
 
 
 def _blob_has_data(blob: dict) -> bool:
-    """True when a fetched stats blob actually carries at least one stat.
+    """True when a fetched stats blob is usable for evaluation.
 
-    When the NBA.com bulk call comes back empty, assemble_stats_blob still
-    returns a well-formed blob — every one of its seventeen stat sections is
-    present, and every field inside is null. So "did we get anything?" has to
-    mean "is any field, anywhere outside metadata, non-null?".
+    ``box_score`` is the canary, and it has to be — a PARTIAL fetch is the nasty
+    case. box_score and advanced both come from the single bulk call, while
+    play_type, matchup and shot data come from separate per-player calls. When
+    the bulk call alone fails, the blob still arrives carrying play types and
+    matchups but with box_score entirely null. Jokic had exactly that row, and a
+    naive "is anything non-null?" check waves it straight through — then every
+    volume gate and nearly every threshold condition reads null off it.
 
-    Deliberately permissive about shape: a section may be a dict of fields or a
-    bare scalar, and either counts. The job here is to catch the all-null blob a
-    failed fetch produces, and only that. When in doubt this must answer True —
-    a false negative silently discards a player's real stats, which is the very
-    failure it exists to prevent.
+    So: when a blob carries a box_score section, that section must have data.
+    Blobs with no box_score key at all are not assembled blobs (older shapes,
+    test fixtures); for those fall back to "is anything non-null?", which errs
+    toward keeping data rather than discarding a player's real stats.
     """
+    if "box_score" in blob:
+        return any(value is not None for value in (blob["box_score"] or {}).values())
+
     for section, value in blob.items():
         if section in _NON_STAT_SECTIONS:
             continue
