@@ -410,11 +410,24 @@
   },
   {
    "id": "i120",
-   "label": "🛑 #120 recompute guardrail\n(P1 bug — gates all retunes)",
-   "group": "value",
+   "label": "✅ #120 recompute guardrail\n— CLOSED (7427c27)",
+   "group": "done",
    "x": 190,
    "y": 570,
-   "description": "evaluate_skills_for_run(recompute_composite=True) silently overwrites resolved (4,691) and manual_override (536) entries — 5,227 human decisions. Fix: re-flag disagreements instead of overwriting. Blocks every threshold retune on a human-carrying skill, including #117 backfill and #86 re-evaluation.",
+   "description": "Shipped: resolved/manual_override entries survive recompute verbatim; contradictions re-flag for review. Audit found 12 already-lost decisions in the Defensive Rebounding Update release → remediation is #121.",
+   "meta": {
+    "state": "closed",
+    "milestone": "Value Economy",
+    "priority": "p1"
+   }
+  },
+  {
+   "id": "i121",
+   "label": "#121 restore 12 lost rebounder\ndecisions (P1, AFK)",
+   "group": "value",
+   "x": 270,
+   "y": 690,
+   "description": "Copy the 12 human-decided rebounder entries from the Finals Refresh snapshot back into the draft; guarded recompute re-flags genuine contradictions. No publish from this issue. Found by #120's audit; 6 real tier drops live in the active release (Curry, Adams, Kenrich Williams...).",
    "meta": {
     "state": "open",
     "milestone": "Value Economy",
@@ -570,6 +583,12 @@
    "to": "i86",
    "label": "guards re-evaluation",
    "description": "#86's Giannis re-evaluation would recompute a human-carrying skill; unsafe until the guardrail lands."
+  },
+  {
+   "from": "i120",
+   "to": "i121",
+   "label": "audit found the losses",
+   "description": "#120's AC4 audit surfaced the 12 destroyed decisions; the guardrail makes the restoration recompute safe."
   }
  ]
 }
