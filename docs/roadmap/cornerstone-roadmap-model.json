@@ -241,13 +241,13 @@
   },
   {
    "id": "e107",
-   "label": "🧍 #107 VALUE CURRENCY (epic)\nprice players by skill",
-   "group": "value",
+   "label": "✅ #107 VALUE CURRENCY (epic)\n— CLOSED, all ACs met",
+   "group": "done",
    "x": -700,
    "y": 450,
-   "description": "Epic. IRL salary makes the standard RuleSet a solved puzzle — Wemby is a top-3 skillset at $13.4M. Replace contract dollars with skill-derived prices: rank-pair players by an `overall` score against the real NBA salary curve. Legends get ladder prices too; the rookie-scale patch dies.",
+   "description": "Every player priced by skill (#109), builder currency-aware (#110), standard flipped + rookie rule retired (#111), diversity proven (max active 26% < X=40%). Guardrail + data restorations (#120-122) landed en route.",
    "meta": {
-    "state": "open",
+    "state": "closed",
     "milestone": "Value Economy",
     "url": "https://github.com/chrooks/Cornerstone/issues/107"
    }
@@ -345,13 +345,13 @@
   },
   {
    "id": "i111",
-   "label": "🧍 #111 Flip standard; retire\nrookie-scale rule (P1)",
-   "group": "value",
+   "label": "✅ #111 standard flipped to value\n— CLOSED (9d13fb2)",
+   "group": "done",
    "x": 700,
    "y": 530,
-   "description": "The payoff. standard goes to value currency, flat legend_salary dies, the 2-rookie-scale-contract patch is deleted. Verify roster diversity actually improved.",
+   "description": "standard v2-value published (rollback: republish v1). RookieDeal rule + flat legend salary deleted. Concentration harness: max active 26% (Wemby) vs X=40%; 3&D tripwire silent. LeBron 72% legend-slot note flagged.",
    "meta": {
-    "state": "open",
+    "state": "closed",
     "milestone": "Value Economy",
     "url": "https://github.com/chrooks/Cornerstone/issues/111"
    }
@@ -401,7 +401,7 @@
    "group": "value",
    "x": 350,
    "y": 280,
-   "description": "OG Anunoby scores 74th against a real 21st. NOT a weighting problem — adding him as a fit anchor costs the top-10 fit and still leaves him 60th. His creation is 5.4/4.5; the model has nothing to reward him FOR. Matchup versatility, playoff scalability and role scarcity are things the 21-skill taxonomy never measures. Becomes a PRICING EXPLOIT once #109 lands: 3&D wings get systematically underpriced — the same bug as Wemby-at-$13.4M in different clothes.",
+   "description": "OG Anunoby scores 74th against a real 21st. NOT a weighting problem — adding him as a fit anchor costs the top-10 fit and still leaves him 60th. His creation is 5.4/4.5; the model has nothing to reward him FOR. Matchup versatility, playoff scalability and role scarcity are things the 21-skill taxonomy never measures. Becomes a PRICING EXPLOIT once #109 lands: 3&D wings get systematically underpriced — the same bug as Wemby-at-$13.4M in different clothes. UPDATE: #111 tripwire did NOT fire (OG 4%, Bridges 2%, DFS 2%) — accepted for v1; revisit with concentration_harness.py after any pricing/taxonomy change.",
    "meta": {
     "state": "open",
     "milestone": "Value Economy",
@@ -443,6 +443,16 @@
     "state": "closed",
     "milestone": "Value Economy",
     "priority": "p2"
+   }
+  },
+  {
+   "id": "i123",
+   "label": "#123 value-flip stragglers\n(P3 chore, AFK)",
+   "group": "value",
+   "description": "Legacy /rosters endpoint still stamps $54M cornerstone (zero callers); stale Playwright cap constant. Found during #111.",
+   "meta": {
+    "state": "open",
+    "priority": "p3"
    }
   }
  ],
@@ -606,6 +616,12 @@
    "to": "i122",
    "label": "--draft audit found it",
    "description": "#121's full-draft audit re-run surfaced this second pre-guardrail loss."
+  },
+  {
+   "from": "i111",
+   "to": "i123",
+   "label": "stragglers",
+   "description": "Out-of-scope leftovers from the flip."
   }
  ]
 }
