@@ -121,10 +121,9 @@ class _FakeSupabase:
                         "team_label": "Rotation",
                         "salary_cap": 195_000_000,
                         "salary_cap_display": "$195M",
-                        "cornerstone_rule": "1 Legend required ($54M)",
-                        "cornerstone_salary": 54_000_000,
+                        "cornerstone_rule": "1 Legend required",
+                        "currency": "value",
                         "player_pool": "2025-26 Snapshot + Legends",
-                        "rookie_deal_limit": 2,
                     },
                     "status": "published",
                     "published_at": "2026-05-11T00:00:00Z",
@@ -544,23 +543,6 @@ def test_save_team_resolves_snapshot_player_ids_on_insert(client, fake_supabase)
         slot = row["slot"]
         assert row["snapshot_player_id"] == SNAPSHOT_PLAYER_IDS[slot]
         assert row["canonical_player_id"] == CANONICAL_PLAYER_IDS[slot]
-
-
-def test_save_team_rejects_too_many_rookie_deals(client):
-    """Prove validator enforces rookie_deal_limit from rules_json."""
-    body = valid_payload()
-    rookie_count = 0
-    for player in body["players"]:
-        if not player["is_cornerstone"] and rookie_count < 3:
-            player["is_rookie_deal"] = True
-            rookie_count += 1
-
-    resp, data = post_saved_team(client, body)
-
-    assert resp.status_code == 400
-    assert data["success"] is False
-    assert "rookie-deal" in data["error"]
-    assert "2" in data["error"]
 
 
 def test_save_team_reads_salary_cap_from_rules_json(client, fake_supabase):

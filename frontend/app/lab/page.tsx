@@ -26,17 +26,12 @@ interface RuleSetDef {
     salaryCap: string;
     cornerstoneRule: string;
     playerPool: string;
-    rookieDealLimit: number;
   };
   community: {
     teamsBuilt: number;
     topCornerstone: string;
     avgScore: number | null;
   };
-}
-
-function asNumber(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function asString(value: unknown, fallback: string): string {
@@ -67,9 +62,8 @@ function mapRuleSetSummary(
       allowedTeamSizes: resolvedRules.allowedTeamSizes,
       teamLabel: resolvedRules.teamLabel,
       salaryCap: asString(rules.salary_cap_display, formatSalaryCap(rules.salary_cap)),
-      cornerstoneRule: asString(rules.cornerstone_rule, isStandard ? "1 Legend required ($54M)" : "Any Player, any slot"),
+      cornerstoneRule: asString(rules.cornerstone_rule, isStandard ? "1 Legend required" : "Any Player, any slot"),
       playerPool: asString(rules.player_pool, isStandard ? "Current Snapshot + Legends" : "PlayerPool details pending"),
-      rookieDealLimit: asNumber(rules.rookie_deal_limit, 0),
     },
     community: {
       teamsBuilt: stats?.team_count ?? 0,
@@ -96,7 +90,6 @@ function RulesPanel({ rs }: { rs: RuleSetDef }) {
     { label: "Salary Cap", value: rs.rules.salaryCap },
     { label: "Cornerstone", value: rs.rules.cornerstoneRule },
     { label: "Player Pool", value: rs.rules.playerPool },
-    { label: "Rookie Deal Limit", value: rs.rules.rookieDealLimit === 0 ? "None" : `${rs.rules.rookieDealLimit} max` },
   ];
 
   return (

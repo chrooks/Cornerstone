@@ -58,10 +58,6 @@ interface CourtStripProps {
   highlightRange: { startFrac: number; endFrac: number } | null;
   pickerHoveredSalary: number | null;
   onSalaryCapFilterClick: (max: number) => void;
-  /** Max rookie deal players allowed by the RuleSet. undefined = no limit. */
-  rookieDealLimit?: number;
-  /** Current count of rookie deal players in the roster. */
-  rosterRookieDealCount?: number;
   /* Slot interaction handlers */
   onSlotClick: (slotIndex: number) => void;
   onRemoveSlot: (slotIndex: number) => void;
@@ -231,8 +227,6 @@ export function CourtStrip({
   highlightRange,
   pickerHoveredSalary,
   onSalaryCapFilterClick,
-  rookieDealLimit,
-  rosterRookieDealCount = 0,
   onSlotClick,
   onRemoveSlot,
   onDropPlayer,
@@ -384,33 +378,16 @@ export function CourtStrip({
       id="builder-court-strip"
       className="border border-[#d9d0c9] bg-[#f7f7f7] rounded-lg overflow-hidden"
     >
-      {/* Row 1: SalaryCap gauge + optional rookie deal counter (hidden when uncapped) */}
-      {(salaryCap != null || rookieDealLimit != null) && (
+      {/* Row 1: SalaryCap gauge (hidden when uncapped) */}
+      {salaryCap != null && (
       <div className="border-b border-[#d9d0c9]/50 px-3 pb-2 pt-3 sm:px-5 sm:pb-1.5">
-        {salaryCap != null && (
-          <SalaryGauge
-            usedSalary={usedSalary}
-            cap={salaryCap}
-            highlightRange={highlightRange}
-            previewSalary={pickerHoveredSalary}
-            onRemainingClick={(max) => onSalaryCapFilterClick(max)}
-          />
-        )}
-        {rookieDealLimit != null && (
-          <div
-            id="builder-rookie-deal-counter"
-            className="mt-1 flex items-center justify-end gap-1 text-[0.6875rem]"
-            title={`This Rule Set allows at most ${rookieDealLimit} rookie deal player${rookieDealLimit !== 1 ? "s" : ""}`}
-          >
-            <span className="text-[#0e0907]/35">Rookie Deal</span>
-            <span className={cn(
-              "font-mono tabular-nums font-medium",
-              rosterRookieDealCount >= rookieDealLimit ? "text-[#e53e3e]" : "text-[#f3a181]",
-            )}>
-              {rosterRookieDealCount} / {rookieDealLimit}
-            </span>
-          </div>
-        )}
+        <SalaryGauge
+          usedSalary={usedSalary}
+          cap={salaryCap}
+          highlightRange={highlightRange}
+          previewSalary={pickerHoveredSalary}
+          onRemainingClick={(max) => onSalaryCapFilterClick(max)}
+        />
       </div>
       )}
 

@@ -100,10 +100,9 @@ class _FakeSupabase:
                         "team_label": "Rotation",
                         "salary_cap": 195_000_000,
                         "salary_cap_display": "$195M",
-                        "cornerstone_rule": "1 Legend required ($54M)",
-                        "cornerstone_salary": 54_000_000,
+                        "cornerstone_rule": "1 Legend required",
+                        "currency": "value",
                         "player_pool": "2025-26 Snapshot + Legends",
-                        "rookie_deal_limit": 2,
                     },
                     "status": "published",
                     "published_at": "2026-05-11T00:00:00Z",
@@ -162,8 +161,8 @@ def test_canonical_rules_hash_is_deterministic():
     """Same rules_json produces same hash regardless of key order."""
     from api.rulesets import canonical_rules_hash
 
-    ordered_a = {"salary_cap": 195_000_000, "team_size": 9, "rookie_deal_limit": 2}
-    ordered_b = {"team_size": 9, "rookie_deal_limit": 2, "salary_cap": 195_000_000}
+    ordered_a = {"salary_cap": 195_000_000, "team_size": 9, "currency": "value"}
+    ordered_b = {"team_size": 9, "currency": "value", "salary_cap": 195_000_000}
 
     assert canonical_rules_hash(ordered_a) == canonical_rules_hash(ordered_b)
     assert len(canonical_rules_hash(ordered_a)) == 32

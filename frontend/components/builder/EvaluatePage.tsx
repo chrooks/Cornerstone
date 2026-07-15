@@ -22,7 +22,7 @@ import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { readSlotsFromParams, buildPlayerPayload } from "@/lib/roster-utils";
 import { resolveRuleSetRules } from "@/lib/rulesets";
-import { LEGEND_SALARY, teamLabelForSize } from "@/lib/builder-config";
+import { getPlayerPrice, teamLabelForSize } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
 import { LineupCombinationsSection } from "./LineupCombinationsSection";
@@ -403,6 +403,7 @@ export function EvaluatePage() {
     if (filledSlots.some((player) => player === null)) return null;
 
     const legend = dataReady.legend;
+    const currency = resolvedRules.currency;
 
     return {
       ruleset_slug: ruleset ?? "standard",
@@ -422,7 +423,9 @@ export function EvaluatePage() {
             is_cornerstone: true,
             player_id: null,
             legend_id: legend.id,
-            salary_snapshot: LEGEND_SALARY,
+            // #111: the cornerstone legend prices from the #109 ladder under the
+            // active currency, same as every other slot — no flat legend fee.
+            salary_snapshot: getPlayerPrice(player!, currency) ?? 0,
             player_name_snapshot: legend.name,
             team_snapshot: legend.team,
             position_snapshot: legend.position,
@@ -437,7 +440,7 @@ export function EvaluatePage() {
           is_cornerstone: isCornerstone,
           player_id: player!.is_legend ? null : player!.id,
           legend_id: player!.is_legend ? player!.id : null,
-          salary_snapshot: player!.salary ?? 0,
+          salary_snapshot: getPlayerPrice(player!, currency) ?? 0,
           player_name_snapshot: player!.name,
           team_snapshot: player!.team,
           position_snapshot: player!.position,

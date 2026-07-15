@@ -141,12 +141,6 @@ export function BuilderPage() {
   const salaryCap = typeof rulesJson?.salary_cap === "number"
     ? (rulesJson.salary_cap as number)
     : undefined;
-  const legendSalary = typeof rulesJson?.cornerstone_salary === "number"
-    ? (rulesJson.cornerstone_salary as number)
-    : undefined;
-  const rookieDealLimit = typeof rulesJson?.rookie_deal_limit === "number"
-    ? (rulesJson.rookie_deal_limit as number)
-    : undefined;
   const cornerstoneSource = resolvedRules.cornerstoneSource;
   const currency = resolvedRules.currency;
   const teamLabel = resolvedRules.teamLabel;
@@ -166,9 +160,8 @@ export function BuilderPage() {
   const [hoveredSlotIndex, setHoveredSlotIndex] = useState<number | null>(null);
   const [hoveredCourtPlayerId, setHoveredCourtPlayerId] = useState<string | null>(null);
 
-  const salary = useBuilderSalary(roster.allSlots, cornerstoneId, hoveredSlotIndex, {
+  const salary = useBuilderSalary(roster.allSlots, hoveredSlotIndex, {
     salaryCap,
-    legendSalary,
     currency,
   });
 
@@ -255,10 +248,6 @@ export function BuilderPage() {
 
   const [buildProfilePlayer, setBuildProfilePlayer] = useState<PlayerWithSkills | null>(null);
   const hasAvailableBuildSlot = roster.rosterPlayerIds.size < roster.allSlots.length;
-  const rosterRookieDealCount = useMemo(
-    () => roster.allSlots.filter((p) => p?.is_rookie_deal).length,
-    [roster.allSlots],
-  );
   const buildProfile = useMemo(
     () => (buildProfilePlayer ? playerWithSkillsToProfile(buildProfilePlayer) : null),
     [buildProfilePlayer],
@@ -450,8 +439,6 @@ export function BuilderPage() {
         highlightRange={salary.highlightRange}
         pickerHoveredSalary={salary.pickerHoveredSalary}
         onSalaryCapFilterClick={(max) => salary.setSalaryCapFilter(max)}
-        rookieDealLimit={rookieDealLimit}
-        rosterRookieDealCount={rosterRookieDealCount}
         onSlotClick={handleSlotClick}
         onRemoveSlot={handleRemoveSlotGuarded}
         onDropPlayer={handleDropPlayer}
@@ -561,8 +548,6 @@ export function BuilderPage() {
             )}
             highlightedPlayerId={hoveredCourtPlayerId}
             isAdmin={isAdmin}
-            rookieDealLimit={rookieDealLimit}
-            rosterRookieDealCount={rosterRookieDealCount}
           />
         </div>
 

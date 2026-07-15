@@ -33,9 +33,6 @@ export function getPlayerPrice(
 /** Default salary cap budget in dollars (fallback when RuleSet not loaded). */
 export const DEFAULT_SALARY_CAP = 195_000_000;
 
-/** Default salary assigned to a cornerstone legend (fallback). */
-export const DEFAULT_LEGEND_SALARY = 54_000_000;
-
 /** Default maximum number of players in a rotation (fallback). */
 export const DEFAULT_MAX_ROSTER_SLOTS = 9;
 
@@ -57,5 +54,4 @@ export function teamLabelForSize(size: number): string {
 // Re-export under old names for consumers that haven't migrated yet
 // (admin evaluator-calibration, tests)
 export const SALARY_CAP = DEFAULT_SALARY_CAP;
-export const LEGEND_SALARY = DEFAULT_LEGEND_SALARY;
 export const MAX_ROSTER_SLOTS = DEFAULT_MAX_ROSTER_SLOTS;

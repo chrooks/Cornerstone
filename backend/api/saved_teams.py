@@ -206,13 +206,6 @@ def _validate_saved_team(
     if salary_cap is not None and total_salary > salary_cap:
         return None, None, f"Saved Team exceeds SalaryCap of ${salary_cap:,}"
 
-    # RookieDeal limit (M3)
-    rookie_deal_limit = rules_json.get("rookie_deal_limit")
-    if rookie_deal_limit is not None:
-        rookie_count = sum(1 for p in players if p.get("is_rookie_deal"))
-        if rookie_count > rookie_deal_limit:
-            return None, None, f"{team_label} allows at most {rookie_deal_limit} rookie-deal players"
-
     return players, team_size, None
 
 
