@@ -454,6 +454,17 @@
     "state": "open",
     "priority": "p3"
    }
+  },
+  {
+   "id": "i124",
+   "label": "✅ #124 picker price display\n— CLOSED (569cc0e)",
+   "group": "done",
+   "description": "Displayed prices now resolve through getPlayerPrice: currency prop on PlayerPoolBrowser, Salary⇄Value header, sort follows displayed price, Legends picker shows ladder prices. Found by Chris post-#111.",
+   "meta": {
+    "state": "closed",
+    "milestone": "Value Economy",
+    "priority": "p1"
+   }
   }
  ],
  "edges": [
@@ -622,6 +633,12 @@
    "to": "i123",
    "label": "stragglers",
    "description": "Out-of-scope leftovers from the flip."
+  },
+  {
+   "from": "i111",
+   "to": "i124",
+   "label": "display gap found post-flip",
+   "description": "The flip charged value prices but the shared table still displayed IRL salary; legends picker showed no price."
   }
  ]
 }
