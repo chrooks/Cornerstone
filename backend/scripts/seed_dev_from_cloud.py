@@ -35,6 +35,7 @@ TABLES = [
     ("players", 100),
     ("legends", 50),
     ("canonical_players", 100),  # identity registry — released_players FKs it
+    ("draft_skill_profiles", 25),  # released rows FK their source draft profile
     ("snapshot_releases", 20),
     ("released_players", 25),  # active release only — see fetch below
     ("evaluation_versions", 5),
