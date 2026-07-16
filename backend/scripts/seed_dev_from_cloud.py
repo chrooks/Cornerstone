@@ -38,14 +38,20 @@ TABLES = [
     ("draft_skill_profiles", 25),  # released rows FK their source draft profile
     ("snapshot_releases", 20),
     ("released_players", 25),  # active release only — see fetch below
-    ("evaluation_versions", 5),
+    ("evaluation_versions", 1),  # self-referential parent_id — insert in created order
     ("player_stats", 25),
 ]
 
 # Tables where a dev-local row (different id, possibly colliding unique keys —
 # e.g. release labels — or duplicating entities like legends) must be dropped
 # before the cloud upsert. Dev-only cleanup; the cloud is never written.
-DROP_DEV_LOCAL = {"players", "legends", "canonical_players", "snapshot_releases"}
+DROP_DEV_LOCAL = {
+    "players",
+    "legends",
+    "canonical_players",
+    "snapshot_releases",
+    "evaluation_versions",
+}
 
 
 def fetch_all(client, table, flt=None):
@@ -84,6 +90,10 @@ def main() -> None:
     for table, batch_size in TABLES:
         if table == "snapshot_releases":
             rows = cloud_releases
+        elif table == "evaluation_versions":
+            # Self-referential parent_id: parents predate children, so
+            # created-order single-row inserts always satisfy the FK.
+            rows = sorted(fetch_all(cloud, table), key=lambda r: r["created_at"])
         elif table == "released_players":
             rows = fetch_all(cloud, table, flt=lambda q: q.eq("snapshot_release_id", active_id))
         else:
