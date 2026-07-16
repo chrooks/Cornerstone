@@ -465,6 +465,17 @@
     "milestone": "Value Economy",
     "priority": "p1"
    }
+  },
+  {
+   "id": "i125",
+   "label": "✅ #125 filter follows value price;\nRD tag removed — CLOSED (1664ab5)",
+   "group": "done",
+   "description": "Salary filter evaluates getPlayerPrice via FilterContext; filter label reads Value on value surfaces; dead RD tag dropped from Row/Card/Panel.",
+   "meta": {
+    "state": "closed",
+    "milestone": "Value Economy",
+    "priority": "p1"
+   }
   }
  ],
  "edges": [
@@ -639,6 +650,12 @@
    "to": "i124",
    "label": "display gap found post-flip",
    "description": "The flip charged value prices but the shared table still displayed IRL salary; legends picker showed no price."
+  },
+  {
+   "from": "i124",
+   "to": "i125",
+   "label": "follow-up",
+   "description": "Two more price consumers found live: the filter predicate and the RD signifier."
   }
  ]
 }
