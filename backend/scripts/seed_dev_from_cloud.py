@@ -34,11 +34,17 @@ DEV_URL = "http://127.0.0.1:8092"
 TABLES = [
     ("players", 100),
     ("legends", 50),
+    ("canonical_players", 100),  # identity registry — released_players FKs it
     ("snapshot_releases", 20),
     ("released_players", 25),  # active release only — see fetch below
     ("evaluation_versions", 5),
     ("player_stats", 25),
 ]
+
+# Tables where a dev-local row (different id, possibly colliding unique keys —
+# e.g. release labels — or duplicating entities like legends) must be dropped
+# before the cloud upsert. Dev-only cleanup; the cloud is never written.
+DROP_DEV_LOCAL = {"players", "legends", "canonical_players", "snapshot_releases"}
 
 
 def fetch_all(client, table, flt=None):
@@ -89,22 +95,17 @@ def main() -> None:
             print("  [dry-run: would upsert]")
             continue
 
-        if table == "snapshot_releases":
-            # Dev-local releases can collide with cloud rows on the unique label
-            # (same label, different id). Remove any release the cloud doesn't
-            # know before upserting — safe: dev released_players carry only
-            # cloud-known ids after this seed, and a fresh dev has none.
-            cloud_ids = [r["id"] for r in rows]
+        if table in DROP_DEV_LOCAL:
+            cloud_ids = {r["id"] for r in rows}
             stale = [
-                r["id"]
-                for r in fetch_all(dev, "snapshot_releases")
-                if r["id"] not in cloud_ids
+                r["id"] for r in fetch_all(dev, table) if r["id"] not in cloud_ids
             ]
             for sid in stale:
-                dev.table("released_players").delete().eq("snapshot_release_id", sid).execute()
-                dev.table("snapshot_releases").delete().eq("id", sid).execute()
+                if table == "snapshot_releases":
+                    dev.table("released_players").delete().eq("snapshot_release_id", sid).execute()
+                dev.table(table).delete().eq("id", sid).execute()
             if stale:
-                print(f"  [dropped {len(stale)} dev-local release(s)]", end="")
+                print(f"  [dropped {len(stale)} dev-local row(s)]", end="")
 
         for i in range(0, len(rows), batch_size):
             dev.table(table).upsert(rows[i : i + batch_size]).execute()
