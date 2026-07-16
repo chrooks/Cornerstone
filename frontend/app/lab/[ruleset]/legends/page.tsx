@@ -101,12 +101,17 @@ export default function LegendsPage() {
     [resolvedRuleSet?.rules, searchParams],
   );
   const cornerstoneSource = resolvedRules.cornerstoneSource;
+  const currency = resolvedRules.currency;
   const maxSlots = resolvedRules.teamSize;
 
   /* ── Data state ── */
   const [legends, setLegends] = useState<LegendSummary[]>([]);
   const [details, setDetails] = useState<Record<string, LegendDetail>>({});
   const [allPlayers, setAllPlayers] = useState<PlayerWithSkills[]>([]);
+  /* value_price per legend id — the legends list endpoint omits it, so it is
+     sourced from the bulk endpoint (#124). salary is deliberately NOT merged:
+     legends carry a stale $54M stamp that must never surface. */
+  const [legendPrices, setLegendPrices] = useState<Record<string, number | null>>({});
   const [loading, setLoading] = useState(true);
 
   /* ── Shared no_active_release Error State + retry bookkeeping (#62) ── */
@@ -116,8 +121,11 @@ export default function LegendsPage() {
   /* ── PlayerWithSkills projection for filter/sort infra ── */
   const playersProjection = useMemo(() => {
     if (cornerstoneSource === "all") return allPlayers;
-    return legends.map((l) => legendToPlayerWithSkills(l, details[l.id] ?? null));
-  }, [cornerstoneSource, allPlayers, legends, details]);
+    return legends.map((l) => {
+      const base = legendToPlayerWithSkills(l, details[l.id] ?? null);
+      return l.id in legendPrices ? { ...base, value_price: legendPrices[l.id] } : base;
+    });
+  }, [cornerstoneSource, allPlayers, legends, details, legendPrices]);
 
   /* ── Sort state ── */
   const defaultSortKeys: SortKey[] = [{ field: "alltime_plus_count", direction: "desc" }];
@@ -205,6 +213,23 @@ export default function LegendsPage() {
     /* detectNoActiveRelease / settleRetry are stable — deps stay mount + retryToken */
   }, [resolvedRuleSet, cornerstoneSource, retryToken, detectNoActiveRelease, settleRetry]);
 
+  /* ── Legend value_price lookup (#124) — bulk endpoint carries value_price
+       for legends; the legends list endpoint does not. Only needed under a
+       value RuleSet in legend-only mode ("all" mode already has value_price). ── */
+  useEffect(() => {
+    if (!resolvedRuleSet || cornerstoneSource === "all" || currency !== "value") return;
+    let cancelled = false;
+    listPlayersWithSkills().then((res) => {
+      if (cancelled || !res.success || !res.data) return;
+      const map: Record<string, number | null> = {};
+      for (const p of res.data) {
+        if (p.is_legend) map[p.id] = p.value_price ?? null;
+      }
+      setLegendPrices(map);
+    });
+    return () => { cancelled = true; };
+  }, [resolvedRuleSet, cornerstoneSource, currency]);
+
   /* ── Row click in table → navigate to build with this cornerstone ── */
   const handleRowClick = useCallback(
     (player: PlayerWithSkills) => {
@@ -275,6 +300,7 @@ export default function LegendsPage() {
           <PlayerPoolBrowser
             id="legends-pool-browser"
             players={playersProjection}
+            currency={currency}
             defaultSortKeys={defaultSortKeys}
             defaultPageSize={LEGENDS_PANEL_PAGE_SIZE}
             defaultPageSizeByViewSize={{ row: LEGENDS_ROW_PAGE_SIZE, card: LEGENDS_CARD_PAGE_SIZE, panel: LEGENDS_PANEL_PAGE_SIZE }}

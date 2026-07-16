@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { formatHeight, SKILL_LABELS } from "@/components/players/playerFilters";
+import { DEFAULT_CURRENCY, getPlayerPrice, type RuleSetCurrency } from "@/lib/builder-config";
 import { formatPlayerSalary, getTopSkills } from "./playerViewUtils";
 import type { PlayerWithSkills, SkillTier } from "@/lib/types";
 
@@ -25,6 +26,8 @@ interface PlayerCardViewProps {
   onHoverEnd?: () => void;
   onDragStart?: (event: React.DragEvent, player: PlayerWithSkills) => void;
   onContextMenu?: (event: React.MouseEvent, player: PlayerWithSkills) => void;
+  /** Pricing currency for the bio-line price (#124). Defaults to "market". */
+  currency?: RuleSetCurrency;
 }
 
 export function PlayerCardView({
@@ -39,6 +42,7 @@ export function PlayerCardView({
   onHoverEnd,
   onDragStart,
   onContextMenu,
+  currency = DEFAULT_CURRENCY,
 }: PlayerCardViewProps) {
   const [expanded, setExpanded] = useState(false);
   const hoverGuard = useUnmountHoverEnd(onHoverEnd);
@@ -49,11 +53,12 @@ export function PlayerCardView({
   const canAct = !!onPrimaryAction && !disabled;
   const canOpenProfile = !!onOpenProfile;
   const canClickCard = canAct || (!primaryActionLabel && canOpenProfile && !disabled);
+  const price = getPlayerPrice(player, currency);
   const bioLine = [
     player.age != null ? `Age ${player.age}` : null,
     formatHeight(player.height) || null,
     player.weight != null ? `${player.weight} lbs` : null,
-    player.salary != null ? `${formatPlayerSalary(player.salary)}${player.is_rookie_deal ? " RD" : ""}` : null,
+    price != null ? `${formatPlayerSalary(price)}${player.is_rookie_deal ? " RD" : ""}` : null,
     player.peak_year != null ? `${player.peak_year}` : null,
   ].filter(Boolean).join(" · ");
 

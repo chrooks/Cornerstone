@@ -4,6 +4,7 @@ import { PlayerCardView } from "./PlayerCardView";
 import { PlayerPanelView } from "./PlayerPanelView";
 import type { ReactNode } from "react";
 import type { PlayerWithSkills } from "@/lib/types";
+import type { RuleSetCurrency } from "@/lib/builder-config";
 
 export type PlayerViewSize = "row" | "card" | "panel";
 
@@ -23,6 +24,8 @@ interface PlayerViewProps {
   onDragStart?: (event: React.DragEvent, player: PlayerWithSkills) => void;
   onContextMenu?: (event: React.MouseEvent, player: PlayerWithSkills) => void;
   fitContent?: ReactNode;
+  /** Pricing currency for the displayed price (#124). Defaults to "market". */
+  currency?: RuleSetCurrency;
 }
 
 export function PlayerView({ size, skills, ...props }: PlayerViewProps) {

@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { formatSalary, formatHeight, SKILL_LABELS } from "./playerFilters";
+import { DEFAULT_CURRENCY, getPlayerPrice, type RuleSetCurrency } from "@/lib/builder-config";
 import { PlayerRowView, skillCountAtOrAbove } from "@/components/players/PlayerView";
 import { SKILL_TIERS, TIER_CONTEXT_COLORS, TIER_CONTEXT_ACTIVE } from "@/lib/tiers";
 import { SKILL_ABBREV, PROFILE_SKILL_ORDER } from "@/lib/skills";
@@ -181,6 +182,12 @@ interface PlayerTableProps {
    * Lab, builder) render no checkbox column and no footer.
    */
   bulkSelection?: PlayerTableBulkSelection;
+  /**
+   * Pricing currency for the effective-price ("Salary") column (#124). Defaults
+   * to "market" so /players + admin stay pixel-identical; Lab surfaces pass the
+   * active RuleSet's currency, flipping the column to value_price + "Value" label.
+   */
+  currency?: RuleSetCurrency;
 }
 
 export interface PlayerTableBulkSelection {
@@ -224,8 +231,16 @@ export function PlayerTable({
   rootClassName,
   wrapperClassName,
   bulkSelection,
+  currency = DEFAULT_CURRENCY,
 }: PlayerTableProps) {
   const router = useRouter();
+
+  // Effective-price column: header + tooltip + toggle label reflect the currency.
+  const priceLabel = currency === "value" ? "Value" : "Salary";
+  const columnLabel = useCallback(
+    (col: ColDef) => (col.key === "salary" ? priceLabel : (SKILL_LABELS[col.key] ?? col.label)),
+    [priceLabel],
+  );
 
   // Page-scoped header-checkbox state: checked when every on-page row is selected.
   const pageRowIds = players.map((p) => p.id);
@@ -459,7 +474,7 @@ export function PlayerTable({
       case "salary":
         return (
           <span className="tabular-nums">
-            {formatSalary(player.salary)}
+            {formatSalary(getPlayerPrice(player, currency))}
             {player.is_rookie_deal && (
               <span className="ml-1.5 text-[0.6875rem] text-[#f3a181]/60 font-medium" title="This player is currently on their rookie deal">RD</span>
             )}
@@ -568,9 +583,9 @@ export function PlayerTable({
                       col.sticky && "sticky left-0 z-20 bg-muted/60 border-r border-border",
                     )}
                     onClick={col.key !== "headshot" ? (e) => handleHeaderClick(e, col.key) : undefined}
-                    title={col.key !== "headshot" ? `Sort by ${SKILL_LABELS[col.key] ?? col.label} (Shift+click for secondary sort)` : undefined}
+                    title={col.key !== "headshot" ? `Sort by ${columnLabel(col)} (Shift+click for secondary sort)` : undefined}
                   >
-                    <span className="truncate">{col.label}</span>
+                    <span className="truncate">{columnLabel(col)}</span>
                     {col.key !== "headshot" && getSortIndicator(col.key)}
 
                     {/* Resize handle — right edge of header (not on headshot column) */}
@@ -720,7 +735,7 @@ export function PlayerTable({
                       onChange={() => toggleColumn(col.key)}
                       className="rounded-sm"
                     />
-                    <span>{col.key === "name" ? "Name (locked)" : (SKILL_LABELS[col.key] ?? col.label)}</span>
+                    <span>{col.key === "name" ? "Name (locked)" : columnLabel(col)}</span>
                   </label>
                 ))}
               </div>

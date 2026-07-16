@@ -7,6 +7,7 @@ import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import { formatSkillName, PUBLIC_SKILL_CATEGORIES } from "@/lib/skills";
 import { formatHeight } from "@/components/players/playerFilters";
+import { DEFAULT_CURRENCY, getPlayerPrice, type RuleSetCurrency } from "@/lib/builder-config";
 import { formatPlayerSalary } from "./playerViewUtils";
 import type { LegendTier, PlayerWithSkills, SkillTier } from "@/lib/types";
 
@@ -27,6 +28,8 @@ interface PlayerPanelViewProps {
   onDragStart?: (event: React.DragEvent, player: PlayerWithSkills) => void;
   onContextMenu?: (event: React.MouseEvent, player: PlayerWithSkills) => void;
   fitContent?: ReactNode;
+  /** Pricing currency for the price fact (#124). Defaults to "market". */
+  currency?: RuleSetCurrency;
 }
 
 function TierBadge({ tier }: { tier: string | null | undefined }) {
@@ -48,6 +51,7 @@ export function PlayerPanelView({
   onDragStart,
   onContextMenu,
   fitContent,
+  currency = DEFAULT_CURRENCY,
 }: PlayerPanelViewProps) {
   const hoverGuard = useUnmountHoverEnd(onHoverEnd);
   const [activeTab, setActiveTab] = useState<"player" | "build-fit">("player");
@@ -65,12 +69,14 @@ export function PlayerPanelView({
     return counts;
   }, [profile]);
 
+  const price = getPlayerPrice(player, currency);
+  const priceLabel = currency === "value" ? "Value" : "Salary";
   const facts = [
     player.peak_year != null ? ["Era", String(player.peak_year)] : null,
     player.age != null ? [isLegend ? "Peak Age" : "Age", String(player.age)] : null,
     player.height ? ["Height", formatHeight(player.height)] : null,
     player.weight != null ? ["Weight", `${player.weight} lbs`] : null,
-    player.salary != null ? ["Salary", `${formatPlayerSalary(player.salary)}${player.is_rookie_deal ? " RD" : ""}`] : null,
+    price != null ? [priceLabel, `${formatPlayerSalary(price)}${player.is_rookie_deal ? " RD" : ""}`] : null,
   ].filter(Boolean) as [string, string][];
 
   return (

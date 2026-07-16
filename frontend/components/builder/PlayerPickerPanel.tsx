@@ -262,6 +262,7 @@ export function PlayerPickerPanel({
           id="player-picker-browser"
           className="flex flex-col gap-1.5 flex-1 min-h-0"
           players={players}
+          currency={currency}
           defaultSortKeys={[{ field: "name", direction: "asc" }]}
           defaultPageSize={ROW_DEFAULT_PAGE_SIZE}
           defaultPageSizeByViewSize={{ row: ROW_DEFAULT_PAGE_SIZE, card: CARDS_DEFAULT_PAGE_SIZE, panel: PANELS_DEFAULT_PAGE_SIZE }}

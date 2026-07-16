@@ -30,6 +30,7 @@ import {
   stableMultiSort,
 } from "@/components/players/playerPoolPipeline";
 import type { SortKey } from "@/components/players/SortControls";
+import { DEFAULT_CURRENCY, type RuleSetCurrency } from "@/lib/builder-config";
 import type { LegendDetail, PlayerProfile, PlayerWithSkills, SkillTier } from "@/lib/types";
 
 const CURRENT_SEASON = "2025-26";
@@ -120,6 +121,12 @@ interface PlayerPoolBrowserProps {
    * (filtered)"; the consumer owns selectedIds + the action buttons.
    */
   bulkSelection?: PlayerPoolBulkSelection;
+  /**
+   * Pricing currency for the effective-price column + sort + card/panel price
+   * (#124). Defaults to "market" — /players and admin omit it and stay
+   * pixel-identical; Lab surfaces pass the active RuleSet's currency.
+   */
+  currency?: RuleSetCurrency;
 }
 
 export interface PlayerPoolBulkSelection {
@@ -212,6 +219,7 @@ export function PlayerPoolBrowser({
   highlightedPlayerId,
   isAdmin,
   bulkSelection,
+  currency = DEFAULT_CURRENCY,
 }: PlayerPoolBrowserProps) {
   const initialPageSize = defaultPageSizeByViewSize?.[defaultViewSize] ?? defaultPageSize;
   const [filterEntries, setFilterEntries] = useState<FilterEntry[]>(initialFilterEntries);
@@ -404,8 +412,8 @@ export function PlayerPoolBrowser({
     [filterEntries, players],
   );
   const sortedPlayers = useMemo(
-    () => stableMultiSort(filteredPlayers, sortKeys),
-    [filteredPlayers, sortKeys],
+    () => stableMultiSort(filteredPlayers, sortKeys, currency),
+    [filteredPlayers, sortKeys, currency],
   );
   const paginatedPlayers = useMemo(
     () => paginatePlayerPool(sortedPlayers, page, pageSize),
@@ -586,6 +594,7 @@ export function PlayerPoolBrowser({
           rootClassName={tableRootClassName}
           wrapperClassName={tableWrapperClassName}
           bulkSelection={tableBulkSelection}
+          currency={currency}
         />
       );
     }
@@ -620,6 +629,7 @@ export function PlayerPoolBrowser({
                 onHover={onRowHover}
                 onHoverEnd={onRowHoverEnd}
                 fitContent={renderPlayerFit?.(player, { surface: "panel" })}
+                currency={currency}
               />
             );
           })}

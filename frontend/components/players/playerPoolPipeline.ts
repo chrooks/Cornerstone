@@ -5,10 +5,16 @@ import {
   tierToNum,
   type FilterEntry,
 } from "@/components/players/playerFilters";
+import { DEFAULT_CURRENCY, getPlayerPrice, type RuleSetCurrency } from "@/lib/builder-config";
 import type { SortKey } from "@/components/players/SortControls";
 import type { PlayerWithSkills } from "@/lib/types";
 
-function compareByKey(a: PlayerWithSkills, b: PlayerWithSkills, key: SortKey): number {
+function compareByKey(
+  a: PlayerWithSkills,
+  b: PlayerWithSkills,
+  key: SortKey,
+  currency: RuleSetCurrency,
+): number {
   const dir = key.direction === "asc" ? 1 : -1;
 
   const getVal = (player: PlayerWithSkills): number | string | null => {
@@ -19,7 +25,9 @@ function compareByKey(a: PlayerWithSkills, b: PlayerWithSkills, key: SortKey): n
       case "age": return player.age;
       case "height": return parseHeight(player.height);
       case "weight": return player.weight;
-      case "salary": return player.salary;
+      // Sort the price column by the effective price for the active currency so
+      // the ordering matches the displayed number (value_price on value surfaces).
+      case "salary": return getPlayerPrice(player, currency);
       case "games_played": return player.games_played;
       case "minutes_per_game": return player.minutes_per_game;
       case "peak_year": return player.peak_year ?? null;
@@ -50,11 +58,15 @@ function compareByKey(a: PlayerWithSkills, b: PlayerWithSkills, key: SortKey): n
   return ((av as number) - (bv as number)) * dir;
 }
 
-export function stableMultiSort(players: PlayerWithSkills[], keys: SortKey[]): PlayerWithSkills[] {
+export function stableMultiSort(
+  players: PlayerWithSkills[],
+  keys: SortKey[],
+  currency: RuleSetCurrency = DEFAULT_CURRENCY,
+): PlayerWithSkills[] {
   if (keys.length === 0) return players;
   return [...players].sort((a, b) => {
     for (const key of keys) {
-      const cmp = compareByKey(a, b, key);
+      const cmp = compareByKey(a, b, key, currency);
       if (cmp !== 0) return cmp;
     }
     return 0;
