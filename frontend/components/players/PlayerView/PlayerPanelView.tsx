@@ -76,7 +76,7 @@ export function PlayerPanelView({
     player.age != null ? [isLegend ? "Peak Age" : "Age", String(player.age)] : null,
     player.height ? ["Height", formatHeight(player.height)] : null,
     player.weight != null ? ["Weight", `${player.weight} lbs`] : null,
-    price != null ? [priceLabel, `${formatPlayerSalary(price)}${player.is_rookie_deal ? " RD" : ""}`] : null,
+    price != null ? [priceLabel, formatPlayerSalary(price)] : null,
   ].filter(Boolean) as [string, string][];
 
   return (

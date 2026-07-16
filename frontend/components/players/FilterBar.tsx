@@ -40,6 +40,7 @@ import {
   NUMERIC_OPERATORS,
 } from "./playerFilters";
 import type { PlayerWithSkills } from "@/lib/types";
+import { DEFAULT_CURRENCY, type RuleSetCurrency } from "@/lib/builder-config";
 
 // ---------------------------------------------------------------------------
 // SortableFilterPill — a single draggable active-filter pill
@@ -48,12 +49,14 @@ import type { PlayerWithSkills } from "@/lib/types";
 function SortableFilterPill({
   entry,
   index,
+  currency,
   onRemove,
   onToggleConnector,
   onToggleNegated,
 }: {
   entry: ActiveFilter;
   index: number;
+  currency: RuleSetCurrency;
   onRemove: () => void;
   onToggleConnector: () => void;
   onToggleNegated: () => void;
@@ -156,7 +159,7 @@ function SortableFilterPill({
           {...listeners}
           title="Drag to reorder"
         >
-          {entry.filter.label}:{" "}
+          {displayFilterLabel(entry.filter.label, currency)}:{" "}
           <span className="font-normal text-muted-foreground">{displayValue}</span>
         </span>
       </div>
@@ -227,9 +230,20 @@ function SortableParenPill({
 // FilterBar — the main exported component
 // ---------------------------------------------------------------------------
 
+/**
+ * Display-only label remap (#125): the "Salary" filter matches the effective
+ * price, so its visible name follows the column header — "Value" on
+ * value-currency surfaces. The label stays "Salary" as the filter's identity.
+ */
+function displayFilterLabel(label: string, currency: RuleSetCurrency): string {
+  return label === "Salary" && currency === "value" ? "Value" : label;
+}
+
 interface FilterBarProps {
   /** All loaded players — used to derive dynamic select options (e.g. team names). */
   players: PlayerWithSkills[];
+  /** Pricing currency of the active surface — display-only label remap. */
+  currency?: RuleSetCurrency;
   /** Filter types exposed for this PlayerPool. Defaults to all player filters. */
   availableFilters?: PlayerFilterType[];
   filters: FilterEntry[];
@@ -246,6 +260,7 @@ interface FilterBarProps {
 
 export function FilterBar({
   players,
+  currency = DEFAULT_CURRENCY,
   availableFilters = AVAILABLE_FILTERS,
   filters,
   nextConnector,
@@ -339,7 +354,7 @@ export function FilterBar({
         >
           {availableFilters.map((f) => (
             <option key={f.label} value={f.label}>
-              {f.label}
+              {displayFilterLabel(f.label, currency)}
             </option>
           ))}
         </select>
@@ -539,6 +554,7 @@ export function FilterBar({
                     key={entry.id}
                     entry={entry}
                     index={index}
+                    currency={currency}
                     onRemove={() => onRemoveFilter(index)}
                     onToggleConnector={() => onToggleConnector(index)}
                     onToggleNegated={() => onToggleNegated(index)}

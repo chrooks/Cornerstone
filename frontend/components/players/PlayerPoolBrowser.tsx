@@ -408,8 +408,8 @@ export function PlayerPoolBrowser({
   }, [availableFilters, filterRequest, nextConnector, onFilterRequestHandled]);
 
   const filteredPlayers = useMemo(
-    () => filterPlayerPool(players, filterEntries),
-    [filterEntries, players],
+    () => filterPlayerPool(players, filterEntries, currency),
+    [filterEntries, players, currency],
   );
   const sortedPlayers = useMemo(
     () => stableMultiSort(filteredPlayers, sortKeys, currency),
@@ -660,6 +660,7 @@ export function PlayerPoolBrowser({
 
       <FilterBar
         players={players}
+        currency={currency}
         availableFilters={availableFilters}
         filters={filterEntries}
         nextConnector={nextConnector}

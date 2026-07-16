@@ -76,9 +76,10 @@ export function stableMultiSort(
 export function filterPlayerPool(
   players: PlayerWithSkills[],
   filterEntries: FilterEntry[],
+  currency: RuleSetCurrency = DEFAULT_CURRENCY,
 ): PlayerWithSkills[] {
   if (filterEntries.length === 0) return players;
-  return players.filter((player) => evalFilterEntries(player, filterEntries));
+  return players.filter((player) => evalFilterEntries(player, filterEntries, { currency }));
 }
 
 export function paginatePlayerPool(

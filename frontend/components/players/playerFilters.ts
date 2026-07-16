@@ -10,6 +10,7 @@
 import type { PlayerWithSkills } from "@/lib/types";
 import { tierToNum } from "@/lib/tiers";
 import { ALL_SKILL_NAMES, SKILL_LABELS } from "@/lib/skills";
+import { DEFAULT_CURRENCY, getPlayerPrice, type RuleSetCurrency } from "@/lib/builder-config";
 
 // Re-export tierToNum so existing imports from this file keep working.
 export { tierToNum };
@@ -56,11 +57,17 @@ export function formatSalary(salary: number | null): string {
 // Filter type definitions
 // ---------------------------------------------------------------------------
 
+/** Ambient context for filters whose meaning depends on the active surface (#125). */
+export type FilterContext = {
+  /** Pricing currency of the active RuleSet — the Salary filter matches the displayed price. */
+  currency: RuleSetCurrency;
+};
+
 type BaseFilter = {
   /** Label shown in the filter type dropdown. */
   label: string;
   /** The apply function determines whether a player passes this filter. */
-  apply: (player: PlayerWithSkills, value: string) => boolean;
+  apply: (player: PlayerWithSkills, value: string, ctx?: FilterContext) => boolean;
 };
 
 /** Text input filter — user types a substring or number. */
@@ -170,6 +177,7 @@ export function isParenMarker(entry: FilterEntry): entry is ParenMarker {
 export function evalFilterEntries(
   player: PlayerWithSkills,
   entries: FilterEntry[],
+  ctx?: FilterContext,
 ): boolean {
   if (entries.length === 0) return true;
 
@@ -223,10 +231,10 @@ export function evalFilterEntries(
   return groups.some((group) =>
     group.every((seg) => {
       if (seg.kind === "leaf") {
-        const result = seg.filter.filter.apply(player, seg.filter.value);
+        const result = seg.filter.filter.apply(player, seg.filter.value, ctx);
         return seg.filter.negated ? !result : result;
       }
-      return evalFilterEntries(player, seg.items);
+      return evalFilterEntries(player, seg.items, ctx);
     }),
   );
 }
@@ -355,10 +363,13 @@ export const AVAILABLE_FILTERS: PlayerFilterType[] = [
     label: "Salary",
     inputMethod: "numeric",
     unit: "$M",
-    apply: (player, value) => {
+    // Matches the price the surface displays and charges: value_price on
+    // value-currency surfaces, real salary elsewhere (#125).
+    apply: (player, value, ctx) => {
       const [op, raw] = value.split("|");
       const n = parseFloat(raw) * 1_000_000;
-      return !isNaN(n) && player.salary != null && applyNumericOp(player.salary, op, n);
+      const price = getPlayerPrice(player, ctx?.currency ?? DEFAULT_CURRENCY);
+      return !isNaN(n) && price != null && applyNumericOp(price, op, n);
     },
   },
 

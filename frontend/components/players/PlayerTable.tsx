@@ -475,9 +475,6 @@ export function PlayerTable({
         return (
           <span className="tabular-nums">
             {formatSalary(getPlayerPrice(player, currency))}
-            {player.is_rookie_deal && (
-              <span className="ml-1.5 text-[0.6875rem] text-[#f3a181]/60 font-medium" title="This player is currently on their rookie deal">RD</span>
-            )}
           </span>
         );
       case "games_played":
