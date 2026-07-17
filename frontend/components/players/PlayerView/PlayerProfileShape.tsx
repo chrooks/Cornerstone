@@ -74,19 +74,25 @@ export function PlayerProfileShape({ playerName, skills }: PlayerProfileShapePro
 
   const axisValues = useMemo<PlayerShapeAxisValue[] | null>(() => {
     if (percentiles) {
-      return TEAM_SHAPE_AXES.map((axis) => ({
-        key: axis.key,
-        value: percentiles[axis.key] ?? null,
-        isRaw: false,
-      }));
+      return TEAM_SHAPE_AXES.map((axis) => {
+        // #100: player composites use playerKey ("passing") where it differs
+        // from the team subscore key ("collective_passing").
+        const lookupKey = axis.playerKey ?? axis.key;
+        return {
+          key: lookupKey,
+          value: percentiles[lookupKey] ?? null,
+          isRaw: false,
+        };
+      });
     }
     if (rawFallbackMax) {
       const breakdowns = computeRawCompositeBreakdowns(skillMap);
       return TEAM_SHAPE_AXES.map((axis) => {
-        const raw = breakdowns[axis.key as CompositeKey]?.raw;
+        const lookupKey = (axis.playerKey ?? axis.key) as CompositeKey;
+        const raw = breakdowns[lookupKey]?.raw;
         return {
-          key: axis.key,
-          value: raw == null ? null : rawToTenPointScale(axis.key as CompositeKey, raw, rawFallbackMax),
+          key: lookupKey,
+          value: raw == null ? null : rawToTenPointScale(lookupKey, raw, rawFallbackMax),
           isRaw: true,
         };
       });

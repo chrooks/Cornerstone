@@ -21,7 +21,6 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .weights import (
-    COMPOSITE_NAMES,
     OVERALL_COMPOSITE_WEIGHTS,
     OVERALL_MEAN_PEAK_BLEND,
 )
@@ -78,16 +77,20 @@ def compute_overall(
     active_weights = OVERALL_COMPOSITE_WEIGHTS if weights is None else weights
     active_blend = OVERALL_MEAN_PEAK_BLEND if blend is None else blend
 
-    missing = [name for name in COMPOSITE_NAMES if name not in composites]
+    # The priced axis set is exactly the fitted weight keys, NOT all of
+    # COMPOSITE_NAMES. A display-only composite like ``passing`` (#100) is absent
+    # from the weights and must not perturb the ladder the weights were fit on.
+    priced_axes = list(active_weights.keys())
+    missing = [name for name in priced_axes if name not in composites]
     if missing:
         raise KeyError(f"compute_overall: missing composite axes: {missing}")
 
-    total_weight = sum(active_weights[name] for name in COMPOSITE_NAMES)
+    total_weight = sum(active_weights[name] for name in priced_axes)
     weighted_mean = (
-        sum(composites[name] * active_weights[name] for name in COMPOSITE_NAMES)
+        sum(composites[name] * active_weights[name] for name in priced_axes)
         / total_weight
     )
-    best_axis = max(composites[name] for name in COMPOSITE_NAMES)
+    best_axis = max(composites[name] for name in priced_axes)
 
     blended = active_blend * weighted_mean + (1.0 - active_blend) * best_axis
     return round(blended * 10.0, 1)

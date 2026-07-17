@@ -107,6 +107,10 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
     raw_finishing = c.get("finishing_crafty_weight", 1.0) * _tv("crafty_finisher") + _tv("high_flyer")
     raw_defensive_rebounding = _tv("rebounder")
     raw_offensive_rebounding = _tv("offensive_rebounder")
+    # #100: playmaking composite — passer skill alone, mirroring the team-level
+    # _collective_passing ingredient. steady_hand owns ball_security, so passer
+    # is not reused there; percentile normalization handles the spread.
+    raw_passing = _tv("passer")
     raw_perimeter_defense = (
         _tv("perimeter_disruptor")
         + c["perimeter_defense_versatile_defender"] * _tv("versatile_defender")
@@ -206,6 +210,7 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         "off_ball_impact": raw_off_ball_impact,
         "shot_creation": raw_shot_creation,
         "pnr_orchestration": raw_pnr_orchestration,
+        "passing": raw_passing,
         "ball_security": raw_ball_security,
         "defensive_rebounding": raw_defensive_rebounding,
         "offensive_rebounding": raw_offensive_rebounding,
@@ -266,12 +271,20 @@ def _percentile_normalize(
 
 
 def distributions_ready(distributions: Mapping[str, list[float]] | None) -> bool:
-    """Return True when every composite has enough distribution values."""
+    """Return True when every composite the active version computes has enough
+    distribution values.
+
+    A composite the active Evaluation Version does not compute (e.g. ``passing``
+    under a pre-#100 declarative-formula blob) has an empty distribution list;
+    skip it rather than blocking readiness for every other composite. Its player
+    spoke then renders as an honest gap (#100, ADR 0005).
+    """
     if not distributions:
         return False
     return all(
         len(distributions.get(name, [])) >= MIN_DISTRIBUTION_SIZE
         for name in COMPOSITE_NAMES
+        if distributions.get(name)
     )
 
 
@@ -413,7 +426,9 @@ def compute_player_composites(
         player_id=player_id,
         name=name,
         raw=raw,
-        **{name: normalized[name] for name in COMPOSITE_NAMES},
+        # .get → None for a composite the active version doesn't compute (a
+        # pre-#100 formula blob lacking ``passing``): an honest gap, not a 0.
+        **{name: normalized.get(name) for name in COMPOSITE_NAMES},
         bell_amplitude=float(bell["amplitude"]),
         bell_peak=int(bell["peak_center"]),
         bell_range_down=int(bell["range_down"]),

@@ -963,13 +963,16 @@ function NewFeedbackRead({
           <PlayerShapeGlyph
             playerName={targetPlayer.name}
             axisValues={TEAM_SHAPE_AXES.map((axis) => {
-              const trait = traits.find((entry) => entry.key === axis.key);
+              // #100: player composites use playerKey ("passing") where it differs
+              // from the team subscore key ("collective_passing").
+              const lookupKey = axis.playerKey ?? axis.key;
+              const trait = traits.find((entry) => entry.key === lookupKey);
               const hasSkills = !!targetPlayer.skills && Object.keys(targetPlayer.skills).length > 0;
-              const percentile = trait?.normalizedValue ?? fetchedPercentiles?.[axis.key] ?? null;
+              const percentile = trait?.normalizedValue ?? fetchedPercentiles?.[lookupKey] ?? null;
               // Percentiles stand on their own; raw formula reads need a Skill Profile.
               const value = percentile ?? (trait && hasSkills ? trait.value : null);
               return {
-                key: axis.key,
+                key: lookupKey,
                 value,
                 isRaw: value != null && percentile == null,
               };

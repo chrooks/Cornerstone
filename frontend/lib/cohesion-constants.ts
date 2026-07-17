@@ -7,7 +7,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// Impact Trait columns (the 12 player-level normalized basketball effects)
+// Impact Trait columns (the 15 player-level normalized basketball effects)
 // ---------------------------------------------------------------------------
 
 export interface CompositeColumn {
@@ -45,6 +45,7 @@ export const COMPOSITE_COLUMNS: CompositeColumn[] = [
   { key: "off_ball_impact", abbr: "OBI", label: "Off-Ball Impact" },
   { key: "shot_creation", abbr: "SC", label: "Shot Creation" },
   { key: "pnr_orchestration", abbr: "PnRO", label: "PnR Orchestration" },
+  { key: "passing", abbr: "Pass", label: "Passing" },
   { key: "ball_security", abbr: "BS", label: "Ball Security" },
   { key: "defensive_rebounding", abbr: "DRb", label: "Def Rebounding" },
   { key: "offensive_rebounding", abbr: "ORb", label: "Off Rebounding" },
@@ -63,6 +64,7 @@ export const IMPACT_TRAIT_DESCRIPTIONS: Record<string, string> = {
   off_ball_impact: "Cutting, movement, relocation, and secondary playmaking without dominating the ball.",
   shot_creation: "Ability to generate shots for self and teammates.",
   pnr_orchestration: "Pick-and-roll initiation, reading the defense, and creating off screens.",
+  passing: "Playmaking and passing to create for teammates.",
   ball_security: "Turnover avoidance and ball-handling safety.",
   defensive_rebounding: "Securing defensive boards through positioning and effort.",
   offensive_rebounding: "Crashing the offensive glass for second-chance opportunities.",

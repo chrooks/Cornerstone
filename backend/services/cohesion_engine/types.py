@@ -50,6 +50,10 @@ class PlayerComposites:
     bell_flat_down: int
     bell_flat_up: int
     raw: dict[str, float] = field(default_factory=dict)
+    # #100: playmaking composite. Optional/defaulted because a pre-#100
+    # Evaluation Version (declarative-formula blob without a ``passing`` entry)
+    # computes no value — the spoke renders as an honest gap, never a fake 0.
+    passing: float | None = None
 
 
 @dataclass(frozen=True)

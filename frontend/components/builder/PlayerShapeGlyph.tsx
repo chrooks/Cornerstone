@@ -39,7 +39,12 @@ interface PlayerShapeGlyphProps {
 
 export function PlayerShapeGlyph({ playerName, axisValues, className }: PlayerShapeGlyphProps) {
   const byKey = new Map(axisValues.map((entry) => [entry.key, entry]));
-  const ordered = TEAM_SHAPE_AXES.map((axis) => byKey.get(axis.key) ?? { key: axis.key, value: null, isRaw: false });
+  // #100: player composites are keyed by playerKey (e.g. "passing") where it
+  // differs from the team subscore key (e.g. "collective_passing").
+  const ordered = TEAM_SHAPE_AXES.map((axis) => {
+    const lookupKey = axis.playerKey ?? axis.key;
+    return byKey.get(lookupKey) ?? { key: lookupKey, value: null, isRaw: false };
+  });
   const values = ordered.map((entry) => entry.value);
   const hasAnyValue = values.some((value) => value != null);
   const isRawRead = ordered.some((entry) => entry.value != null && entry.isRaw);

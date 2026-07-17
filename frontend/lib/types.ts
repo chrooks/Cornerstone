@@ -539,6 +539,8 @@ export interface CohesionCompositeScores {
   off_ball_impact: number;
   shot_creation: number;
   pnr_orchestration: number;
+  /** #100: playmaking composite (passer). null under a pre-#100 Evaluation Version. */
+  passing: number | null;
   ball_security: number;
   defensive_rebounding: number;
   offensive_rebounding: number;

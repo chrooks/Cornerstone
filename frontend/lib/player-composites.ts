@@ -178,6 +178,13 @@ export function computeRawCompositeBreakdowns(skills: PlayerSkillMap | null | un
     note: "Skill subtotal is multiplied by finishing, so finishers turn touches into stronger rim pressure.",
   };
 
+  // #100: passing = passer tier value alone (mirrors team _collective_passing).
+  raw.passing = {
+    terms: [skillFormulaTerm(skills, "passer")],
+    raw: 0,
+  };
+  raw.passing.raw = sumTerms(raw.passing.terms);
+
   raw.ball_security = {
     terms: [skillFormulaTerm(skills, "passer")],
     raw: 0,

@@ -73,7 +73,7 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "transition_passer": 0.4,                 # flat additive passing bonus (fixes outlet-passer bug)
 }
 
-# Canonical list of the 13 composite dimensions a player is scored on.
+# Canonical list of the 15 composite dimensions a player is scored on.
 # Order here determines display order in the UI composite bars.
 COMPOSITE_NAMES: tuple[str, ...] = (
     "spacing",               # floor spacing via shooting gravity
@@ -84,6 +84,7 @@ COMPOSITE_NAMES: tuple[str, ...] = (
     "off_ball_impact",       # cutting, off-ball movement, and secondary playmaking
     "shot_creation",         # ability to generate shots for self and others
     "pnr_orchestration",     # pick-and-roll initiation and creation
+    "passing",               # playmaking from the passer skill (#100 — earns collective_passing its spoke)
     "ball_security",         # turnover avoidance and ball-handling safety
     "defensive_rebounding",  # securing defensive boards
     "offensive_rebounding",  # crashing the offensive glass
@@ -105,6 +106,7 @@ THEORETICAL_MAX: dict[str, float] = {
     "off_ball_impact": 115.104,
     "shot_creation": 178.26239999999999,
     "pnr_orchestration": 28.8,
+    "passing": 16.0,  # passer ATG tier value (fallback only; percentile-normalized in practice)
     "ball_security": 16.0,  # steady_hand ATG tier value (proxy only for key-absent legends)
     "defensive_rebounding": 16.0,
     "offensive_rebounding": 16.0,

@@ -134,6 +134,14 @@ def export_formulas(coefficients: dict[str, float]) -> dict[str, dict[str, Any]]
             "depends_on": ["finishing"],
         },
         # ── Step 3: independent composites ───────────────────────────
+        # #100: passing = passer tier value alone (mirrors team _collective_passing).
+        "passing": {
+            "factors": [
+                _skill("passer"),
+            ],
+            "amplifiers": [],
+            "depends_on": [],
+        },
         # ball_security reads the steady_hand skill; the legacy 3-skill
         # proxy survives only as a fallback for key-absent profiles
         # (unbackfilled Legends). Mirrors the hardcoded path.

@@ -15,11 +15,14 @@ import { useTweenedValues } from "@/lib/hooks/useTweened";
 
 interface ShapeAxis {
   key: string;
+  /** Player-composite key when it differs from the team subscore key (#100):
+   * the team side reads `key`, player-side consumers read `playerKey ?? key`. */
+  playerKey?: string;
   label: string;
   arc: 0 | 1 | 2;
 }
 
-/** 11 shared axes in three equal-angle arcs mirroring the Subscore Tree. */
+/** 12 shared axes in three equal-angle arcs mirroring the Subscore Tree. */
 export const TEAM_SHAPE_AXES: ShapeAxis[] = [
   // Offense arc
   { key: "spacing", label: "Spacing", arc: 0 },
@@ -27,6 +30,8 @@ export const TEAM_SHAPE_AXES: ShapeAxis[] = [
   { key: "paint_touch", label: "Rim", arc: 0 },
   { key: "post_game", label: "Post", arc: 0 },
   { key: "off_ball_impact", label: "Off-Ball", arc: 0 },
+  // #100: team subscore is collective_passing; player composite is passing.
+  { key: "collective_passing", playerKey: "passing", label: "Passing", arc: 0 },
   { key: "ball_security", label: "Ball Sec", arc: 0 },
   // Defense arc
   { key: "perimeter_defense", label: "Perim D", arc: 1 },
@@ -121,7 +126,7 @@ interface TeamShapeGlyphProps {
   contribution?: { playerName: string; values: (number | null)[] } | null;
 }
 
-/** Per-vertex reveal spacing; 11 vertices finish within ~550ms. */
+/** Per-vertex reveal spacing; 12 vertices finish within ~600ms. */
 const REVEAL_STEP_MS = 50;
 
 export function TeamShapeGlyph({

@@ -15,8 +15,17 @@ from .weights import COMPOSITE_NAMES
 
 
 def _composite_values(player: PlayerComposites) -> dict[str, float]:
-    """Return the named composite scores that participate in accentuation."""
-    return {name: float(getattr(player, name)) for name in COMPOSITE_NAMES}
+    """Return the named composite scores that participate in accentuation.
+
+    A composite the active Evaluation Version does not compute is ``None`` (e.g.
+    ``passing`` under a pre-#100 formula blob); skip it rather than coerce a fake
+    0 into the strength/weakness ranking.
+    """
+    return {
+        name: float(value)
+        for name in COMPOSITE_NAMES
+        if (value := getattr(player, name)) is not None
+    }
 
 
 def _strengths(player: PlayerComposites, values: dict[str, Any]) -> dict[str, float]:
