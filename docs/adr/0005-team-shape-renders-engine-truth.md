@@ -45,5 +45,5 @@ Decision point 4's condition is met, not reversed — so this is an in-place ame
   }
   ```
 
-  Published dev version id: _pending M3 publish on the dev stack — record here once published._
+  Published dev version id: `cohesion-v9-passing` (`77b74bc1-ac0b-4514-aeb3-385f6effb1c9`), 2026-07-17. The prior active `cohesion-v8` had no `composite_formulas` block at all, so the publish carried the full 15-composite declarative block from `formula_export.export_formulas`, not a single-key patch.
 - **Attribution.** No change needed — `collective_passing → ["passer"]` was already wired in `cohesion_engine/attribution.py` (`COMPOSITE_DRIVING_SKILLS`), so the spoke's Attribution Ledger (ADR 0006/0007) ships with it.
