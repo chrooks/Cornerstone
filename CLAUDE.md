@@ -23,12 +23,19 @@ npm run lint    # ESLint
 
 ### Database
 ```bash
-supabase db push                              # Apply pending migrations to linked project
+npx supabase db push                          # Apply pending migrations to linked project
 # New migrations: add a timestamped .sql file to supabase/migrations/, then push
 python backend/scripts/lint_migrations.py     # Lint SECURITY DEFINER lockdown
 pre-commit install                            # One-time: auto-run linter on staged migrations
 ```
 Migration conventions live in `docs/agents/migration-conventions.md`.
+
+- After writing a migration: on a machine where the CLI is authenticated (check
+  `npx supabase projects list`), run `npx supabase db push` yourself and confirm
+  the applied version — no relay. Otherwise end migration work with the exact
+  one-liner for Chris and wait.
+- NEVER accept or request auth tokens pasted into chat. If the CLI isn't
+  authenticated, stop and hand Chris the `npx supabase login` one-liner.
 
 ---
 
