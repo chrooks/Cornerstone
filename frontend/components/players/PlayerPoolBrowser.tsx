@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn, randomId } from "@/lib/utils";
 import { getLegend, getPlayerProfile, getPlayerStats } from "@/lib/api";
 import { FilterBar } from "@/components/players/FilterBar";
@@ -71,6 +72,8 @@ interface PlayerPoolBrowserProps {
   sortFieldOptions?: string[];
   cardGridClassName?: string;
   panelListClassName?: string;
+  /** Panel view only: "landscape" (default, one-per-row) or "portrait" (fixed-width sheet for a horizontal carousel — pair with a scroll-x panelListClassName). */
+  panelOrientation?: "landscape" | "portrait";
   contentClassName?: string;
   tableRootClassName?: string;
   tableWrapperClassName?: string;
@@ -187,6 +190,7 @@ export function PlayerPoolBrowser({
   sortFieldOptions,
   cardGridClassName = "grid grid-cols-[repeat(auto-fill,_minmax(280px,_1fr))] gap-4",
   panelListClassName = "flex flex-col gap-6",
+  panelOrientation = "landscape",
   contentClassName,
   tableRootClassName,
   tableWrapperClassName,
@@ -239,6 +243,8 @@ export function PlayerPoolBrowser({
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [profilePlayer, setProfilePlayer] = useState<PlayerWithSkills | null>(null);
   const [profileBoxStats, setProfileBoxStats] = useState<Record<string, number | null> | null>(null);
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const [carouselEdges, setCarouselEdges] = useState({ atStart: true, atEnd: false });
   const profileCache = useRef(new Map<string, PlayerProfile>());
   const profileBoxStatsCache = useRef(new Map<string, Record<string, number | null> | null>());
   const handledFilterRequestIds = useRef(new Set<string>());
@@ -441,6 +447,38 @@ export function PlayerPoolBrowser({
     onVisiblePlayersChange?.(sortedPlayers);
   }, [onVisiblePlayersChange, sortedPlayers]);
 
+  const isPortraitCarousel = viewSize === "panel" && panelOrientation === "portrait";
+
+  const updateCarouselEdges = useCallback(() => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const atStart = el.scrollLeft <= 1;
+    const atEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 1;
+    setCarouselEdges((prev) =>
+      prev.atStart === atStart && prev.atEnd === atEnd ? prev : { atStart, atEnd },
+    );
+  }, []);
+
+  /* Re-derive edges when the page of cards changes or cards grow (streamed-in
+     skill profiles change scrollWidth without a scroll event). */
+  useEffect(() => {
+    if (!isPortraitCarousel) return;
+    updateCarouselEdges();
+    const el = carouselRef.current;
+    if (!el) return;
+    const resizeObserver = new ResizeObserver(updateCarouselEdges);
+    resizeObserver.observe(el);
+    Array.from(el.children).forEach((child) => resizeObserver.observe(child));
+    return () => resizeObserver.disconnect();
+  }, [isPortraitCarousel, paginatedPlayers, updateCarouselEdges]);
+
+  const scrollCarousel = useCallback((direction: 1 | -1) => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollBy({ left: direction * el.clientWidth, behavior: reducedMotion ? "auto" : "smooth" });
+  }, []);
+
   const handleAddFilter = useCallback((filter: PlayerFilterType, value: string) => {
     if (filterEntries.length >= MAX_ACTIVE_FILTERS) return;
     const entry: ActiveFilter = {
@@ -602,9 +640,42 @@ export function PlayerPoolBrowser({
     const collectionId = viewSize === "card" ? `${id}-cards` : `${id}-panels`;
     const collectionClassName = viewSize === "card" ? cardGridClassName : panelListClassName;
 
+    const carouselControls = isPortraitCarousel && paginatedPlayers.length > 0 && (
+      <div id={`${id}-carousel-controls`} className="flex items-center justify-end gap-1.5 mb-3">
+        <button
+          id={`${id}-carousel-prev`}
+          type="button"
+          aria-label="Scroll to previous players"
+          disabled={carouselEdges.atStart}
+          onClick={() => scrollCarousel(-1)}
+          className="inline-flex items-center justify-center h-8 w-8 rounded-sm border border-[#d9d0c9] text-[#0e0907]/65 transition-colors duration-150 hover:bg-[#f0f0f0] hover:text-[#0e0907] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffa05c] focus-visible:ring-offset-2 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <button
+          id={`${id}-carousel-next`}
+          type="button"
+          aria-label="Scroll to next players"
+          disabled={carouselEdges.atEnd}
+          onClick={() => scrollCarousel(1)}
+          className="inline-flex items-center justify-center h-8 w-8 rounded-sm border border-[#d9d0c9] text-[#0e0907]/65 transition-colors duration-150 hover:bg-[#f0f0f0] hover:text-[#0e0907] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffa05c] focus-visible:ring-offset-2 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    );
+
     return (
       <>
-        <div id={collectionId} className={collectionClassName}>
+        {carouselControls}
+        <div
+          id={collectionId}
+          ref={isPortraitCarousel ? carouselRef : undefined}
+          onScroll={isPortraitCarousel ? updateCarouselEdges : undefined}
+          role={isPortraitCarousel ? "region" : undefined}
+          aria-label={isPortraitCarousel ? "Player carousel" : undefined}
+          className={collectionClassName}
+        >
           {paginatedPlayers.map((player) => {
             const disabled = disabledPlayerIds?.has(player.id) ?? false;
             const muted = mutedPlayerIds?.has(player.id) ?? false;
@@ -613,6 +684,7 @@ export function PlayerPoolBrowser({
               <PlayerView
                 key={player.id}
                 size={viewSize}
+                orientation={viewSize === "panel" ? panelOrientation : undefined}
                 player={player}
                 skills={viewSize === "panel" ? getPanelSkills?.(player) : undefined}
                 disabled={disabled}
@@ -634,7 +706,7 @@ export function PlayerPoolBrowser({
             );
           })}
           {paginatedPlayers.length === 0 && (
-            <p id={`${id}-${viewSize}-empty`} className={cn(viewSize === "card" && "col-span-full", "text-center text-sm text-muted-foreground py-12")}>
+            <p id={`${id}-${viewSize}-empty`} className={cn(viewSize === "card" && "col-span-full", viewSize === "panel" && "w-full", "text-center text-sm text-muted-foreground py-12")}>
               {emptyMessage}
             </p>
           )}
@@ -685,7 +757,9 @@ export function PlayerPoolBrowser({
         id={`${id}-content`}
         className={cn(
           contentClassName,
-          viewSize !== "row" && "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1",
+          viewSize !== "row" && viewSize === "panel" && panelOrientation === "portrait"
+            ? "min-h-0"
+            : viewSize !== "row" && "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1",
         )}
       >
         {renderCollectionView()}

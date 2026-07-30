@@ -85,7 +85,10 @@ const LEGEND_SORT_FIELDS = SORT_FIELD_OPTIONS.filter(
 const LEGEND_HIDDEN_COLUMNS = ["games_played"];
 const LEGENDS_ROW_PAGE_SIZE = 16;
 const LEGENDS_CARD_PAGE_SIZE = 16;
-const LEGENDS_PANEL_PAGE_SIZE = 8;
+/* Portrait carousel cards are ~320px wide vs. the old full-width landscape
+   panel — a page can hold far more before scrolling feels like pagination
+   fighting the carousel (#128). */
+const LEGENDS_PANEL_PAGE_SIZE = 24;
 
 /* ── Main page component ── */
 export default function LegendsPage() {
@@ -230,6 +233,39 @@ export default function LegendsPage() {
     return () => { cancelled = true; };
   }, [resolvedRuleSet, cornerstoneSource, currency]);
 
+  /* ── Carousel scroll pin ──
+     Chromium silently throws the portrait carousel to its far end when the
+     streamed-in skill profiles grow the cards (no scroll event fires, so it
+     isn't user intent). Track real scrolls; when the container or a card
+     resizes and the position moved without one, put it back. */
+  useEffect(() => {
+    if (loading) return;
+    const el = document.getElementById("legends-pool-browser-panels");
+    if (!el) return;
+
+    let last = el.scrollLeft;
+    const onScroll = () => { last = el.scrollLeft; };
+    el.addEventListener("scroll", onScroll, { passive: true });
+
+    const pin = () => {
+      if (Math.abs(el.scrollLeft - last) > 1) el.scrollLeft = last;
+    };
+    const resizeObserver = new ResizeObserver(pin);
+    resizeObserver.observe(el);
+    const observeChildren = () => {
+      Array.from(el.children).forEach((child) => resizeObserver.observe(child));
+    };
+    observeChildren();
+    const mutationObserver = new MutationObserver(observeChildren);
+    mutationObserver.observe(el, { childList: true });
+
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, [loading, noActiveRelease]);
+
   /* ── Row click in table → navigate to build with this cornerstone ── */
   const handleRowClick = useCallback(
     (player: PlayerWithSkills) => {
@@ -304,9 +340,14 @@ export default function LegendsPage() {
             defaultSortKeys={defaultSortKeys}
             defaultPageSize={LEGENDS_PANEL_PAGE_SIZE}
             defaultPageSizeByViewSize={{ row: LEGENDS_ROW_PAGE_SIZE, card: LEGENDS_CARD_PAGE_SIZE, panel: LEGENDS_PANEL_PAGE_SIZE }}
-            pageSizeOptions={[8, 16, 32]}
+            pageSizeOptions={[8, 16, 24, 32]}
             viewSizes={["row", "card", "panel"]}
             defaultViewSize="panel"
+            panelOrientation="portrait"
+            /* snap-proximity, not -mandatory: cards grow as skill profiles stream
+               in, and mandatory re-snap on that resize hurls the carousel to the
+               far end in Chromium. */
+            panelListClassName="flex gap-4 overflow-x-auto snap-x snap-proximity pb-2 items-start"
             defaultHiddenColumns={cornerstoneSource === "all" ? [] : LEGEND_HIDDEN_COLUMNS}
             availableFilters={cornerstoneSource === "all" ? AVAILABLE_FILTERS : LEGEND_FILTERS}
             sortFieldOptions={cornerstoneSource === "all" ? SORT_FIELD_OPTIONS : LEGEND_SORT_FIELDS}

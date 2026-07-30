@@ -26,11 +26,13 @@ interface PlayerViewProps {
   fitContent?: ReactNode;
   /** Pricing currency for the displayed price (#124). Defaults to "market". */
   currency?: RuleSetCurrency;
+  /** Panel-only: "landscape" (default) or "portrait" — see PlayerPanelView. */
+  orientation?: "landscape" | "portrait";
 }
 
-export function PlayerView({ size, skills, ...props }: PlayerViewProps) {
+export function PlayerView({ size, skills, orientation, ...props }: PlayerViewProps) {
   if (size === "panel") {
-    return <PlayerPanelView {...props} skills={skills} />;
+    return <PlayerPanelView {...props} skills={skills} orientation={orientation} />;
   }
   return <PlayerCardView {...props} />;
 }
