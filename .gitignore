@@ -43,3 +43,4 @@ node_modules/
 # agent-native local plan bridge tokens
 plans/**/.plan-url
 .diagram-exports/
+graphify-out/
