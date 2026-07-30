@@ -120,14 +120,21 @@ export function PlayerPanelView({
   const skillsBody = fitContent && activeTab === "build-fit" ? (
     <div id={`player-panel-view-build-fit-${player.id}`}>{fitContent}</div>
   ) : profile ? (
-    <div className={cn("grid gap-x-6 gap-y-5", isPortrait ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3")}>
+    /* Portrait runs the six categories two-up (three fixed rows) — same
+       position in every card, so cross-card scanning still lines up. */
+    <div className={cn("grid", isPortrait ? "grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4" : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-5")}>
       {Object.entries(PUBLIC_SKILL_CATEGORIES).map(([category, skillNames]) => (
         <div key={category}>
           <h4 className="text-[0.6875rem] font-medium tracking-[0.03em] uppercase text-[#0e0907]/35 mb-2">{category}</h4>
           <div className="flex flex-col gap-1">
             {skillNames.map((skillKey) => (
               <div key={skillKey} className="flex items-center justify-between gap-2 py-0.5">
-                <span className="text-[0.8125rem] text-[#0e0907]/60 truncate">{formatSkillName(skillKey)}</span>
+                <span
+                  title={formatSkillName(skillKey)}
+                  className={cn("text-[#0e0907]/60 truncate", isPortrait ? "text-[0.75rem]" : "text-[0.8125rem]")}
+                >
+                  {formatSkillName(skillKey)}
+                </span>
                 <TierBadge tier={profile[skillKey]} />
               </div>
             ))}
@@ -229,8 +236,9 @@ export function PlayerPanelView({
           /* Widths divide the container exactly (minus the flex gap-4 seams)
              so a whole number of cards is visible per breakpoint — no cut-off
              card at the viewport edge; the carousel controls + pagination
-             carry the "there's more" signal. */
-          "w-full sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/3)] xl:w-[calc((100%-3rem)/4)] shrink-0 snap-start flex flex-col rounded-md border border-[#d9d0c9] bg-[#f7f7f7] transition-colors",
+             carry the "there's more" signal. Caps at 3-up: the extra width
+             lets the skills grid run two columns, halving card height. */
+          "w-full sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/3)] shrink-0 snap-start flex flex-col rounded-md border border-[#d9d0c9] bg-[#f7f7f7] transition-colors",
           canClickPanel && "cursor-pointer hover:border-[#0e0907]/30",
           disabled && "opacity-40 cursor-not-allowed",
           muted && !disabled && "opacity-55 grayscale-[0.4]",
@@ -282,7 +290,7 @@ export function PlayerPanelView({
 
         <div
           id={`player-panel-view-detail-${player.id}`}
-          className="px-5 py-4 min-w-0"
+          className="px-4 py-4 min-w-0"
           onClick={fitContent ? (event) => event.stopPropagation() : undefined}
         >
           {tabs}
