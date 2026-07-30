@@ -37,7 +37,10 @@ def _player_id(player: dict[str, Any], index: int) -> str:
 
 
 def _collective_passing(lineup: list[dict[str, Any]], values: dict[str, Any]) -> float:
-    """Blend primary creator quality with lineup-wide passing depth."""
+    """Blend primary creator quality with lineup-wide passing depth.
+
+    Weights are calibration judgments, not research-backed — see ADR 0008.
+    """
     if not lineup:
         return 0.0
     tv = values["tier_values"]
@@ -57,7 +60,10 @@ def _top_two_plus_depth(
     secondary_weight: float,
     depth_weight: float,
 ) -> float:
-    """Score concentrated lineup roles by top option, helper, and depth."""
+    """Score concentrated lineup roles by top option, helper, and depth.
+
+    Weights are calibration judgments, not research-backed — see ADR 0008.
+    """
     if not composites:
         return 0.0
     sorted_values = sorted((float(getattr(player, field)) for player in composites), reverse=True)

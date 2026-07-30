@@ -281,6 +281,7 @@ STACKING_RETURNS: tuple[float, ...] = (1.0, 0.5, 0.25, 0.1)
 SWITCHABILITY_COVERAGE_THRESHOLD: float = 0.5
 # Switchability blend: 60% overlap density, 40% floor compression.
 SWITCHABILITY_OVERLAP_WEIGHT: float = 0.6
+# Primary/secondary/depth splits below are calibration judgments — see ADR 0008.
 # Collective passing subscore: best creator carries 60%, rest is depth average.
 PASSING_PRIMARY_CREATOR_WEIGHT: float = 0.6
 PASSING_DEPTH_WEIGHT: float = 0.4
