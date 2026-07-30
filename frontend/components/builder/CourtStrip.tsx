@@ -13,6 +13,7 @@
  */
 
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SalaryGauge } from "./SalaryGauge";
@@ -162,6 +163,7 @@ function SlotCircle({
             className={cn(
               "w-full h-full rounded-none overflow-hidden bg-white transition-all duration-150",
               isFocused && "scale-105",
+              isDragging && "opacity-30",
             )}
             style={{
               boxShadow: isFocused
@@ -245,6 +247,19 @@ export function CourtStrip({
   } | null>(null);
   const suppressClickRef = useRef(false);
   const [draggingSlot, setDraggingSlot] = useState<number | null>(null);
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const draggingOccupant = draggingSlot != null ? slots[draggingSlot - 1] : null;
+  const draggingSize = draggingSlot === 1 && cornerstoneId ? CORNERSTONE_SIZE : SLOT_SIZE;
+
+  function previewTransform(clientX: number, clientY: number) {
+    return `translate3d(${clientX - draggingSize / 2}px, ${clientY - draggingSize / 2}px, 0)`;
+  }
+
+  function positionPreview(clientX: number, clientY: number) {
+    if (!previewRef.current) return;
+    previewRef.current.style.transform = previewTransform(clientX, clientY);
+  }
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
@@ -293,11 +308,15 @@ export function CourtStrip({
       if (!drag.active && moved) {
         drag.active = true;
         setDraggingSlot(drag.sourceSlot);
+        setDragStartPos({ x: moveEvent.clientX, y: moveEvent.clientY });
         document.body.style.cursor = "grabbing";
         document.body.style.userSelect = "none";
       }
 
-      if (drag.active) moveEvent.preventDefault();
+      if (drag.active) {
+        moveEvent.preventDefault();
+        positionPreview(moveEvent.clientX, moveEvent.clientY);
+      }
     };
 
     const finishPointerDrag = (upEvent: PointerEvent) => {
@@ -320,6 +339,7 @@ export function CourtStrip({
 
       slotDragRef.current = null;
       setDraggingSlot(null);
+      setDragStartPos(null);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       window.removeEventListener("pointermove", handlePointerMove);
@@ -330,6 +350,7 @@ export function CourtStrip({
     const cancelPointerDrag = () => {
       slotDragRef.current = null;
       setDraggingSlot(null);
+      setDragStartPos(null);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       window.removeEventListener("pointermove", handlePointerMove);
@@ -428,6 +449,27 @@ export function CourtStrip({
           )}
         </div>
       </div>
+
+      {draggingOccupant && dragStartPos && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={previewRef}
+            className="pointer-events-none fixed left-0 top-0 z-[9999] overflow-hidden rounded-none shadow-[0_4px_16px_rgba(14,9,7,0.18),0_1px_4px_rgba(14,9,7,0.08)]"
+            style={{
+              width: draggingSize,
+              height: draggingSize,
+              transform: previewTransform(dragStartPos.x, dragStartPos.y),
+            }}
+          >
+            <PlayerHeadshot
+              nba_api_id={draggingOccupant.nba_api_id}
+              size={draggingSize}
+              name={draggingOccupant.name}
+              className="!rounded-none"
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
