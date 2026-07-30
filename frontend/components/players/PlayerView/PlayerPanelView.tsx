@@ -140,7 +140,7 @@ export function PlayerPanelView({
   );
 
   const actions = (
-    <div id={`player-panel-view-actions-${player.id}`} className={cn("flex flex-wrap gap-2", isPortrait ? "mt-auto pt-5" : "mt-6 lg:mt-auto lg:pt-6")}>
+    <div id={`player-panel-view-actions-${player.id}`} className={cn("flex gap-2", isPortrait ? "flex-nowrap mt-auto pt-3" : "flex-wrap mt-6 lg:mt-auto lg:pt-6")}>
       {primaryActionLabel && (
         <button
           id={`player-panel-view-primary-${player.id}`}
@@ -150,7 +150,10 @@ export function PlayerPanelView({
             event.stopPropagation();
             onPrimaryAction?.(player);
           }}
-          className="inline-flex items-center px-5 py-2.5 rounded-sm bg-[#ffa05c] text-[#0e0907] text-[0.8125rem] font-medium tracking-[0.01em] transition-colors duration-150 hover:bg-[#fe6d34] disabled:opacity-50 disabled:cursor-not-allowed"
+          className={cn(
+            "inline-flex items-center py-2.5 rounded-sm bg-[#ffa05c] text-[#0e0907] text-[0.8125rem] font-medium tracking-[0.01em] transition-colors duration-150 hover:bg-[#fe6d34] disabled:opacity-50 disabled:cursor-not-allowed",
+            isPortrait ? "flex-1 justify-center px-3 whitespace-nowrap" : "px-5",
+          )}
         >
           {primaryActionLabel}
         </button>
@@ -163,7 +166,10 @@ export function PlayerPanelView({
             event.stopPropagation();
             onOpenProfile(player);
           }}
-          className="inline-flex items-center px-4 py-2.5 rounded-sm border border-[#d9d0c9] text-[#0e0907]/65 text-[0.8125rem] font-medium tracking-[0.01em] transition-colors duration-150 hover:bg-[#f0f0f0] hover:text-[#0e0907]"
+          className={cn(
+            "inline-flex items-center py-2.5 rounded-sm border border-[#d9d0c9] text-[#0e0907]/65 text-[0.8125rem] font-medium tracking-[0.01em] transition-colors duration-150 hover:bg-[#f0f0f0] hover:text-[#0e0907]",
+            isPortrait ? "justify-center px-3 whitespace-nowrap" : "px-4",
+          )}
         >
           Inspect
         </button>
@@ -172,7 +178,7 @@ export function PlayerPanelView({
   );
 
   const tierCountsNode = tierCounts && (
-    <div id={`player-panel-view-tier-counts-${player.id}`} className={cn("flex items-center gap-2 flex-wrap", isPortrait ? "mt-4" : "mt-5")}>
+    <div id={`player-panel-view-tier-counts-${player.id}`} className={cn("flex gap-2 flex-wrap", isPortrait ? "mt-3 min-h-[3.25rem] items-start content-start" : "mt-5 items-center")}>
       {(["All-Time Great", "Elite", "Proficient", "Capable"] as LegendTier[]).map((tier) =>
         tier && tierCounts[tier] ? (
           <span key={tier} className="flex items-center gap-1">
@@ -220,42 +226,48 @@ export function PlayerPanelView({
       <article
         {...sharedArticleProps}
         className={cn(
-          "w-[280px] sm:w-[320px] shrink-0 snap-start flex flex-col rounded-md border border-[#d9d0c9] bg-[#f7f7f7] transition-colors",
+          /* Widths divide the container exactly (minus the flex gap-4 seams)
+             so a whole number of cards is visible per breakpoint — no cut-off
+             card at the viewport edge; the carousel controls + pagination
+             carry the "there's more" signal. */
+          "w-full sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/3)] xl:w-[calc((100%-3rem)/4)] shrink-0 snap-start flex flex-col rounded-md border border-[#d9d0c9] bg-[#f7f7f7] transition-colors",
           canClickPanel && "cursor-pointer hover:border-[#0e0907]/30",
           disabled && "opacity-40 cursor-not-allowed",
           muted && !disabled && "opacity-55 grayscale-[0.4]",
           highlighted && "!opacity-100 ring-2 ring-[#ffa05c]/60",
         )}
       >
-        {/* min-h keeps every card's skills section starting at the same y so
-            rows align when scanning across the carousel — wrapped names and
-            wrapped tier-chip rows otherwise shift it by up to ~45px.
-            ponytail: bump if a summary ever exceeds 340px. */}
-        <div id={`player-panel-view-summary-${player.id}`} className="min-h-[340px] px-5 py-5 border-b border-[#d9d0c9]/60 flex flex-col">
+        {/* Cross-card row alignment comes from reserving exact heights on the
+            two variable elements (2-line name slot, 2-row tier-chip slot)
+            instead of padding the whole block — no dead vertical space. */}
+        <div id={`player-panel-view-summary-${player.id}`} className="px-5 py-4 border-b border-[#d9d0c9]/60 flex flex-col">
           <div className="flex items-start gap-3">
             <PlayerHeadshot
               nba_api_id={player.nba_api_id}
-              size={56}
+              size={48}
               name={player.name}
               className="border border-[#d9d0c9]/60 shrink-0"
             />
-            <div className="min-w-0">
-              <h3 id={`player-panel-view-name-${player.id}`} className="text-[1.0625rem] font-semibold leading-[1.2] text-[#0e0907]">
+            {/* min-h reserves the 2-line-name case so the facts grid below
+                starts at the same y on every card; the slack lands after the
+                meta line, not between name and meta. */}
+            <div className="min-w-0 min-h-[67px]">
+              <h3 id={`player-panel-view-name-${player.id}`} className="text-[1.0625rem] font-semibold leading-[1.2] text-[#0e0907] line-clamp-2">
                 {isLegend && player.peak_year != null ? `${player.peak_year} ` : ""}{player.name}
               </h3>
-              <div id={`player-panel-view-meta-${player.id}`} className="flex items-center gap-2 mt-1 flex-wrap">
+              <div id={`player-panel-view-meta-${player.id}`} className="flex items-center gap-2 mt-0.5 whitespace-nowrap overflow-hidden">
                 {player.position && <span className="text-[0.8125rem] font-medium text-[#0e0907]/55">{player.position}</span>}
                 {player.team && (
                   <>
                     <span className="text-[#0e0907]/20" aria-hidden="true">·</span>
-                    <span className="text-[0.8125rem] text-[#0e0907]/55">{player.team}</span>
+                    <span className="text-[0.8125rem] text-[#0e0907]/55 truncate">{player.team}</span>
                   </>
                 )}
               </div>
             </div>
           </div>
 
-          <div id={`player-panel-view-facts-${player.id}`} className="grid grid-cols-2 gap-x-4 gap-y-1 mt-4">
+          <div id={`player-panel-view-facts-${player.id}`} className="grid grid-cols-2 gap-x-4 gap-y-0.5 mt-3">
             {facts.map(([label, value]) => (
               <div key={label} className="flex items-baseline justify-between gap-2">
                 <span className="text-[0.6875rem] font-medium tracking-[0.01em] text-[#0e0907]/40">{label}</span>
@@ -270,7 +282,7 @@ export function PlayerPanelView({
 
         <div
           id={`player-panel-view-detail-${player.id}`}
-          className="px-5 py-5 min-w-0"
+          className="px-5 py-4 min-w-0"
           onClick={fitContent ? (event) => event.stopPropagation() : undefined}
         >
           {tabs}
