@@ -285,3 +285,6 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- Ask narrow questions. A broad `query` (e.g. "how does evaluation flow end to end") returns 1000+ nodes and truncates to ~55 at the default token budget — the answer is often in the cut. Narrow the question, or raise `--budget`.
+- `graphify path` finds import/call edges only — it will not connect the frontend to the backend across an HTTP call. Trace those by hand from `lib/api.ts` to the matching blueprint in `backend/api/`.
+- `graphify explain` matches the first node with that name, which may be a same-named React component rather than the backend module. Confirm the `src=` path before trusting it.
