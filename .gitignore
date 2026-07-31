@@ -44,3 +44,4 @@ node_modules/
 plans/**/.plan-url
 .diagram-exports/
 graphify-out/
+.tasks/

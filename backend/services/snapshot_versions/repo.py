@@ -331,6 +331,32 @@ def publish_draft(
             "Skill trace snapshot freeze failed — public 'why' data will be empty for this release"
         )
 
+    # Issue #86: report-only stale-tier check against the data just published.
+    # Never allowed to block a publish — same never-block pattern as the
+    # trace_snapshot freeze above.
+    try:
+        from services.snapshot_versions import drift_audit
+
+        drift = drift_audit.find_tier_drift(published.season, client=c)
+        if drift:
+            logger.warning(
+                "Tier drift detected on publish (release %s, %d stale stats-derived "
+                "tier(s)): %s",
+                published.id,
+                len(drift),
+                ", ".join(
+                    f"{d.player_name}/{d.skill_name}:{d.stored_tier}->{d.recomputed_tier}"
+                    for d in drift
+                ),
+            )
+        else:
+            logger.info("Tier drift check clean for release %s", published.id)
+    except Exception:
+        logger.exception(
+            "Tier drift check failed after publish (release %s) — publish still succeeded",
+            published.id,
+        )
+
     # Rewarm distribution cache against the freshly published snapshot.
     # Issue #72: warm against the published Release's own season, not the
     # hardcoded CURRENT_SEASON, so the cache key matches the freeze scope.
