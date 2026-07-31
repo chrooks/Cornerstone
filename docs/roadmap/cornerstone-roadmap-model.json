@@ -476,6 +476,19 @@
         "milestone": "Value Economy",
         "priority": "p1"
       }
+    },
+    {
+      "id": "i131",
+      "label": "🧍 #131 drift report in\npublish UI (P2 feature)",
+      "group": "snapshot",
+      "x": -130,
+      "y": -470,
+      "description": "Surface the #86 publish-time tier-drift report in the admin publish flow: clean / drift-found (banner + expandable table) / check-failed states. Backend returns the drift summary with the publish response; never-block guarantee holds.",
+      "meta": {
+        "state": "open",
+        "priority": "p2",
+        "url": "https://github.com/chrooks/Cornerstone/issues/131"
+      }
     }
   ],
   "edges": [
@@ -656,6 +669,12 @@
       "to": "i125",
       "label": "follow-up",
       "description": "Two more price consumers found live: the filter predicate and the RD signifier."
+    },
+    {
+      "from": "i130",
+      "to": "i131",
+      "label": "seeds demo data",
+      "description": "If #130's recompute lands first, #131's drifted state needs seeded test data to demo."
     }
   ]
 }
