@@ -52,7 +52,7 @@
       "group": "done",
       "x": -700,
       "y": 0,
-      "description": "Team Shape glyphs, attribution ledger, eval-impact preview, score animation, drilldowns, Save & Publish ceremony (#94 — commit moment: restated eval, version pins, visibility choice, sealed copy) — shipped. 1 open (#100).",
+      "description": "Team Shape glyphs, attribution ledger, eval-impact preview, score animation, drilldowns, Save & Publish ceremony (#94 — commit moment: restated eval, version pins, visibility choice, sealed copy) — shipped. 1 open (#100). #133 pre-V1 re-audit CLOSED 2026-09-21: 14 V1 fixes (#136-#149), Tier 2/3 post-launch (#150, #151).",
       "meta": {
         "state": "mostly closed",
         "milestone": "Lab UI/UX Improvements"
@@ -180,7 +180,7 @@
       "group": "archetypes",
       "x": 700,
       "y": -350,
-      "description": "Design the archetype taxonomy (definitional work — human). Blocks #17.",
+      "description": "IN V1. Grilling 2026-09-21: offense role + defense role per player, J. Kyle Mann vocabulary, Advantage creator / exploiter families, legends same rules + admin override, negative roles shown (Cone / Defensive target).",
       "meta": {
         "state": "open · hitl",
         "milestone": "Player Archetypes",
@@ -193,7 +193,7 @@
       "group": "archetypes",
       "x": 700,
       "y": -200,
-      "description": "Implement archetype computation and surface it in the UI. Agent-ready once taxonomy exists.",
+      "description": "IN V1. Compute + display the #15 roles. Do not build the display before Chris approves the names.",
       "meta": {
         "state": "open · afk",
         "milestone": "Player Archetypes",
@@ -397,11 +397,11 @@
     },
     {
       "id": "i119",
-      "label": "🧍 #119 Taxonomy can't see\n3&D value (P2)",
+      "label": "🧍 #119 Taxonomy can't see\n3&D value (V1, P1 — grilling)",
       "group": "value",
       "x": 350,
       "y": 280,
-      "description": "OG Anunoby scores 74th against a real 21st. NOT a weighting problem — adding him as a fit anchor costs the top-10 fit and still leaves him 60th. His creation is 5.4/4.5; the model has nothing to reward him FOR. Matchup versatility, playoff scalability and role scarcity are things the 21-skill taxonomy never measures. Becomes a PRICING EXPLOIT once #109 lands: 3&D wings get systematically underpriced — the same bug as Wemby-at-$13.4M in different clothes. UPDATE: #111 tripwire did NOT fire (OG 4%, Bridges 2%, DFS 2%) — accepted for v1; revisit with concentration_harness.py after any pricing/taxonomy change.",
+      "description": "FIX BEFORE LAUNCH (Chris, 2026-09-21). Grilled together with Player Archetypes (#15/#17). Prototypes: no existing-Skill option lands OG within tolerance while keeping the #108 fit; open question is one new Assignment defender Skill from matchup difficulty (needs #134).",
       "meta": {
         "state": "open",
         "milestone": "Value Economy",
@@ -488,6 +488,234 @@
         "state": "open",
         "priority": "p2",
         "url": "https://github.com/chrooks/Cornerstone/issues/131"
+      }
+    },
+    {
+      "id": "i132",
+      "label": "#132 In-season update pipeline\n(post-launch, week 1)",
+      "group": "snapshot",
+      "x": -130,
+      "y": -610,
+      "description": "Scheduled draft on the hestia dev stack, Pushover ping with the drift summary, Chris publishes, the V1 copy-to-prod script promotes it.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/132",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i134",
+      "label": "#134 Matchup fetch sends wrong\nparams — league totals (V1, P1)",
+      "group": "snapshot",
+      "x": -350,
+      "y": -500,
+      "description": "DefPlayerIDNullable → DefPlayerID; one bulk call; recalibrate versatile_defender. Every active matchup_defense blob is the league total today.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/134",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i135",
+      "label": "🧍 #135 Archetype traits + team\nconcepts (JKM, post-launch)",
+      "group": "archetypes",
+      "x": 1000,
+      "y": -200,
+      "description": "Chef/patron, ball stopper, stabilizer tags; chain-link defense / crowded elevator in GM Notes. Parked from the V1 archetype grill.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/135",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i136",
+      "label": "#136 Phone navbar collapse\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": -700,
+      "y": 900,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/136",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i137",
+      "label": "#137 Explain Value; retire $54M copy\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": -467,
+      "y": 900,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/137",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i138",
+      "label": "#138 Picker: sort by Value, drop unpriced\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": -234,
+      "y": 900,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/138",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i139",
+      "label": "#139 Eval: engine before AI note\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": -1,
+      "y": 900,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/139",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i140",
+      "label": "#140 Eval: relative grade scale\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": 232,
+      "y": 900,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/140",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i141",
+      "label": "#141 Touch picker without hover\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": 465,
+      "y": 900,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/141",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i142",
+      "label": "#142 Build: score strip above Team Shape\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": 698,
+      "y": 900,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/142",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i149",
+      "label": "#149 Build: starter progress, not 0.00\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": -700,
+      "y": 1050,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/149",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i143",
+      "label": "#143 Block over-cap / incomplete Builds\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": -467,
+      "y": 1050,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/143",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i144",
+      "label": "#144 Lab Error States + 404/error pages\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": -234,
+      "y": 1050,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/144",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i145",
+      "label": "#145 Prove signed-in save on dev\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": -1,
+      "y": 1050,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/145",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i146",
+      "label": "#146 Eval: Copy link + login return\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": 232,
+      "y": 1050,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/146",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i147",
+      "label": "#147 Phone Final Eval layout\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": 465,
+      "y": 1050,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/147",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i148",
+      "label": "#148 Start from a sample Build\n(V1 Lab fix, P1)",
+      "group": "lab",
+      "x": 698,
+      "y": 1050,
+      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/148",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i150",
+      "label": "🧍 #150 Lab audit Tier 2 polish\n(22 fixes, post-launch)",
+      "group": "lab",
+      "x": -350,
+      "y": 1220,
+      "description": "Post-launch polish from the #133 audit; Chris re-ranks after launch.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/150",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i151",
+      "label": "🧍 #151 Lab audit Tier 3 polish\n(22 fixes, post-launch)",
+      "group": "lab",
+      "x": 100,
+      "y": 1220,
+      "description": "Post-launch polish from the #133 audit; Chris re-ranks after launch.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/151",
+        "state": "open"
       }
     }
   ],
@@ -675,6 +903,30 @@
       "to": "i131",
       "label": "seeds demo data",
       "description": "If #130's recompute lands first, #131's drifted state needs seeded test data to demo."
+    },
+    {
+      "from": "i134",
+      "to": "i130",
+      "label": "fix before recompute",
+      "description": "#130 would republish versatile_defender tiers computed on league-total matchup data."
+    },
+    {
+      "from": "i134",
+      "to": "i119",
+      "label": "signal needs it",
+      "description": "A matchup-difficulty / Assignment defender signal for #119 needs correct per-defender matchup rows."
+    },
+    {
+      "from": "i17",
+      "to": "i135",
+      "label": "roles first",
+      "description": "Traits and team concepts build on the V1 role labels."
+    },
+    {
+      "from": "i130",
+      "to": "i132",
+      "label": "pipeline after release",
+      "description": "The in-season pipeline reuses the reviewed V1 release flow."
     }
   ]
 }
