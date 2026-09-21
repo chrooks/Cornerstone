@@ -175,25 +175,12 @@
       }
     },
     {
-      "id": "i15",
-      "label": "🧍 #15 Define Player Archetype\ntaxonomy",
-      "group": "archetypes",
-      "x": 700,
-      "y": -350,
-      "description": "IN V1. Grilling 2026-09-21: offense role + defense role per player, J. Kyle Mann vocabulary, Advantage creator / exploiter families, legends same rules + admin override, negative roles shown (Cone / Defensive target).",
-      "meta": {
-        "state": "open · hitl",
-        "milestone": "Player Archetypes",
-        "url": "https://github.com/chrooks/Cornerstone/issues/15"
-      }
-    },
-    {
       "id": "i17",
       "label": "#17 Compute & display\nPlayer Archetypes",
       "group": "archetypes",
       "x": 700,
       "y": -200,
-      "description": "IN V1. Compute + display the #15 roles. Do not build the display before Chris approves the names.",
+      "description": "IN V1. Compute + display the approved taxonomy (docs/player-archetype-taxonomy.md; #15 closed 2026-09-21). #119 plan M7 (engine) + M8 (display).",
       "meta": {
         "state": "open · afk",
         "milestone": "Player Archetypes",
@@ -791,12 +778,6 @@
     }
   ],
   "edges": [
-    {
-      "from": "i15",
-      "to": "i17",
-      "label": "taxonomy first",
-      "description": "Archetype computation can't start until the taxonomy is defined."
-    },
     {
       "from": "i80",
       "to": "i79",
