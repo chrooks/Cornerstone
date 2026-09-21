@@ -729,6 +729,18 @@
         "url": "https://github.com/chrooks/Cornerstone/issues/152",
         "state": "open"
       }
+    },
+    {
+      "id": "i153",
+      "label": "#153 Archetype capacity:\n3-season usage blend (post-launch)",
+      "group": "archetypes",
+      "x": 1000,
+      "y": -50,
+      "description": "Portable skill-set fix for one-season usage bias (LeBron next to Luka). Needs a prior-season stats ingest.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/153",
+        "state": "open"
+      }
     }
   ],
   "edges": [
@@ -957,6 +969,12 @@
       "to": "i17",
       "label": "defense roles",
       "description": "Archetype defense roles read the two new Skills."
+    },
+    {
+      "from": "i17",
+      "to": "i153",
+      "label": "refines capacity",
+      "description": "Replaces the one-season usage capacity signal in the archetype rules."
     }
   ]
 }
