@@ -728,6 +728,18 @@
         "url": "https://github.com/chrooks/Cornerstone/issues/153",
         "state": "open"
       }
+    },
+    {
+      "id": "i154",
+      "label": "#154 \"Trust All Claude\" nulls\nstats-only tiers (V1, P1 bug)",
+      "group": "snapshot",
+      "x": -600,
+      "y": -600,
+      "description": "Bulk trust_claude writes final_tier null on HIGH-Skill flags (claude_rating null). Fix before the #130 review queue.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/154",
+        "state": "open"
+      }
     }
   ],
   "edges": [
@@ -940,6 +952,18 @@
       "to": "i153",
       "label": "refines capacity",
       "description": "Replaces the one-season usage capacity signal in the archetype rules."
+    },
+    {
+      "from": "i154",
+      "to": "i130",
+      "label": "fix before review",
+      "description": "#130 stages ~270 HIGH-Skill flags; one bulk trust-Claude click would null them."
+    },
+    {
+      "from": "i154",
+      "to": "i152",
+      "label": "rated-None safety",
+      "description": "Archetype labels read reviewed tiers; a null written as resolved must never read as a reviewed None."
     }
   ]
 }
