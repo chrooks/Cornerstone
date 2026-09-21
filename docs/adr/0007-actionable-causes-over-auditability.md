@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Date:** 2026-07-08
-**Related:** ADR 0006, `docs/research/lab-consequence-decision-weight.md`, CONTEXT.md (Software as Education, Partnership Model — global Lexicon)
+**Related:** ADR 0006, `docs/research/lab-consequence-decision-weight.md`, LEXICON.md (Software as Education, Partnership Model — global Lexicon)
 
 ## Context
 

@@ -9,7 +9,7 @@ Audits the Lab against the six findings from [lab-juice-game-feel.md](./lab-juic
 | Touchpoint | Intent | Affordances | Signifiers & Feedback | Gaps observed |
 |---|---|---|---|---|
 | **Legends** (`01-legends.png`) | Pick a Cornerstone | Row/Card/Panel views, filter/sort, Random, "Select as Cornerstone", Inspect | Rich 21-skill tier panel per legend | No feedforward of what selecting costs ($54M slot) or seeds; selection navigates via `window.location.href` (full reload — Flow break) |
-| **Build, empty** (`02`) | Start the Rotation | Slot strip with numbered OPEN slots, picker table | Empty [Feedback](../../CONTEXT.md) panel shows literal `0.00` dead stars; "What Drags: Only 1 player — need at least 5" | The `0.00` Empty State reads as failure, not invitation |
+| **Build, empty** (`02`) | Start the Rotation | Slot strip with numbered OPEN slots, picker table | Empty [Feedback](../../LEXICON.md) panel shows literal `0.00` dead stars; "What Drags: Only 1 player — need at least 5" | The `0.00` Empty State reads as failure, not invitation |
 | **Build, picker hover** (`03`) | Weigh a candidate | Hover row → SalaryGauge ghost: `+$11M`, would-be-remaining | **The one existing feedforward Signifier — salary only** | No eval-impact preview: nothing says what Nesmith does to Build Cohesion |
 | **Build, full** (`04`) | Tune the roster | Click/drag add, ✕ remove, slot swap, live eval (500ms debounce), Next Search suggestions with FILTER links, What Holds/What Drags | Live star badge (1.62), cap gauge, rookie-deal counter | Score updates with **no animation** (`transition-colors` only); no delta shown (was 1.55 → now 1.62? invisible); add/remove has no enter/exit feedback |
 | **Eval** (`05-eval-full`) | Final read | Factor bars, 13 letter-graded subscores, accentuation, LLM Scouting Note, Pressure Points | Grades + exact values + `title` tooltips; narrative staggered behind spinner | Everything numeric renders **at once**; drilldown stops at subscore level — no per-player contribution anywhere |
@@ -28,7 +28,7 @@ Audits the Lab against the six findings from [lab-juice-game-feel.md](./lab-juic
 
 ## Strongest Signifiers (keep)
 
-- **Next Search suggestions with FILTER affordances** — the engine teaches what to look for and wires it to action. Genuine [Software as Education](../../CONTEXT.md).
+- **Next Search suggestions with FILTER affordances** — the engine teaches what to look for and wires it to action. Genuine [Software as Education](../../LEXICON.md).
 - **Salary ghost preview on hover** — exactly the right feedforward shape; it just stops at salary.
 - **What Holds / What Drags** — honest, cause-flavored feedback copy.
 - **Letter grades + exact values together** — dual coding, tiers for scanning, decimals for truth.
