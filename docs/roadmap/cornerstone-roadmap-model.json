@@ -370,19 +370,6 @@
       }
     },
     {
-      "id": "i118",
-      "label": "🧍 #118 Archetype-relative\n`overall` (explore, P3)",
-      "group": "value",
-      "x": 0,
-      "y": 280,
-      "description": "Exploratory. Score a player only on the axes his archetype plays — Curry is never scored on post_game at all. Tie-ranking (#114) makes a zero honest; this makes it unnecessary. Parked behind the Archetype taxonomy (#15, #17). Must be reconciled with #108's weights — the two overlap.",
-      "meta": {
-        "state": "open",
-        "milestone": null,
-        "url": "https://github.com/chrooks/Cornerstone/issues/118"
-      }
-    },
-    {
       "id": "i116",
       "label": "#116 Tests write to live DB;\n3 fail on develop (P2)",
       "group": "value",
@@ -843,25 +830,9 @@
       "label": "split from"
     },
     {
-      "from": "i114",
-      "to": "i118",
-      "label": "alt approach",
-      "dashes": true
-    },
-    {
       "from": "i113",
       "to": "i117",
       "label": "14 players held back"
-    },
-    {
-      "from": "i15",
-      "to": "i118",
-      "label": "blocks"
-    },
-    {
-      "from": "i17",
-      "to": "i118",
-      "label": "blocks"
     },
     {
       "from": "i108",
@@ -872,12 +843,6 @@
       "from": "i119",
       "to": "i109",
       "label": "pricing exploit",
-      "dashes": true
-    },
-    {
-      "from": "i119",
-      "to": "i118",
-      "label": "would dissolve",
       "dashes": true
     },
     {
