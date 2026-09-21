@@ -162,10 +162,22 @@ _Avoid_: breakdown, contribution split, per-player scores
 The player-select highlight on the Team Shape: selecting a Player marks that Player's Attribution Ledger input value on each spoke, in true Subscore units. Renders only real ledger numbers — no stacked segments, since adjustments can be negative or gated and would make stacking lie.
 _Avoid_: stacked spokes, player overlay (ambiguous with Player Shape)
 
+**Player Archetype**:
+A Player's Archetype Roles on offense and on defense, which name what the Player can do on each end as a portable skill set. Never a score input.
+_Avoid_: archetype label, player type, Lineup archetype
+
+**Archetype Role**:
+One named role on one end. Each end has a main role and at most one second role that clears its own bar.
+_Avoid_: badge, trait, tag
+
+**Pair Name**:
+A barbershop name for a common pair of main roles, such as "3-and-D Wing".
+_Avoid_: archetype name, combo
+
 ## Relationships
 
 ### Naming conventions
-- **Skills** are named as player-archetype nouns — a "player who does X" (`passer`, `driver`, `rim_protector`, `steady_hand`). **Impact Traits** and **Subscores** are named as team-quality nouns (`spacing`, `ball_security`, `collective_passing`). The same basketball idea may exist in both namespaces under different keys: the Steady Hand (`steady_hand`) Skill feeds the Ball Security Impact Trait.
+- **Skills** are named as agent nouns — a "player who does X" (`passer`, `driver`, `rim_protector`, `steady_hand`). **Impact Traits** and **Subscores** are named as team-quality nouns (`spacing`, `ball_security`, `collective_passing`). The same basketball idea may exist in both namespaces under different keys: the Steady Hand (`steady_hand`) Skill feeds the Ball Security Impact Trait.
 
 ### Team hierarchy
 - **Team** is the universal concept. **Lineup** (5), **Rotation** (9), and **Roster** (12) are size-specific Team types.
@@ -190,6 +202,10 @@ _Avoid_: stacked spokes, player overlay (ambiguous with Player Shape)
 - A **PlayerPool** is a collection of Players (including Legends) passed as data to a PlayerPoolBrowser.
 - A **PlayerView** renders one Player at a configurable size: **Row**, **Card**, **Panel**, or **Profile**. A PlayerPoolBrowser renders a collection of PlayerViews at the active size.
 - Different surfaces render different PlayerPools with different column/filter configurations: the Legends picker uses a PlayerPool of only Legends; the builder picker uses active Players minus rostered ones.
+
+### Player Archetypes
+- A **Player Archetype** describes one Player, on each end. A Lineup archetype labels the style of one **Lineup**, from its **Subscores**. **Versatility** is the variety of viable Lineup archetypes across a **Rotation**. Player Archetypes feed neither, and never enter a score or a price.
+- The **Anchor** defense role (a rim protector; code key `def_anchor`) is an **Archetype Role**. It is not the Anchor **Impact Trait** example, not the `anchor` **Subscore** example (`anchor_total`), and not the calibration anchor players (the reference Players behind `/api/anchors`).
 
 ### RuleSet governs the Build
 - A **RuleSet** defines: Team size, **SalaryCap**, **Cornerstone** rules, **PlayerPool**, **RookieDeal** limit.
