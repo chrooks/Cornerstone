@@ -1,0 +1,1018 @@
+{
+ "edition": {
+  "title": "The Ringer's Top 100 NBA Player Rankings — final 2025-26 edition (post-Finals)",
+  "updated": "2026-06-16",
+  "url": "https://nbarankings.theringer.com/rankings",
+  "panel": "Bill Simmons, Zach Lowe, Danny Chau, Kirk Goldsberry, Rob Mahoney, Michael Pina, Justin Verrier",
+  "fetched": "2026-09-21",
+  "method": "__NEXT_DATA__ from one server-rendered fetch (processedPlayers.rankings order; each player weekly_rankings_4 = the 6/16 column), cross-checked 100/100 against a headless Playwright render of the page"
+ },
+ "matches_108_top10": true,
+ "notes": [
+  "Page JSON also carries a stale Lonzo Ball record at order=100 (no weekly_rankings, last edited 2025-06-29); the rendered page shows Rui Hachimura at 100 and not Lonzo, so Lonzo is excluded.",
+  "Matched against dev players table (self-hosted Supabase) by name with accents, punctuation and Jr/Sr/II/III suffixes stripped; aliases: Cam Johnson->Cameron Johnson, Norm Powell->Norman Powell.",
+  "ringer_team matches db_team for all 100 players (sanity check on the name matches)."
+ ],
+ "players": [
+  {
+   "rank": 1,
+   "name": "Shai Gilgeous-Alexander",
+   "ringer_team": "Oklahoma City Thunder",
+   "player_id": "6d79aa86-3fb0-4cf3-a457-8086c13dd95a",
+   "db_name": "Shai Gilgeous-Alexander",
+   "nba_api_id": "1628983",
+   "db_team": "OKC",
+   "match": "exact"
+  },
+  {
+   "rank": 2,
+   "name": "Victor Wembanyama",
+   "ringer_team": "San Antonio Spurs",
+   "player_id": "20153d1e-180b-4ebb-9110-1609a732ea43",
+   "db_name": "Victor Wembanyama",
+   "nba_api_id": "1641705",
+   "db_team": "SAS",
+   "match": "exact"
+  },
+  {
+   "rank": 3,
+   "name": "Nikola Jokic",
+   "ringer_team": "Denver Nuggets",
+   "player_id": "f8394455-50e5-40ea-94ab-28ceefce6baa",
+   "db_name": "Nikola Jokić",
+   "nba_api_id": "203999",
+   "db_team": "DEN",
+   "match": "normalized"
+  },
+  {
+   "rank": 4,
+   "name": "Luka Doncic",
+   "ringer_team": "Los Angeles Lakers",
+   "player_id": "b78bc9ab-c7c5-4a0e-b8ed-ae34a70ddb4d",
+   "db_name": "Luka Dončić",
+   "nba_api_id": "1629029",
+   "db_team": "LAL",
+   "match": "normalized"
+  },
+  {
+   "rank": 5,
+   "name": "Jalen Brunson",
+   "ringer_team": "New York Knicks",
+   "player_id": "c9f10ab0-7306-45fe-8e6b-9e7b7d707cae",
+   "db_name": "Jalen Brunson",
+   "nba_api_id": "1628973",
+   "db_team": "NYK",
+   "match": "exact"
+  },
+  {
+   "rank": 6,
+   "name": "Anthony Edwards",
+   "ringer_team": "Minnesota Timberwolves",
+   "player_id": "5394eb49-27eb-4db7-9022-c89ea6d0601d",
+   "db_name": "Anthony Edwards",
+   "nba_api_id": "1630162",
+   "db_team": "MIN",
+   "match": "exact"
+  },
+  {
+   "rank": 7,
+   "name": "Giannis Antetokounmpo",
+   "ringer_team": "Milwaukee Bucks",
+   "player_id": "040d6d04-0b81-4afe-8bdb-422aab31e8de",
+   "db_name": "Giannis Antetokounmpo",
+   "nba_api_id": "203507",
+   "db_team": "MIL",
+   "match": "exact"
+  },
+  {
+   "rank": 8,
+   "name": "Kawhi Leonard",
+   "ringer_team": "Los Angeles Clippers",
+   "player_id": "1d7e28a6-3bb7-4cdd-ae78-5d68fad49296",
+   "db_name": "Kawhi Leonard",
+   "nba_api_id": "202695",
+   "db_team": "LAC",
+   "match": "exact"
+  },
+  {
+   "rank": 9,
+   "name": "Cade Cunningham",
+   "ringer_team": "Detroit Pistons",
+   "player_id": "903f42e3-36f1-4ff6-b60e-bb933c5653a8",
+   "db_name": "Cade Cunningham",
+   "nba_api_id": "1630595",
+   "db_team": "DET",
+   "match": "exact"
+  },
+  {
+   "rank": 10,
+   "name": "Stephen Curry",
+   "ringer_team": "Golden State Warriors",
+   "player_id": "4ba199e5-ca49-4401-9380-115e02b9246b",
+   "db_name": "Stephen Curry",
+   "nba_api_id": "201939",
+   "db_team": "GSW",
+   "match": "exact"
+  },
+  {
+   "rank": 11,
+   "name": "Donovan Mitchell",
+   "ringer_team": "Cleveland Cavaliers",
+   "player_id": "81f13c04-ded5-4982-bff2-95dcf418420c",
+   "db_name": "Donovan Mitchell",
+   "nba_api_id": "1628378",
+   "db_team": "CLE",
+   "match": "exact"
+  },
+  {
+   "rank": 12,
+   "name": "Karl-Anthony Towns",
+   "ringer_team": "New York Knicks",
+   "player_id": "308f2b77-6739-42ce-bdf5-f04694c9a354",
+   "db_name": "Karl-Anthony Towns",
+   "nba_api_id": "1626157",
+   "db_team": "NYK",
+   "match": "exact"
+  },
+  {
+   "rank": 13,
+   "name": "Jayson Tatum",
+   "ringer_team": "Boston Celtics",
+   "player_id": "4fa3108f-12f9-46e9-b7b1-32cf05062e3e",
+   "db_name": "Jayson Tatum",
+   "nba_api_id": "1628369",
+   "db_team": "BOS",
+   "match": "exact"
+  },
+  {
+   "rank": 14,
+   "name": "Jaylen Brown",
+   "ringer_team": "Boston Celtics",
+   "player_id": "9b57669f-ef89-4025-9879-1274c410777e",
+   "db_name": "Jaylen Brown",
+   "nba_api_id": "1627759",
+   "db_team": "BOS",
+   "match": "exact"
+  },
+  {
+   "rank": 15,
+   "name": "Tyrese Maxey",
+   "ringer_team": "Philadelphia 76ers",
+   "player_id": "21d8663e-79fd-4346-b61a-eebe9c38c855",
+   "db_name": "Tyrese Maxey",
+   "nba_api_id": "1630178",
+   "db_team": "PHI",
+   "match": "exact"
+  },
+  {
+   "rank": 16,
+   "name": "Kevin Durant",
+   "ringer_team": "Houston Rockets",
+   "player_id": "7d3c872a-d144-433c-a2e4-a740160d609d",
+   "db_name": "Kevin Durant",
+   "nba_api_id": "201142",
+   "db_team": "HOU",
+   "match": "exact"
+  },
+  {
+   "rank": 17,
+   "name": "Scottie Barnes",
+   "ringer_team": "Toronto Raptors",
+   "player_id": "706e6944-554f-406d-85bc-6313956bdf6f",
+   "db_name": "Scottie Barnes",
+   "nba_api_id": "1630567",
+   "db_team": "TOR",
+   "match": "exact"
+  },
+  {
+   "rank": 18,
+   "name": "Devin Booker",
+   "ringer_team": "Phoenix Suns",
+   "player_id": "d8e055bd-a531-4851-a65a-133189d41f83",
+   "db_name": "Devin Booker",
+   "nba_api_id": "1626164",
+   "db_team": "PHX",
+   "match": "exact"
+  },
+  {
+   "rank": 19,
+   "name": "Jamal Murray",
+   "ringer_team": "Denver Nuggets",
+   "player_id": "9f6d8833-3cce-4f0b-9eee-6374f7b80a0f",
+   "db_name": "Jamal Murray",
+   "nba_api_id": "1627750",
+   "db_team": "DEN",
+   "match": "exact"
+  },
+  {
+   "rank": 20,
+   "name": "LeBron James",
+   "ringer_team": "Los Angeles Lakers",
+   "player_id": "e99218fd-da82-4847-9c47-790671997177",
+   "db_name": "LeBron James",
+   "nba_api_id": "2544",
+   "db_team": "LAL",
+   "match": "exact"
+  },
+  {
+   "rank": 21,
+   "name": "OG Anunoby",
+   "ringer_team": "New York Knicks",
+   "player_id": "577b8e48-ea18-406c-a872-84c1501efc03",
+   "db_name": "OG Anunoby",
+   "nba_api_id": "1628384",
+   "db_team": "NYK",
+   "match": "exact"
+  },
+  {
+   "rank": 22,
+   "name": "Deni Avdija",
+   "ringer_team": "Portland Trail Blazers",
+   "player_id": "5ab8c559-04c5-4671-b7a1-015c4420f8c1",
+   "db_name": "Deni Avdija",
+   "nba_api_id": "1630166",
+   "db_team": "POR",
+   "match": "exact"
+  },
+  {
+   "rank": 23,
+   "name": "Jalen Johnson",
+   "ringer_team": "Atlanta Hawks",
+   "player_id": "efdfc619-835c-43a8-8789-195c92ba494d",
+   "db_name": "Jalen Johnson",
+   "nba_api_id": "1630552",
+   "db_team": "ATL",
+   "match": "exact"
+  },
+  {
+   "rank": 24,
+   "name": "Evan Mobley",
+   "ringer_team": "Cleveland Cavaliers",
+   "player_id": "116cf1a4-a187-4359-ada9-a7b851d9bd9b",
+   "db_name": "Evan Mobley",
+   "nba_api_id": "1630596",
+   "db_team": "CLE",
+   "match": "exact"
+  },
+  {
+   "rank": 25,
+   "name": "Bam Adebayo",
+   "ringer_team": "Miami Heat",
+   "player_id": "95813484-179f-4d7a-8f5f-46a2d485f2c3",
+   "db_name": "Bam Adebayo",
+   "nba_api_id": "1628389",
+   "db_team": "MIA",
+   "match": "exact"
+  },
+  {
+   "rank": 26,
+   "name": "Stephon Castle",
+   "ringer_team": "San Antonio Spurs",
+   "player_id": "5ab52d15-28de-4f1c-b3ec-4029aae08a0d",
+   "db_name": "Stephon Castle",
+   "nba_api_id": "1642264",
+   "db_team": "SAS",
+   "match": "exact"
+  },
+  {
+   "rank": 27,
+   "name": "Pascal Siakam",
+   "ringer_team": "Indiana Pacers",
+   "player_id": "b00960df-ab52-4910-8ba7-33ba878c2b75",
+   "db_name": "Pascal Siakam",
+   "nba_api_id": "1627783",
+   "db_team": "IND",
+   "match": "exact"
+  },
+  {
+   "rank": 28,
+   "name": "Chet Holmgren",
+   "ringer_team": "Oklahoma City Thunder",
+   "player_id": "73ed6fb0-2523-4bd0-9f04-d5282a5ebeec",
+   "db_name": "Chet Holmgren",
+   "nba_api_id": "1631096",
+   "db_team": "OKC",
+   "match": "exact"
+  },
+  {
+   "rank": 29,
+   "name": "Paolo Banchero",
+   "ringer_team": "Orlando Magic",
+   "player_id": "4bd9824a-c14a-4bfe-89dc-1def090a312b",
+   "db_name": "Paolo Banchero",
+   "nba_api_id": "1631094",
+   "db_team": "ORL",
+   "match": "exact"
+  },
+  {
+   "rank": 30,
+   "name": "Alperen Sengun",
+   "ringer_team": "Houston Rockets",
+   "player_id": "e7fe6ff1-62f0-41ee-b75e-40994e110a73",
+   "db_name": "Alperen Sengun",
+   "nba_api_id": "1630578",
+   "db_team": "HOU",
+   "match": "exact"
+  },
+  {
+   "rank": 31,
+   "name": "James Harden",
+   "ringer_team": "Cleveland Cavaliers",
+   "player_id": "2c2ca3f9-574c-47c5-91d6-007a71ffe252",
+   "db_name": "James Harden",
+   "nba_api_id": "201935",
+   "db_team": "CLE",
+   "match": "exact"
+  },
+  {
+   "rank": 32,
+   "name": "Jalen Williams",
+   "ringer_team": "Oklahoma City Thunder",
+   "player_id": "fb616131-f290-41f9-829f-a38b1e852dde",
+   "db_name": "Jalen Williams",
+   "nba_api_id": "1631114",
+   "db_team": "OKC",
+   "match": "exact"
+  },
+  {
+   "rank": 33,
+   "name": "LaMelo Ball",
+   "ringer_team": "Charlotte Hornets",
+   "player_id": "277fd1c9-0480-48b8-aedd-51087b3f3f16",
+   "db_name": "LaMelo Ball",
+   "nba_api_id": "1630163",
+   "db_team": "CHA",
+   "match": "exact"
+  },
+  {
+   "rank": 34,
+   "name": "Austin Reaves",
+   "ringer_team": "Los Angeles Lakers",
+   "player_id": "f9d38256-e07e-48ab-bdfe-11420e03f66b",
+   "db_name": "Austin Reaves",
+   "nba_api_id": "1630559",
+   "db_team": "LAL",
+   "match": "exact"
+  },
+  {
+   "rank": 35,
+   "name": "Derrick White",
+   "ringer_team": "Boston Celtics",
+   "player_id": "34b22bbb-e15c-40ac-8e0a-a2a744e7044d",
+   "db_name": "Derrick White",
+   "nba_api_id": "1628401",
+   "db_team": "BOS",
+   "match": "exact"
+  },
+  {
+   "rank": 36,
+   "name": "Amen Thompson",
+   "ringer_team": "Houston Rockets",
+   "player_id": "700abe28-124c-4cc7-b170-b89088a97843",
+   "db_name": "Amen Thompson",
+   "nba_api_id": "1641708",
+   "db_team": "HOU",
+   "match": "exact"
+  },
+  {
+   "rank": 37,
+   "name": "Lauri Markkanen",
+   "ringer_team": "Utah Jazz",
+   "player_id": "dc136358-4f38-44eb-a791-e8aceb00d240",
+   "db_name": "Lauri Markkanen",
+   "nba_api_id": "1628374",
+   "db_team": "UTA",
+   "match": "exact"
+  },
+  {
+   "rank": 38,
+   "name": "Franz Wagner",
+   "ringer_team": "Orlando Magic",
+   "player_id": "a3f027dd-90b9-4382-a8d6-3344704e1a9e",
+   "db_name": "Franz Wagner",
+   "nba_api_id": "1630532",
+   "db_team": "ORL",
+   "match": "exact"
+  },
+  {
+   "rank": 39,
+   "name": "Rudy Gobert",
+   "ringer_team": "Minnesota Timberwolves",
+   "player_id": "bff66cca-0c6e-42b5-a708-1ff6c34df143",
+   "db_name": "Rudy Gobert",
+   "nba_api_id": "203497",
+   "db_team": "MIN",
+   "match": "exact"
+  },
+  {
+   "rank": 40,
+   "name": "Desmond Bane",
+   "ringer_team": "Orlando Magic",
+   "player_id": "33026697-df0c-40dd-a43a-148f78f28c2a",
+   "db_name": "Desmond Bane",
+   "nba_api_id": "1630217",
+   "db_team": "ORL",
+   "match": "exact"
+  },
+  {
+   "rank": 41,
+   "name": "Cooper Flagg",
+   "ringer_team": "Dallas Mavericks",
+   "player_id": "6f9ee815-1bc8-4ca5-9d9f-e34d001c3990",
+   "db_name": "Cooper Flagg",
+   "nba_api_id": "1642843",
+   "db_team": "DAL",
+   "match": "exact"
+  },
+  {
+   "rank": 42,
+   "name": "Aaron Gordon",
+   "ringer_team": "Denver Nuggets",
+   "player_id": "d073e1f1-ed0b-4d2a-af4c-248e2e5491a8",
+   "db_name": "Aaron Gordon",
+   "nba_api_id": "203932",
+   "db_team": "DEN",
+   "match": "exact"
+  },
+  {
+   "rank": 43,
+   "name": "Joel Embiid",
+   "ringer_team": "Philadelphia 76ers",
+   "player_id": "e063a454-f384-49a4-89ad-bcb95958e04a",
+   "db_name": "Joel Embiid",
+   "nba_api_id": "203954",
+   "db_team": "PHI",
+   "match": "exact"
+  },
+  {
+   "rank": 44,
+   "name": "Jalen Duren",
+   "ringer_team": "Detroit Pistons",
+   "player_id": "7de62378-7625-402f-807e-8c3c27f73c18",
+   "db_name": "Jalen Duren",
+   "nba_api_id": "1631105",
+   "db_team": "DET",
+   "match": "exact"
+  },
+  {
+   "rank": 45,
+   "name": "Dylan Harper",
+   "ringer_team": "San Antonio Spurs",
+   "player_id": "ddc0c97b-782a-4878-8a88-baaf9945baa8",
+   "db_name": "Dylan Harper",
+   "nba_api_id": "1642844",
+   "db_team": "SAS",
+   "match": "exact"
+  },
+  {
+   "rank": 46,
+   "name": "De'Aaron Fox",
+   "ringer_team": "San Antonio Spurs",
+   "player_id": "46591583-1a1d-4beb-b483-e3e10edee995",
+   "db_name": "De'Aaron Fox",
+   "nba_api_id": "1628368",
+   "db_team": "SAS",
+   "match": "exact"
+  },
+  {
+   "rank": 47,
+   "name": "Kon Knueppel",
+   "ringer_team": "Charlotte Hornets",
+   "player_id": "8f67d4f9-c1fc-4610-b3e0-95e13e9df163",
+   "db_name": "Kon Knueppel",
+   "nba_api_id": "1642851",
+   "db_team": "CHA",
+   "match": "exact"
+  },
+  {
+   "rank": 48,
+   "name": "Zion Williamson",
+   "ringer_team": "New Orleans Pelicans",
+   "player_id": "479d132b-215a-4023-8ab5-c8d3cedb24bc",
+   "db_name": "Zion Williamson",
+   "nba_api_id": "1629627",
+   "db_team": "NOP",
+   "match": "exact"
+  },
+  {
+   "rank": 49,
+   "name": "Trey Murphy III",
+   "ringer_team": "New Orleans Pelicans",
+   "player_id": "cc55897a-d729-4a9f-9e9e-c9797811d63b",
+   "db_name": "Trey Murphy III",
+   "nba_api_id": "1630530",
+   "db_team": "NOP",
+   "match": "exact"
+  },
+  {
+   "rank": 50,
+   "name": "Brandon Miller",
+   "ringer_team": "Charlotte Hornets",
+   "player_id": "f9a10f20-5dd9-4939-a93c-cbfe7c4d0c16",
+   "db_name": "Brandon Miller",
+   "nba_api_id": "1641706",
+   "db_team": "CHA",
+   "match": "exact"
+  },
+  {
+   "rank": 51,
+   "name": "Jaden McDaniels",
+   "ringer_team": "Minnesota Timberwolves",
+   "player_id": "3566161f-3faa-4290-99f4-82bf175d7dd6",
+   "db_name": "Jaden McDaniels",
+   "nba_api_id": "1630183",
+   "db_team": "MIN",
+   "match": "exact"
+  },
+  {
+   "rank": 52,
+   "name": "Nickeil Alexander-Walker",
+   "ringer_team": "Atlanta Hawks",
+   "player_id": "2c21e5aa-4458-4d44-8653-5bde740e9650",
+   "db_name": "Nickeil Alexander-Walker",
+   "nba_api_id": "1629638",
+   "db_team": "ATL",
+   "match": "exact"
+  },
+  {
+   "rank": 53,
+   "name": "Keyonte George",
+   "ringer_team": "Utah Jazz",
+   "player_id": "6539850b-1495-499d-8449-055fa0ec2cdf",
+   "db_name": "Keyonte George",
+   "nba_api_id": "1641718",
+   "db_team": "UTA",
+   "match": "exact"
+  },
+  {
+   "rank": 54,
+   "name": "Julius Randle",
+   "ringer_team": "Minnesota Timberwolves",
+   "player_id": "ca66c65a-299e-4428-957e-f97fad692ca2",
+   "db_name": "Julius Randle",
+   "nba_api_id": "203944",
+   "db_team": "MIN",
+   "match": "exact"
+  },
+  {
+   "rank": 55,
+   "name": "Darius Garland",
+   "ringer_team": "Los Angeles Clippers",
+   "player_id": "c5f2581d-7adf-48d7-a796-d6a7eaae2043",
+   "db_name": "Darius Garland",
+   "nba_api_id": "1629636",
+   "db_team": "LAC",
+   "match": "exact"
+  },
+  {
+   "rank": 56,
+   "name": "Ausar Thompson",
+   "ringer_team": "Detroit Pistons",
+   "player_id": "c49b6c11-fec7-437e-b5eb-2daa8c3793b5",
+   "db_name": "Ausar Thompson",
+   "nba_api_id": "1641709",
+   "db_team": "DET",
+   "match": "exact"
+  },
+  {
+   "rank": 57,
+   "name": "Michael Porter Jr.",
+   "ringer_team": "Brooklyn Nets",
+   "player_id": "9e3d124a-617d-44e5-a9a5-f3130e3104db",
+   "db_name": "Michael Porter Jr.",
+   "nba_api_id": "1629008",
+   "db_team": "BKN",
+   "match": "exact"
+  },
+  {
+   "rank": 58,
+   "name": "Jarrett Allen",
+   "ringer_team": "Cleveland Cavaliers",
+   "player_id": "34ab0771-0fd2-4c8c-8467-5f6707d9247b",
+   "db_name": "Jarrett Allen",
+   "nba_api_id": "1628386",
+   "db_team": "CLE",
+   "match": "exact"
+  },
+  {
+   "rank": 59,
+   "name": "Dillon Brooks",
+   "ringer_team": "Phoenix Suns",
+   "player_id": "34182472-34bc-44da-b401-b6f2a64d6830",
+   "db_name": "Dillon Brooks",
+   "nba_api_id": "1628415",
+   "db_team": "PHX",
+   "match": "exact"
+  },
+  {
+   "rank": 60,
+   "name": "Alex Caruso",
+   "ringer_team": "Oklahoma City Thunder",
+   "player_id": "ff0a711b-6ba9-40e8-bec9-2740fc41322d",
+   "db_name": "Alex Caruso",
+   "nba_api_id": "1627936",
+   "db_team": "OKC",
+   "match": "exact"
+  },
+  {
+   "rank": 61,
+   "name": "Mikal Bridges",
+   "ringer_team": "New York Knicks",
+   "player_id": "c3236d47-2d3d-421e-aede-dfdf05975a45",
+   "db_name": "Mikal Bridges",
+   "nba_api_id": "1628969",
+   "db_team": "NYK",
+   "match": "exact"
+  },
+  {
+   "rank": 62,
+   "name": "Norm Powell",
+   "ringer_team": "Miami Heat",
+   "match": "alias",
+   "player_id": "ac32763a-28e3-4971-9bd6-1e3cd61091dd",
+   "db_name": "Norman Powell",
+   "nba_api_id": "1626181",
+   "db_team": "MIA"
+  },
+  {
+   "rank": 63,
+   "name": "Trae Young",
+   "ringer_team": "Washington Wizards",
+   "player_id": "b1f134f1-c609-4fd5-bb1b-61dc05c06fee",
+   "db_name": "Trae Young",
+   "nba_api_id": "1629027",
+   "db_team": "WAS",
+   "match": "exact"
+  },
+  {
+   "rank": 64,
+   "name": "Josh Hart",
+   "ringer_team": "New York Knicks",
+   "player_id": "0c04d12d-f0b9-4902-ac04-cfa32d97ae23",
+   "db_name": "Josh Hart",
+   "nba_api_id": "1628404",
+   "db_team": "NYK",
+   "match": "exact"
+  },
+  {
+   "rank": 65,
+   "name": "Devin Vassell",
+   "ringer_team": "San Antonio Spurs",
+   "player_id": "921a8b2e-87d7-4a99-9fd8-c469bc069081",
+   "db_name": "Devin Vassell",
+   "nba_api_id": "1630170",
+   "db_team": "SAS",
+   "match": "exact"
+  },
+  {
+   "rank": 66,
+   "name": "Paul George",
+   "ringer_team": "Philadelphia 76ers",
+   "player_id": "2a6903b1-14fc-494d-a80d-aab0a2be6c6b",
+   "db_name": "Paul George",
+   "nba_api_id": "202331",
+   "db_team": "PHI",
+   "match": "exact"
+  },
+  {
+   "rank": 67,
+   "name": "Brandon Ingram",
+   "ringer_team": "Toronto Raptors",
+   "player_id": "330046b0-915f-4eb9-a205-262fcdcfb7c9",
+   "db_name": "Brandon Ingram",
+   "nba_api_id": "1627742",
+   "db_team": "TOR",
+   "match": "exact"
+  },
+  {
+   "rank": 68,
+   "name": "Tyler Herro",
+   "ringer_team": "Miami Heat",
+   "player_id": "d2010804-1810-41d2-92eb-52c8d97f0268",
+   "db_name": "Tyler Herro",
+   "nba_api_id": "1629639",
+   "db_team": "MIA",
+   "match": "exact"
+  },
+  {
+   "rank": 69,
+   "name": "Isaiah Hartenstein",
+   "ringer_team": "Oklahoma City Thunder",
+   "player_id": "6d1b3d03-5f14-4884-bcf9-b766c66f0a19",
+   "db_name": "Isaiah Hartenstein",
+   "nba_api_id": "1628392",
+   "db_team": "OKC",
+   "match": "exact"
+  },
+  {
+   "rank": 70,
+   "name": "Payton Pritchard",
+   "ringer_team": "Boston Celtics",
+   "player_id": "96c258c2-2564-478a-bc85-d1c71fbedfed",
+   "db_name": "Payton Pritchard",
+   "nba_api_id": "1630202",
+   "db_team": "BOS",
+   "match": "exact"
+  },
+  {
+   "rank": 71,
+   "name": "Ajay Mitchell",
+   "ringer_team": "Oklahoma City Thunder",
+   "player_id": "1983ad7d-232a-4b82-8978-4e0ba815cdaa",
+   "db_name": "Ajay Mitchell",
+   "nba_api_id": "1642349",
+   "db_team": "OKC",
+   "match": "exact"
+  },
+  {
+   "rank": 72,
+   "name": "Andrew Nembhard",
+   "ringer_team": "Indiana Pacers",
+   "player_id": "4bd4980f-06dc-4c94-bced-d4f75d608320",
+   "db_name": "Andrew Nembhard",
+   "nba_api_id": "1629614",
+   "db_team": "IND",
+   "match": "exact"
+  },
+  {
+   "rank": 73,
+   "name": "Josh Giddey",
+   "ringer_team": "Chicago Bulls",
+   "player_id": "cba9e299-20af-4870-9c25-fccaba8963b9",
+   "db_name": "Josh Giddey",
+   "nba_api_id": "1630581",
+   "db_team": "CHI",
+   "match": "exact"
+  },
+  {
+   "rank": 74,
+   "name": "Jrue Holiday",
+   "ringer_team": "Portland Trail Blazers",
+   "player_id": "34401d44-62ea-4bff-a624-e557737f32e1",
+   "db_name": "Jrue Holiday",
+   "nba_api_id": "201950",
+   "db_team": "POR",
+   "match": "exact"
+  },
+  {
+   "rank": 75,
+   "name": "Cason Wallace",
+   "ringer_team": "Oklahoma City Thunder",
+   "player_id": "b65e24fc-446b-441f-aa9d-fa8c5704400b",
+   "db_name": "Cason Wallace",
+   "nba_api_id": "1641717",
+   "db_team": "OKC",
+   "match": "exact"
+  },
+  {
+   "rank": 76,
+   "name": "Peyton Watson",
+   "ringer_team": "Denver Nuggets",
+   "player_id": "34577a6a-f065-4bb5-a6b0-3db0a865e940",
+   "db_name": "Peyton Watson",
+   "nba_api_id": "1631212",
+   "db_team": "DEN",
+   "match": "exact"
+  },
+  {
+   "rank": 77,
+   "name": "Naz Reid",
+   "ringer_team": "Minnesota Timberwolves",
+   "player_id": "aa6aabad-e327-4d5a-b2eb-372f1abf7c76",
+   "db_name": "Naz Reid",
+   "nba_api_id": "1629675",
+   "db_team": "MIN",
+   "match": "exact"
+  },
+  {
+   "rank": 78,
+   "name": "Dyson Daniels",
+   "ringer_team": "Atlanta Hawks",
+   "player_id": "688cb00d-1f43-4b36-8754-5515bf4b7a35",
+   "db_name": "Dyson Daniels",
+   "nba_api_id": "1630700",
+   "db_team": "ATL",
+   "match": "exact"
+  },
+  {
+   "rank": 79,
+   "name": "RJ Barrett",
+   "ringer_team": "Toronto Raptors",
+   "player_id": "0fca0022-2be0-4085-9e86-a28d30759413",
+   "db_name": "RJ Barrett",
+   "nba_api_id": "1629628",
+   "db_team": "TOR",
+   "match": "exact"
+  },
+  {
+   "rank": 80,
+   "name": "Jaime Jaquez Jr.",
+   "ringer_team": "Miami Heat",
+   "player_id": "3d96ba96-60d8-41d6-aca7-ad4f7f276b54",
+   "db_name": "Jaime Jaquez Jr.",
+   "nba_api_id": "1631170",
+   "db_team": "MIA",
+   "match": "exact"
+  },
+  {
+   "rank": 81,
+   "name": "Ayo Dosunmu",
+   "ringer_team": "Minnesota Timberwolves",
+   "player_id": "37724798-ec8d-41f8-8044-8a41972ad810",
+   "db_name": "Ayo Dosunmu",
+   "nba_api_id": "1630245",
+   "db_team": "MIN",
+   "match": "exact"
+  },
+  {
+   "rank": 82,
+   "name": "Donovan Clingan",
+   "ringer_team": "Portland Trail Blazers",
+   "player_id": "216ead33-787f-4609-b03a-71d9715f497f",
+   "db_name": "Donovan Clingan",
+   "nba_api_id": "1642270",
+   "db_team": "POR",
+   "match": "exact"
+  },
+  {
+   "rank": 83,
+   "name": "Onyeka Okongwu",
+   "ringer_team": "Atlanta Hawks",
+   "player_id": "f05f2128-b268-4795-a3b5-1b9fa68609ad",
+   "db_name": "Onyeka Okongwu",
+   "nba_api_id": "1630168",
+   "db_team": "ATL",
+   "match": "exact"
+  },
+  {
+   "rank": 84,
+   "name": "VJ Edgecombe",
+   "ringer_team": "Philadelphia 76ers",
+   "player_id": "af0dc5bd-849f-48e7-bb79-7bc5ef0a4c2a",
+   "db_name": "VJ Edgecombe",
+   "nba_api_id": "1642845",
+   "db_team": "PHI",
+   "match": "exact"
+  },
+  {
+   "rank": 85,
+   "name": "Jalen Suggs",
+   "ringer_team": "Orlando Magic",
+   "player_id": "b389bb85-a628-4f73-90b3-6c2c9950b4f9",
+   "db_name": "Jalen Suggs",
+   "nba_api_id": "1630591",
+   "db_team": "ORL",
+   "match": "exact"
+  },
+  {
+   "rank": 86,
+   "name": "Tobias Harris",
+   "ringer_team": "Detroit Pistons",
+   "player_id": "0d7acc0b-8467-48f3-86ec-f86496bdad63",
+   "db_name": "Tobias Harris",
+   "nba_api_id": "202699",
+   "db_team": "DET",
+   "match": "exact"
+  },
+  {
+   "rank": 87,
+   "name": "CJ McCollum",
+   "ringer_team": "Atlanta Hawks",
+   "player_id": "bd5bed1b-da75-45b3-8df4-9246059d700e",
+   "db_name": "CJ McCollum",
+   "nba_api_id": "203468",
+   "db_team": "ATL",
+   "match": "exact"
+  },
+  {
+   "rank": 88,
+   "name": "Ryan Rollins",
+   "ringer_team": "Milwaukee Bucks",
+   "player_id": "93092709-1fe2-4a7e-98b2-d01de69c1893",
+   "db_name": "Ryan Rollins",
+   "nba_api_id": "1631157",
+   "db_team": "MIL",
+   "match": "exact"
+  },
+  {
+   "rank": 89,
+   "name": "Dejounte Murray",
+   "ringer_team": "New Orleans Pelicans",
+   "player_id": "3b84415f-b0f4-49a3-b193-4cb27d833b1b",
+   "db_name": "Dejounte Murray",
+   "nba_api_id": "1627749",
+   "db_team": "NOP",
+   "match": "exact"
+  },
+  {
+   "rank": 90,
+   "name": "Cam Johnson",
+   "ringer_team": "Denver Nuggets",
+   "player_id": "3d1e53f7-6cf6-41a2-b95b-88e2b49eae88",
+   "db_name": "Cameron Johnson",
+   "nba_api_id": "1629661",
+   "db_team": "DEN",
+   "match": "alias"
+  },
+  {
+   "rank": 91,
+   "name": "Alex Sarr",
+   "ringer_team": "Washington Wizards",
+   "player_id": "a4fba81e-252d-4477-93da-12043efbee0e",
+   "db_name": "Alex Sarr",
+   "nba_api_id": "1642259",
+   "db_team": "WAS",
+   "match": "exact"
+  },
+  {
+   "rank": 92,
+   "name": "Coby White",
+   "ringer_team": "Charlotte Hornets",
+   "player_id": "6fd05a2f-af9d-4a9a-b58b-dee523062c68",
+   "db_name": "Coby White",
+   "nba_api_id": "1629632",
+   "db_team": "CHA",
+   "match": "exact"
+  },
+  {
+   "rank": 93,
+   "name": "Collin Murray-Boyles",
+   "ringer_team": "Toronto Raptors",
+   "player_id": "8be10ba4-eb73-499a-981b-41c53cad20a8",
+   "db_name": "Collin Murray-Boyles",
+   "nba_api_id": "1642867",
+   "db_team": "TOR",
+   "match": "exact"
+  },
+  {
+   "rank": 94,
+   "name": "Toumani Camara",
+   "ringer_team": "Portland Trail Blazers",
+   "player_id": "e61c1084-3f0d-4340-b800-ad1210087e31",
+   "db_name": "Toumani Camara",
+   "nba_api_id": "1641739",
+   "db_team": "POR",
+   "match": "exact"
+  },
+  {
+   "rank": 95,
+   "name": "Mitchell Robinson",
+   "ringer_team": "New York Knicks",
+   "player_id": "f1c6573e-704c-4941-b794-253012e05039",
+   "db_name": "Mitchell Robinson",
+   "nba_api_id": "1629011",
+   "db_team": "NYK",
+   "match": "exact"
+  },
+  {
+   "rank": 96,
+   "name": "Moussa Diabate",
+   "ringer_team": "Charlotte Hornets",
+   "player_id": "2e63f240-001d-4deb-ab83-6874e5360ff5",
+   "db_name": "Moussa Diabaté",
+   "nba_api_id": "1631217",
+   "db_team": "CHA",
+   "match": "normalized"
+  },
+  {
+   "rank": 97,
+   "name": "Draymond Green",
+   "ringer_team": "Golden State Warriors",
+   "player_id": "3ba8635a-37a5-40b3-abf9-58d967a5228b",
+   "db_name": "Draymond Green",
+   "nba_api_id": "203110",
+   "db_team": "GSW",
+   "match": "exact"
+  },
+  {
+   "rank": 98,
+   "name": "Julian Champagnie",
+   "ringer_team": "San Antonio Spurs",
+   "player_id": "32c19bd6-197a-4704-bd35-75dfb99365b7",
+   "db_name": "Julian Champagnie",
+   "nba_api_id": "1630577",
+   "db_team": "SAS",
+   "match": "exact"
+  },
+  {
+   "rank": 99,
+   "name": "Keldon Johnson",
+   "ringer_team": "San Antonio Spurs",
+   "player_id": "f8c3d5e2-502e-4c12-87c4-07d0fe62f4a1",
+   "db_name": "Keldon Johnson",
+   "nba_api_id": "1629640",
+   "db_team": "SAS",
+   "match": "exact"
+  },
+  {
+   "rank": 100,
+   "name": "Rui Hachimura",
+   "ringer_team": "Los Angeles Lakers",
+   "player_id": "f9426463-c842-4271-a114-512bd7c4967f",
+   "db_name": "Rui Hachimura",
+   "nba_api_id": "1629060",
+   "db_team": "LAL",
+   "match": "exact"
+  }
+ ]
+}
