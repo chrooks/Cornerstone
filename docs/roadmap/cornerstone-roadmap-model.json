@@ -740,6 +740,54 @@
         "url": "https://github.com/chrooks/Cornerstone/issues/154",
         "state": "open"
       }
+    },
+    {
+      "id": "i155",
+      "label": "#155 Skill-scoped Claude run +\nper-Skill bulk review (V1, P1)",
+      "group": "engine",
+      "x": 820,
+      "y": 150,
+      "description": "#119 plan M2; sub-issue of #152. Scoped Claude run keeps human decisions; per-Skill agreements-only bulk review.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/155",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i156",
+      "label": "#156 Direct composite path loses\nflags (NOT NULL) — parked bug",
+      "group": "snapshot",
+      "x": -600,
+      "y": -750,
+      "description": "Delete-then-insert in _upsert_draft_skill_flags breaks on HIGH claude_rating null.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/156",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i157",
+      "label": "🧍 #157 Recalibrate rim_protector\n(quality rule, post-launch)",
+      "group": "archetypes",
+      "x": 1000,
+      "y": 100,
+      "description": "Rim FG% vs expected + BLK%, no per-game volume. Parked after launch.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/157",
+        "state": "open"
+      }
+    },
+    {
+      "id": "i158",
+      "label": "#158 EV publish does not flush\nper-worker caches — parked bug",
+      "group": "engine",
+      "x": 820,
+      "y": -500,
+      "description": "Key distribution + value-ladder caches by EV id as well as release id.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/158",
+        "state": "open"
+      }
     }
   ],
   "edges": [
@@ -964,6 +1012,30 @@
       "to": "i152",
       "label": "rated-None safety",
       "description": "Archetype labels read reviewed tiers; a null written as resolved must never read as a reviewed None."
+    },
+    {
+      "from": "i154",
+      "to": "i155",
+      "label": "same code first",
+      "description": "#155 extends the review resolve paths that #154 guards."
+    },
+    {
+      "from": "i155",
+      "to": "i152",
+      "label": "review tools",
+      "description": "The split needs the scoped Claude run and per-Skill bulk review."
+    },
+    {
+      "from": "i155",
+      "to": "i130",
+      "label": "recompute passthrough",
+      "description": "#130 uses the recompute_composite passthrough from #155."
+    },
+    {
+      "from": "i152",
+      "to": "i157",
+      "label": "then recalibrate rim",
+      "description": "Rim rule recalibration follows the split."
     }
   ]
 }
