@@ -717,6 +717,18 @@
         "url": "https://github.com/chrooks/Cornerstone/issues/151",
         "state": "open"
       }
+    },
+    {
+      "id": "i152",
+      "label": "🧍 #152 Split Perimeter Disruptor\ninto on-ball + off-ball (V1, P1)",
+      "group": "engine",
+      "x": 600,
+      "y": 280,
+      "description": "Decided in the #119 grill 2026-09-21 (right over on time). Two LOW-confidence defensive Skills; on-ball rule reads matchup deployment (needs #134). Runs in one Snapshot draft with #130.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/152",
+        "state": "open"
+      }
     }
   ],
   "edges": [
@@ -927,6 +939,24 @@
       "to": "i132",
       "label": "pipeline after release",
       "description": "The in-season pipeline reuses the reviewed V1 release flow."
+    },
+    {
+      "from": "i134",
+      "to": "i152",
+      "label": "on-ball rule needs it",
+      "description": "The on-ball half reads matchup deployment, which needs correct per-defender matchup rows."
+    },
+    {
+      "from": "i152",
+      "to": "i130",
+      "label": "same draft",
+      "description": "The split and the #130 HIGH-only recompute run in one open Snapshot draft and publish once."
+    },
+    {
+      "from": "i152",
+      "to": "i17",
+      "label": "defense roles",
+      "description": "Archetype defense roles read the two new Skills."
     }
   ]
 }
