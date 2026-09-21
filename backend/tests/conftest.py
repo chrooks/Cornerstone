@@ -22,6 +22,31 @@ for path in (REPO_ROOT, BACKEND_DIR):
 
 
 # ---------------------------------------------------------------------------
+# Real-DB guard (#116)
+# ---------------------------------------------------------------------------
+# No test run may reach a real database by default. Blank the credentials
+# before any module calls load_dotenv(): load_dotenv never overrides a key
+# that is already set, so the blanks win and get_supabase() raises instead
+# of writing. Opt in with CORNERSTONE_LIVE_DB_TESTS=1, which still refuses
+# the cloud project (*.supabase.co is production).
+# ponytail: env guard, not a fake — a fake at the client Seam is the #116 full fix.
+
+
+def _guard_real_db() -> None:
+    from dotenv import dotenv_values
+
+    url = os.environ.get("SUPABASE_URL") or dotenv_values(BACKEND_DIR / ".env").get("SUPABASE_URL") or ""
+    opted_in = os.environ.get("CORNERSTONE_LIVE_DB_TESTS") == "1"
+    if opted_in and ".supabase.co" not in url:
+        return
+    os.environ["SUPABASE_URL"] = ""
+    os.environ["SUPABASE_SERVICE_KEY"] = ""
+
+
+_guard_real_db()
+
+
+# ---------------------------------------------------------------------------
 # Live-DB detection
 # ---------------------------------------------------------------------------
 
