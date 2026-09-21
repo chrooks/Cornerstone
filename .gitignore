@@ -45,3 +45,19 @@ plans/**/.plan-url
 .diagram-exports/
 graphify-out/
 .tasks/
+
+# Canon capture media
+inbox/*.m4a
+archive/*.m4a
+inbox/*.mp3
+archive/*.mp3
+inbox/*.wav
+archive/*.wav
+inbox/*.jpg
+archive/*.jpg
+inbox/*.jpeg
+archive/*.jpeg
+inbox/*.png
+archive/*.png
+inbox/*.heic
+archive/*.heic
