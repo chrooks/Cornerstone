@@ -592,6 +592,22 @@ class TestPublishDraftDriftCheck:
         mock_drift.assert_called_once()
         assert mock_drift.call_args[0][0] == published_row["season"]
 
+        # Issue #131: the API response carries the drift summary, not just a log line.
+        assert result.drift_summary == {
+            "status": "drift",
+            "count": 1,
+            "entries": [
+                {
+                    "player_id": "p1",
+                    "player_name": "Giannis",
+                    "skill_name": "offensive_rebounder",
+                    "stored_tier": "Elite",
+                    "recomputed_tier": "Proficient",
+                    "source": "stats_only",
+                }
+            ],
+        }
+
     def test_publish_succeeds_when_drift_check_raises(self):
         """A crashing drift check must never block publish either."""
         from services.snapshot_versions import drift_audit, repo
@@ -633,6 +649,50 @@ class TestPublishDraftDriftCheck:
 
         assert result.label == published_row["label"]  # publish_draft did not raise
         mock_drift.assert_called_once()
+
+        # Issue #131: a crashing check surfaces as status check_failed, never an
+        # exception and never empty-but-silent — the admin sees the check errored.
+        assert result.drift_summary == {"status": "check_failed", "count": 0, "entries": []}
+
+    def test_publish_returns_clean_status_when_no_drift(self):
+        """An empty drift report surfaces as status 'clean', not just absence."""
+        from services.snapshot_versions import drift_audit, repo
+
+        draft_id = "aaaaaaaa-0000-0000-0000-000000000001"
+        published_row = _make_published_row(id=draft_id)
+
+        client = MagicMock()
+        client.rpc.return_value.execute.return_value = _result(None)
+        (
+            client
+            .table.return_value
+            .select.return_value
+            .eq.return_value
+            .single.return_value
+            .execute.return_value
+        ) = _result(published_row)
+
+        with patch.object(repo, "_get_client", return_value=client):
+            with patch("services.pipeline_runs.repo.any_running", return_value=False):
+                with patch("services.pipeline_runs.repo.any_pending_commit", return_value=False):
+                    with patch.object(drift_audit, "find_tier_drift", return_value=[]) as mock_drift:
+                        with patch("services.snapshot_versions.trace_snapshot.snapshot_skill_traces"):
+                            with patch("services.snapshot_versions.distribution_cache.force_clear_distributions"):
+                                with patch("services.snapshot_versions.distribution_cache.ensure_distributions"):
+                                    with patch("services.snapshot_versions.value_ladder_cache.force_clear_ladder"):
+                                        with patch("services.snapshot_versions.value_ladder_cache.ensure_ladder"):
+                                            with patch("services.evaluation_versions.repo.get_active") as mock_active:
+                                                from services.cohesion_engine.engine import EvaluationVersion
+                                                mock_active.return_value = EvaluationVersion(
+                                                    id="ev-1", slug="cohesion-v1", status="published",
+                                                    payload={"values": {}},
+                                                )
+                                                result = repo.publish_draft(
+                                                    draft_id, "label", allow_missing_composite=True
+                                                )
+
+        mock_drift.assert_called_once()
+        assert result.drift_summary == {"status": "clean", "count": 0, "entries": []}
 
 
 # ---------------------------------------------------------------------------

@@ -1064,6 +1064,28 @@ export interface SnapshotRelease {
   /** Issue #71: authoritative count of open flags this Release froze with.
    *  null for legacy rows; 0 when none were bypassed. */
   published_with_open_flags?: number | null;
+  /** Issue #131: report-only tier-drift check result from the publish that
+   *  produced this Release (issue #86's check). null outside a fresh publish
+   *  response. Never blocks — check_failed means the check itself errored. */
+  drift_summary?: DriftSummary | null;
+}
+
+/** One stored, stats-derived skill tier that disagreed with a fresh recompute
+ *  at publish time (issue #86 / #131). */
+export interface DriftEntry {
+  player_id: string;
+  player_name: string;
+  skill_name: string;
+  stored_tier: string | null;
+  recomputed_tier: string;
+  source: string;
+}
+
+/** The publish-time tier-drift report (issue #131). */
+export interface DriftSummary {
+  status: "clean" | "drift" | "check_failed";
+  count: number;
+  entries: DriftEntry[];
 }
 
 /** A draft/review Snapshot Release augmented with live-run state. */

@@ -24,10 +24,12 @@ import { ExcludedSection } from "../_components/ExcludedSection";
 import { RunPipelineConfirmDialog } from "../_components/RunPipelineConfirmDialog";
 import { useRunCompositePipeline } from "../_lib/useRunCompositePipeline";
 import { setPlayersExcludedFromSnapshot } from "@/lib/api";
+import { DriftReportPanel } from "../../_components/DriftReportPanel";
 import type {
   SnapshotDraftSummary,
   SnapshotCountSummary,
   SnapshotPublishValidation,
+  SnapshotRelease,
 } from "@/lib/types";
 import type { TabSlug } from "../_lib/tabRouting";
 
@@ -44,6 +46,12 @@ export interface PublishTabProps {
   /** Revert the snapshot to draft — surfaced inline on the canonical block. */
   onBackToDraft?: () => void;
   isTransitioning?: boolean;
+  /** Issue #131: the just-published Release (carries drift_summary), or null
+   *  before a publish this session. Drives the post-publish state below the CTA. */
+  justPublished?: SnapshotRelease | null;
+  /** Issue #131: navigate to the published Release once the admin has reviewed
+   *  the drift report. */
+  onContinueToRelease?: () => void;
 }
 
 export function PublishTab({
@@ -57,6 +65,8 @@ export function PublishTab({
   isPublishing,
   onBackToDraft,
   isTransitioning,
+  justPublished,
+  onContinueToRelease,
 }: PublishTabProps) {
   const missingCompositePlayers = useMemo(
     () => validation?.missing_composite_players ?? [],
@@ -277,26 +287,53 @@ export function PublishTab({
         </div>
       )}
 
-      <div id="publish-tab-cta">
-        <button
-          id="publish-tab-publish-btn"
-          type="button"
-          onClick={onOpenPublishModal}
-          disabled={isCanonicalBlocked || isPublishing}
-          className="text-sm font-semibold px-6 py-2.5 rounded-[4px]
-            bg-[#ffa05c] text-[#0e0907] hover:bg-[#fe6d34]
-            focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-2
-            disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isPublishing ? "Publishing…" : "Publish snapshot"}
-        </button>
-        {missingComposite > 0 && (
-          <p className="text-xs text-neutral-500 mt-2">
-            {missingComposite} player{missingComposite !== 1 ? "s" : ""} missing composite
-            Skill Profiles. You can still publish and acknowledge.
+      {justPublished ? (
+        // Issue #131: publish already succeeded — this is the drift report,
+        // not another publish gate. Quiet by default, expandable on drift.
+        <div id="publish-tab-post-publish" className="space-y-3">
+          <p className="text-sm font-medium text-[#0e0907]">
+            Published as &ldquo;{justPublished.label}&rdquo;.
           </p>
-        )}
-      </div>
+          {justPublished.drift_summary && (
+            <DriftReportPanel
+              id="publish-tab-drift-report"
+              summary={justPublished.drift_summary}
+            />
+          )}
+          <button
+            id="publish-tab-continue-to-release-btn"
+            type="button"
+            onClick={onContinueToRelease}
+            className="text-sm font-semibold px-6 py-2.5 rounded-[4px]
+              bg-[#ffa05c] text-[#0e0907] hover:bg-[#fe6d34]
+              focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-2
+              transition-colors"
+          >
+            View release &rarr;
+          </button>
+        </div>
+      ) : (
+        <div id="publish-tab-cta">
+          <button
+            id="publish-tab-publish-btn"
+            type="button"
+            onClick={onOpenPublishModal}
+            disabled={isCanonicalBlocked || isPublishing}
+            className="text-sm font-semibold px-6 py-2.5 rounded-[4px]
+              bg-[#ffa05c] text-[#0e0907] hover:bg-[#fe6d34]
+              focus:outline-none focus:ring-2 focus:ring-[#ffa05c] focus:ring-offset-2
+              disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isPublishing ? "Publishing…" : "Publish snapshot"}
+          </button>
+          {missingComposite > 0 && (
+            <p className="text-xs text-neutral-500 mt-2">
+              {missingComposite} player{missingComposite !== 1 ? "s" : ""} missing composite
+              Skill Profiles. You can still publish and acknowledge.
+            </p>
+          )}
+        </div>
+      )}
 
       {runPipeline.pendingIds && (
         <RunPipelineConfirmDialog

@@ -37,6 +37,9 @@ def _release_dict(r) -> dict:
         "published_at": r.published_at,
         "created_at": r.created_at,
         "published_with_open_flags": getattr(r, "published_with_open_flags", None),
+        # Issue #131: report-only tier-drift summary from publish_draft (issue #86's
+        # check). None outside the publish response — only publish_draft populates it.
+        "drift_summary": getattr(r, "drift_summary", None),
     }
 
 

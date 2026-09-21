@@ -56,7 +56,9 @@ def anon_client():
         yield c
 
 
-def _fake_release(status="published", is_active=True, published_with_open_flags=0):
+def _fake_release(
+    status="published", is_active=True, published_with_open_flags=0, drift_summary=None
+):
     return MagicMock(
         id="bbbbbbbb-0000-0000-0000-000000000002",
         label="2025-26 Current",
@@ -66,6 +68,7 @@ def _fake_release(status="published", is_active=True, published_with_open_flags=
         published_at="2026-05-01T00:00:00Z",
         created_at="2026-05-01T00:00:00Z",
         published_with_open_flags=published_with_open_flags,
+        drift_summary=drift_summary,
     )
 
 
@@ -79,6 +82,7 @@ def _fake_draft(status="draft"):
         published_at=None,
         created_at="2026-05-26T00:00:00Z",
         published_with_open_flags=None,
+        drift_summary=None,
     )
 
 
@@ -344,6 +348,38 @@ class TestPublishDraftEndpoint:
         body = resp.get_json()
         assert body["success"] is True
         assert body["data"]["is_active"] is True
+
+    def test_post_publish_response_carries_drift_summary(self, admin_client):
+        """Issue #131: the drift summary repo.publish_draft attaches to the
+        Release rides through to the API response untouched."""
+        from services.snapshot_versions import repo
+
+        drift_summary = {
+            "status": "drift",
+            "count": 1,
+            "entries": [
+                {
+                    "player_id": "p1",
+                    "player_name": "Giannis",
+                    "skill_name": "offensive_rebounder",
+                    "stored_tier": "Elite",
+                    "recomputed_tier": "Proficient",
+                    "source": "stats_only",
+                }
+            ],
+        }
+        published = _fake_release(
+            status="published", is_active=True, drift_summary=drift_summary
+        )
+        with patch.object(repo, "publish_draft", return_value=published):
+            resp = admin_client.post(
+                "/api/snapshots/drafts/aaaaaaaa-0000-0000-0000-000000000001/publish",
+                json={"label": "Test", "allow_missing_composite": True},
+                headers=admin_client.auth_header,
+            )
+
+        assert resp.status_code == 200
+        assert resp.get_json()["data"]["drift_summary"] == drift_summary
 
     def test_publish_default_allow_open_flags_false_blocks_publish_when_flags_open(
         self, admin_client

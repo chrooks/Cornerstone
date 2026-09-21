@@ -30,6 +30,7 @@ import type {
   SnapshotDraftSummary,
   SnapshotCountSummary,
   SnapshotPublishValidation,
+  SnapshotRelease,
 } from "@/lib/types";
 import { StateChip } from "../../_components/StateChip";
 import { DiscardActions } from "../../_components/DiscardActions";
@@ -70,6 +71,10 @@ export function DraftWorkspaceShell() {
   // publishResetNonce disarms the override in the modal so they must re-confirm.
   const [publishCountChanged, setPublishCountChanged] = useState(false);
   const [publishResetNonce, setPublishResetNonce] = useState(0);
+  // Issue #131: the just-published Release (carries drift_summary). Publish
+  // no longer auto-navigates — the admin reviews the drift report on this
+  // tab first, then continues to the release via an explicit action.
+  const [justPublished, setJustPublished] = useState<SnapshotRelease | null>(null);
 
   // Issue #69: track the previously-seen draft status so a SILENT flip (another
   // admin window / backend) can be surfaced with explicit Feedback. Local flips
@@ -279,7 +284,9 @@ export function DraftWorkspaceShell() {
           );
           setPublishCountChanged(false);
           setPublishModalOpen(false);
-          router.replace(`/admin/snapshots/${res.data.id}`);
+          // Issue #131: hold here so the drift report renders before navigating —
+          // the admin reads it, then continues via handleContinueToRelease.
+          setJustPublished(res.data);
         } else if (res.error?.includes("open_flags_changed")) {
           // Issue #71: the count moved under the admin. Refresh the validation
           // count, disarm the override, and keep the modal open so they re-confirm
@@ -301,8 +308,13 @@ export function DraftWorkspaceShell() {
         setIsPublishing(false);
       }
     },
-    [draft, router, reload, validation]
+    [draft, reload, validation]
   );
+
+  const handleContinueToRelease = useCallback(() => {
+    if (!justPublished) return;
+    router.replace(`/admin/snapshots/${justPublished.id}`);
+  }, [justPublished, router]);
 
   const handleDiscarded = useCallback(() => {
     router.replace("/admin/snapshots");
@@ -431,6 +443,8 @@ export function DraftWorkspaceShell() {
               isPublishing={isPublishing}
               onBackToDraft={handleMoveToDraft}
               isTransitioning={isTransitioning}
+              justPublished={justPublished}
+              onContinueToRelease={handleContinueToRelease}
             />
           )}
         </div>

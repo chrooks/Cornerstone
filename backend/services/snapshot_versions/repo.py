@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 import logging
+import dataclasses
 from dataclasses import dataclass
 from typing import Optional
 
@@ -33,6 +34,10 @@ class SnapshotRelease:
     # Issue #71: authoritative count of open flags this Release froze with.
     # None for legacy rows / non-published drafts.
     published_with_open_flags: Optional[int] = None
+    # Issue #131: report-only tier-drift summary from the publish-time check
+    # (issue #86). None for reads that didn't run the check (only publish_draft
+    # populates it). {"status": "clean"|"drift"|"check_failed", "count", "entries"}.
+    drift_summary: Optional[dict] = None
 
 
 def _row_to_release(row: dict) -> SnapshotRelease:
@@ -333,7 +338,8 @@ def publish_draft(
 
     # Issue #86: report-only stale-tier check against the data just published.
     # Never allowed to block a publish — same never-block pattern as the
-    # trace_snapshot freeze above.
+    # trace_snapshot freeze above. Issue #131: capture the result (not just
+    # log it) so the API response can surface it to the admin.
     try:
         from services.snapshot_versions import drift_audit
 
@@ -351,10 +357,22 @@ def publish_draft(
             )
         else:
             logger.info("Tier drift check clean for release %s", published.id)
+        published = dataclasses.replace(
+            published,
+            drift_summary={
+                "status": "drift" if drift else "clean",
+                "count": len(drift),
+                "entries": [dataclasses.asdict(d) for d in drift],
+            },
+        )
     except Exception:
         logger.exception(
             "Tier drift check failed after publish (release %s) — publish still succeeded",
             published.id,
+        )
+        published = dataclasses.replace(
+            published,
+            drift_summary={"status": "check_failed", "count": 0, "entries": []},
         )
 
     # Rewarm distribution cache against the freshly published snapshot.
