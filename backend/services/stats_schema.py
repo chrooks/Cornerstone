@@ -43,6 +43,7 @@ _TEMPLATE: dict = {
         "tov": None,
         "pf": None,
         "min": None,
+        "gp": None,                   # GP (games played, from the base row)
     },
 
     # Advanced per-game metrics
@@ -58,6 +59,8 @@ _TEMPLATE: dict = {
         "stl_pct": None,              # STL_PCT (if available)
         "blk_pct": None,              # BLK_PCT (if available)
         "free_throw_rate": None,      # FTA / FGA (computed)
+        "pace": None,                 # PACE (possessions per 48 minutes)
+        "poss": None,                 # POSS as the PerGame Advanced frame serves it (unit checked at M1.31)
     },
 
     # Catch-and-shoot + pull-up tracking (LeagueDashPtStats)
@@ -222,6 +225,14 @@ _TEMPLATE: dict = {
         "total_matchup_poss": None,
         "matchup_difficulty": None,  # 0-1: possession-weighted opponent PTS percentile (GP >= 20)
         "handler_share": None,       # 0-1: share of possessions vs PnR + iso POSS_PCT >= 0.40 scorers
+    },
+
+    # 3-point totals of every regular season before this one (PlayerCareerStats career
+    # minus this season; the make-rate floor, decision d). 0 for a rookie; None when
+    # the career call failed.
+    "shooting_history": {
+        "prior_fg3m": None,
+        "prior_fg3a": None,
     },
 
     # Salary (from ESPN scraper, stored separately in players table)

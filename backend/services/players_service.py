@@ -254,6 +254,13 @@ def get_or_fetch_player_stats(
     # lookups in matchup defense so we avoid per-player CommonPlayerInfo calls.
     player_index = nba_api_client.get_player_index(season)
 
+    # Games and minutes come from the fresh base row when it exists: the Stat
+    # Fetch never refreshes the players table, so its games can be stale.
+    base_row = bulk_data.get("base", {}).get(nba_api_id) or {}
+    if base_row.get("GP"):
+        gp = int(base_row["GP"])
+        mpg = float(base_row.get("MIN") or mpg)
+
     # Lazy per-player fetch; matchups come from the one league call in the bulk (#134)
     shot_chart_df = nba_api_client.get_player_shot_chart(nba_api_id, season)
     matchup_df    = bulk_data.get("matchups", {}).get(nba_api_id)
@@ -299,6 +306,13 @@ def get_or_fetch_player_stats(
             player_id, nba_api_id, season,
         )
         return None
+
+    # Prior-season 3-point totals for the make-rate floor (decision d): one
+    # PlayerCareerStats call per player, never the career-cache path (it writes
+    # rows). The template's None values stay when the call fails.
+    career = nba_api_client.get_player_career_stats(nba_api_id, season)
+    if career is not None:
+        blob["shooting_history"] = {"prior_fg3m": career["prior_fg3m"], "prior_fg3a": career["prior_fg3a"]}
 
     _persist_stats_blob(player_id, season, blob, supabase)
 

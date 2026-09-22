@@ -83,6 +83,7 @@ def assemble_stats_blob(
             "tov":     _v(base, "TOV"),
             "pf":      _v(base, "PF"),
             "min":     _v(base, "MIN"),
+            "gp":      _v(base, "GP"),
         })
         succeeded.append("base")
     else:
@@ -112,6 +113,8 @@ def assemble_stats_blob(
             "blk_pct": _compute_per48_pct(_v(base, "BLK"), _v(base, "MIN")),
             # free_throw_rate = FTA / FGA (computed from base, PerGame already applied)
             "free_throw_rate":   round(fta / fga, 4) if fga else None,
+            "pace":              _v(adv, "PACE"),
+            "poss":              _v(adv, "POSS"),
         })
         succeeded.append("advanced")
     else:

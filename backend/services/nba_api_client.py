@@ -10,6 +10,8 @@ All bulk endpoints return {nba_api_player_id: row_dict} for O(1) player lookups.
 """
 
 import logging
+import math
+import numbers
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -124,9 +126,62 @@ def _df_to_player_dict(df: pd.DataFrame) -> dict[int, dict]:
     # Different endpoints use different player ID column names
     for id_col in ("PLAYER_ID", "CLOSE_DEF_PERSON_ID", "PERSON_ID"):
         if id_col in df.columns:
-            return {int(row[id_col]): row.to_dict() for _, row in df.iterrows()}
+            rows_by_id: dict[int, list[dict]] = {}
+            for _, row in df.iterrows():
+                rows_by_id.setdefault(int(row[id_col]), []).append(row.to_dict())
+            return {pid: rows[0] if len(rows) == 1 else _merge_stints(rows)
+                    for pid, rows in rows_by_id.items()}
     logger.warning("No player ID column found in DataFrame; columns: %s", list(df.columns[:5]))
     return {}
+
+
+def _num(val) -> float | None:
+    """A real number as float; None for text, bools and NaN."""
+    if isinstance(val, bool) or not isinstance(val, numbers.Number):
+        return None
+    val = float(val)
+    return None if math.isnan(val) else val
+
+
+def _merge_stints(rows: list[dict]) -> dict:
+    """Merge a traded player's per-team rows into one (#17; Synergy splits by team).
+
+    Every bulk frame is PerGame, so each row holds one team stint's per-game
+    values: turn each stint into totals (value × GP), then divide by the summed
+    GP. A naive sum would double a traded player's possessions, and an
+    unweighted mean would give a 5-game stint the weight of a 50-game one.
+    Text and *_ID columns keep the last row.
+    """
+    merged = dict(rows[-1])
+    gps = [_num(r.get("GP")) or 0.0 for r in rows]
+    if not sum(gps):
+        logger.warning("Duplicate player rows without GP; keeping the last row")
+        return merged
+
+    def weighted(col: str, weights: list[float]) -> float | None:
+        pairs = [(v, w) for r, w in zip(rows, weights) if (v := _num(r.get(col))) is not None]
+        total_w = sum(w for _, w in pairs)
+        return sum(v * w for v, w in pairs) / total_w if total_w else None
+
+    for col in merged:
+        if col == "GP" or col.endswith("_ID") or all(_num(r.get(col)) is None for r in rows):
+            continue
+        # ponytail: rates and PERCENTILE take the GP-weighted mean too — approximate;
+        # only POSS_PCT and PPP (the columns the assembler reads) are rebuilt exactly.
+        merged[col] = weighted(col, gps)
+    merged["GP"] = int(sum(gps))
+
+    if "POSS" in merged:
+        poss = [(_num(r.get("POSS")) or 0.0) * gp for r, gp in zip(rows, gps)]
+        if "POSS_PCT" in merged:
+            # POSS_PCT = play-type possessions / all possessions, so rebuild both totals.
+            shares = [(p, pct) for p, r in zip(poss, rows) if (pct := _num(r.get("POSS_PCT")))]
+            all_poss = sum(p / pct for p, pct in shares)
+            merged["POSS_PCT"] = sum(p for p, _ in shares) / all_poss if all_poss else None
+        if "PPP" in merged and "PTS" in merged:
+            pts = sum((_num(r.get("PTS")) or 0.0) * gp for r, gp in zip(rows, gps))
+            merged["PPP"] = pts / sum(poss) if sum(poss) else None
+    return merged
 
 
 _RETRY_ATTEMPTS = 2
@@ -457,10 +512,19 @@ def get_league_matchups(season: str = "2025-26") -> dict[int, pd.DataFrame]:
     return {}
 
 
-def get_player_career_stats(nba_api_id: int) -> dict | None:
+def _fg3_totals(df: pd.DataFrame) -> tuple[int, int]:
+    """Summed FG3M, FG3A of a PlayerCareerStats frame (pre-1979 seasons hold no 3PT data)."""
+    return tuple(int(pd.to_numeric(df[c], errors="coerce").fillna(0).sum()) for c in ("FG3M", "FG3A"))
+
+
+def get_player_career_stats(nba_api_id: int, season: str = "2025-26") -> dict | None:
     """
     Fetch career totals for a player via PlayerCareerStats.
-    Returns a dict with career_games_played and seasons_played.
+    Returns a dict with career_games_played, seasons_played, and prior_fg3m /
+    prior_fg3a: the 3-point makes and attempts of every regular season before
+    `season` (career totals minus the `season` rows; the make-rate floor,
+    decision d). A traded player has one `season` row per team plus a TOT row,
+    so only the TOT row is subtracted when it exists.
     """
     from nba_api.stats.endpoints import PlayerCareerStats
 
@@ -480,7 +544,16 @@ def get_player_career_stats(nba_api_id: int) -> dict | None:
         seasons_played = len(season_df) if not season_df.empty else 0
         career_gp = int(career_df["GP"].iloc[0]) if not career_df.empty else 0
 
-        return {"career_games_played": career_gp, "seasons_played": seasons_played}
+        prior_fg3m = prior_fg3a = 0
+        if not career_df.empty:
+            this = season_df[season_df["SEASON_ID"] == season]
+            tot = this[this["TEAM_ABBREVIATION"] == "TOT"]
+            career_m, career_a = _fg3_totals(career_df)
+            this_m, this_a = _fg3_totals(tot if not tot.empty else this)
+            prior_fg3m, prior_fg3a = career_m - this_m, career_a - this_a
+
+        return {"career_games_played": career_gp, "seasons_played": seasons_played,
+                "prior_fg3m": prior_fg3m, "prior_fg3a": prior_fg3a}
 
     except Exception as exc:
         logger.warning("PlayerCareerStats failed for %d: %s", nba_api_id, exc)
