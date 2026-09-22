@@ -213,7 +213,15 @@ def _upsert_skill_profile(
             # value only when no existing entry is found (e.g. first-ever run).
             for skill_name in low_confidence_skills:
                 if skill_name in existing_profile:
-                    skills_result[skill_name] = existing_profile[skill_name]
+                    carried = existing_profile[skill_name]
+                    # A stats row holds either the evaluator's dict (a staged
+                    # run) or a bare tier string (compositing's direct path),
+                    # and since M2.15's merge one row can hold both. Everything
+                    # below reads skills_result entries as dicts, so normalise
+                    # here rather than teaching each reader a second shape.
+                    if not isinstance(carried, dict):
+                        carried = {"tier": carried}
+                    skills_result[skill_name] = carried
 
     # Determine review_required: True if any skill has review_recommended=True
     review_required = any(

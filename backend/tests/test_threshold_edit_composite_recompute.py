@@ -400,3 +400,88 @@ def test_recompute_overwrites_non_human_sources_normally():
         entry = mock_stage.call_args[0][1][0].profile["cutter"]
         assert entry["final_tier"] == "Elite", source   # overwritten, not protected
         mock_flags.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# M2.13 — a scoped Claude run feeds FRESH Claude tiers into the merge
+# ---------------------------------------------------------------------------
+
+
+def _merge(existing_profile, fresh_claude, recomputed, skill="cutter",
+           stat_result=None):
+    """Call _merge_composite_for_skills with composite_skill stubbed out."""
+    from services.skill_engine.evaluation_only import _merge_composite_for_skills
+
+    skills_result = {skill: stat_result or {"tier": "Elite", "stat_confidence": "high"}}
+    with patch("services.skill_engine.evaluation_only.composite_skill",
+               return_value=recomputed) as mock_composite:
+        merged, flags = _merge_composite_for_skills(
+            skills_result, [skill], existing_profile, 80, "p1", "2025-26",
+            fresh_claude=fresh_claude,
+        )
+    return merged, flags, mock_composite
+
+
+def test_merge_uses_fresh_claude_tier_for_non_human_entry():
+    """A fresh Claude tier replaces the stale composite claude_tier in the recompute."""
+    existing = {"cutter": {
+        "final_tier": "Capable", "stat_tier": "Capable",
+        "claude_tier": "Capable", "claude_confidence": "low",
+        "source": "stats_only",
+    }}
+    fresh = {"cutter": {"tier": "Elite", "confidence": "high",
+                        "justification": "Cuts hard off the ball.",
+                        "claude_failed": False}}
+
+    _, _, mock_composite = _merge(
+        existing, fresh, {"final_tier": "Elite", "flagged": False},
+    )
+
+    _, _, claude_result, _ = mock_composite.call_args[0]
+    assert claude_result["tier"] == "Elite"          # FRESH, not the stale Capable
+    assert claude_result["confidence"] == "high"
+    assert claude_result["claude_failed"] is False
+
+
+def test_merge_falls_back_to_existing_claude_when_fresh_entry_failed():
+    """A failed fresh entry must never clobber the stored Claude context."""
+    existing = {"cutter": {
+        "final_tier": "Capable", "claude_tier": "Capable",
+        "claude_confidence": "low", "source": "stats_only",
+    }}
+    fresh = {"cutter": {"tier": None, "confidence": None,
+                        "justification": None, "claude_failed": True}}
+
+    _, _, mock_composite = _merge(
+        existing, fresh, {"final_tier": "Capable", "flagged": False},
+    )
+
+    _, _, claude_result, _ = mock_composite.call_args[0]
+    assert claude_result["tier"] == "Capable"        # stored context, not None
+
+
+def test_merge_keeps_human_entry_and_flags_with_fresh_claude_tier():
+    """#120 guard holds: the resolved entry is kept verbatim, and the
+    contradiction flag records the FRESH Claude tier plus its justification."""
+    existing = {"cutter": {
+        "final_tier": "Capable", "stat_tier": "Capable",
+        "claude_tier": "Capable", "source": "resolved",
+    }}
+    fresh = {"cutter": {"tier": "Elite", "confidence": "high",
+                        "justification": "Elite cutter on tape.",
+                        "claude_failed": False}}
+
+    merged, flags, _ = _merge(
+        existing, fresh,
+        {"final_tier": "Elite", "flagged": False},
+        stat_result={"tier": "Elite", "driving_stats": {"cut_pts": 4.2}},
+    )
+
+    assert merged["cutter"] == existing["cutter"]     # verbatim, untouched
+    assert len(flags) == 1
+    flag = flags[0]
+    assert flag.claude_tier == "Elite"                # FRESH tier, not the stale one
+    assert flag.stats_tier == "Elite"
+    assert "resolved" in flag.flag_reason
+    assert flag.claude_justification == "Elite cutter on tape."
+    assert flag.stat_values == {"cut_pts": 4.2}

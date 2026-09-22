@@ -457,8 +457,10 @@ def skill_evaluation_batch():
     Request body (all optional):
       {
         "player_ids": ["<uuid>", ...],  // empty = all qualifying players
-        "season": "2025-26",
-        "skill_filter": ["Scorer", "Playmaker"]  // omit = all 21 skills
+        "season": "2025-26",            // omit = the open draft's season
+        "skill_filter": ["Scorer", "Playmaker"],  // omit = all 21 skills
+        "recompute_composite": false,   // stage the merged composite, not a stats row
+        "with_claude": false            // re-rate the non-HIGH filtered Skills with Claude
       }
 
     Side effect: spawns a background worker that reads existing player_stats,
@@ -473,8 +475,9 @@ def skill_evaluation_batch():
 
     body = request.get_json(silent=True) or {}
     player_ids: list[str] = body.get("player_ids") or []
-    season: str = body.get("season", CURRENT_SEASON)
     skill_filter: list[str] | None = body.get("skill_filter") or None
+    recompute_composite = body.get("recompute_composite", False)
+    with_claude = body.get("with_claude", False)
 
     # Validate skill_filter entries against the canonical 21-skill taxonomy.
     if skill_filter:
@@ -482,7 +485,38 @@ def skill_evaluation_batch():
         if unknown:
             return _err(f"unknown_skill: {unknown[0]}", 400)
 
+    # Strict booleans, not truthiness: "false" and 0 are caller bugs, and either
+    # flag read wrong changes which profile source the commit replaces.
+    if not isinstance(recompute_composite, bool):
+        return _err("invalid_recompute_composite — expected a boolean", 400)
+    if not isinstance(with_claude, bool):
+        return _err("invalid_with_claude — expected a boolean", 400)
+    if (recompute_composite or with_claude) and not skill_filter:
+        return _err(
+            "skill_filter_required — a composite recompute or Claude run must name its Skills",
+            400,
+        )
+    if with_claude and not recompute_composite:
+        return _err(
+            "with_claude_requires_recompute_composite — a fresh Claude tier only "
+            "reaches the profile through the composite merge",
+            400,
+        )
+
     draft_id = g.draft_id
+
+    # Season follows the draft being worked, not a hardcoded default — a draft on
+    # a later season would otherwise stage rows nothing reads.
+    season: str | None = body.get("season")
+    if not season:
+        try:
+            season = snap_repo.get_release(draft_id).season
+        except Exception:
+            logger.warning(
+                "skill-evaluation: could not read draft %s season — falling back to %s",
+                draft_id, CURRENT_SEASON,
+            )
+            season = CURRENT_SEASON
 
     # Check for a pending-commit run before starting a new one
     try:
@@ -491,6 +525,12 @@ def skill_evaluation_batch():
             scope="player" if player_ids else "bulk",
             snapshot_release_id=draft_id,
             player_id=player_ids[0] if len(player_ids) == 1 else None,
+            params={
+                "season": season,
+                "skill_filter": skill_filter,
+                "recompute_composite": recompute_composite,
+                "with_claude": with_claude,
+            },
         )
     except Exception as exc:
         err_msg = str(exc).lower()
@@ -520,6 +560,8 @@ def skill_evaluation_batch():
                 player_ids=resolved_ids,
                 season=season,
                 skill_filter=skill_filter,
+                recompute_composite=recompute_composite,
+                with_claude=with_claude,
             )
             runs_repo.complete_run(run_id, rows_processed=len(resolved_ids))
         except Exception as exc:

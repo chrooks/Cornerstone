@@ -3,23 +3,28 @@ skill_engine/evaluation_only.py — Evaluation-only pipeline path.
 
 Reads existing player_stats, evaluates against draft thresholds (or override),
 and stages results in pipeline_run_results. Does NOT call the NBA API.
-Does NOT call Claude (source='stats' only per blueprint Q1 default).
+
+Calls Claude only when asked to (with_claude, a Skill-scoped composite
+recompute); the default path is source='stats' only, per blueprint Q1.
 
 Public Surface:
-  evaluate_skills_for_run(run_id, player_ids, season, skill_filter, thresholds_override) -> None
+  evaluate_skills_for_run(run_id, player_ids, season, skill_filter,
+                          thresholds_override, recompute_composite, with_claude) -> None
 """
 
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from services.supabase_client import get_supabase, in_chunks, run_query
 from services.skill_engine.cache import get_thresholds, get_league_averages
 from services.skill_engine.evaluator import evaluate_all_skills, apply_auto_promotions
+from services.claude_assessment import get_claude_assessment
 from services.compositing import composite_skill, _tier_index
 from services.notability import get_notability_score
-from services.skills import HIGH_CONFIDENCE_SKILLS
+from services.skills import HIGH_CONFIDENCE_SKILLS, HUMAN_DECISION_SOURCES
 from services.pipeline_run_results.repo import (
     StagedProfileRow,
     StagedFlagRow,
@@ -32,11 +37,24 @@ from services.players_service import _blob_has_data, get_or_fetch_player_stats  
 
 logger = logging.getLogger(__name__)
 
-# Composite entries whose `source` records a human review decision (issue #120).
-# A recompute must never silently overwrite these — resolved (a flag adjudicated
-# in /admin/review) and manual_override (an admin's direct tier) are people's
-# calls, not stat output.
-_HUMAN_DECISION_SOURCES = frozenset({"resolved", "manual_override"})
+# Local alias for the one definition in services.skills — see it for the why.
+_HUMAN_DECISION_SOURCES = HUMAN_DECISION_SOURCES
+
+# At most this many Claude calls in flight during a with_claude run.
+# ponytail: a fixed pool, not a rate limiter; raise it if the Anthropic tier allows.
+_CLAUDE_PARALLELISM = 5
+
+
+def _usable_fresh_claude(fresh_claude: Optional[dict], skill_name: str) -> Optional[dict]:
+    """Return this Skill's fresh Claude entry, or None when it is unusable.
+
+    An entry Claude failed to produce must never displace the tier already
+    stored for that Skill — a failed rating is missing data, not a new opinion.
+    """
+    entry = (fresh_claude or {}).get(skill_name) or {}
+    if entry.get("claude_failed") or not entry.get("tier"):
+        return None
+    return entry
 
 
 def _get_client():
@@ -51,6 +69,7 @@ def _merge_composite_for_skills(
     notability_score: int,
     player_id: str,
     season: str,
+    fresh_claude: Optional[dict] = None,
 ) -> tuple[dict, list[StagedFlagRow]]:
     """Recompute the affected skills' composite entries, merged into the existing profile.
 
@@ -59,6 +78,13 @@ def _merge_composite_for_skills(
     overwrite only the affected skills. Claude context is reconstructed from the
     existing composite entry (None for high-confidence skills, which composite
     purely from stats).
+
+    fresh_claude is this run's Claude assessment, keyed by skill ({"tier",
+    "justification", "confidence", "claude_failed"} per entry). A usable fresh
+    entry replaces the stale claude_tier from the existing composite; a failed
+    one falls back to what is stored. Human-decision entries stay verbatim
+    either way, and their contradiction flag records the FRESH tier — that is
+    the opinion Chris is being asked to adjudicate.
 
     Issue #120 guardrail: an entry whose `source` is a recorded human decision
     (resolved / manual_override) is kept EXACTLY as-is — never overwritten. The
@@ -74,8 +100,20 @@ def _merge_composite_for_skills(
         if stat_result is None:
             continue
         existing_entry = existing_composite.get(skill_name) or {}
+        fresh_entry = _usable_fresh_claude(fresh_claude, skill_name)
+        # The tier a flag should show as Claude's opinion, and the reason behind it.
+        flag_claude_tier = existing_entry.get("claude_tier")
+        flag_justification = None
         if skill_name in HIGH_CONFIDENCE_SKILLS:
             claude_result = None
+        elif fresh_entry is not None:
+            claude_result = {
+                "tier": fresh_entry.get("tier"),
+                "confidence": fresh_entry.get("confidence"),
+                "claude_failed": False,
+            }
+            flag_claude_tier = fresh_entry.get("tier")
+            flag_justification = fresh_entry.get("justification")
         else:
             claude_tier = existing_entry.get("claude_tier")
             claude_result = {
@@ -102,8 +140,10 @@ def _merge_composite_for_skills(
                         f"{existing_entry.get('source')}:{human_tier}"
                     ),
                     season=season,
-                    claude_tier=existing_entry.get("claude_tier"),
+                    claude_tier=flag_claude_tier,
                     stats_tier=fresh_tier,
+                    claude_justification=flag_justification,
+                    stat_values=stat_result.get("driving_stats") or None,
                 ))
             continue
 
@@ -118,11 +158,12 @@ def _stage_composite_for_player(
     affected_skills: list[str],
     existing_composite: dict,
     notability_score: int,
+    fresh_claude: Optional[dict] = None,
 ) -> tuple[StagedProfileRow, list[StagedFlagRow]]:
     """Build the merged composite profile row + any review flags for one player."""
     merged_composite, protected_flags = _merge_composite_for_skills(
         skills_result, affected_skills, existing_composite, notability_score,
-        player_id, season,
+        player_id, season, fresh_claude=fresh_claude,
     )
     profile_row = StagedProfileRow(
         player_id=player_id,
@@ -143,6 +184,7 @@ def _stage_composite_for_player(
         # disagreement / low-notability).
         entry = merged_composite.get(skill_name) or {}
         if entry.get("flagged"):
+            fresh_entry = _usable_fresh_claude(fresh_claude, skill_name)
             flag_rows.append(StagedFlagRow(
                 player_id=player_id,
                 skill_name=skill_name,
@@ -150,8 +192,102 @@ def _stage_composite_for_player(
                 season=season,
                 claude_tier=entry.get("claude_tier"),
                 stats_tier=entry.get("stat_tier"),
+                claude_justification=(
+                    fresh_entry.get("justification") if fresh_entry else None
+                ),
+                stat_values=(skills_result.get(skill_name) or {}).get("driving_stats") or None,
             ))
     return profile_row, flag_rows
+
+
+def _fetch_fresh_claude(
+    evaluated: dict[str, dict],
+    season: str,
+    skills: list[str],
+    client,
+) -> tuple[dict[str, dict], set[str]]:
+    """Ask Claude to rate `skills` for each evaluated player, 5 calls in flight.
+
+    Returns (fresh_by_player, failed_player_ids). A player whose call fails is
+    reported as failed and never as an empty rating: the commit replaces a whole
+    profile row per source, so staging a player Claude could not rate would
+    write missing data over tiers that were fine.
+    """
+    fresh_by_player: dict[str, dict] = {}
+    failed: set[str] = set()
+
+    with ThreadPoolExecutor(max_workers=_CLAUDE_PARALLELISM) as pool:
+        futures = {
+            pool.submit(
+                get_claude_assessment, player_id, season, skills_result, client,
+                skills=skills,
+            ): player_id
+            for player_id, skills_result in evaluated.items()
+        }
+        for future in as_completed(futures):
+            player_id = futures[future]
+            try:
+                result = future.result()
+            except Exception:
+                logger.exception(
+                    "evaluate_skills_for_run: Claude call raised for player %s — "
+                    "skipping the player", player_id,
+                )
+                failed.add(player_id)
+                continue
+            if result.get("claude_failed") or not result.get("skills"):
+                logger.warning(
+                    "evaluate_skills_for_run: Claude returned nothing for player %s — "
+                    "skipping the player", player_id,
+                )
+                failed.add(player_id)
+                continue
+            fresh_by_player[player_id] = result["skills"]
+
+    return fresh_by_player, failed
+
+
+def _merged_claude_row(
+    player_id: str,
+    season: str,
+    existing_claude: dict,
+    fresh_claude: dict,
+) -> Optional[StagedProfileRow]:
+    """Merge this run's Claude tiers into the player's stored claude profile.
+
+    The commit replaces a whole row per source, so a claude row holding only the
+    Skills this run rated would erase every other Skill's Claude tier.
+    """
+    fresh_tiers: dict[str, str] = {}
+    for skill_name in (fresh_claude or {}):
+        entry = _usable_fresh_claude(fresh_claude, skill_name)
+        if entry is not None:
+            fresh_tiers[skill_name] = entry["tier"]
+    if not fresh_tiers:
+        return None
+    return StagedProfileRow(
+        player_id=player_id,
+        season=season,
+        source="claude",
+        profile={**existing_claude, **fresh_tiers},
+    )
+
+
+def _read_profiles_by_source(client, player_ids: list[str], season: str, source: str) -> dict[str, dict]:
+    """Batch-read one draft_skill_profiles source into {player_id: profile}."""
+    by_player: dict[str, dict] = {}
+    for chunk in in_chunks(player_ids):
+        result = run_query(
+            lambda c=chunk: client.table("draft_skill_profiles")
+            .select("player_id, profile")
+            .eq("source", source)
+            .eq("season", season)
+            .in_("player_id", c)
+            .execute()
+        )
+        for row in (result.data or []):
+            by_player[row["player_id"]] = row.get("profile") or {}
+    return by_player
 
 
 def evaluate_skills_for_run(
@@ -161,6 +297,7 @@ def evaluate_skills_for_run(
     skill_filter: Optional[list[str]] = None,
     thresholds_override: Optional[dict] = None,
     recompute_composite: bool = False,
+    with_claude: bool = False,
 ) -> None:
     """Evaluate skills for the given players and stage results for the pipeline run.
 
@@ -180,6 +317,13 @@ def evaluate_skills_for_run(
                              composite are skipped (never stage a partial profile,
                              which the replace-on-commit RPC would clobber).
                              Used by threshold_edit runs.
+        with_claude:         If True, ask Claude to re-rate the non-HIGH skills in
+                             skill_filter for each player and feed those FRESH tiers
+                             into the composite merge. Requires recompute_composite
+                             (ValueError otherwise) — a fresh tier only reaches the
+                             profile through that merge. A player whose Claude call
+                             fails is skipped entirely, never staged with missing
+                             data. Also stages a merged source='claude' row.
 
     Side effects:
         - Reads player_stats from Supabase.
@@ -187,9 +331,19 @@ def evaluate_skills_for_run(
         - Calls stage_profile_rows (writes to pipeline_run_results).
         - When recompute_composite: also reads draft_skill_profiles (composite)
           and notability, and calls composite_skill.
+        - When skill_filter without recompute_composite: reads the stats profile
+          so the filtered run keeps the skills it did not evaluate.
+        - When with_claude: reads draft_skill_profiles (claude) and calls the
+          Anthropic API, at most _CLAUDE_PARALLELISM calls in flight.
         - Does NOT call NBA API.
-        - Does NOT call Claude.
+        - Does NOT call Claude unless with_claude is True.
     """
+    if with_claude and not recompute_composite:
+        raise ValueError(
+            "with_claude requires recompute_composite — a fresh Claude tier only "
+            "reaches the profile through the composite merge"
+        )
+
     if not player_ids:
         stage_profile_rows(run_id, [])
         return
@@ -251,30 +405,10 @@ def evaluate_skills_for_run(
             skipped_empty,
         )
 
-    # When recomputing composite, batch-fetch each player's existing composite
-    # profile to merge the affected skills into (preserving untouched skills).
-    existing_composite_by_player: dict[str, dict] = {}
-    affected_skills: list[str] = []
-    needs_notability = False
-    if recompute_composite:
-        affected_skills = list(skill_filter) if skill_filter else []
-        needs_notability = any(s not in HIGH_CONFIDENCE_SKILLS for s in affected_skills)
-        for chunk in in_chunks(player_ids):
-            comp_result = run_query(
-                lambda c=chunk: client.table("draft_skill_profiles")
-                .select("player_id, profile")
-                .eq("source", "composite")
-                .eq("season", season)
-                .in_("player_id", c)
-                .execute()
-            )
-            for row in (comp_result.data or []):
-                existing_composite_by_player[row["player_id"]] = row.get("profile") or {}
-
-    staged_profiles: list[StagedProfileRow] = []
-    staged_flags: list[StagedFlagRow] = []
-    skipped_no_composite = 0
-
+    # Evaluate every player up front. The Claude pass below needs each player's
+    # stat result as prompt input, so the evaluation cannot stay inside the
+    # staging loop without running twice.
+    evaluated: dict[str, dict] = {}
     for player_id in player_ids:
         stats_blob = stats_by_player.get(player_id)
         if not stats_blob:
@@ -283,17 +417,83 @@ def evaluate_skills_for_run(
                 player_id, season,
             )
             continue
-
         try:
             skills_result = evaluate_all_skills(stats_blob, thresholds, league_avgs)
-            skills_result = apply_auto_promotions(skills_result, thresholds)
+            evaluated[player_id] = apply_auto_promotions(skills_result, thresholds)
         except Exception:
             logger.exception(
                 "evaluate_skills_for_run: error evaluating player %s — skipping", player_id
             )
+
+    # When recomputing composite, batch-fetch each player's existing composite
+    # profile to merge the affected skills into (preserving untouched skills).
+    existing_composite_by_player: dict[str, dict] = {}
+    affected_skills: list[str] = []
+    needs_notability = False
+    if recompute_composite:
+        affected_skills = list(skill_filter) if skill_filter else []
+        needs_notability = any(s not in HIGH_CONFIDENCE_SKILLS for s in affected_skills)
+        existing_composite_by_player = _read_profiles_by_source(
+            client, player_ids, season, "composite"
+        )
+
+    # A filtered stats run stages a whole row, and commit replaces it — so merge
+    # the filtered result into what the player already has, or the skills this
+    # run did not evaluate would be wiped.
+    existing_stats_by_player: dict[str, dict] = {}
+    if skill_filter and not recompute_composite:
+        existing_stats_by_player = _read_profiles_by_source(
+            client, player_ids, season, "stats"
+        )
+
+    # Scoped Claude pass — fresh tiers for the non-HIGH skills in the filter.
+    fresh_claude_by_player: dict[str, dict] = {}
+    claude_failed_players: set[str] = set()
+    existing_claude_by_player: dict[str, dict] = {}
+    if with_claude:
+        claude_scope = [s for s in affected_skills if s not in HIGH_CONFIDENCE_SKILLS]
+        if claude_scope:
+            # Only players the staging loop can actually use. A player with no
+            # composite row is dropped below, so asking Claude about him spends
+            # an API call on an answer this run throws away.
+            claude_input = {
+                pid: result for pid, result in evaluated.items()
+                if existing_composite_by_player.get(pid)
+            }
+            fresh_claude_by_player, claude_failed_players = _fetch_fresh_claude(
+                claude_input, season, claude_scope, client
+            )
+            if claude_input and not fresh_claude_by_player:
+                # Every call failed. Returning normally stages nothing and the
+                # worker reports success over the full player count, which reads
+                # as "nothing moved" — so the outage is invisible and the spend
+                # gets repeated.
+                raise RuntimeError(
+                    "claude_unavailable — Claude rated no player in this run"
+                )
+            existing_claude_by_player = _read_profiles_by_source(
+                client, player_ids, season, "claude"
+            )
+        else:
+            logger.info(
+                "evaluate_skills_for_run [%s]: with_claude requested but every "
+                "filtered skill is high-confidence — Claude not called", run_id,
+            )
+
+    staged_profiles: list[StagedProfileRow] = []
+    staged_flags: list[StagedFlagRow] = []
+    skipped_no_composite = 0
+    skipped_claude_failed = 0
+
+    for player_id in player_ids:
+        skills_result = evaluated.get(player_id)
+        if skills_result is None:
             continue
 
         if recompute_composite:
+            if player_id in claude_failed_players:
+                skipped_claude_failed += 1
+                continue
             # Stage the merged composite (what the Player Pool / publish read).
             existing_composite = existing_composite_by_player.get(player_id)
             if not existing_composite:
@@ -308,20 +508,33 @@ def evaluate_skills_for_run(
                 get_notability_score(player_id, season, client)
                 if needs_notability else 0
             )
+            fresh_claude = fresh_claude_by_player.get(player_id)
             profile_row, flag_rows = _stage_composite_for_player(
                 player_id, season, skills_result, affected_skills,
-                existing_composite, notability,
+                existing_composite, notability, fresh_claude=fresh_claude,
             )
             staged_profiles.append(profile_row)
             staged_flags.extend(flag_rows)
+            if with_claude and fresh_claude:
+                claude_row = _merged_claude_row(
+                    player_id, season,
+                    existing_claude_by_player.get(player_id) or {},
+                    fresh_claude,
+                )
+                if claude_row is not None:
+                    staged_profiles.append(claude_row)
             continue
 
-        # Apply skill filter — only keep requested skills in the staged profile
+        # Apply skill filter — only keep requested skills in the staged profile,
+        # merged over what the player already has (commit replaces the row).
         if skill_filter:
             filtered_profile = {
-                skill_name: data
-                for skill_name, data in skills_result.items()
-                if skill_name in skill_filter
+                **(existing_stats_by_player.get(player_id) or {}),
+                **{
+                    skill_name: data
+                    for skill_name, data in skills_result.items()
+                    if skill_name in skill_filter
+                },
             }
         else:
             filtered_profile = skills_result
@@ -340,8 +553,10 @@ def evaluate_skills_for_run(
 
     logger.info(
         "evaluate_skills_for_run [%s]: staged %d profile rows, %d flag rows"
-        "%s",
+        "%s%s",
         run_id, len(staged_profiles), len(staged_flags),
         f", skipped {skipped_no_composite} player(s) with no existing composite"
         if skipped_no_composite else "",
+        f", skipped {skipped_claude_failed} player(s) Claude could not rate"
+        if skipped_claude_failed else "",
     )

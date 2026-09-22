@@ -85,6 +85,12 @@ class StagedFlagRow:
     season: str
     claude_tier: Optional[str] = None
     stats_tier: Optional[str] = None
+    # Why the two sides disagree — the review queue shows these next to the
+    # tiers. The direct-write path (compositing._upsert_draft_skill_flags)
+    # already fills the matching draft_skill_flags columns; a staged flag that
+    # left them null arrived in the queue with no reasoning attached.
+    claude_justification: Optional[str] = None
+    stat_values: Optional[dict] = None
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +207,8 @@ def stage_flag_rows(run_id: str, rows: Iterable[StagedFlagRow]) -> None:
             "season": row.season,
             "claude_tier": row.claude_tier,
             "stats_tier": row.stats_tier,
+            "claude_justification": row.claude_justification,
+            "stat_values": row.stat_values,
         }
         for row in rows_list
     ]
@@ -326,7 +334,14 @@ def get_diff(run_id: str) -> dict:
                     "change_type": change_type,
                 })
 
-            # Aggregate per-skill summary counts
+            # Aggregate per-skill summary counts. A with_claude run stages two
+            # rows for one player+season (the merged composite and the merged
+            # claude row), so counting every source would report one moved tier
+            # twice — and a source='claude' row publishes nothing on its own.
+            # It stays in `changes`, where the drilldown prints its source.
+            if source == "claude":
+                continue
+
             skill_stats = per_skill.setdefault(skill_name, {
                 "promotions": 0,
                 "demotions": 0,

@@ -33,8 +33,21 @@ export function SkillEvaluationRunner({
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [selectedPlayers, setSelectedPlayers] = useState<PlayerLite[]>([]);
 
+  /* M2.16 modes. `withClaude` is only valid on top of `recomputeComposite`,
+     and both need a Skill filter — the backend rejects the other shapes. */
+  const [recomputeComposite, setRecomputeComposite] = useState(false);
+  const [withClaude, setWithClaude] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /* A state updater must stay pure — StrictMode runs it twice. Compute the
+     next value here, then set both pieces of state. */
+  const toggleRecomposite = useCallback(() => {
+    const next = !recomputeComposite;
+    setRecomputeComposite(next);
+    if (!next) setWithClaude(false);
+  }, [recomputeComposite]);
 
   const toggleSkill = useCallback((skill: string) => {
     setSelectedSkills((prev) => {
@@ -56,19 +69,53 @@ export function SkillEvaluationRunner({
   const skillCount = selectedSkills.size;
   const playerCount = selectedPlayers.length;
 
+  /* Either mode needs a Skill filter, so "all 21 Skills" is not what an empty
+     picker means there — it means the run cannot go. Say that, rather than
+     promising a scope the layer note directly contradicts. */
+  const needsSkillFilter = recomputeComposite || withClaude;
   const skillScopeLabel =
-    skillCount === 0 ? `all ${TOTAL_SKILLS} Skills` : `${skillCount} Skill${skillCount === 1 ? "" : "s"}`;
+    skillCount === 0
+      ? needsSkillFilter
+        ? "no Skills selected"
+        : `all ${TOTAL_SKILLS} Skills`
+      : `${skillCount} Skill${skillCount === 1 ? "" : "s"}`;
   const playerScopeLabel =
     playerCount === 0 ? "all qualifying players" : `${playerCount} player${playerCount === 1 ? "" : "s"}`;
 
+  /* What this click actually does, in the order it does it. */
+  const modeSummary = withClaude
+    ? "It asks Claude for a fresh tier on each non-HIGH Skill, then writes the merged result into the published composite."
+    : recomputeComposite
+    ? "It writes the fresh stat tiers into the published composite."
+    : "It stops at the stats layer — no published rating changes.";
+
   const handleRun = useCallback(async () => {
     if (disabled || submitting) return;
+
+    /* Transparent Friction on the one control that spends money: a whole-league
+       Claude run is one API call per Player, and nothing else on this page
+       bills. The cheaper modes stay one click. */
+    if (withClaude) {
+      const scope =
+        playerCount === 0
+          ? "every qualifying Player"
+          : `${playerCount} Player${playerCount === 1 ? "" : "s"}`;
+      const confirmed = window.confirm(
+        `Ask Claude about ${scope}, across ${skillCount} Skill${skillCount === 1 ? "" : "s"}?\n\n` +
+          "That is one Anthropic API call per Player, and it is billed whether or " +
+          "not you commit the run."
+      );
+      if (!confirmed) return;
+    }
+
     setSubmitting(true);
     setError(null);
 
     const body = {
       ...(playerCount > 0 ? { player_ids: selectedPlayers.map((p) => p.id) } : {}),
       ...(skillCount > 0 ? { skill_filter: Array.from(selectedSkills) } : {}),
+      ...(recomputeComposite ? { recompute_composite: true } : {}),
+      ...(recomputeComposite && withClaude ? { with_claude: true } : {}),
     };
 
     try {
@@ -97,6 +144,8 @@ export function SkillEvaluationRunner({
     skillCount,
     selectedPlayers,
     selectedSkills,
+    recomputeComposite,
+    withClaude,
     onStaged,
   ]);
 
@@ -121,13 +170,58 @@ export function SkillEvaluationRunner({
           that this stage updates stat-derived ratings only. */}
       <div
         id="skill-eval-layer-note"
-        className="rounded-[6px] border border-[#d9d0c9] bg-[#fef9f5] px-3 py-2 mb-4 text-xs text-neutral-600"
+        className="rounded-[6px] border border-[#d9d0c9] bg-[#fef9f5] px-3 py-2 mb-4 text-xs text-neutral-600 space-y-1"
       >
-        Updates <span className="font-medium text-[#0e0907]">stat-derived</span> ratings only.
-        A Player&rsquo;s <span className="font-medium text-[#0e0907]">published</span> rating
-        comes from the composite — re-run <span className="font-medium text-[#0e0907]">Compositing</span>{" "}
-        or use a <span className="font-medium text-[#0e0907]">manual override</span> in Review/Player Pool
-        for the change to reach the published profile.
+        <p>
+          On its own this run updates <span className="font-medium text-[#0e0907]">stat-derived</span>{" "}
+          ratings only. A Player&rsquo;s <span className="font-medium text-[#0e0907]">published</span>{" "}
+          rating comes from the composite, so without the first box below the change stops at the stats layer.
+        </p>
+        <p>
+          <span className="font-medium text-[#0e0907]">Recompute composite</span> merges the fresh stat
+          tiers into the composite for the chosen Skills. A Skill you already resolved by hand keeps your
+          decision and gets a new flag when the fresh tier contradicts it.
+        </p>
+        <p>
+          <span className="font-medium text-[#0e0907]">Ask Claude</span> also asks Claude for fresh tiers on
+          the chosen non-HIGH Skills before that merge, and costs an API call per Player.
+        </p>
+        <p>Both modes need at least one Skill selected.</p>
+      </div>
+
+      {/* M2.16 modes */}
+      <div id="skill-eval-modes" className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-5">
+        <label
+          htmlFor="skill-eval-recompute-composite"
+          className="flex items-center gap-2 text-xs text-neutral-700"
+        >
+          <input
+            id="skill-eval-recompute-composite"
+            type="checkbox"
+            checked={recomputeComposite}
+            onChange={toggleRecomposite}
+            disabled={disabled}
+            className="h-3.5 w-3.5 accent-[#fe6d34] disabled:opacity-50"
+          />
+          Recompute composite
+        </label>
+        <label
+          htmlFor="skill-eval-with-claude"
+          className={cn(
+            "flex items-center gap-2 text-xs",
+            recomputeComposite ? "text-neutral-700" : "text-neutral-400"
+          )}
+        >
+          <input
+            id="skill-eval-with-claude"
+            type="checkbox"
+            checked={withClaude}
+            onChange={() => setWithClaude((prev) => !prev)}
+            disabled={disabled || !recomputeComposite}
+            className="h-3.5 w-3.5 accent-[#fe6d34] disabled:opacity-50"
+          />
+          Ask Claude (non-HIGH Skills)
+        </label>
       </div>
 
       {/* Skill subset */}
@@ -193,6 +287,7 @@ export function SkillEvaluationRunner({
       {error && (
         <div
           id="skill-eval-error"
+          role="alert"
           className="rounded-[6px] border border-red-200 bg-red-50 px-3 py-2 mb-3 text-xs text-red-700"
         >
           {error}
@@ -202,7 +297,8 @@ export function SkillEvaluationRunner({
       <div className="flex items-center justify-between gap-4">
         <p id="skill-eval-scope-summary" className="text-xs text-neutral-500">
           Will evaluate <span className="font-medium text-[#0e0907]">{playerScopeLabel}</span>{" "}
-          against <span className="font-medium text-[#0e0907]">{skillScopeLabel}</span>.
+          against <span className="font-medium text-[#0e0907]">{skillScopeLabel}</span>.{" "}
+          {modeSummary}
         </p>
         <button
           id="pipeline-skill-eval-run-btn"

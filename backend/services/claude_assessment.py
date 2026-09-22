@@ -8,12 +8,13 @@ Pipeline per player:
   1. Fetch player metadata (name, team, position, age, GP, MPG, season)
   2. Fetch raw stats blob from player_stats table
   3. Build structured prompt with player context + stat tables
-  4. Call Claude with blind assessment (11 moderate skills) and
-     informed assessment (3 low skills)
+  4. Call Claude with blind assessment (the moderate-confidence skills) and
+     informed assessment (the low-confidence skills)
   5. Parse JSON response; retry once on failure
 
-Claude is NOT called for the 6 high-confidence skills — their stat ratings
-become the final ratings directly.
+Claude is NOT called for the high-confidence skills — their stat ratings
+become the final ratings directly. Callers can pass a `skills` subset to rate
+only some of the moderate and low keys (a skill-scoped run).
 
 Environment:
   ANTHROPIC_API_KEY — required; fails clearly if absent
@@ -69,6 +70,27 @@ _SKILL_DISPLAY_NAMES: dict[str, str] = {
 _SKILL_DEFINITIONS: dict[str, str] = {
     k: v for k, v in _ALL_SKILL_DEFINITIONS.items()
     if k in MODERATE_CONFIDENCE_SKILLS | LOW_CONFIDENCE_SKILLS
+}
+
+# Every skill key Claude is asked to rate (a high-confidence key never appears)
+_CLAUDE_SKILLS: frozenset[str] = MODERATE_CONFIDENCE_SKILLS | LOW_CONFIDENCE_SKILLS
+
+# One "what the stats miss" sentence per low-confidence skill, read by
+# _build_informed_section. Every key in LOW_CONFIDENCE_SKILLS needs an entry.
+_INFORMED_GUIDANCE: dict[str, str] = {
+    "versatile_defender": (
+        "Your assessment of this player's defensive versatility based on body type, "
+        "lateral movement, and known defensive reputation should override the stats "
+        "if they conflict; versatility includes defending bigs in the post."
+    ),
+    "perimeter_disruptor": (
+        "Screen navigation, recovery speed, and overall defensive IQ are invisible in "
+        "these stats — weight your knowledge accordingly."
+    ),
+    "high_flyer": (
+        "Athleticism is poorly captured by statistics — weight your knowledge of this "
+        "player's physical tools and playing style heavily."
+    ),
 }
 
 # API configuration
@@ -127,8 +149,10 @@ def _format_value(val: Any) -> str:
     if val is None:
         return "N/A"
     if isinstance(val, float):
-        # Show percentages as decimals to 3 places; counts as whole numbers
-        if 0.0 <= val <= 1.0:
+        # Show rates and differentials as decimals to 3 places; counts as whole
+        # numbers. The range is signed — a matchup differential of -0.03 must not
+        # round to "-0.0" and throw away the defensive signal (#119).
+        if -1.0 <= val <= 1.0:
             return f"{val:.3f}"
         return f"{val:.1f}"
     return str(val)
@@ -190,11 +214,44 @@ def _format_stats_for_prompt(stats_blob: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_blind_section() -> str:
+def _scoped_skills(skills: list[str] | None, group: frozenset[str]) -> list[str]:
     """
-    Build Sub-section A: blind assessment of the 11 moderate-confidence skills.
+    Sorted members of `group` the caller asked for — all of them when `skills` is None.
+
+    Sorting keeps prompt ordering deterministic across runs (a frozenset has no
+    stable order).
+
+    Raises:
+        ValueError: `skills` is empty, or holds a high-confidence or unknown key.
+    """
+    if skills is None:
+        return sorted(group)
+    if not skills:
+        raise ValueError("skills subset is empty — nothing for Claude to rate")
+    unrated = sorted(set(skills) - _CLAUDE_SKILLS)
+    if unrated:
+        raise ValueError(
+            "Claude does not rate these skill keys (high-confidence or unknown): "
+            + ", ".join(unrated)
+        )
+    return sorted(group & set(skills))
+
+
+def _build_blind_section(skills: list[str] | None = None) -> str:
+    """
+    Build Sub-section A: blind assessment of the moderate-confidence skills.
     Claude sees stats but NOT the stat-based tier.
+
+    Args:
+        skills: Optional subset of skill keys. None means every moderate skill.
+
+    Returns:
+        The section text, or "" when no moderate skill is in the subset.
     """
+    skill_keys = _scoped_skills(skills, MODERATE_CONFIDENCE_SKILLS)
+    if not skill_keys:
+        return ""
+
     lines = [
         "## Sub-section A — Blind Skill Assessment (Moderate Confidence)",
         "",
@@ -207,25 +264,38 @@ def _build_blind_section() -> str:
         "Skill definitions:",
         "",
     ]
-    # Sort for deterministic prompt ordering across runs (frozenset has no stable order)
-    for skill_key in sorted(MODERATE_CONFIDENCE_SKILLS):
+    for skill_key in skill_keys:
         display = _SKILL_DISPLAY_NAMES[skill_key]
         definition = _SKILL_DEFINITIONS[skill_key]
         lines.append(f"- **{skill_key}** ({display}): {definition}")
 
     lines += [
         "",
-        "Provide your assessment for each of the 11 skills above. "
+        f"Provide your assessment for each of the {len(skill_keys)} skills above. "
         "Set confidence to \"low\" for any skill where you are uncertain.",
     ]
     return "\n".join(lines)
 
 
-def _build_informed_section(stat_skills_result: dict) -> str:
+def _build_informed_section(
+    stat_skills_result: dict,
+    skills: list[str] | None = None,
+) -> str:
     """
-    Build Sub-section B: informed assessment of the 3 low-confidence skills.
+    Build Sub-section B: informed assessment of the low-confidence skills.
     Claude sees stats AND the stat-based tier and confidence.
+
+    Args:
+        stat_skills_result: Skill evaluation results from the stat pipeline.
+        skills: Optional subset of skill keys. None means every low skill.
+
+    Returns:
+        The section text, or "" when no low-confidence skill is in the subset.
     """
+    skill_keys = _scoped_skills(skills, LOW_CONFIDENCE_SKILLS)
+    if not skill_keys:
+        return ""
+
     lines = [
         "## Sub-section B — Informed Skill Assessment (Low Confidence)",
         "",
@@ -236,54 +306,21 @@ def _build_informed_section(stat_skills_result: dict) -> str:
         "",
     ]
 
-    # versatile_defender
-    vd = stat_skills_result.get("versatile_defender", {})
-    vd_tier = vd.get("tier", "None")
-    vd_driving = vd.get("driving_stats", {})
-    vd_stats_str = _format_driving_stats_inline(vd_driving)
-    lines += [
-        "### versatile_defender (Versatile Defender)",
-        "Can guard multiple positional groups effectively when switched.",
-        f"The stat pipeline computed the following metrics: {vd_stats_str}",
-        f"The stat-based rating is **{vd_tier}** with LOW confidence.",
-        "Your assessment of this player's defensive versatility based on body type, "
-        "lateral movement, and known defensive reputation should override the stats if they conflict.",
-        "",
-    ]
-
-    # perimeter_disruptor
-    perim = stat_skills_result.get("perimeter_disruptor", {})
-    perim_tier = perim.get("tier", "None")
-    perim_driving = perim.get("driving_stats", {})
-    perim_stats_str = _format_driving_stats_inline(perim_driving)
-    lines += [
-        "### perimeter_disruptor (Perimeter Disruptor)",
-        "Disrupts ball handlers through active hands, pressure, and contest.",
-        f"The stats show: {perim_stats_str}",
-        f"The stat-based rating is **{perim_tier}** with LOW confidence.",
-        "Screen navigation, recovery speed, and overall defensive IQ are invisible in "
-        "these stats — weight your knowledge accordingly.",
-        "",
-    ]
-
-    # high_flyer
-    hf = stat_skills_result.get("high_flyer", {})
-    hf_tier = hf.get("tier", "None")
-    hf_driving = hf.get("driving_stats", {})
-    hf_stats_str = _format_driving_stats_inline(hf_driving)
-    lines += [
-        "### high_flyer (Above the Rim Finishing)",
-        "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, "
-        "and transition finishes.",
-        f"The stats show: {hf_stats_str}",
-        f"The stat-based rating is **{hf_tier}** with LOW confidence.",
-        "Athleticism is poorly captured by statistics — weight your knowledge of this "
-        "player's physical tools and playing style heavily.",
-        "",
-    ]
+    for skill_key in skill_keys:
+        stat_entry = stat_skills_result.get(skill_key, {})
+        tier = stat_entry.get("tier", "None")
+        driving_stats = _format_driving_stats_inline(stat_entry.get("driving_stats", {}))
+        lines += [
+            f"### {skill_key} ({_SKILL_DISPLAY_NAMES[skill_key]})",
+            _SKILL_DEFINITIONS[skill_key],
+            f"The stats show: {driving_stats}",
+            f"The stat-based rating is **{tier}** with LOW confidence.",
+            _INFORMED_GUIDANCE[skill_key],
+            "",
+        ]
 
     lines.append(
-        "Provide your assessment for each of the 3 skills above. "
+        f"Provide your assessment for each of the {len(skill_keys)} skills above. "
         "Set confidence to \"low\" for any skill where you are uncertain."
     )
     return "\n".join(lines)
@@ -305,6 +342,7 @@ def build_claude_prompt(
     player_info: dict,
     stats_blob: dict,
     stat_skills_result: dict,
+    skills: list[str] | None = None,
 ) -> str:
     """
     Build the full structured Claude prompt for a player's skill assessment.
@@ -313,10 +351,27 @@ def build_claude_prompt(
         player_info:       Player metadata row from the players table.
         stats_blob:        Raw stats JSONB blob from player_stats table.
         stat_skills_result: Skill evaluation results from the stat pipeline (Prompt 4).
+        skills:            Optional subset of skill keys to rate. None means every
+                           moderate + low skill. A section whose subset is empty is
+                           left out of the prompt entirely.
 
     Returns:
         Prompt string ready to send to the Anthropic messages API.
+
+    Raises:
+        ValueError: `skills` is empty, or holds a high-confidence or unknown key.
     """
+    blind_section    = _build_blind_section(skills)
+    informed_section = _build_informed_section(stat_skills_result, skills)
+    blind_count      = len(_scoped_skills(skills, MODERATE_CONFIDENCE_SKILLS))
+    informed_count   = len(_scoped_skills(skills, LOW_CONFIDENCE_SKILLS))
+    section_counts   = " + ".join(
+        part for part in (
+            f"{blind_count} from Sub-section A" if blind_count else "",
+            f"{informed_count} from Sub-section B" if informed_count else "",
+        ) if part
+    )
+
     name     = player_info.get("name", "Unknown")
     team     = player_info.get("team", "Unknown")
     position = player_info.get("position", "Unknown")
@@ -348,10 +403,8 @@ def build_claude_prompt(
         "",
         "## Section 3 — Skill Assessment Request",
         "",
-        _build_blind_section(),
-        "",
-        _build_informed_section(stat_skills_result),
-        "",
+        *([blind_section, ""] if blind_section else []),
+        *([informed_section, ""] if informed_section else []),
         "---",
         "",
         "## Response Format",
@@ -371,7 +424,7 @@ def build_claude_prompt(
         }, indent=2),
         '```',
         "",
-        "Include all 14 skills (11 from Sub-section A + 3 from Sub-section B) in the "
+        f"Include all {blind_count + informed_count} skills ({section_counts}) in the "
         "\"skills\" object. Use the snake_case skill keys as the object keys. "
         "Set confidence to \"low\" for any skill where you are uncertain, even if you "
         "still provide a tier — this self-reported confidence is used in compositing.",
@@ -556,6 +609,7 @@ def get_claude_assessment(
     season: str,
     stat_skills_result: dict,
     supabase: Client,
+    skills: list[str] | None = None,
 ) -> dict:
     """
     Run Claude's skill assessment for a single player.
@@ -568,6 +622,9 @@ def get_claude_assessment(
         season:             Season string (e.g. "2025-26").
         stat_skills_result: Dict from Prompt 4 skill evaluation (may be empty).
         supabase:           Supabase client.
+        skills:             Optional subset of skill keys to rate. None means every
+                            moderate + low skill. The returned "skills" dict holds
+                            exactly the requested keys.
 
     Returns:
         {
@@ -576,7 +633,13 @@ def get_claude_assessment(
           "input_tokens":   int,
           "output_tokens":  int,
         }
+
+    Raises:
+        ValueError: `skills` is empty, or holds a high-confidence or unknown key.
     """
+    # Validate the subset before any fetch or API spend.
+    target_skills = _scoped_skills(skills, _CLAUDE_SKILLS)
+
     client = _get_anthropic_client()
 
     player_info = _fetch_player_info(player_id, season, supabase)
@@ -586,7 +649,7 @@ def get_claude_assessment(
 
     stats_blob = _fetch_stats_blob(player_id, season, supabase)
 
-    prompt = build_claude_prompt(player_info, stats_blob, stat_skills_result)
+    prompt = build_claude_prompt(player_info, stats_blob, stat_skills_result, skills=skills)
 
     raw_skills, input_tokens, output_tokens = call_claude(prompt, client)
 
@@ -600,13 +663,12 @@ def get_claude_assessment(
         }
 
     # Build the final skills dict — validate each entry, mark missing as failed
-    all_claude_skills = list(MODERATE_CONFIDENCE_SKILLS | LOW_CONFIDENCE_SKILLS)
-    skills: dict[str, dict] = {}
+    assessed: dict[str, dict] = {}
 
-    for skill_key in all_claude_skills:
+    for skill_key in target_skills:
         entry = raw_skills.get(skill_key)
         if entry and _validate_skill_entry(entry):
-            skills[skill_key] = {
+            assessed[skill_key] = {
                 "tier":          entry["tier"],
                 "justification": entry["justification"],
                 "confidence":    entry["confidence"],
@@ -615,7 +677,7 @@ def get_claude_assessment(
         else:
             # Skill missing or malformed in Claude's response
             logger.warning("Claude response missing or invalid for skill '%s'", skill_key)
-            skills[skill_key] = {
+            assessed[skill_key] = {
                 "tier":          None,
                 "justification": None,
                 "confidence":    None,
@@ -623,7 +685,7 @@ def get_claude_assessment(
             }
 
     return {
-        "skills":        skills,
+        "skills":        assessed,
         "claude_failed": False,
         "input_tokens":  input_tokens,
         "output_tokens": output_tokens,

@@ -228,3 +228,97 @@ def test_skill_evaluation_accepts_known_skills_in_filter(monkeypatch, app_client
     assert not (resp.status_code == 400 and "unknown_skill" in (body or {}).get("error", "")), (
         f"Known skill {ALL_SKILLS[0]!r} was incorrectly rejected by allowlist"
     )
+
+
+# ---------------------------------------------------------------------------
+# M2.16: skill-evaluation reads the scoped-run flags strictly
+# ---------------------------------------------------------------------------
+
+
+def _capture_start_run(monkeypatch):
+    """Capture the kwargs runs_repo.start_run is called with."""
+    from services.pipeline_runs import repo as runs_repo
+
+    captured: dict = {}
+
+    def fake_start_run(*a, **kw):
+        captured.update(kw)
+        return _RUN_ID
+
+    monkeypatch.setattr(runs_repo, "start_run", fake_start_run)
+    return captured
+
+
+def _post_skill_eval(monkeypatch, app_client, body):
+    import threading
+    import api.auth as auth_mod
+
+    monkeypatch.setattr(auth_mod.snap_repo, "get_draft", lambda client=None: _DRAFT)
+    monkeypatch.setattr(threading.Thread, "start", lambda self: None)
+    return app_client.post("/api/pipeline/skill-evaluation", json=body, headers=AUTH)
+
+
+@pytest.mark.parametrize("bad", ["true", 1, "yes"])
+def test_skill_evaluation_rejects_non_boolean_recompute_composite(monkeypatch, app_client, bad):
+    """recompute_composite is a strict boolean — a truthy string is a caller bug."""
+    _capture_start_run(monkeypatch)
+    resp = _post_skill_eval(monkeypatch, app_client, {"recompute_composite": bad})
+    assert resp.status_code == 400
+    assert "invalid_recompute_composite" in resp.get_json()["error"]
+
+
+def test_skill_evaluation_rejects_non_boolean_with_claude(monkeypatch, app_client):
+    """with_claude is a strict boolean too."""
+    _capture_start_run(monkeypatch)
+    resp = _post_skill_eval(monkeypatch, app_client, {"with_claude": "true"})
+    assert resp.status_code == 400
+    assert "invalid_with_claude" in resp.get_json()["error"]
+
+
+def test_skill_evaluation_requires_skill_filter_for_recompute(monkeypatch, app_client):
+    """A composite recompute across all 21 Skills is never what the caller meant."""
+    _capture_start_run(monkeypatch)
+    resp = _post_skill_eval(monkeypatch, app_client, {"recompute_composite": True})
+    assert resp.status_code == 400
+    assert "skill_filter_required" in resp.get_json()["error"]
+
+
+def test_skill_evaluation_with_claude_requires_recompute_composite(monkeypatch, app_client):
+    """Fresh Claude tiers only reach the profile through the composite merge."""
+    from services.skills import ALL_SKILLS
+
+    _capture_start_run(monkeypatch)
+    resp = _post_skill_eval(
+        monkeypatch, app_client,
+        {"with_claude": True, "skill_filter": [ALL_SKILLS[0]]},
+    )
+    assert resp.status_code == 400
+    assert "recompute_composite" in resp.get_json()["error"]
+
+
+def test_skill_evaluation_records_flags_and_draft_season_in_params(monkeypatch, app_client):
+    """The run row records what it was asked to do, and an omitted season
+    falls back to the draft's season rather than a hardcoded default."""
+    import api.pipeline as pipeline_mod
+    from services.skills import ALL_SKILLS
+
+    captured = _capture_start_run(monkeypatch)
+    monkeypatch.setattr(
+        pipeline_mod.snap_repo, "get_release",
+        lambda release_id, client=None: SnapshotRelease(
+            id=release_id, label="draft-test", season="2031-32", status="draft",
+            is_active=False, published_at=None, created_at="2026-01-01T00:00:00Z",
+        ),
+    )
+
+    resp = _post_skill_eval(
+        monkeypatch, app_client,
+        {"recompute_composite": True, "with_claude": True,
+         "skill_filter": [ALL_SKILLS[0]]},
+    )
+
+    assert resp.status_code == 200, resp.get_json()
+    params = captured.get("params") or {}
+    assert params["recompute_composite"] is True
+    assert params["with_claude"] is True
+    assert params["season"] == "2031-32"

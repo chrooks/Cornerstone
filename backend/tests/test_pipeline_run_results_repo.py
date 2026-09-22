@@ -442,3 +442,135 @@ def test_staged_flag_row_is_frozen():
     )
     with pytest.raises((AttributeError, TypeError)):
         row.skill_name = "mutated"  # type: ignore
+
+
+# ---------------------------------------------------------------------------
+# M2.18: staged flags carry Claude's justification and the driving stats
+# ---------------------------------------------------------------------------
+
+
+def test_stage_flag_rows_writes_claude_justification_and_stat_values(mock_supabase):
+    """A staged flag carries claude_justification + stat_values so the review
+    queue shows WHY Claude disagreed, exactly as the direct-write path does."""
+    rows = [
+        StagedFlagRow(
+            player_id="p-just",
+            skill_name="versatile_defender",
+            flag_reason="stat_claude_disagreement",
+            season="2025-26",
+            claude_tier="Elite",
+            stats_tier="Capable",
+            claude_justification="Guards 1-4 and holds up in the post.",
+            stat_values={"matchup_difficulty": 0.71},
+        )
+    ]
+
+    captured = []
+
+    flag_table_mock = MagicMock()
+    flag_table_mock.insert.side_effect = lambda payload: (
+        captured.extend(payload) or flag_table_mock.insert.return_value
+    )
+    flag_table_mock.insert.return_value.execute.return_value = MagicMock(data=[])
+    mock_supabase.table.side_effect = lambda name: (
+        flag_table_mock if name == "pipeline_run_flag_results"
+        else mock_supabase.table.return_value
+    )
+
+    with patch("services.pipeline_run_results.repo._get_client", return_value=mock_supabase):
+        stage_flag_rows("run-just", rows)
+
+    assert len(captured) == 1
+    assert captured[0]["claude_justification"] == "Guards 1-4 and holds up in the post."
+    assert captured[0]["stat_values"] == {"matchup_difficulty": 0.71}
+
+
+def test_stage_flag_rows_defaults_justification_fields_to_none(mock_supabase):
+    """The two new columns are optional — a flag staged without them writes NULL."""
+    rows = [
+        StagedFlagRow(
+            player_id="p-plain",
+            skill_name="rim_protector",
+            flag_reason="flagged",
+            season="2025-26",
+        )
+    ]
+
+    captured = []
+
+    flag_table_mock = MagicMock()
+    flag_table_mock.insert.side_effect = lambda payload: (
+        captured.extend(payload) or flag_table_mock.insert.return_value
+    )
+    flag_table_mock.insert.return_value.execute.return_value = MagicMock(data=[])
+    mock_supabase.table.side_effect = lambda name: (
+        flag_table_mock if name == "pipeline_run_flag_results"
+        else mock_supabase.table.return_value
+    )
+
+    with patch("services.pipeline_run_results.repo._get_client", return_value=mock_supabase):
+        stage_flag_rows("run-plain", rows)
+
+    assert captured[0]["claude_justification"] is None
+    assert captured[0]["stat_values"] is None
+
+
+# ---------------------------------------------------------------------------
+# A with_claude run stages two rows per player (composite + claude). The
+# summary counts what publishes; the drilldown still shows Claude's movement.
+# ---------------------------------------------------------------------------
+
+
+def _diff_two_source_run(mock_supabase):
+    staged_rows = [
+        {
+            "run_id": "run-claude", "player_id": "p1", "season": "2025-26",
+            "source": "composite",
+            "profile": {"versatile_defender": {"final_tier": "Elite"}},
+        },
+        {
+            "run_id": "run-claude", "player_id": "p1", "season": "2025-26",
+            "source": "claude",
+            "profile": {"versatile_defender": "Proficient"},
+        },
+    ]
+    current_rows = [
+        {
+            "player_id": "p1", "season": "2025-26", "source": "composite",
+            "profile": {"versatile_defender": {"final_tier": "Capable"}},
+        },
+        {
+            "player_id": "p1", "season": "2025-26", "source": "claude",
+            "profile": {"versatile_defender": "Capable"},
+        },
+    ]
+
+    def table_router(name):
+        mock = MagicMock()
+        if name == "pipeline_run_results":
+            mock.select.return_value.eq.return_value.range.return_value.execute.return_value = MagicMock(data=staged_rows)
+        elif name == "draft_skill_profiles":
+            mock.select.return_value.in_.return_value.execute.return_value = MagicMock(data=current_rows)
+        return mock
+
+    mock_supabase.table.side_effect = table_router
+    with patch("services.pipeline_run_results.repo._get_client", return_value=mock_supabase):
+        return get_diff("run-claude")
+
+
+def test_get_diff_summary_counts_one_change_per_published_tier(mock_supabase):
+    """One Skill moved once. Counting both staged sources doubles the number
+    Chris commits on, and a source='claude' row publishes no tier."""
+    result = _diff_two_source_run(mock_supabase)
+
+    assert result["summary"]["total_changed"] == 1
+    assert result["summary"]["per_skill"]["versatile_defender"]["promotions"] == 1
+    assert result["summary"]["per_skill"]["versatile_defender"]["demotions"] == 0
+
+
+def test_get_diff_still_lists_the_claude_row_in_changes(mock_supabase):
+    """The summary drops it; the drilldown must not — it prints `source`."""
+    result = _diff_two_source_run(mock_supabase)
+
+    sources = sorted(c["source"] for c in result["changes"])
+    assert sources == ["claude", "composite"]

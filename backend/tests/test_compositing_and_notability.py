@@ -25,13 +25,16 @@ from services.compositing import (
     composite_profile,
 )
 from services.skills import (
+    ALL_SKILLS,
     HIGH_CONFIDENCE_SKILLS,
     MODERATE_CONFIDENCE_SKILLS,
     LOW_CONFIDENCE_SKILLS,
 )
 from services.claude_assessment import (
+    _INFORMED_GUIDANCE,
     _format_stat_section,
     _build_blind_section,
+    _build_informed_section,
     build_claude_prompt,
     estimate_cost_usd,
 )
@@ -589,7 +592,7 @@ class TestSkillSetSizes:
         assert "steady_hand" in ALL_SKILLS
         assert "steady_hand" in SKILL_DEFINITIONS
 
-        prompt = _build_legend_prompt("Magic Johnson", "1980s", None)
+        prompt = _build_legend_prompt("Magic Johnson", "1980s", None, ALL_SKILLS)
         assert "steady_hand" in prompt
 
     def test_no_overlap(self):
@@ -686,6 +689,133 @@ class TestPromptConstruction:
         # The versatile_defender stat tier should appear in the prompt
         assert "Capable" in prompt  # versatile_defender stat tier
 
+    # --- M2.11: the informed section is table-driven ------------------------
+
+    def test_informed_guidance_covers_every_low_confidence_skill(self):
+        assert set(_INFORMED_GUIDANCE) == set(LOW_CONFIDENCE_SKILLS)
+
+    def test_versatile_defender_guidance_mentions_defending_bigs_in_the_post(self):
+        assert "defending bigs in the post" in _INFORMED_GUIDANCE["versatile_defender"]
+
+    def test_informed_section_renders_every_guidance_sentence(self):
+        informed = _build_informed_section(self._stat_skills())
+        for skill_key, guidance in _INFORMED_GUIDANCE.items():
+            assert skill_key in informed
+            assert guidance in informed
+
+    def test_prompt_skill_counts_derive_from_the_skill_sets(self):
+        prompt = build_claude_prompt(
+            self._player_info(), self._stats_blob(), self._stat_skills()
+        )
+        blind_n = len(MODERATE_CONFIDENCE_SKILLS)
+        low_n = len(LOW_CONFIDENCE_SKILLS)
+        assert f"each of the {blind_n} skills above" in prompt
+        assert f"each of the {low_n} skills above" in prompt
+        assert f"Include all {blind_n + low_n} skills" in prompt
+        assert f"{blind_n} from Sub-section A + {low_n} from Sub-section B" in prompt
+
+    # --- M2.12: a Skill subset scopes the prompt ----------------------------
+
+    def test_skills_subset_scopes_prompt_to_one_skill(self):
+        prompt = build_claude_prompt(
+            self._player_info(),
+            self._stats_blob(),
+            self._stat_skills(),
+            skills=["versatile_defender"],
+        )
+        assert "versatile_defender" in prompt
+        for skill in ALL_SKILLS:
+            if skill != "versatile_defender":
+                assert skill not in prompt, f"Skill '{skill}' should not be in the prompt"
+        assert "Sub-section A" not in prompt  # no blind section at all
+        assert "Include all 1 skills (1 from Sub-section B)" in prompt
+
+    def test_skills_subset_blind_only_omits_the_informed_section(self):
+        prompt = build_claude_prompt(
+            self._player_info(),
+            self._stats_blob(),
+            self._stat_skills(),
+            skills=["cutter", "passer"],
+        )
+        assert "Sub-section A" in prompt
+        assert "Sub-section B" not in prompt
+        assert "each of the 2 skills above" in prompt
+
+    def test_skills_subset_rejects_a_high_confidence_skill(self):
+        with pytest.raises(ValueError, match="rim_protector"):
+            build_claude_prompt(
+                self._player_info(),
+                self._stats_blob(),
+                self._stat_skills(),
+                skills=["rim_protector"],
+            )
+
+    def test_skills_subset_rejects_an_unknown_skill(self):
+        with pytest.raises(ValueError, match="not_a_skill"):
+            build_claude_prompt(
+                self._player_info(),
+                self._stats_blob(),
+                self._stat_skills(),
+                skills=["cutter", "not_a_skill"],
+            )
+
+    def test_skills_subset_rejects_an_empty_list(self):
+        with pytest.raises(ValueError, match="empty"):
+            build_claude_prompt(
+                self._player_info(), self._stats_blob(), self._stat_skills(), skills=[]
+            )
+
+    def test_blind_section_subset_holds_only_the_requested_skills(self):
+        blind = _build_blind_section(skills=["cutter"])
+        assert "cutter" in blind
+        assert "passer" not in blind
+
+    def test_get_claude_assessment_scopes_the_result_to_the_subset(self, monkeypatch):
+        from services import claude_assessment as ca
+
+        captured: dict[str, str] = {}
+
+        def _fake_call(prompt, client):
+            captured["prompt"] = prompt
+            return (
+                {
+                    "versatile_defender": {
+                        "tier": "Elite",
+                        "justification": "Guards one through four.",
+                        "confidence": "high",
+                    }
+                },
+                10,
+                20,
+            )
+
+        monkeypatch.setattr(ca, "_get_anthropic_client", lambda: object())
+        monkeypatch.setattr(ca, "_fetch_player_info", lambda *a, **k: self._player_info())
+        monkeypatch.setattr(ca, "_fetch_stats_blob", lambda *a, **k: self._stats_blob())
+        monkeypatch.setattr(ca, "call_claude", _fake_call)
+
+        result = ca.get_claude_assessment(
+            "player-1",
+            "2025-26",
+            self._stat_skills(),
+            object(),
+            skills=["versatile_defender"],
+        )
+
+        assert set(result["skills"]) == {"versatile_defender"}
+        assert result["skills"]["versatile_defender"]["tier"] == "Elite"
+        assert result["claude_failed"] is False
+        assert "high_flyer" not in captured["prompt"]
+
+    def test_get_claude_assessment_rejects_a_high_confidence_skill(self, monkeypatch):
+        from services import claude_assessment as ca
+
+        monkeypatch.setattr(ca, "_get_anthropic_client", lambda: object())
+        with pytest.raises(ValueError, match="rim_protector"):
+            ca.get_claude_assessment(
+                "player-1", "2025-26", self._stat_skills(), object(), skills=["rim_protector"]
+            )
+
 
 # ===========================================================================
 # Claude assessment — Stats formatting
@@ -704,6 +834,11 @@ class TestStatsFormatting:
         assert "22.5" in result
         assert "4.1" in result
         assert "| Stat | Value |" in result
+
+    def test_small_negative_value_keeps_three_decimals(self):
+        # A negative matchup differential must not round to "-0.0" (#119)
+        result = _format_stat_section("Defensive Matchup Data", {"cross_group_fg_diff": -0.03})
+        assert "-0.030" in result
 
     def test_blind_section_has_11_skills(self):
         blind = _build_blind_section()
