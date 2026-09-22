@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { getRunDiff } from "@/lib/api";
+import { getRunDiff, discardPipelineRun } from "@/lib/api";
 import { usePipelineRunsPolling } from "../../_components/usePipelineRunsPolling";
 import { isReviewableRun, isTerminalRun } from "../_lib/runReview";
 import { DiffSummaryView } from "./diff/DiffSummaryView";
@@ -32,6 +32,23 @@ interface RunDiffPreviewProps {
 }
 
 type ViewMode = "summary" | "drilldown";
+
+/**
+ * How long a run has been going, in words. The Discard dialog asks Chris to
+ * tell a stuck run from a healthy one, and without this the two look identical.
+ */
+function runAge(startedAt: string | null | undefined): string | null {
+  if (!startedAt) return null;
+  const started = Date.parse(startedAt);
+  if (Number.isNaN(started)) return null;
+  const minutes = Math.floor((Date.now() - started) / 60_000);
+  if (minutes < 1) return "started just now";
+  if (minutes < 60) return `started ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `started ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `started ${days} day${days === 1 ? "" : "s"} ago`;
+}
 
 function ViewToggleButton({
   active,
@@ -73,6 +90,8 @@ export function RunDiffPreview({
   const [loadState, setLoadState] = useState<"loading" | "error" | "ready">("loading");
   const [viewMode, setViewMode] = useState<ViewMode>("summary");
   const [jumpSkill, setJumpSkill] = useState<string | null>(null);
+  const [discardingStuck, setDiscardingStuck] = useState(false);
+  const [stuckError, setStuckError] = useState<string | null>(null);
 
   // The run prop comes from the parent's run list, fetched once and not
   // live — the backend stages threshold_edit/skill_evaluation runs on a
@@ -103,6 +122,34 @@ export function RunDiffPreview({
     loadDiff();
   }, [loadDiff, isRunning]);
 
+  // A develop push restarts the server mid-run, and the run's row stays at
+  // `running` forever with no worker behind it. The backend's discard accepts
+  // a running run, so the control is always offered — the dialog carries the
+  // cost rather than hiding the control behind a timer (M2.17a).
+  const handleDiscardStuck = useCallback(async () => {
+    if (discardingStuck) return;
+    const confirmed = window.confirm(
+      "Only discard a run that is stuck because a develop push restarted the server. " +
+        "A healthy run keeps working, and discarding it throws its work away."
+    );
+    if (!confirmed) return;
+
+    setDiscardingStuck(true);
+    setStuckError(null);
+    try {
+      const res = await discardPipelineRun(runId);
+      if (res.success) {
+        onDiscarded();
+      } else {
+        setStuckError(res.error ?? "Failed to discard run.");
+      }
+    } catch {
+      setStuckError("Could not reach the backend to discard this run.");
+    } finally {
+      setDiscardingStuck(false);
+    }
+  }, [discardingStuck, runId, onDiscarded]);
+
   const terminal = effectiveRun ? isTerminalRun(effectiveRun) : false;
   const canAct = effectiveRun ? isReviewableRun(effectiveRun) : false;
 
@@ -120,10 +167,43 @@ export function RunDiffPreview({
         </button>
         <div
           id="run-diff-preview-running"
-          className="flex items-center gap-2 text-neutral-400 text-sm py-12 justify-center"
+          className="flex items-center gap-2 text-neutral-400 text-sm pt-12 pb-6 justify-center"
         >
           <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          Run in progress — re-evaluating players, this can take a moment...
+          <span id="run-diff-preview-running-age">
+            Run in progress — re-evaluating players, this can take a moment
+            {runAge(effectiveRun?.started_at) ? ` (${runAge(effectiveRun?.started_at)})` : ""}.
+          </span>
+        </div>
+
+        <div className="flex flex-col items-center gap-2 pb-12">
+          <button
+            id="run-diff-preview-discard-stuck-btn"
+            type="button"
+            onClick={handleDiscardStuck}
+            disabled={discardingStuck}
+            className={cn(
+              "px-4 py-2 rounded-[4px] text-xs font-medium transition-colors",
+              "border border-[#d9d0c9] bg-white text-neutral-600 hover:text-[#0e0907] hover:border-[#0e0907]",
+              "focus:outline-none focus:ring-2 focus:ring-[#d9d0c9] focus:ring-offset-2",
+              "disabled:opacity-50 disabled:cursor-not-allowed"
+            )}
+          >
+            {discardingStuck ? "Discarding…" : "Discard stuck run"}
+          </button>
+          <p className="text-[11px] text-neutral-500 max-w-sm text-center">
+            A deploy that restarts the server leaves its run at &ldquo;running&rdquo; forever. Use this
+            only then — it throws away the work of a run that is still going.
+          </p>
+          {stuckError && (
+            <div
+              id="run-diff-preview-discard-stuck-error"
+              role="alert"
+              className="rounded-[6px] border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+            >
+              {stuckError}
+            </div>
+          )}
         </div>
       </div>
     );
