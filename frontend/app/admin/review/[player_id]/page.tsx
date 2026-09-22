@@ -591,7 +591,9 @@ export default function PlayerReviewPage() {
     [player_id]
   );
 
-  if (loading) {
+  // Skeleton on first load only: a refetch after a resolve keeps the page, and
+  // the <Toaster> in it, mounted — unmounting it drops the pending toast.
+  if (loading && !detail) {
     return (
       <main className="max-w-3xl mx-auto px-4 py-8">
         <div className="space-y-3 animate-pulse">
