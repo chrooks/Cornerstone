@@ -51,6 +51,17 @@ export const ALL_SKILL_NAMES: string[] = Object.values(SKILL_CATEGORIES).flat();
 /** Total number of skills — derive this rather than hardcoding. */
 export const TOTAL_SKILLS = ALL_SKILL_NAMES.length;
 
+/**
+ * Mirror of NO_BULK_TRUST_STATS_SKILLS in backend/services/skills.py — keep the
+ * two in step. Their tier drives an archetype label and the stats engine is
+ * weakest exactly there, so the review queue hides "Trust Stats" for them and
+ * the API rejects the call.
+ */
+export const NO_BULK_TRUST_STATS_SKILLS = new Set([
+  "versatile_defender",
+  "perimeter_disruptor",
+]);
+
 // ---------------------------------------------------------------------------
 // Human-readable display names
 // ---------------------------------------------------------------------------

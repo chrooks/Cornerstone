@@ -494,6 +494,15 @@ export async function runCompositeBatch(season?: string): Promise<ApiResponse<{
 // Review Queue (Prompt 7)
 // ---------------------------------------------------------------------------
 
+/**
+ * A review-queue row. `agreement_count` is only present when the queue was
+ * fetched with `skill_name` (#152, M2.3): the player's open flags on that Skill
+ * where Claude's tier is real and equals the stat tier.
+ */
+export type ReviewQueueEntry = FlaggedPlayerSummary & {
+  agreement_count?: number;
+};
+
 /** Get players with unresolved flags, with optional filters. */
 export async function getReviewQueue(params?: {
   season?: string;
@@ -501,15 +510,17 @@ export async function getReviewQueue(params?: {
   team?: string;
   position?: string;
   flag_reason?: string;
-}): Promise<ApiResponse<FlaggedPlayerSummary[]>> {
+  skill_name?: string;
+}): Promise<ApiResponse<ReviewQueueEntry[]>> {
   const q = new URLSearchParams();
   if (params?.season)      q.set("season", params.season);
   if (params?.search)      q.set("search", params.search);
   if (params?.team)        q.set("team", params.team);
   if (params?.position)    q.set("position", params.position);
   if (params?.flag_reason) q.set("flag_reason", params.flag_reason);
+  if (params?.skill_name)  q.set("skill_name", params.skill_name);
   const qs = q.toString() ? `?${q}` : "";
-  return apiFetch<FlaggedPlayerSummary[]>(`/api/review/queue${qs}`);
+  return apiFetch<ReviewQueueEntry[]>(`/api/review/queue${qs}`);
 }
 
 /** Get all flags and profiles for a single player. */
@@ -571,12 +582,21 @@ export async function getSkillBreakdown(
 }
 
 /**
- * Resolve all unresolved flags for a player (trust_stats or trust_claude only).
- * Under trust_claude the server leaves flags with no Claude tier open and
- * lists them in `skipped` (#154).
+ * Resolve unresolved flags across one or more players (trust_stats or
+ * trust_claude only).
+ *
+ * Scope (#152, M2.4):
+ *  - `playerIds` — one or many; the server caps a call at 600.
+ *  - `skillName` — restrict to a single Skill instead of the whole profile.
+ *  - `agreementsOnly` — resolve only flags where Claude's tier is real and
+ *    equals the stat tier; everything else comes back in `skipped`.
+ *
+ * The server leaves a flag open and lists it in `skipped` with a reason:
+ * `no_claude_tier` (#154), `disagreement`, `human_decision`,
+ * `negative_candidate` (D21) or `defensive_key`.
  */
 export async function bulkResolveFlags(
-  playerId: string,
+  scope: { playerIds: string[]; skillName?: string; agreementsOnly?: boolean },
   resolution: "trust_stats" | "trust_claude",
   notes?: string,
   season?: string
@@ -589,7 +609,14 @@ export async function bulkResolveFlags(
 > {
   return apiFetch("/api/review/bulk-resolve", {
     method: "POST",
-    body: JSON.stringify({ player_id: playerId, resolution, notes, season }),
+    body: JSON.stringify({
+      player_ids: scope.playerIds,
+      skill_name: scope.skillName,
+      agreements_only: scope.agreementsOnly,
+      resolution,
+      notes,
+      season,
+    }),
   });
 }
 
@@ -1260,6 +1287,19 @@ export function triggerBioTeamSync(player_id?: string): Promise<ApiResponse<{ ru
 }
 
 /**
+ * A skill-evaluation run body, plus the two M2.16 modes.
+ *
+ * `recompute_composite` re-merges the stat tiers into the composite through the
+ * #120 human-decision guard; `with_claude` additionally asks Claude for fresh
+ * tiers on the non-HIGH Skills in the filter. Both require `skill_filter`, and
+ * `with_claude` requires `recompute_composite`.
+ */
+export type SkillEvaluationRunRequest = SkillEvaluationRequest & {
+  recompute_composite?: boolean;
+  with_claude?: boolean;
+};
+
+/**
  * Trigger a skill-evaluation run scoped to the current open draft.
  *
  * Both axes of `opts` are optional:
@@ -1270,7 +1310,7 @@ export function triggerBioTeamSync(player_id?: string): Promise<ApiResponse<{ ru
  * `pending_commit_run_exists` in the `error` field of the envelope.
  */
 export function triggerSkillEvaluation(
-  opts?: SkillEvaluationRequest
+  opts?: SkillEvaluationRunRequest
 ): Promise<ApiResponse<{ run_id: string; status: string }>> {
   return apiFetch<{ run_id: string; status: string }>(
     "/api/pipeline/skill-evaluation",

@@ -493,7 +493,7 @@ export default function PlayerReviewPage() {
       if (!player_id) return;
       setBulkSaving(true);
       try {
-        const res = await bulkResolveFlags(player_id, resolution, undefined, CURRENT_SEASON);
+        const res = await bulkResolveFlags({ playerIds: [player_id] }, resolution, undefined, CURRENT_SEASON);
         if (res.success && res.data) {
           const skippedCount = res.data.skipped?.length ?? 0;
           toast.success(

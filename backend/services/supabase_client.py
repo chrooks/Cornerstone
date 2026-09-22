@@ -38,6 +38,33 @@ def in_chunks(ids: Sequence[T], size: int = 100) -> list[list[T]]:
     return [list(ids[i : i + size]) for i in range(0, len(ids), size)]
 
 
+# PostgREST's db-max-rows. A response is truncated at this many rows and says
+# nothing about the rest, so a read that can exceed it must walk pages.
+PAGE_SIZE = 1000
+
+
+def paged_rows(build_query: Callable[[], object]) -> list[dict]:
+    """Every row a query matches, walked in `.range()` pages.
+
+    `build_query` returns a fresh, unexecuted query each call — the same
+    filters, one page at a time. Use it for any read whose row count is not
+    bounded by the id list (draft_skill_flags carries 5-15 rows per profile,
+    so 100 profile ids can pass the cap).
+    """
+    out: list[dict] = []
+    start = 0
+    while True:
+        size = PAGE_SIZE
+        res = run_query(
+            lambda s=start, n=size: build_query().range(s, s + n - 1).execute()
+        )
+        rows = res.data or []
+        out.extend(rows)
+        if len(rows) < size:
+            return out
+        start += size
+
+
 def get_supabase() -> Client:
     """Return the shared Supabase client, creating it on first call."""
     global _client

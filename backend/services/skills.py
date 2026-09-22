@@ -53,6 +53,22 @@ LOW_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
     "high_flyer",
 })
 
+# Skills a bulk "Trust Stats" must never resolve across many players at once.
+# Their tier drives an archetype label, and the stats engine is weakest exactly
+# there, so a human decides each one.
+# #152 swaps perimeter_disruptor for point_of_attack_defender + off_ball_disruptor; D19 labels read these tiers
+NO_BULK_TRUST_STATS_SKILLS: frozenset[str] = frozenset({
+    "versatile_defender",
+    "perimeter_disruptor",
+})
+
+# Composite entries whose `source` records a human review decision (issue #120).
+# A recompute must never silently overwrite these — resolved (a flag adjudicated
+# in /admin/review) and manual_override (an admin's direct tier) are people's
+# calls, not stat output. One definition, because the recompute path and the
+# whole-profile guard must agree on what a person's call looks like.
+HUMAN_DECISION_SOURCES: frozenset[str] = frozenset({"resolved", "manual_override"})
+
 # ---------------------------------------------------------------------------
 # Derived collections
 # ---------------------------------------------------------------------------

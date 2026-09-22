@@ -11,10 +11,16 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getReviewQueue } from "@/lib/api";
+import { getReviewQueue, bulkResolveFlags, type ReviewQueueEntry } from "@/lib/api";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
-import type { FlaggedPlayerSummary } from "@/lib/types";
+import {
+  ALL_SKILL_NAMES,
+  SKILL_CATEGORIES,
+  NO_BULK_TRUST_STATS_SKILLS,
+  formatSkillName,
+} from "@/lib/skills";
 
 const FLAG_REASON_LABELS: Record<string, string> = {
   two_tier_disagreement:   "2-Tier Disagree",
@@ -23,6 +29,50 @@ const FLAG_REASON_LABELS: Record<string, string> = {
   claude_low_confidence:   "Claude Low Conf",
   data_missing:            "Data Missing",
 };
+
+/** Claude is never asked about a HIGH Skill, so it can have no agreements. */
+const HIGH_CONFIDENCE_SKILLS = new Set(SKILL_CATEGORIES["High Confidence"]);
+
+/** Server reasons for a flag the bulk resolve deliberately left open. */
+const SKIP_REASON_LABELS: Record<string, [singular: string, plural: string]> = {
+  disagreement:       ["disagreement", "disagreements"],
+  human_decision:     ["human decision", "human decisions"],
+  negative_candidate: ["negative candidate", "negative candidates"],
+  no_claude_tier:     ["no Claude tier", "no Claude tier"],
+  defensive_key:      ["defensive key", "defensive keys"],
+};
+
+/** Mirrors `_BULK_PLAYER_CAP` in backend/api/review.py. */
+const BULK_PLAYER_CAP = 600;
+
+/**
+ * Error States for the bulk endpoint. The API answers with a bare code, which
+ * names no cause and no way forward — so each one gets a sentence that does.
+ */
+const BULK_ERROR_LABELS: Record<string, string> = {
+  too_many_players:
+    `A bulk resolve covers at most ${BULK_PLAYER_CAP} players at once. ` +
+    "Narrow the queue by team or position, then run it once per slice.",
+  defensive_key_trust_stats_blocked:
+    "Trust Stats is blocked on this Skill — its tier drives an archetype label, " +
+    "so each flag needs a person. Use Trust Claude, or open the players one by one.",
+  unknown_skill:
+    "That Skill is not in the taxonomy. Reload the page and pick it again.",
+  invalid_agreements_only:
+    "The request was malformed. Reload the page and try once more.",
+};
+
+function describeSkips(skipped: { reason: string }[]): string {
+  const counts = new Map<string, number>();
+  for (const s of skipped) {
+    counts.set(s.reason, (counts.get(s.reason) ?? 0) + 1);
+  }
+  return Array.from(counts, ([reason, n]) => {
+    const labels = SKIP_REASON_LABELS[reason];
+    const label = labels ? labels[n === 1 ? 0 : 1] : reason.replace(/_/g, " ");
+    return `${n} ${label}`;
+  }).join(", ");
+}
 
 function formatFlagReason(reason: string): string {
   return FLAG_REASON_LABELS[reason] ?? reason.replace(/_/g, " ");
@@ -65,8 +115,8 @@ export function ReviewQueueWorkspace() {
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : "/admin/review");
   }, [router, searchParams]);
-  const [players, setPlayers]               = useState<FlaggedPlayerSummary[]>([]);
-  const [allPlayers, setAllPlayers]         = useState<FlaggedPlayerSummary[]>([]);
+  const [players, setPlayers]               = useState<ReviewQueueEntry[]>([]);
+  const [allPlayers, setAllPlayers]         = useState<ReviewQueueEntry[]>([]);
   const [loading, setLoading]               = useState(true);
   const [error, setError]                   = useState<string | null>(null);
 
@@ -74,6 +124,15 @@ export function ReviewQueueWorkspace() {
   const [teamFilter, setTeamFilter]         = useState("");
   const [posFilter, setPosFilter]           = useState("");
   const [reasonFilter, setReasonFilter]     = useState("");
+  const [skillFilter, setSkillFilter]       = useState("");
+
+  /* The Skill the CURRENT rows were fetched under — set only after a
+     successful fetch, so the bulk bar's counts always describe the queue on
+     screen rather than an unapplied dropdown choice (#152, M2.9). */
+  const [appliedSkill, setAppliedSkill]     = useState<string | null>(null);
+  const [bulkError, setBulkError]           = useState<string | null>(null);
+  const [bulkResult, setBulkResult]         = useState<string | null>(null);
+  const [bulkSaving, setBulkSaving]         = useState(false);
 
   const fetchQueue = useCallback(async () => {
     setLoading(true);
@@ -83,14 +142,16 @@ export function ReviewQueueWorkspace() {
       team:        teamFilter || undefined,
       position:    posFilter || undefined,
       flag_reason: reasonFilter || undefined,
+      skill_name:  skillFilter || undefined,
     });
     if (res.success && res.data) {
       setPlayers(res.data);
+      setAppliedSkill(skillFilter || null);
     } else {
       setError(res.error ?? "Failed to load review queue");
     }
     setLoading(false);
-  }, [search, teamFilter, posFilter, reasonFilter]);
+  }, [search, teamFilter, posFilter, reasonFilter, skillFilter]);
 
   useEffect(() => {
     setLoading(true);
@@ -107,6 +168,8 @@ export function ReviewQueueWorkspace() {
 
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();
+    setBulkError(null);
+    setBulkResult(null);
     fetchQueue();
   }, [fetchQueue]);
 
@@ -115,6 +178,10 @@ export function ReviewQueueWorkspace() {
     setTeamFilter("");
     setPosFilter("");
     setReasonFilter("");
+    setSkillFilter("");
+    setAppliedSkill(null);
+    setBulkError(null);
+    setBulkResult(null);
     setLoading(true);
     setError(null);
     const res = await getReviewQueue();
@@ -141,6 +208,73 @@ export function ReviewQueueWorkspace() {
   const visiblePlayers = scopedIds
     ? players.filter((p) => scopedIds.has(p.player_id))
     : players;
+
+  /* Per-Skill bulk bar (#152, M2.10). Every count below describes the rows on
+     screen, so a button label promises exactly what the click will resolve. */
+  const skillLabel      = appliedSkill ? formatSkillName(appliedSkill) : "";
+  const agreementTotal  = visiblePlayers.reduce((n, p) => n + (p.agreement_count ?? 0), 0);
+  const skillFlagTotal  = visiblePlayers.reduce((n, p) => n + p.unresolved_flag_count, 0);
+  const isHighSkill     = appliedSkill != null && HIGH_CONFIDENCE_SKILLS.has(appliedSkill);
+  const canTrustStats   = appliedSkill != null && !NO_BULK_TRUST_STATS_SKILLS.has(appliedSkill);
+
+  const runSkillBulk = useCallback(
+    async (
+      resolution: "trust_stats" | "trust_claude",
+      count: number,
+      agreementsOnly: boolean
+    ) => {
+      if (!appliedSkill || bulkSaving) return;
+      const label = formatSkillName(appliedSkill);
+      const noun = agreementsOnly ? "agreement" : "flag";
+      const confirmed = window.confirm(
+        `${resolution === "trust_claude" ? "Trust Claude" : "Trust Stats"} for ` +
+          `${count} ${label} ${noun}${count === 1 ? "" : "s"} across ` +
+          `${visiblePlayers.length} player${visiblePlayers.length === 1 ? "" : "s"}?\n\n` +
+          "This writes the tier into each published composite profile and cannot be undone."
+      );
+      if (!confirmed) return;
+
+      setBulkSaving(true);
+      setBulkError(null);
+      try {
+        const res = await bulkResolveFlags(
+          {
+            playerIds: visiblePlayers.map((p) => p.player_id),
+            skillName: appliedSkill,
+            agreementsOnly,
+          },
+          resolution
+        );
+        if (res.success && res.data) {
+          const skipped = res.data.skipped ?? [];
+          const summary =
+            `Resolved ${res.data.resolved_count}` +
+            (skipped.length > 0
+              ? ` · ${skipped.length} left open: ${describeSkips(skipped)}. ` +
+                "Those need a person — open the players below."
+              : "");
+          setBulkResult(summary);
+          toast.success(summary);
+          await fetchQueue();
+        } else {
+          /* Error State: the request was refused, so the queue is unchanged. */
+          const code = res.error ?? "";
+          setBulkError(BULK_ERROR_LABELS[code] ?? (code || "Bulk resolve failed"));
+        }
+      } catch {
+        /* A dropped or timed-out request is NOT "nothing happened" — the write
+           runs per player, so some of it may have landed. Refetch, and say so. */
+        setBulkError(
+          "The request did not finish. Some flags may already be resolved — " +
+            "the queue below has been refreshed."
+        );
+        await fetchQueue();
+      } finally {
+        setBulkSaving(false);
+      }
+    },
+    [appliedSkill, bulkSaving, visiblePlayers, fetchQueue]
+  );
 
   return (
     <div id="review-queue-workspace" className="max-w-5xl space-y-6">
@@ -222,6 +356,21 @@ export function ReviewQueueWorkspace() {
           </select>
         </div>
 
+        <div className="min-w-[170px]">
+          <label htmlFor="review-skill-select" className="text-xs font-medium text-muted-foreground block mb-1">Skill</label>
+          <select
+            id="review-skill-select"
+            value={skillFilter}
+            onChange={(e) => setSkillFilter(e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="">All skills</option>
+            {ALL_SKILL_NAMES.map((s) => (
+              <option key={s} value={s}>{formatSkillName(s)}</option>
+            ))}
+          </select>
+        </div>
+
         <button
           id="review-filter-btn"
           type="submit"
@@ -230,7 +379,7 @@ export function ReviewQueueWorkspace() {
           Filter
         </button>
 
-        {(search || teamFilter || posFilter || reasonFilter) && (
+        {(search || teamFilter || posFilter || reasonFilter || skillFilter) && (
           <button
             id="review-clear-btn"
             type="button"
@@ -263,7 +412,101 @@ export function ReviewQueueWorkspace() {
         </div>
       )}
 
-      {!loading && !error && (
+      {/* Per-Skill bulk bar (#152, M2.10) — only after a Skill filter applied. */}
+      {!loading && !error && appliedSkill && visiblePlayers.length > 0 && (
+        <div
+          id="review-skill-bulk-actions"
+          className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3"
+        >
+          <div className="min-w-[220px]">
+            <p className="text-sm font-semibold text-foreground">{skillLabel}</p>
+            <p id="review-skill-bulk-counts" className="text-xs text-muted-foreground mt-0.5">
+              {agreementTotal} agreement{agreementTotal === 1 ? "" : "s"} ·{" "}
+              {skillFlagTotal} open flag{skillFlagTotal === 1 ? "" : "s"} across{" "}
+              {visiblePlayers.length} player{visiblePlayers.length === 1 ? "" : "s"}
+            </p>
+            {isHighSkill && (
+              <p id="review-skill-bulk-high-note" className="text-xs text-muted-foreground mt-1">
+                Claude is never asked about a high-confidence Skill, so it has no agreements to trust.
+              </p>
+            )}
+            {!canTrustStats && (
+              <p id="review-skill-bulk-defensive-note" className="text-xs text-muted-foreground mt-1">
+                Trust Stats is blocked here — the archetype labels read this defensive tier, so each flag gets a human.
+              </p>
+            )}
+            {reasonFilter && (
+              <p id="review-skill-bulk-reason-note" className="text-xs text-muted-foreground mt-1">
+                The Flag Reason filter narrows the list, not the bulk action — this
+                resolves every open {skillLabel} flag on the players shown.
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              id="review-skill-bulk-trust-claude-btn"
+              type="button"
+              disabled={bulkSaving || isHighSkill || agreementTotal === 0}
+              onClick={() => runSkillBulk("trust_claude", agreementTotal, true)}
+              className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {bulkSaving
+                ? "Resolving…"
+                : `Trust Claude for ${agreementTotal} ${skillLabel} agreement${agreementTotal === 1 ? "" : "s"}`}
+            </button>
+            {canTrustStats && (
+              <button
+                id="review-skill-bulk-trust-stats-btn"
+                type="button"
+                disabled={bulkSaving || skillFlagTotal === 0}
+                onClick={() => runSkillBulk("trust_stats", skillFlagTotal, false)}
+                className="px-3 py-1.5 rounded-md border border-input bg-background text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bulkSaving
+                  ? "Resolving…"
+                  : `Trust Stats for ${skillFlagTotal} ${skillLabel} flag${skillFlagTotal === 1 ? "" : "s"}`}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {bulkError && (
+        <div
+          id="review-skill-bulk-error"
+          role="alert"
+          className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive"
+        >
+          {bulkError}
+        </div>
+      )}
+
+      {/* The standalone /admin/review route mounts no <Toaster>, so the same
+          sentence the toast carries also lands here. */}
+      {bulkResult && !bulkError && (
+        <p
+          id="review-skill-bulk-result"
+          role="status"
+          className="rounded-lg border border-border bg-muted/20 px-4 py-3 text-sm text-foreground"
+        >
+          {bulkResult}
+        </p>
+      )}
+
+      {/* Empty State: a Skill filter that matched nothing. */}
+      {!loading && !error && appliedSkill && visiblePlayers.length === 0 && (
+        <div
+          id="review-skill-bulk-empty"
+          className="rounded-lg border border-border bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground"
+        >
+          No open {skillLabel} flags
+        </div>
+      )}
+
+      {/* The Skill Empty State above already says why the list is empty, and
+          "No players in queue." would be untrue when only that Skill is clear. */}
+      {!loading && !error && !(visiblePlayers.length === 0 && appliedSkill) && (
         <p id="review-queue-count" className="text-xs text-muted-foreground">
           {visiblePlayers.length === 0
             ? scopedIds

@@ -5,7 +5,7 @@ Endpoints:
   GET  /api/review/queue                    — filterable list of players with unresolved flags
   GET  /api/review/<player_id>/flags        — all flags + profiles for a single player
   POST /api/review/<player_id>/resolve      — resolve a single skill flag
-  POST /api/review/bulk-resolve             — resolve all unresolved flags for a player
+  POST /api/review/bulk-resolve             — resolve open flags across players, optionally one Skill
 
 All responses use the standard {success, data, error} envelope.
 """
@@ -17,11 +17,11 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 
 from api.auth import require_admin, require_open_draft
-from services.supabase_client import get_supabase, in_chunks, run_query
+from services.supabase_client import get_supabase, in_chunks, paged_rows, run_query
 from services.players_service import CURRENT_SEASON
 from services.skill_engine.cache import get_thresholds, get_league_averages
 from services.skill_engine.evaluator import collect_condition_results
-from services.skills import ALL_SKILLS, HIGH_CONFIDENCE_SKILLS
+from services.skills import ALL_SKILLS, HIGH_CONFIDENCE_SKILLS, NO_BULK_TRUST_STATS_SKILLS
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,23 @@ _VALID_TIERS = {"None", "Capable", "Proficient", "Elite", "All-Time Great"}
 
 # Valid resolution choices
 _VALID_RESOLUTIONS = {"trust_stats", "trust_claude", "manual_override"}
+
+# Most players a single bulk-resolve call may touch.
+_BULK_PLAYER_CAP = 600
+
+# The Skills a negative archetype label reads (D21). Derived from the live
+# taxonomy, so the #152 split (perimeter_disruptor → point_of_attack_defender +
+# off_ball_disruptor) needs no edit here.
+_CORE_DEFENSIVE_SKILLS: tuple[str, ...] = tuple(
+    s for s in (
+        "point_of_attack_defender",
+        "off_ball_disruptor",
+        "perimeter_disruptor",
+        "versatile_defender",
+        "rim_protector",
+    )
+    if s in ALL_SKILLS
+)
 
 
 def _ok(data) -> tuple:
@@ -72,6 +89,68 @@ def _claude_tier(skill_name: str, flag: dict, profile_data: dict) -> str | None:
     return flag.get("claude_rating")
 
 
+def _is_agreement(flag: dict, profile_data: dict) -> bool:
+    """True when the bulk resolve would write this flag under `agreements_only`.
+
+    The count and the click must read one authority, or a button promises work
+    the server refuses (or hides work it would do). So this asks the same two
+    questions `bulk_resolve` asks: does `_claude_tier` give a tier from the
+    composite entry, and does it equal the stat tier? 'None' is a real tier —
+    the entry's `claude_tier`, not the flag's string, tells the two apart.
+    """
+    sname = flag.get("skill_name")
+    if _claude_tier(sname, flag, profile_data) is None:
+        return False
+    if _is_human_decision(flag, profile_data.get(sname)):
+        return False
+    return flag.get("claude_rating") == flag.get("stat_rating")
+
+
+def _is_human_decision(flag: dict, entry) -> bool:
+    """True when a person decided this Skill and a bulk action must not redo it.
+
+    Two records say so, and either one is enough:
+      - the composite entry's `human_reviewed` marker (D21), written by
+        `resolve_flag` and `manual_override_skill` and dropped by a bulk;
+      - a `human_decision_contradicted` flag_reason, which the #120 recompute
+        guard raises over an entry it refused to overwrite.
+
+    `source` is deliberately NOT part of the test: a bulk writes
+    `source="resolved"` too, so gating on it would freeze the league after one
+    bulk pass, and a fresh profile is born `source="manual_override"`.
+    """
+    if str(flag.get("flag_reason") or "").startswith("human_decision_contradicted"):
+        return True
+    return isinstance(entry, dict) and bool(entry.get("human_reviewed"))
+
+
+def _open_flag_query(supabase, profile_ids, skill_name: str, columns: str):
+    """Unresolved flags for a chunk of composite profiles, optionally one Skill."""
+    q = (
+        supabase.table("draft_skill_flags")
+        .select(columns)
+        .in_("skill_profile_id", profile_ids)
+        .is_("resolution", "null")
+    )
+    return q.eq("skill_name", skill_name) if skill_name else q
+
+
+def _is_negative_candidate(profile_data: dict) -> bool:
+    """True when the draft composite reads 'None' on every core defensive Skill.
+
+    D21: such a player can drive a negative archetype label, so Chris resolves
+    his 'None' flags one at a time — a bulk action must not decide them.
+    """
+    if not _CORE_DEFENSIVE_SKILLS:
+        return False
+    for skill in _CORE_DEFENSIVE_SKILLS:
+        entry = profile_data.get(skill)
+        tier = entry.get("final_tier") if isinstance(entry, dict) else entry
+        if tier != "None":
+            return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # GET /api/review/queue
 # ---------------------------------------------------------------------------
@@ -91,10 +170,13 @@ def review_queue():
       ?team=BOS            (filter by team abbreviation)
       ?position=F          (filter by position, partial match)
       ?flag_reason=...     (filter by flag_reason value)
+      ?skill_name=high_flyer  (only players with an open flag on that Skill;
+                               each entry then also carries agreement_count)
 
     Response data: list of {
       player_id, player_name, team, position,
-      unresolved_flag_count, flag_reasons: str[]
+      unresolved_flag_count, flag_reasons: str[],
+      agreement_count?: int    // only when ?skill_name= is set
     }
     """
     season      = request.args.get("season", CURRENT_SEASON)
@@ -102,14 +184,17 @@ def review_queue():
     team_filter = request.args.get("team", "").strip()
     pos_filter  = request.args.get("position", "").strip()
     reason_filter = request.args.get("flag_reason", "").strip()
+    skill_filter  = request.args.get("skill_name", "").strip()
 
     try:
         supabase = get_supabase()
 
-        # Step 1: Get composite profiles for this season
+        # Step 1: Get composite profiles for this season. The JSONB comes along
+        # only for a Skill-filtered queue, which is the only caller that counts
+        # agreements — and the count has to read the same entry the write does.
         composite_profiles = run_query(lambda: (
             supabase.table("draft_skill_profiles")
-            .select("id, player_id")
+            .select("id, player_id, profile" if skill_filter else "id, player_id")
             .eq("season", season)
             .eq("source", "composite")
             .execute()
@@ -118,6 +203,10 @@ def review_queue():
             r["id"]: r["player_id"]
             for r in (composite_profiles.data or [])
         }
+        profile_data_by_id: dict[str, dict] = {
+            r["id"]: (r.get("profile") or {})
+            for r in (composite_profiles.data or [])
+        } if skill_filter else {}
         composite_ids = list(composite_profile_map.keys())
 
         if not composite_ids:
@@ -128,11 +217,11 @@ def review_queue():
         for chunk in in_chunks(composite_ids):
             # Default arg captures chunk value so the lambda closure is correct
             rows = run_query(lambda c=chunk: (
-                supabase.table("draft_skill_flags")
-                .select("id, skill_profile_id, skill_name, flag_reason")
-                .in_("skill_profile_id", c)
-                .is_("resolution", "null")
-                .execute()
+                _open_flag_query(
+                    supabase, c, skill_filter,
+                    "id, skill_profile_id, skill_name, flag_reason, "
+                    "stat_rating, claude_rating",
+                ).execute()
             ))
             all_unresolved.extend(rows.data or [])
 
@@ -140,15 +229,19 @@ def review_queue():
             return _ok([])
 
         # Step 3: Resolve player IDs from profile map, group flags by player
-        # { player_id: { "count": int, "reasons": set } }
+        # { player_id: { "count": int, "reasons": set, "agreements": int } }
         player_flag_info: dict[str, dict] = {}
         for flag in all_unresolved:
             pid = composite_profile_map.get(flag["skill_profile_id"])
             if not pid:
                 continue
             if pid not in player_flag_info:
-                player_flag_info[pid] = {"count": 0, "reasons": set()}
+                player_flag_info[pid] = {"count": 0, "reasons": set(), "agreements": 0}
             player_flag_info[pid]["count"] += 1
+            if skill_filter and _is_agreement(
+                flag, profile_data_by_id.get(flag["skill_profile_id"], {})
+            ):
+                player_flag_info[pid]["agreements"] += 1
             reason = flag.get("flag_reason")
             if reason:
                 player_flag_info[pid]["reasons"].add(reason)
@@ -189,14 +282,17 @@ def review_queue():
             if reason_filter and reason_filter not in flag_info["reasons"]:
                 continue
 
-            queue.append({
+            entry = {
                 "player_id":             pid,
                 "player_name":           player.get("name"),
                 "team":                  player.get("team"),
                 "position":              player.get("position"),
                 "unresolved_flag_count": flag_info["count"],
                 "flag_reasons":          sorted(flag_info["reasons"]),
-            })
+            }
+            if skill_filter:
+                entry["agreement_count"] = flag_info["agreements"]
+            queue.append(entry)
 
         # Sort by unresolved count descending, then by name
         queue.sort(key=lambda x: (-x["unresolved_flag_count"], x["player_name"] or ""))
@@ -458,6 +554,9 @@ def resolve_flag(player_id: str):
                 **profile_data[skill_name],
                 "final_tier": resolved_tier,
                 "source":     "resolved",
+                # D21: a human looked at this one. Every bulk resolve reads the
+                # marker (_is_human_decision) and leaves the entry alone.
+                "human_reviewed": True,
             }
             updated_profile = {**profile_data, skill_name: updated_skill}
             supabase.table("draft_skill_profiles").update({
@@ -507,144 +606,228 @@ def resolve_flag(player_id: str):
 @require_open_draft
 def bulk_resolve():
     """
-    Resolve all unresolved flags for a player in one shot.
+    Resolve open flags across one or many players, optionally for one Skill.
 
-    Supports "trust_stats" and "trust_claude" resolutions. Manual override
-    is not supported in bulk mode since each skill would need its own value.
+    Supports "trust_stats" and "trust_claude". Manual override is not supported
+    in bulk mode since each Skill would need its own value.
 
     Under "trust_claude", a flag whose Skill has no Claude tier (a HIGH Skill,
     or a failed Claude call — see _claude_tier) is skipped: its flag stays
     open, its composite entry is untouched, and it is listed in `skipped`
     (#154). Trusting the stored 'None' would erase a real stats tier.
 
+    What a bulk resolve does NOT do (#152, D21): it never resolves a flag whose
+    `flag_reason` starts with `human_decision_contradicted`, so a manual
+    override a human made — the way a player whose reputation beats his numbers
+    gets corrected — survives every later bulk action on that Skill. It also
+    never sets the `human_reviewed` marker, and strips it from any entry it
+    rewrites, so the marker always names the last HUMAN decision.
+
     Request body (JSON):
       {
-        "player_id":  str,                           // required
+        "player_ids": str[],                         // required (alias: "player_id")
         "resolution": "trust_stats"|"trust_claude",  // required (no manual_override)
+        "skill_name": str | null,                    // optional — one Skill only
+        "agreements_only": bool,                     // optional, default false
         "notes":      str | null,                    // optional
-        "season":     "2025-26"                     // optional, default current
+        "season":     "2025-26"                      // optional, default current
       }
 
     Response data:
       { "resolved_count": int, "all_flags_resolved": bool,
-        "skipped": [ { "player_id": str, "skill_name": str, "reason": "no_claude_tier" } ] }
+        "skipped": [ { "player_id": str, "skill_name": str, "reason": str } ] }
+
+    A `skipped` reason is one of: no_claude_tier (#154), defensive_key,
+    disagreement, human_decision, negative_candidate.
     """
-    body       = request.get_json(silent=True) or {}
-    player_id  = body.get("player_id", "").strip()
-    resolution = body.get("resolution", "").strip()
-    notes      = body.get("notes")
-    season     = body.get("season", CURRENT_SEASON)
+    body = request.get_json(silent=True) or {}
 
-    if not _validate_uuid(player_id):
-        return _err("Invalid player_id — must be a UUID")
+    raw_ids = body.get("player_ids")
+    if raw_ids is None:
+        alias = body.get("player_id")
+        raw_ids = [alias] if alias else []
+    if not isinstance(raw_ids, list):
+        return _err("'player_ids' must be a list of UUIDs")
+    player_ids = list(dict.fromkeys(str(p).strip() for p in raw_ids if str(p).strip()))
+    if not player_ids:
+        return _err("'player_ids' is required")
+    if len(player_ids) > _BULK_PLAYER_CAP:
+        return _err("too_many_players")
+    for pid in player_ids:
+        if not _validate_uuid(pid):
+            return _err("Invalid player_id — must be a UUID")
 
-    # Bulk-resolve only supports stat/claude (not manual, which needs per-skill values)
+    resolution      = body.get("resolution", "").strip()
+    skill_name      = (body.get("skill_name") or "").strip()
+    agreements_only = body.get("agreements_only", False)
+    notes           = body.get("notes")
+    season          = body.get("season", CURRENT_SEASON)
+
     _bulk_valid = {"trust_stats", "trust_claude"}
     if resolution not in _bulk_valid:
         return _err(
             f"'resolution' for bulk-resolve must be one of: {', '.join(sorted(_bulk_valid))}"
         )
+    if skill_name and skill_name not in ALL_SKILLS:
+        return _err("unknown_skill")
+    if not isinstance(agreements_only, bool):
+        return _err("invalid_agreements_only")
+    if resolution == "trust_stats" and skill_name in NO_BULK_TRUST_STATS_SKILLS:
+        return _err("defensive_key_trust_stats_blocked")
 
     try:
         supabase = get_supabase()
 
-        # Find the composite profile
-        profile_row = (
-            supabase.table("draft_skill_profiles")
-            .select("id, profile")
-            .eq("player_id", player_id)
-            .eq("season", season)
-            .eq("source", "composite")
-            .limit(1)
-            .execute()
-        )
-        if not profile_row.data:
+        profiles: list[dict] = []
+        for chunk in in_chunks(player_ids):
+            rows = run_query(lambda c=chunk: (
+                supabase.table("draft_skill_profiles")
+                .select("id, player_id, profile")
+                .in_("player_id", c)
+                .eq("season", season)
+                .eq("source", "composite")
+                .execute()
+            ))
+            profiles.extend(rows.data or [])
+
+        if not profiles:
             return _err(
-                f"No composite profile for player {player_id} season {season}", status=404
+                f"No composite profile for the requested players, season {season}",
+                status=404,
             )
-        profile_id   = profile_row.data[0]["id"]
-        profile_data = profile_row.data[0]["profile"] or {}
 
-        # Get all unresolved flags for this composite profile
-        flag_rows = (
-            supabase.table("draft_skill_flags")
-            .select("id, skill_name, stat_rating, claude_rating")
-            .eq("skill_profile_id", profile_id)
-            .is_("resolution", "null")
-            .execute()
-        )
-        flags = flag_rows.data or []
+        profile_ids = [p["id"] for p in profiles]
+        flags_by_profile: dict[str, list[dict]] = {}
+        for chunk in in_chunks(profile_ids):
+            # Paged: a queue player carries 5-15 open flags, so 100 profile ids
+            # can pass PostgREST's row cap and drop flags with no error.
+            rows = paged_rows(lambda c=chunk: _open_flag_query(
+                supabase, c, skill_name,
+                "id, skill_profile_id, skill_name, stat_rating, "
+                "claude_rating, flag_reason",
+            ))
+            for flag in rows:
+                flags_by_profile.setdefault(flag["skill_profile_id"], []).append(flag)
 
-        if not flags:
+        if not flags_by_profile:
             return _ok({"resolved_count": 0, "all_flags_resolved": True, "skipped": []})
 
         resolved_at = datetime.now(timezone.utc).isoformat()
-
-        # Determine resolved tier for each flag and build updates
-        updated_profile = dict(profile_data)
-        resolved_count  = 0
+        resolved_count = 0
         skipped: list[dict] = []
+        touched_profile_ids: list[str] = []
 
-        for flag in flags:
-            flag_id    = flag["id"]
-            skill_name = flag["skill_name"]
+        for prof in profiles:
+            profile_id   = prof["id"]
+            player_id    = prof["player_id"]
+            profile_data = prof.get("profile") or {}
+            flags        = flags_by_profile.get(profile_id) or []
+            if not flags:
+                continue
 
-            if resolution == "trust_stats":
-                resolved_tier = flag["stat_rating"]
-            else:
-                resolved_tier = _claude_tier(skill_name, flag, profile_data)
-                if resolved_tier is None:
+            # D21 runs per player, not per flag — compute it once.
+            negative_candidate = bool(skill_name) and _is_negative_candidate(profile_data)
+
+            updated_profile = dict(profile_data)
+            ids_by_tier: dict[str, list[str]] = {}
+
+            for flag in flags:
+                sname = flag["skill_name"]
+
+                def _skip(reason: str):
                     skipped.append({
                         "player_id":  player_id,
-                        "skill_name": skill_name,
-                        "reason":     "no_claude_tier",
+                        "skill_name": sname,
+                        "reason":     reason,
                     })
+
+                # A human decision outranks every automated rule below it, in
+                # every mode — the per-player "Trust All" buttons send no
+                # skill_name, and they must not overwrite a person's call either.
+                if _is_human_decision(flag, profile_data.get(sname)):
+                    _skip("human_decision")
                     continue
 
-            # Update the individual flag record
-            supabase.table("draft_skill_flags").update({
-                "resolution":     resolution,
-                "resolved_value": resolved_tier,
-                "resolved_at":    resolved_at,
-                "notes":          notes,
-            }).eq("id", flag_id).execute()
+                if resolution == "trust_stats":
+                    if sname in NO_BULK_TRUST_STATS_SKILLS:
+                        _skip("defensive_key")
+                        continue
+                    resolved_tier = flag["stat_rating"]
+                else:
+                    resolved_tier = _claude_tier(sname, flag, profile_data)
+                    if resolved_tier is None:
+                        _skip("no_claude_tier")
+                        continue
 
-            # Update the composite profile JSONB for this skill
-            if skill_name in updated_profile and isinstance(updated_profile[skill_name], dict):
-                updated_profile[skill_name] = {
-                    **updated_profile[skill_name],
-                    "final_tier": resolved_tier,
-                    "source":     "resolved",
-                }
+                if agreements_only and not (
+                    _claude_tier(sname, flag, profile_data) is not None
+                    and flag.get("stat_rating") == flag.get("claude_rating")
+                ):
+                    _skip("disagreement")
+                    continue
 
-            resolved_count += 1
+                if negative_candidate and resolved_tier == "None":
+                    _skip("negative_candidate")
+                    continue
 
-        # Persist the updated composite profile (all skills updated in one write);
-        # skip the rewrite when every flag was skipped.
-        if resolved_count:
+                ids_by_tier.setdefault(resolved_tier, []).append(flag["id"])
+
+                if isinstance(updated_profile.get(sname), dict):
+                    entry = {
+                        **updated_profile[sname],
+                        "final_tier": resolved_tier,
+                        "source":     "resolved",
+                    }
+                    # D21: a bulk action is not a human decision.
+                    entry.pop("human_reviewed", None)
+                    updated_profile[sname] = entry
+
+                resolved_count += 1
+
+            if not ids_by_tier:
+                continue
+
+            # One flag write per resolved tier, not one per flag.
+            for tier, ids in ids_by_tier.items():
+                for id_chunk in in_chunks(ids):
+                    supabase.table("draft_skill_flags").update({
+                        "resolution":     resolution,
+                        "resolved_value": tier,
+                        "resolved_at":    resolved_at,
+                        "notes":          notes,
+                    }).in_("id", id_chunk).execute()
+
+            # ponytail: ~400 profile writes per Skill; move to an RPC if prod times out (gunicorn --timeout 120)
             supabase.table("draft_skill_profiles").update({
                 "profile": updated_profile,
             }).eq("id", profile_id).execute()
+            touched_profile_ids.append(profile_id)
 
-        # Verify that no flags remain unresolved (guards against concurrent modifications)
-        remaining = (
-            supabase.table("draft_skill_flags")
-            .select("id")
-            .eq("skill_profile_id", profile_id)
-            .is_("resolution", "null")
-            .execute()
-        )
-        all_resolved = len(remaining.data or []) == 0
+        # One chunked read of what is still open across every touched profile,
+        # then one reviewed=True write per chunk of the profiles with none left.
+        still_open: set[str] = set()
+        for chunk in in_chunks(touched_profile_ids):
+            rows = paged_rows(lambda c=chunk: (
+                supabase.table("draft_skill_flags")
+                .select("skill_profile_id")
+                .in_("skill_profile_id", c)
+                .is_("resolution", "null")
+            ))
+            still_open.update(r["skill_profile_id"] for r in rows)
 
-        if all_resolved:
+        done_ids = [p for p in touched_profile_ids if p not in still_open]
+        for chunk in in_chunks(done_ids):
             supabase.table("draft_skill_profiles").update({
                 "reviewed":    True,
                 "reviewed_at": resolved_at,
-            }).eq("id", profile_id).execute()
+            }).in_("id", chunk).execute()
+
+        all_resolved = bool(touched_profile_ids) and not still_open and not skipped
 
         logger.info(
-            "Bulk-resolved %d flags for player=%s (%s), skipped %d",
-            resolved_count, player_id, resolution, len(skipped),
+            "Bulk-resolved %d flags across %d players (%s, skill=%s, agreements_only=%s), skipped %d",
+            resolved_count, len(player_ids), resolution, skill_name or "*",
+            agreements_only, len(skipped),
         )
 
         return _ok({
@@ -739,12 +922,16 @@ def manual_override_skill(player_id: str):
 
         resolved_at = datetime.now(timezone.utc).isoformat()
 
-        # Check if a skill_flag already exists for this skill
+        # Check if an OPEN skill_flag already exists for this skill. A Skill can
+        # carry several rows (a prior resolved one beside a new flag), and
+        # stamping the resolved one would leave the live flag open for the next
+        # bulk resolve to overwrite this override.
         existing_flag = (
             supabase.table("draft_skill_flags")
             .select("id")
             .eq("skill_profile_id", profile_id)
             .eq("skill_name", skill_name)
+            .is_("resolution", "null")
             .limit(1)
             .execute()
         )
@@ -783,9 +970,15 @@ def manual_override_skill(player_id: str):
             )
             claude_profile = (claude_profile_row.data or [{}])[0].get("profile") or {}
 
-            # Stats profile stores skill tier as a plain string
+            # A stats profile holds either a plain tier string (the direct
+            # compositing path) or the evaluator's dict (a staged run). Reading
+            # only the string shape wrote "the stats said None" into the audit
+            # row of the very decision Chris re-reads later.
             stat_skill  = stats_profile.get(skill_name)
-            stat_rating = stat_skill if isinstance(stat_skill, str) else "None"
+            if isinstance(stat_skill, dict):
+                stat_rating = stat_skill.get("tier") or "None"
+            else:
+                stat_rating = stat_skill if isinstance(stat_skill, str) else "None"
 
             # Claude profile stores either a tier string or a dict with a tier key
             claude_skill = claude_profile.get(skill_name)
@@ -815,6 +1008,8 @@ def manual_override_skill(player_id: str):
                 **current_skill_data,
                 "final_tier": resolved_value,
                 "source":     "manual_override",
+                # D21: an override is the strongest human decision there is.
+                "human_reviewed": True,
             }
         else:
             # Skill not in composite profile yet — build a minimal entry
@@ -825,6 +1020,7 @@ def manual_override_skill(player_id: str):
                 "source":       "manual_override",
                 "flagged":      False,
                 "flag_reason":  "manual_override",
+                "human_reviewed": True,
             }
         updated_profile = {**profile_data, skill_name: updated_skill}
         supabase.table("draft_skill_profiles").update({
