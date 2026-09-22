@@ -54,7 +54,7 @@ def _patch_fetch(monkeypatch, blob):
     monkeypatch.setattr(players_service.nba_api_client, "get_bulk_stats", lambda s: {})
     monkeypatch.setattr(players_service.nba_api_client, "get_player_index", lambda s: {})
     monkeypatch.setattr(players_service.nba_api_client, "get_player_shot_chart", lambda i, s: None)
-    monkeypatch.setattr(players_service.nba_api_client, "get_player_matchups", lambda i, s: None)
+    monkeypatch.setattr(players_service.nba_api_client, "get_player_career_stats", lambda i, s: None)
     monkeypatch.setattr(players_service, "assemble_stats_blob", lambda **kw: blob)
 
     inserted: list = []

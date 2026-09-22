@@ -63,18 +63,16 @@ The following keys need to be added to the `player_stats.stats` blob to support 
   },
   "matchup_defense": {
     "positional_groups_guarded": 0,
-    "matchup_poss_at_pg": 0.0,
-    "matchup_poss_at_sg": 0.0,
-    "matchup_poss_at_sf": 0.0,
-    "matchup_poss_at_pf": 0.0,
+    "matchup_poss_at_g": 0.0,
+    "matchup_poss_at_f": 0.0,
     "matchup_poss_at_c": 0.0,
-    "matchup_fg_pct_at_pg": null,
-    "matchup_fg_pct_at_sg": null,
-    "matchup_fg_pct_at_sf": null,
-    "matchup_fg_pct_at_pf": null,
+    "matchup_fg_pct_at_g": null,
+    "matchup_fg_pct_at_f": null,
     "matchup_fg_pct_at_c": null,
     "cross_group_fg_pct_diff": null,
-    "total_matchup_poss": 0.0
+    "total_matchup_poss": 0.0,
+    "matchup_difficulty": null,
+    "handler_share": null
   }
 }
 ```
@@ -98,7 +96,7 @@ Sources:
 - `tracking_post_touch` → `LeagueDashPtStats` with `PtMeasureType='PostTouch'`
 - `tracking_elbow_touch` → `LeagueDashPtStats` with `PtMeasureType='ElbowTouch'`
 - `shot_detail` → `ShotChartDetail` filtered by `ACTION_TYPE` values, aggregated per player per season
-- `matchup_defense` → Derived from `LeagueSeasonMatchups` queried by `DefPlayerID`, cross-referenced with `CommonPlayerInfo` for opponent positions. The `positional_groups_guarded` field and per-group poss/FG% are computed during the stat fetch, not raw API fields. The `cross_group_fg_pct_diff` is the weighted average MATCHUP_FG_PCT minus league average FG% for each guarded group.
+- `matchup_defense` → Derived from ONE league-wide `LeagueSeasonMatchups` call (blank `DefPlayerID`) grouped by defender, cross-referenced with `PlayerIndex` for opponent positions in three groups: G (PG, SG, G, GF), F (SF, PF, F, FC) and C (#134). The `positional_groups_guarded` field and per-group poss/FG% are computed during the stat fetch, not raw API fields. The `cross_group_fg_pct_diff` is the weighted average MATCHUP_FG_PCT minus league average FG% for each guarded group. `matchup_difficulty` is the possession-weighted league PTS-per-game percentile of the scorers he guarded (GP >= 20 only); `handler_share` is the share of his matchup possessions against scorers whose Synergy PnR ball-handler plus isolation POSS_PCT is 0.40 or more.
 - `hustle.box_outs_off` / `hustle.box_outs_def` → `LeagueHustleStatsPlayer` (fields `OFF_BOXOUTS` and `DEF_BOXOUTS`)
 
 ---
@@ -183,11 +181,11 @@ Sources:
 | Defended at rim FG% | `tracking_defense.defended_at_rim_fg_pct` | Supporting — rim deterrence |
 
 **Positional diversity index computation:**
-1. Query `LeagueSeasonMatchups` by `DefPlayerID` to retrieve all offensive players guarded, with `MATCHUP_MIN`, `PARTIAL_POSS`, and `MATCHUP_FG_PCT`.
-2. Cross-reference each offensive player's listed position from `CommonPlayerInfo` to assign them to one of five positional groups: PG, SG, SF, PF, C.
-3. A positional group counts as "meaningfully guarded" if the defender spent ≥ 10% of their total `PARTIAL_POSS` against that group.
-4. **Positional diversity index** = count of meaningfully guarded positional groups (1–5 scale).
-5. **Cross-group effectiveness** = weighted average `MATCHUP_FG_PCT` across all guarded groups, where weight = `PARTIAL_POSS` per group. Compare to league-average FG% for each group to get a differential (negative = good).
+1. One league-wide `LeagueSeasonMatchups` call (`DefPlayerID` and `OffPlayerID` blank, `PerMode=Totals`) returns every defender-vs-scorer row of the season; the rows are grouped by `DEF_PLAYER_ID` (`nba_api_client.get_league_matchups`).
+2. Each opponent's PlayerIndex position maps to one of three groups, G, F or C (`stats_assembler._matchup_group`). A raw dashed dual goes to its first, primary letter (`F-G` → F, `C-F` → C); a folded code maps GF → G and FC → F. An opponent missing from PlayerIndex is skipped (his possessions still count in `total_matchup_poss`).
+3. A group counts as "meaningfully guarded" if the defender spent ≥ 20% of his total `PARTIAL_POSS` against it (`MEANINGFUL_THRESHOLD = 0.20`).
+4. **Positional diversity index** = count of meaningfully guarded groups (1–3 scale).
+5. **Cross-group effectiveness** = per group, FG% = Σ `MATCHUP_FGM` / Σ `MATCHUP_FGA` (a shotless possession adds nothing); the differential against the league-average FG% of that group (per-game base rows × GP, so totals) is averaged over the meaningful groups, weighted by `PARTIAL_POSS` (negative = good).
 
 **Multi-level contest check (supplementary):**
 Query `LeagueDashPtDefend` across `DefenseCategory` values (`"Less Than 6Ft"`, `"Less Than 10Ft"`, `"Greater Than 15Ft"`, `"3 Pointers"`) and check whether the defender maintains neutral-to-negative DFG% differentials across multiple distance categories. This confirms the matchup data — a player might get assigned perimeter matchups but fail to actually contest at the perimeter.

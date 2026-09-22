@@ -24,6 +24,7 @@ from typing import Any
 from flask import Blueprint, g, jsonify, request
 
 from api.auth import require_admin, require_open_draft
+from services import nba_api_client
 from services.supabase_client import get_supabase, in_chunks, run_query
 from services.players_service import (
     CURRENT_SEASON,
@@ -178,6 +179,16 @@ def _run_fetch_stats_job(run_id: str, player_ids: list[str], season: str, refres
             all_players = get_or_fetch_players(season, DEFAULT_MIN_MPG, False, supabase)
             player_ids = [p["id"] for p in all_players]
             logger.info("fetch-stats [%s]: %d qualifying players", run_id, len(player_ids))
+
+        # One check of the league matchup call before the loop (#134): when it
+        # failed, stop instead of fetching every player without matchups.
+        if not nba_api_client.get_bulk_stats(season).get("matchups"):
+            logger.error("fetch-stats [%s]: league matchup call failed; stopping", run_id)
+            runs_repo.complete_run(
+                run_id, rows_processed=0,
+                error="LeagueSeasonMatchups failed; retry in 10 minutes",
+            )
+            return
 
         total = len(player_ids)
         # Seed total up front so the card shows "0 / N" immediately, then update

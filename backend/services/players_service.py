@@ -244,13 +244,19 @@ def get_or_fetch_player_stats(
     logger.info("Fetching fresh stats for player %s (nba_api_id=%d, season=%s)", player_id, nba_api_id, season)
 
     bulk_data    = nba_api_client.get_bulk_stats(season)
+    if bulk_data.get("base") and not bulk_data.get("matchups"):
+        # The league matchup call failed. Persisting would stamp a fresh
+        # fetched_at on a null matchup_defense, which the 7-day skip then keeps.
+        logger.error("League matchup call failed for %s; not persisting %s so a retry refetches",
+                     season, player_id)
+        return None
     # PlayerIndex is already cached from the bulk fetch; reuse it for position
     # lookups in matchup defense so we avoid per-player CommonPlayerInfo calls.
     player_index = nba_api_client.get_player_index(season)
 
-    # Lazy per-player fetches
+    # Lazy per-player fetch; matchups come from the one league call in the bulk (#134)
     shot_chart_df = nba_api_client.get_player_shot_chart(nba_api_id, season)
-    matchup_df    = nba_api_client.get_player_matchups(nba_api_id, season)
+    matchup_df    = bulk_data.get("matchups", {}).get(nba_api_id)
 
     # Get salary and physical attributes from players table
     salary = player.get("salary")

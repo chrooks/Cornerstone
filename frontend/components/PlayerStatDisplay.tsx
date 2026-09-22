@@ -169,10 +169,11 @@ const STAT_LABELS: Record<string, string> = {
   box_outs_off: "Off Box Outs",
   box_outs_def: "Def Box Outs",
   // Matchup defense
-  partial_possessions: "Matchup Poss",
-  matchup_fg_pct: "Matchup FG%",
-  matchup_3pt_fg_pct: "Matchup 3P%",
-  switches_on: "Switches",
+  total_matchup_poss: "Matchup Poss",
+  positional_groups_guarded: "Groups Guarded",
+  cross_group_fg_pct_diff: "FG% vs Avg",
+  matchup_difficulty: "Matchup Difficulty",
+  handler_share: "Handler Share",
   // Salary
   annual_salary: "Annual Salary",
 };
@@ -249,7 +250,8 @@ const STAT_ORDER: Record<string, string[]> = {
     "box_outs_off", "box_outs_def",
   ],
   matchup_defense: [
-    "partial_possessions", "matchup_fg_pct", "matchup_3pt_fg_pct", "switches_on",
+    "total_matchup_poss", "positional_groups_guarded", "cross_group_fg_pct_diff",
+    "matchup_difficulty", "handler_share",
   ],
   salary: ["annual_salary"],
 };

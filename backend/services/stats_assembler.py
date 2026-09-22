@@ -16,8 +16,8 @@ from typing import Any
 
 import pandas as pd
 
+from services.positions import normalize_position
 from services.stats_schema import empty_stats_blob
-from services import nba_api_client
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def assemble_stats_blob(
     nba_api_id : nba_api integer player ID
     bulk_data  : output of nba_api_client.get_bulk_stats(season)
     shot_chart_df : ShotChartDetail DataFrame (per-player, may be None)
-    matchup_df    : LeagueSeasonMatchups DataFrame (per-player, may be None)
+    matchup_df    : this defender's LeagueSeasonMatchups rows (bulk "matchups", may be None)
     salary     : annual salary in dollars from ESPN scraper (may be None)
     season     : e.g. "2025-26"
     games_played : GP from base stats
@@ -418,7 +418,7 @@ def assemble_stats_blob(
         failed.append("hustle")
 
     # -----------------------------------------------------------------------
-    # matchup_defense — computed from LeagueSeasonMatchups (per-player)
+    # matchup_defense — this defender's rows of the league LeagueSeasonMatchups call
     # -----------------------------------------------------------------------
     matchup_result = _compute_matchup_defense(nba_api_id, matchup_df, bulk_data, player_index or {})
     if matchup_result is not None:
@@ -452,6 +452,71 @@ def assemble_stats_blob(
 # Matchup defense computation
 # ---------------------------------------------------------------------------
 
+POSITIONS = ["G", "F", "C"]
+
+# An explicit map, not a first-letter rule: normalize_position keeps PG, SG, SF
+# and PF, which start with P or S. Folded duals go to their first group (GF → G,
+# FC → F); a raw dashed dual is read before folding (see _matchup_group).
+_MATCHUP_GROUPS = {
+    "PG": "G", "G": "G", "SG": "G", "GF": "G",
+    "SF": "F", "F": "F", "PF": "F", "FC": "F",
+    "C": "C",
+}
+
+
+def _matchup_group(raw: str | None) -> str | None:
+    """Fold a raw position (any spelling) onto a matchup group G | F | C, else None.
+
+    A raw dashed dual ("F-G", "C-F") goes to its first letter: PlayerIndex lists
+    the primary position first, and normalize_position folds F-G and G-F alike.
+    """
+    cleaned = (raw or "").strip().upper()
+    if "-" in cleaned:
+        return {"G": "G", "F": "F", "C": "C"}.get(cleaned[0])
+    return _MATCHUP_GROUPS.get(normalize_position(raw) or "")
+
+
+def _index_group(player_index: dict[int, dict], pid: int) -> str | None:
+    """Matchup group of a PlayerIndex entry, from the raw position when it was kept."""
+    entry = player_index.get(pid, {})
+    return _matchup_group(entry.get("position_raw") or entry.get("position"))
+
+
+_DIFFICULTY_MIN_GP = 20      # an opponent needs 20+ games to carry a scoring percentile
+_HANDLER_POSS_PCT = 0.40     # PnR ball-handler + isolation share that makes a scorer a "handler"
+
+
+def _opponent_pts_percentile(bulk_data: dict[str, dict[int, dict]]) -> dict[int, float]:
+    """League PTS-per-game percentile (0-1] of every player with GP >= 20.
+
+    Ties take the average rank. Feeds matchup_difficulty (#134).
+    """
+    pts: dict[int, float] = {}
+    for pid, r in bulk_data.get("base", {}).items():
+        gp, p = _v(r, "GP"), _v(r, "PTS")
+        if gp is not None and p is not None and gp >= _DIFFICULTY_MIN_GP:
+            pts[int(pid)] = float(p)
+    return pd.Series(pts, dtype=float).rank(pct=True).to_dict()
+
+
+def _handler_ids(bulk_data: dict[str, dict[int, dict]]) -> set[int] | None:
+    """Players whose PnR ball-handler + isolation POSS_PCT is 0.40 or more.
+
+    A player missing from a Synergy frame counts 0 for that play type. Returns
+    None when either frame is missing (its fetch failed), so handler_share is
+    unknown rather than an undercount.
+    """
+    pnr = bulk_data.get("synergy_prballhandler") or {}
+    iso = bulk_data.get("synergy_isolation") or {}
+    if not pnr or not iso:
+        return None
+    return {
+        int(pid) for pid in pnr.keys() | iso.keys()
+        if (_v(pnr.get(pid, {}), "POSS_PCT") or 0) + (_v(iso.get(pid, {}), "POSS_PCT") or 0)
+        >= _HANDLER_POSS_PCT
+    }
+
+
 def _compute_matchup_defense(
     nba_api_id: int,
     matchup_df: pd.DataFrame | None,
@@ -464,10 +529,9 @@ def _compute_matchup_defense(
     Returns None if data is unavailable or insufficient (< 200 total PARTIAL_POSS).
     Otherwise returns a dict with all matchup_defense keys populated.
 
-    Uses player_index (bulk PlayerIndex data) for position lookups to avoid
-    making individual CommonPlayerInfo API calls for every opponent.
+    Uses player_index (bulk PlayerIndex data) for position lookups; an opponent
+    missing from it is skipped (no per-opponent CommonPlayerInfo call).
     """
-    POSITIONS = ["PG", "SG", "SF", "PF", "C"]
     MIN_TOTAL_POSS = 200
     MEANINGFUL_THRESHOLD = 0.20  # 20% of total possessions — 10% was too low,
     # causing almost every player to reach 3 groups due to switches
@@ -486,23 +550,36 @@ def _compute_matchup_defense(
     group_fgm_sum: dict[str, float] = {p: 0.0 for p in POSITIONS}
     group_fga_sum: dict[str, float] = {p: 0.0 for p in POSITIONS}
 
+    # --- Deployment signals: who does he guard? (position-independent) ---
+    pts_pct = _opponent_pts_percentile(bulk_data)
+    handlers = _handler_ids(bulk_data)
+    difficulty_sum = difficulty_poss = handler_poss = 0.0
+
     for _, matchup_row in matchup_df.iterrows():
         off_id = int(matchup_row.get("OFF_PLAYER_ID", 0))
         poss = float(matchup_row.get("PARTIAL_POSS", 0))
         fg_pct = matchup_row.get("MATCHUP_FG_PCT")
 
-        # Resolve position from pre-fetched PlayerIndex to avoid per-player API calls.
-        # PlayerIndex uses "POSITION" field (e.g. "G", "F", "C", "G-F", "F-C").
-        # Fall back to CommonPlayerInfo only if the player isn't in PlayerIndex.
-        index_entry = player_index.get(off_id, {})
-        raw_pos = index_entry.get("position") or ""
-        position = nba_api_client._map_position(raw_pos) if raw_pos else nba_api_client.get_player_position(off_id)
-        if not position or position not in POSITIONS:
+        if off_id in pts_pct:
+            difficulty_sum += poss * pts_pct[off_id]
+            difficulty_poss += poss
+        if handlers is not None and off_id in handlers:
+            handler_poss += poss
+
+        # Resolve position from the pre-fetched PlayerIndex (G, F, C, GF, FC, ...).
+        position = _index_group(player_index, off_id)
+        if position is None:
             continue  # Skip players whose position can't be resolved
 
         group_poss[position] += poss
-        if fg_pct is not None and poss > 0:
-            # Reconstruct FGM from weighted FG% to aggregate correctly
+        fgm, fga = matchup_row.get("MATCHUP_FGM"), matchup_row.get("MATCHUP_FGA")
+        if pd.notna(fgm) and pd.notna(fga):
+            # Makes over attempts: a shotless possession (FGA 0, stored FG% 0.0)
+            # adds nothing instead of counting as a miss.
+            group_fgm_sum[position] += float(fgm)
+            group_fga_sum[position] += float(fga)
+        elif pd.notna(fg_pct) and poss > 0:
+            # Fallback for frames without counts: possession-weighted FG%
             group_fgm_sum[position] += float(fg_pct) * poss
             group_fga_sum[position] += poss
 
@@ -527,18 +604,16 @@ def _compute_matchup_defense(
 
     return {
         "positional_groups_guarded": positional_groups_guarded,
-        "matchup_poss_at_pg":        round(group_poss["PG"], 2),
-        "matchup_poss_at_sg":        round(group_poss["SG"], 2),
-        "matchup_poss_at_sf":        round(group_poss["SF"], 2),
-        "matchup_poss_at_pf":        round(group_poss["PF"], 2),
+        "matchup_poss_at_g":         round(group_poss["G"], 2),
+        "matchup_poss_at_f":         round(group_poss["F"], 2),
         "matchup_poss_at_c":         round(group_poss["C"], 2),
-        "matchup_fg_pct_at_pg":      group_fg_pct.get("PG"),
-        "matchup_fg_pct_at_sg":      group_fg_pct.get("SG"),
-        "matchup_fg_pct_at_sf":      group_fg_pct.get("SF"),
-        "matchup_fg_pct_at_pf":      group_fg_pct.get("PF"),
+        "matchup_fg_pct_at_g":       group_fg_pct.get("G"),
+        "matchup_fg_pct_at_f":       group_fg_pct.get("F"),
         "matchup_fg_pct_at_c":       group_fg_pct.get("C"),
         "cross_group_fg_pct_diff":   cross_diff,
         "total_matchup_poss":        round(total_poss, 2),
+        "matchup_difficulty":        round(difficulty_sum / difficulty_poss, 4) if difficulty_poss else None,
+        "handler_share":             round(handler_poss / total_poss, 4) if handlers is not None else None,
     }
 
 
@@ -550,23 +625,22 @@ def _compute_league_avg_fg_pct_by_position(
     Approximate league-average FG% per positional group.
 
     Uses PlayerIndex (not base stats) for position lookup — LeagueDashPlayerStats
-    does not include a position column. PlayerIndex uses "G" for all guards, so the
-    SG bucket accumulates all guard FGA; PG will typically be empty. This is a known
-    data limitation — cross_group_fg_pct_diff is only computed over positions with data.
+    does not include a position column. PlayerIndex codes are G/F/C plus the duals
+    GF and FC, so the groups are G/F/C (see _matchup_group).
     """
-    POSITIONS = ["PG", "SG", "SF", "PF", "C"]
     totals: dict[str, dict] = {p: {"fga": 0.0, "fgm": 0.0} for p in POSITIONS}
 
     base_data = bulk_data.get("base", {})
     for pid, r in base_data.items():
         # Resolve position from PlayerIndex — base stats have no position column
-        index_entry = player_index.get(int(pid), {})
-        raw_pos = str(index_entry.get("position") or "").strip()
-        pos = nba_api_client._map_position(raw_pos)
-        if pos not in POSITIONS:
+        pos = _index_group(player_index, int(pid))
+        if pos is None:
             continue
-        fga = float(r.get("FGA") or 0)
-        fgm = float(r.get("FGM") or 0)
+        # Base rows are per game: turn each into season totals, so a 5-game
+        # player does not weigh as much as a 70-game one.
+        gp = float(r.get("GP") or 0)
+        fga = float(r.get("FGA") or 0) * gp
+        fgm = float(r.get("FGM") or 0) * gp
         totals[pos]["fga"] += fga
         totals[pos]["fgm"] += fgm
 

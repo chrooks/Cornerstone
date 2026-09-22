@@ -209,21 +209,19 @@ _TEMPLATE: dict = {
         "box_outs_def": None,
     },
 
-    # Computed matchup-defense diversity (LeagueSeasonMatchups per-player, lazy)
+    # Computed matchup defense (LeagueSeasonMatchups, one league call grouped by defender)
     "matchup_defense": {
         "positional_groups_guarded": None,
-        "matchup_poss_at_pg": None,
-        "matchup_poss_at_sg": None,
-        "matchup_poss_at_sf": None,
-        "matchup_poss_at_pf": None,
+        "matchup_poss_at_g": None,        # G/F/C buckets (GF → G, FC → F; #134)
+        "matchup_poss_at_f": None,
         "matchup_poss_at_c": None,
-        "matchup_fg_pct_at_pg": None,
-        "matchup_fg_pct_at_sg": None,
-        "matchup_fg_pct_at_sf": None,
-        "matchup_fg_pct_at_pf": None,
+        "matchup_fg_pct_at_g": None,
+        "matchup_fg_pct_at_f": None,
         "matchup_fg_pct_at_c": None,
         "cross_group_fg_pct_diff": None,  # Negative = good (opponents shoot below league avg)
         "total_matchup_poss": None,
+        "matchup_difficulty": None,  # 0-1: possession-weighted opponent PTS percentile (GP >= 20)
+        "handler_share": None,       # 0-1: share of possessions vs PnR + iso POSS_PCT >= 0.40 scorers
     },
 
     # Salary (from ESPN scraper, stored separately in players table)

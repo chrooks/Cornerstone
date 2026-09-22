@@ -5,7 +5,6 @@ Wraps the nba_api library with:
   - 1.5-second delays between calls to respect rate limits
   - try/except around every call (returns None on failure)
   - In-memory bulk data cache with 24-hour TTL
-  - Indefinite in-memory position lookup cache (CommonPlayerInfo)
 
 All bulk endpoints return {nba_api_player_id: row_dict} for O(1) player lookups.
 """
@@ -74,9 +73,10 @@ _bulk_cache: dict[str, dict[str, dict[int, dict]]] = {}
 _bulk_cache_ts: dict[str, datetime] = {}
 _BULK_TTL_HOURS = 24
 
-# Position lookup cache: {nba_api_player_id: position_group}
-# Values: "PG" | "SG" | "SF" | "PF" | "C" | None
-_position_cache: dict[int, str | None] = {}
+# A failed league matchup call is retried alone, at most once per 10 minutes,
+# while the other 28 frames stay cached (see get_bulk_stats).
+_matchups_tried_ts: dict[str, datetime] = {}
+_MATCHUPS_RETRY_MINUTES = 10
 
 _API_DELAY = 1.5  # seconds between nba_api calls
 
@@ -173,13 +173,14 @@ def _is_bulk_fresh(season: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Bulk league-wide fetch (28 calls, ~42 seconds)
+# Bulk league-wide fetch (29 calls, ~42 seconds)
 # ---------------------------------------------------------------------------
 
 def get_player_index(season: str = "2025-26") -> dict[int, dict]:
     """
     Fetch height, weight, and position for all players via PlayerIndex.
-    Returns {nba_api_player_id: {"height": "6-7", "weight": 210, "position": "F"}}.
+    Returns {nba_api_player_id: {"height": "6-7", "weight": 210, "position": "GF",
+    "position_raw": "F-G", ...}}.
 
     Called once alongside get_bulk_stats() and merged into player upsert rows.
     Uses the same in-memory cache as bulk stats (24-hour TTL keyed on season).
@@ -209,6 +210,9 @@ def get_player_index(season: str = "2025-26") -> dict[int, dict]:
             "height":      str(row.get("HEIGHT") or "").strip() or None,
             "weight":      int(weight_raw) if weight_raw and str(weight_raw).strip().isdigit() else None,
             "position":    normalize_position(str(row.get("POSITION") or "") or None),
+            # The dashed original ("F-G") keeps the primary position for the
+            # matchup buckets; normalize_position folds F-G and G-F alike.
+            "position_raw": str(row.get("POSITION") or "").strip(),
             "draft_round": _safe_int(draft_round_raw),
             "draft_year":  _safe_int(draft_year_raw),
         }
@@ -221,6 +225,8 @@ def get_bulk_stats(season: str = "2025-26") -> dict[str, dict[int, dict]]:
     """
     Fetch all league-wide bulk endpoints for the given season.
     Results are keyed by data category name, then by nba_api PLAYER_ID.
+    The one exception is "matchups": {DEF_PLAYER_ID: DataFrame} from
+    get_league_matchups (a defender has many rows, not one).
 
     Uses an in-memory cache (24-hour TTL).  The first call takes ~42 seconds;
     subsequent calls within the TTL window return instantly.
@@ -230,9 +236,12 @@ def get_bulk_stats(season: str = "2025-26") -> dict[str, dict[int, dict]]:
     """
     if _is_bulk_fresh(season):
         logger.debug("Returning bulk stats from in-memory cache for %s", season)
-        return _bulk_cache[season]
+        cached = _bulk_cache[season]
+        if not cached.get("matchups") and _matchups_retry_due(season):
+            cached = _bulk_cache[season] = {**cached, "matchups": _fetch_league_matchups(season)}
+        return cached
 
-    logger.info("Fetching bulk nba_api stats for season %s (28 calls, ~42s)...", season)
+    logger.info("Fetching bulk nba_api stats for season %s (29 calls, ~42s)...", season)
     data: dict[str, dict[int, dict]] = {}
 
     # Import here to avoid slow startup; nba_api imports can take a moment
@@ -349,6 +358,15 @@ def get_bulk_stats(season: str = "2025-26") -> dict[str, dict[int, dict]]:
         )
         data[key] = _df_to_player_dict(df)
 
+    # --- 29. Matchups (one league-wide call, grouped by defender; #134) ---
+    # A failed call still caches the other 28 frames; the next call within the
+    # TTL retries the matchup call alone once the back-off has passed.
+    # players_service refuses to persist a blob while matchups are empty.
+    data["matchups"] = _fetch_league_matchups(season)
+    if not data["matchups"]:
+        logger.warning("Matchup call failed for %s; retrying it alone after %d minutes",
+                       season, _MATCHUPS_RETRY_MINUTES)
+
     # Store in cache
     _bulk_cache[season] = data
     _bulk_cache_ts[season] = datetime.now(timezone.utc)
@@ -379,44 +397,64 @@ def get_player_shot_chart(nba_api_id: int, season: str = "2025-26") -> pd.DataFr
     )
 
 
-def get_player_matchups(nba_api_id: int, season: str = "2025-26") -> pd.DataFrame | None:
+def _matchups_retry_due(season: str) -> bool:
+    ts = _matchups_tried_ts.get(season)
+    return ts is None or datetime.now(timezone.utc) - ts >= timedelta(minutes=_MATCHUPS_RETRY_MINUTES)
+
+
+def _fetch_league_matchups(season: str) -> dict[int, pd.DataFrame]:
+    """get_league_matchups, stamping the attempt for the retry back-off."""
+    _matchups_tried_ts[season] = datetime.now(timezone.utc)
+    return get_league_matchups(season)
+
+
+def get_league_matchups(season: str = "2025-26") -> dict[int, pd.DataFrame]:
     """
-    Fetch all offensive players guarded by this defender via LeagueSeasonMatchups.
-    Returns OFF_PLAYER_ID, MATCHUP_MIN, PARTIAL_POSS, MATCHUP_FG_PCT per row.
-    Returns None if the endpoint fails or returns insufficient data.
+    Fetch every defender-vs-scorer matchup row of the season in ONE call via
+    LeagueSeasonMatchups, grouped by defender: {DEF_PLAYER_ID: DataFrame}.
+    Each frame holds OFF_PLAYER_ID, PARTIAL_POSS, MATCHUP_FG_PCT, ... per row.
+    Returns {} (with a warning) when the call fails or comes back empty.
+
+    #134: the per-player call sent `DefPlayerIDNullable`, which NBA.com ignores,
+    so every defender got the whole league table. The real param names are
+    `DefPlayerID` / `OffPlayerID`; blank means "all", which is what we want here.
 
     Note: calls the API directly via _cffi_session because the nba_api 1.9 parser
     for this endpoint looks for 'resultSet' (singular) but the API returns 'resultSets'.
     """
-    _sleep()
-    try:
-        resp = _cffi_session.get(
-            "https://stats.nba.com/stats/leagueseasonmatchups",
-            params={
-                "Season":               season,
-                "SeasonType":           "Regular Season",
-                "LeagueID":             "00",
-                "PerMode":              "Totals",
-                "DefPlayerIDNullable":  str(nba_api_id),
-                "OffPlayerIDNullable":  "",
-            },
-            headers=_NBA_HEADERS,
-            timeout=_MATCHUPS_TIMEOUT,
-        )
-        data = resp.json()
-        result_sets = data.get("resultSets", [])
-        if not result_sets:
-            logger.warning("Empty resultSets from LeagueSeasonMatchups for %d", nba_api_id)
-            return None
-        rs = result_sets[0]
-        headers = rs["headers"]
-        rows = rs["rowSet"]
-        if not rows:
-            return None
-        return pd.DataFrame(rows, columns=headers)
-    except Exception as exc:
-        logger.warning("LeagueSeasonMatchups failed for %d: %s", nba_api_id, exc)
-        return None
+    params = {
+        "Season":      season,
+        "SeasonType":  "Regular Season",
+        "LeagueID":    "00",
+        "PerMode":     "Totals",
+        "DefPlayerID": "",
+        "OffPlayerID": "",
+    }
+    for attempt in range(_RETRY_ATTEMPTS):
+        _sleep()
+        try:
+            resp = _cffi_session.get(
+                "https://stats.nba.com/stats/leagueseasonmatchups",
+                params=params,
+                headers=_NBA_HEADERS,
+                timeout=_MATCHUPS_TIMEOUT,
+            )
+            result_sets = resp.json().get("resultSets", [])
+            if not result_sets or not result_sets[0].get("rowSet"):
+                logger.warning("Empty result from LeagueSeasonMatchups for %s", season)
+                return {}
+            rs = result_sets[0]
+            df = pd.DataFrame(rs["rowSet"], columns=rs["headers"])
+            return {int(k): g for k, g in df.groupby("DEF_PLAYER_ID")}
+        except Exception as exc:
+            if attempt < _RETRY_ATTEMPTS - 1:
+                logger.warning("LeagueSeasonMatchups attempt %d failed (%s) — retrying in %ds",
+                               attempt + 1, exc, _RETRY_DELAY)
+                time.sleep(_RETRY_DELAY)
+            else:
+                logger.warning("LeagueSeasonMatchups failed after %d attempts: %s",
+                               _RETRY_ATTEMPTS, exc)
+    return {}
 
 
 def get_player_career_stats(nba_api_id: int) -> dict | None:
@@ -530,56 +568,3 @@ def get_player_info(nba_api_id: int) -> dict | None:
     except Exception as exc:
         logger.warning("CommonPlayerInfo failed for %d: %s", nba_api_id, exc)
         return None
-
-
-def get_player_position(nba_api_id: int) -> str | None:
-    """
-    Look up a player's position via CommonPlayerInfo and map to a
-    canonical positional group: PG | SG | SF | PF | C.
-
-    Results are cached indefinitely (positions don't change mid-season).
-    Returns None if the lookup fails.
-    """
-    if nba_api_id in _position_cache:
-        return _position_cache[nba_api_id]
-
-    from nba_api.stats.endpoints import CommonPlayerInfo
-
-    _sleep()
-    try:
-        info = CommonPlayerInfo(player_id=nba_api_id)
-        df = info.get_data_frames()[0]
-        if df.empty:
-            _position_cache[nba_api_id] = None
-            return None
-
-        raw_pos = str(df["POSITION"].iloc[0]).strip()
-        group = _map_position(raw_pos)
-        _position_cache[nba_api_id] = group
-        return group
-
-    except Exception as exc:
-        logger.warning("CommonPlayerInfo failed for %d: %s", nba_api_id, exc)
-        _position_cache[nba_api_id] = None
-        return None
-
-
-def _map_position(raw: str) -> str | None:
-    """
-    Map a raw ESPN/nba_api position string to one of PG, SG, SF, PF, C.
-    Handles combo strings like 'G-F', 'F-C'.
-    """
-    mapping = {
-        "Point Guard":    "PG",
-        "Shooting Guard": "SG",
-        "Small Forward":  "SF",
-        "Power Forward":  "PF",
-        "Center":         "C",
-        "PG": "PG", "SG": "SG", "SF": "SF", "PF": "PF", "C": "C",
-        "G":  "SG",   # Generic guard → shooting guard
-        "F":  "SF",   # Generic forward → small forward
-        "F-C": "PF",  # Forward-center hybrid → power forward
-        "G-F": "SF",  # Guard-forward hybrid → small forward
-        "C-F": "PF",
-    }
-    return mapping.get(raw)
