@@ -36,6 +36,8 @@ const COMPOSITE_COEFFICIENTS = {
   transition_high_flyer: 0.7,
   transition_driver: 0.3,
   transition_spot_up: 0.2,
+  perimeter_defense_poa: 0.6,
+  perimeter_defense_off_ball: 0.4,
   perimeter_defense_versatile_defender: 0.7,
   interior_defense_versatile_defender: 0.25,
   interior_defense_rebounder: 0.3,
@@ -139,11 +141,22 @@ export function computeRawCompositeBreakdowns(skills: PlayerSkillMap | null | un
   };
   raw.offensive_rebounding.raw = sumTerms(raw.offensive_rebounding.terms);
 
+  // #152 split: mirrors cohesion_engine/composites.py. A skill rated "None" is
+  // present; an absent key (a profile released before the split) is not, and
+  // then the on-ball term carries the whole weight, so the old Perimeter
+  // Disruptor number survives the split unchanged.
+  const hasOffBallRating = skills != null && "off_ball_disruptor" in skills;
   raw.perimeter_defense = {
-    terms: [
-      skillFormulaTerm(skills, "perimeter_disruptor"),
-      skillFormulaTerm(skills, "versatile_defender", c.perimeter_defense_versatile_defender),
-    ],
+    terms: hasOffBallRating
+      ? [
+          skillFormulaTerm(skills, "point_of_attack_defender", c.perimeter_defense_poa),
+          skillFormulaTerm(skills, "off_ball_disruptor", c.perimeter_defense_off_ball),
+          skillFormulaTerm(skills, "versatile_defender", c.perimeter_defense_versatile_defender),
+        ]
+      : [
+          skillFormulaTerm(skills, "point_of_attack_defender"),
+          skillFormulaTerm(skills, "versatile_defender", c.perimeter_defense_versatile_defender),
+        ],
     raw: 0,
   };
   raw.perimeter_defense.raw = sumTerms(raw.perimeter_defense.terms);

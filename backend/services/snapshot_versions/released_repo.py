@@ -15,8 +15,31 @@ from __future__ import annotations
 
 from typing import Iterable
 
+from services.skills import with_legacy_skill_keys
+
 _BATCH = 100
 _LEGENDS_QUERY_LIMIT = 500  # legends ~36 today; ceiling guards against silent truncation
+
+
+def lab_skills(snapshot: dict | None) -> dict:
+    """Serve a released Skill-keyed map under the current taxonomy.
+
+    Takes a Skill Profile snapshot, a frozen trace's `skills` map, or a saved
+    team's profile snapshot — anything keyed by Skill name.
+
+    A release published before the #152 split carries `perimeter_disruptor`.
+    The Lab reads `point_of_attack_defender`, so the carried tier fills it and
+    the retired key is dropped — the frontend never sees a key it no longer
+    knows. A post-split snapshot passes through unchanged.
+
+    Every Lab-side released read goes through here, so the Profile endpoint and
+    the bulk list cannot drift apart.
+
+    # ponytail: delete after prod runs EV v10 and a post-split release
+    """
+    skills = with_legacy_skill_keys(snapshot or {})
+    skills.pop("perimeter_disruptor", None)
+    return skills
 
 
 def fetch_profiles_by_source_player_ids(
@@ -54,7 +77,7 @@ def fetch_profiles_by_source_player_ids(
         for row in (rows.data or []):
             pid = row.get("source_player_id")
             if pid:
-                result[str(pid)] = row.get("skill_profile_snapshot") or {}
+                result[str(pid)] = lab_skills(row.get("skill_profile_snapshot"))
     return result
 
 
@@ -83,7 +106,12 @@ def fetch_skill_trace_by_source_player_id(
     data = rows.data or []
     if not data:
         return None
-    return data[0].get("skill_trace_snapshot") or {}
+    trace = data[0].get("skill_trace_snapshot") or {}
+    # The freeze keys this map by the taxonomy that was current at publish
+    # time, so a pre-split release has no on-ball entry and the Profile's
+    # "why" panel opens empty. Same alias as the profile reads above.
+    # ponytail: delete after prod runs EV v10 and a post-split release
+    return {**trace, "skills": lab_skills(trace.get("skills"))}
 
 
 def fetch_legend_profiles_by_nba_api_ids(
@@ -146,5 +174,5 @@ def fetch_legend_profiles_by_nba_api_ids(
         cid = row.get("canonical_player_id")
         nba_api_id = canonical_by_id.get(cid)
         if nba_api_id is not None:
-            result[str(nba_api_id)] = row.get("skill_profile_snapshot") or {}
+            result[str(nba_api_id)] = lab_skills(row.get("skill_profile_snapshot"))
     return result

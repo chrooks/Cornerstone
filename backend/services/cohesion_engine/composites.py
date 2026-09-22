@@ -20,7 +20,7 @@ import logging
 from bisect import bisect_left, bisect_right
 from typing import Any, Mapping
 
-from services.skills import ALL_SKILLS
+from services.skills import ALL_SKILLS, with_legacy_skill_keys
 
 from .bell_curve import compute_bell_params
 from .types import PlayerComposites
@@ -77,6 +77,13 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
         skills: Player skill map (tier strings or pre-boosted floats).
         values: The ``engine.version.values`` dict from the active Evaluation Version.
     """
+    # #152: fill the missing half of the perimeter_disruptor /
+    # point_of_attack_defender pair BEFORE present_keys is taken, so a pre-split
+    # profile reads as on-ball and a post-split profile still scores against a
+    # pre-split Evaluation Version's formulas.
+    # ponytail: delete after prod runs EV v10 and a post-split release
+    skills = with_legacy_skill_keys(skills)
+
     # Capture key-presence BEFORE default-fill: a skill rated "None" is present
     # (rated careless — no proxy), a key-absent skill (unbackfilled Legend) is
     # not. _with_default_skills erases this distinction, so it must be taken here.
@@ -111,10 +118,22 @@ def compute_raw_composites(skills: dict[str, str | float], values: dict[str, Any
     # _collective_passing ingredient. steady_hand owns ball_security, so passer
     # is not reused there; percentile normalization handles the spread.
     raw_passing = _tv("passer")
-    raw_perimeter_defense = (
-        _tv("perimeter_disruptor")
-        + c["perimeter_defense_versatile_defender"] * _tv("versatile_defender")
-    )
+    # #152: on-ball + off-ball. A profile with no off-ball key (a pre-split
+    # release, an unbackfilled Legend) falls back to the pre-split expression,
+    # so it scores exactly what it scored before the split. The coefficient
+    # defaults do the same for a pre-split Evaluation Version's coefficients.
+    # Mirrors the formula engine's fallback.
+    if "off_ball_disruptor" in present_keys:
+        raw_perimeter_defense = (
+            c.get("perimeter_defense_poa", 1.0) * _tv("point_of_attack_defender")
+            + c.get("perimeter_defense_off_ball", 0.0) * _tv("off_ball_disruptor")
+            + c["perimeter_defense_versatile_defender"] * _tv("versatile_defender")
+        )
+    else:
+        raw_perimeter_defense = (
+            _tv("point_of_attack_defender")
+            + c["perimeter_defense_versatile_defender"] * _tv("versatile_defender")
+        )
     raw_interior_defense = (
         _tv("rim_protector")
         + c["interior_defense_versatile_defender"] * _tv("versatile_defender")

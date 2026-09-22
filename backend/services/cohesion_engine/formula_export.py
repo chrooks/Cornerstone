@@ -99,13 +99,24 @@ def export_formulas(coefficients: dict[str, float]) -> dict[str, dict[str, Any]]
             "amplifiers": [],
             "depends_on": [],
         },
+        # #152: perimeter_disruptor split into on-ball + off-ball. The fallback
+        # fires for any profile with no off-ball key — a pre-split release or an
+        # unbackfilled Legend — and reproduces the pre-split expression exactly.
         "perimeter_defense": {
             "factors": [
-                _skill("perimeter_disruptor"),
+                _skill("point_of_attack_defender", c.get("perimeter_defense_poa", 1.0)),
+                _skill("off_ball_disruptor", c.get("perimeter_defense_off_ball", 0.0)),
                 _skill("versatile_defender", c["perimeter_defense_versatile_defender"]),
             ],
             "amplifiers": [],
             "depends_on": [],
+            "fallback": {
+                "when_missing": ["off_ball_disruptor"],
+                "factors": [
+                    _skill("point_of_attack_defender"),
+                    _skill("versatile_defender", c["perimeter_defense_versatile_defender"]),
+                ],
+            },
         },
         "interior_defense": {
             "factors": [

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { HeroSlideshow } from "@/components/landing/HeroSlideshow";
 import { ProofCardRotator } from "@/components/landing/ProofCardRotator";
 import { Changelog } from "@/components/landing/Changelog";
+import { TOTAL_SKILLS } from "@/lib/skills";
 
 const STEPS = [
   {
@@ -153,7 +154,7 @@ export default function LandingPage() {
               Skill profiles.
             </h2>
             <p className="mt-4 text-[0.9375rem] leading-relaxed text-muted-foreground max-w-sm">
-              Every active player is evaluated on 22 basketball skills using
+              Every active player is evaluated against a {TOTAL_SKILLS}-skill taxonomy using
               statistical thresholds cross-checked by AI assessment. Agreements
               auto-accept. Disagreements get flagged for manual review.
             </p>
@@ -165,7 +166,7 @@ export default function LandingPage() {
                   Skills
                 </span>
                 <span className="font-mono text-2xl tabular-nums text-foreground">
-                  22
+                  {TOTAL_SKILLS}
                 </span>
               </div>
               <div className="flex flex-col gap-0.5">

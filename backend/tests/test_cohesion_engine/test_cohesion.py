@@ -35,7 +35,7 @@ def make_player(name: str, height: str, skills: dict[str, str]) -> dict:
 
 def test_evaluate_lineup_returns_all_subscores_in_range():
     lineup = [
-        make_player("Handler", "6-3", {"pnr_ball_handler": "Elite", "passer": "Elite", "perimeter_disruptor": "Elite"}),
+        make_player("Handler", "6-3", {"pnr_ball_handler": "Elite", "passer": "Elite", "point_of_attack_defender": "Elite"}),
         make_player("Shooter", "6-5", {"movement_shooter": "Elite", "spot_up_shooter": "Elite"}),
         make_player("Cutter", "6-7", {"cutter": "Elite", "driver": "Proficient"}),
         make_player("Big", "7-0", {"rim_protector": "Elite", "rebounder": "Elite", "pnr_finisher": "Elite", "screen_setter": "Elite"}),
@@ -96,7 +96,7 @@ def test_evaluate_lineup_does_not_mutate_input_players():
 
 def test_perimeter_defense_can_boost_transition_subscore():
     pressure_lineup = [
-        make_player(f"Defender {index}", "6-8", {"perimeter_disruptor": "All-Time Great"})
+        make_player(f"Defender {index}", "6-8", {"point_of_attack_defender": "All-Time Great"})
         for index in range(5)
     ]
     neutral_lineup = [

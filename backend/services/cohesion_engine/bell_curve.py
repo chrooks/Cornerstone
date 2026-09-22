@@ -12,6 +12,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from services.skills import with_legacy_skill_keys
+
 
 def parse_height_inches(height: str | int | None) -> int | None:
     """Parse common height formats like '6-7' or '6\\'7\"' into inches."""
@@ -95,6 +97,8 @@ def compute_bell_params(
     skills: dict[str, str], height_inches: int, values: dict[str, Any]
 ) -> dict[str, float | int]:
     """Compute a player's defensive bell curve parameters from skills + height."""
+    # ponytail: delete after prod runs EV v10 and a post-split release
+    skills = with_legacy_skill_keys(skills)
     height_inches = _clamp_height(height_inches, values)
 
     amplitude_map: dict[str, float] = values["amplitude_map"]
@@ -110,7 +114,7 @@ def compute_bell_params(
     pd_cross = values["pd_cross"]
 
     vd = skills.get("versatile_defender", "None")
-    pd = skills.get("perimeter_disruptor", "None")
+    pd = skills.get("point_of_attack_defender", "None")
     rp = skills.get("rim_protector", "None")
 
     # Amplitude captures the best defensive tool plus the warm-body floor.
@@ -212,11 +216,19 @@ def apply_rp_pd_boost(lineup: list[dict[str, Any]], values: dict[str, Any]) -> l
             continue
 
         copied = deepcopy(player)
-        skills = copied.setdefault("skills", {})
-        current_value = amplitude_map.get(skills.get("perimeter_disruptor", "None"), 0.0)
-        skills["perimeter_disruptor"] = _closest_amplitude_tier(
-            current_value + boost, amplitude_map
+        # ponytail: delete after prod runs EV v10 and a post-split release
+        skills = with_legacy_skill_keys(copied.get("skills", {}))
+        copied["skills"] = skills
+        current_value = amplitude_map.get(
+            skills.get("point_of_attack_defender", "None"), 0.0
         )
+        boosted_tier = _closest_amplitude_tier(current_value + boost, amplitude_map)
+        skills["point_of_attack_defender"] = boosted_tier
+        # Mirror onto the retired key: a pre-split Evaluation Version's formulas
+        # still name it, and the alias shim only fills an ABSENT key — without
+        # this the boost would be silently dropped under EV v9.
+        # ponytail: delete after prod runs EV v10 and a post-split release
+        skills["perimeter_disruptor"] = boosted_tier
         boosted.append(copied)
 
     return boosted
@@ -405,7 +417,7 @@ def cluster_defense_gaps(
 # determines which archetype the suggestion recommends. Bands overlap
 # slightly so boundary clusters get the more specific label.
 _ARCHETYPE_BANDS: list[tuple[range, str, str]] = [
-    (range(72, 77),  "perimeter_disruptor", "a defensive guard"),
+    (range(72, 77),  "point_of_attack_defender", "a defensive guard"),
     (range(77, 81),  "versatile_defender",  "a defensive wing"),
     (range(81, 84),  "versatile_defender",  "a switchable forward"),
     (range(84, 89),  "rim_protector",       "a rim protector"),

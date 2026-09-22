@@ -177,7 +177,7 @@ interface LineupCohesion {
   };
   accentuation_details: Record<string, unknown>;
   boosted_bell_curves: Array<BellCurve | null>; // one per starting player
-  rp_pd_boosts: RPPDBoost[];      // rim protector → perimeter disruptor boosts
+  rp_pd_boosts: RPPDBoost[];      // rim protector → point of attack defender boosts
 }
 
 interface PlayerComposites {

@@ -9,13 +9,13 @@
 ## Defense
 
 ### Rim Protection & Perimeter Defense
-- Good Rim Protectors significantly maximize good Perimeter Disruptors & Versatile Defenders. A good defense usually has at least one good one. (e.g. Wemby anchoring the Spurs defense empowers their perimeter defenders)
-- Not having an elite Rim Protector can be overcome by having a stable of Versatile Defenders (and to a lesser degree Perimeter Disruptors). (e.g. The Pistons have a top-3 defense without a Proficient+ Rim Protector by playing all Capable+ Versatile Defenders)
-- The impact of a good Perimeter Disruptor by themselves isn't incredibly valuable. Their impact compounds the more Perimeter Disruptors you have. (e.g. The Thunder having 5 Proficient+ Perimeter Defenders)
-- Versatile Defenders compound with Perimeter Disruptors, just to a lesser degree than Rim Protectors do.
+- Good Rim Protectors significantly maximize good Point of Attack Defenders & Versatile Defenders. A good defense usually has at least one good one. (e.g. Wemby anchoring the Spurs defense empowers their perimeter defenders)
+- Not having an elite Rim Protector can be overcome by having a stable of Versatile Defenders (and to a lesser degree Point of Attack Defenders). (e.g. The Pistons have a top-3 defense without a Proficient+ Rim Protector by playing all Capable+ Versatile Defenders)
+- The impact of a good Point of Attack Defender by themselves isn't incredibly valuable. Their impact compounds the more Point of Attack Defenders you have. (e.g. The Thunder having 5 Proficient+ Perimeter Defenders)
+- Versatile Defenders compound with Point of Attack Defenders, just to a lesser degree than Rim Protectors do.
 
 ### Defensive Minimums
-- If you aren't at least a capable defender (Perimeter Disruptor, Versatile Defender, or Rim Protector), you better be Elite at something else. Not being capable in any of these considerably hinders a team's defense. (e.g. Lakers' subpar defense while playing Reaves and Luka)
+- If you aren't at least a capable defender (Point of Attack Defender, Versatile Defender, or Rim Protector), you better be Elite at something else. Not being capable in any of these considerably hinders a team's defense. (e.g. Lakers' subpar defense while playing Reaves and Luka)
 - The defensive impact of a smaller player at the same skill tier is less than that of a larger player. This can be slightly mitigated if the player is a High Flyer.
 - A player with no offensive threat (no shooting, no creation) gets ignored by the defense — enabling sagging and doubling your on-ball players. Great defensive players with no shooting ability create implicit spacing penalties that partially offset their defensive value.
 - Conversely, players who contribute meaningfully on both ends are disproportionately valuable. A capable defender who can also shoot or create doesn't force a trade-off — you get both without spending two roster spots. In a salary cap context, two-way players are among the highest-value assets on a roster.

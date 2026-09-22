@@ -42,7 +42,7 @@ def make_player(name: str, slot: int, height: str = "6-7", skills: dict[str, str
 
 def balanced_player(name: str, slot: int) -> dict:
     skill_sets = [
-        {"pnr_ball_handler": "Elite", "passer": "Elite", "perimeter_disruptor": "Elite"},
+        {"pnr_ball_handler": "Elite", "passer": "Elite", "point_of_attack_defender": "Elite"},
         {"movement_shooter": "Elite", "spot_up_shooter": "Elite", "off_dribble_shooter": "Proficient"},
         {"cutter": "Elite", "driver": "Elite", "high_flyer": "Proficient"},
         {"rim_protector": "Elite", "rebounder": "Elite", "pnr_finisher": "Elite", "screen_setter": "Elite"},

@@ -209,7 +209,7 @@ Configured in `create_app()` — allowed origins from `FRONTEND_ORIGIN` env var 
 | `players_service.py` | Player CRUD | `get_player()`, `list_players()`, `create_player()`, `delete_player()` |
 | `notability.py` | Signal detection | Identifies notable/fringe players |
 | `supabase_client.py` | DB client singleton | `get_supabase()` |
-| `skills.py` | Skill constants | `SKILL_LIST`, `SKILL_LABELS` (21 skills) |
+| `skills.py` | Skill constants | `SKILL_LIST`, `SKILL_LABELS` (23 skills) |
 | `stats_schema.py` | Stat validation | Schema for raw stat blobs |
 
 ## Request Flow Example: Evaluate Player Skills
@@ -220,7 +220,7 @@ POST /api/players/<player_id>/skills
 skills_bp handler
   ↓
 skill_engine.evaluate_all_skills(stats_blob)
-  ├─ loops 21 skills
+  ├─ loops 23 skills
   ├─ for each:
   │  ├─ apply pre_adjustments
   │  ├─ check volume_gate

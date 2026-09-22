@@ -90,7 +90,7 @@ function compositeBarColor(score: number): string {
 // Equation term definitions
 // ---------------------------------------------------------------------------
 
-interface EquationTerm {
+export interface EquationTerm {
   skill?: string;
   composite?: string;
   label?: string;
@@ -145,8 +145,13 @@ const EQUATION_TERM_SPECS: Record<string, EquationTermSpec[]> = {
     { skill: "driver", coefficientKey: "transition_driver" },
     { skill: "spot_up_shooter", coefficientKey: "transition_spot_up" },
   ],
+  // #152: `multiplier` is the missing-key fallback, and it mirrors the
+  // backend's own defaults — c.get("perimeter_defense_poa", 1.0) and
+  // c.get("perimeter_defense_off_ball", 0.0) — so a pre-v10 Evaluation
+  // Version prints the equation the engine actually ran.
   perimeter_defense: [
-    { skill: "perimeter_disruptor" },
+    { skill: "point_of_attack_defender", coefficientKey: "perimeter_defense_poa", multiplier: 1 },
+    { skill: "off_ball_disruptor", coefficientKey: "perimeter_defense_off_ball", multiplier: 0 },
     { skill: "versatile_defender", coefficientKey: "perimeter_defense_versatile_defender" },
   ],
   interior_defense: [
@@ -167,14 +172,33 @@ function fallbackCoefficientTerms(composite: string, coefficients: Record<string
     .map(([key, multiplier]) => ({ label: key, multiplier }));
 }
 
-function equationTermsFor(composite: string, coefficients: Record<string, number>): EquationTerm[] {
-  const specs = EQUATION_TERM_SPECS[composite];
+/** #152: the split's fallback — a profile with no `off_ball_disruptor` key is
+ * scored by the engine as `1.0*POA + c*VD`, so the panel must print those two
+ * terms and not the three-term split. Mirrors `player-composites.ts` and
+ * `cohesion_engine/composites.py`; the test is key presence, not tier value,
+ * because a Skill rated "None" is rated. */
+function perimeterDefenseTermSpecs(skills: Record<string, string> | undefined): EquationTermSpec[] {
+  const specs = EQUATION_TERM_SPECS.perimeter_defense;
+  if (skills && "off_ball_disruptor" in skills) return specs;
+  return specs.filter((term) => term.skill !== "off_ball_disruptor").map((term) =>
+    term.skill === "point_of_attack_defender" ? { skill: term.skill, multiplier: 1 } : term,
+  );
+}
+
+export function equationTermsFor(
+  composite: string,
+  coefficients: Record<string, number>,
+  skills?: Record<string, string>,
+): EquationTerm[] {
+  const specs = composite === "perimeter_defense"
+    ? perimeterDefenseTermSpecs(skills)
+    : EQUATION_TERM_SPECS[composite];
   if (!specs) return fallbackCoefficientTerms(composite, coefficients);
   return specs.map((term) => ({
     skill: term.skill,
     composite: term.composite,
     multiplier: term.coefficientKey
-      ? coefficientValue(coefficients, term.coefficientKey)
+      ? coefficientValue(coefficients, term.coefficientKey, term.multiplier ?? 1)
       : term.multiplier,
   }));
 }
@@ -454,7 +478,7 @@ export function PlayerEquationPanel({ idPrefix, skills, rawComposites, weights, 
             <p className="text-[8px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{group.heading}</p>
             <div className="space-y-1.5">
               {group.keys.map((composite) => {
-                const terms = equationTermsFor(composite, coefficients);
+                const terms = equationTermsFor(composite, coefficients, skills);
                 if (composite === "pnr_screener") {
                   return (
                     <PnrScreenerRawEquation

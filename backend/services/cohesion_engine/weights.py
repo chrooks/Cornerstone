@@ -58,6 +58,12 @@ COMPOSITE_COEFFICIENTS: dict[str, float] = {
     "transition_high_flyer": 0.7,             # athleticism dominates transition scoring
     "transition_driver": 0.3,                 # driving adds secondary transition value
     "transition_spot_up": 0.2,                # catch-and-shoot in transition (trailing shooter)
+    # #152: perimeter_disruptor split into on-ball + off-ball. 0.6/0.4 keeps
+    # THEORETICAL_MAX at 27.2 (0.6*16 + 0.4*16 + 0.7*16), so the split changes
+    # no score on its own. A profile with no off-ball rating falls back to
+    # 1.0*POA + 0.7*VD — exactly the pre-split formula.
+    "perimeter_defense_poa": 0.6,                 # on-ball defense carries the majority
+    "perimeter_defense_off_ball": 0.4,            # off-ball disruption (steals, deflections, charges)
     "perimeter_defense_versatile_defender": 0.7,  # versatile defender dominates perimeter D composite
     "interior_defense_versatile_defender": 0.25,  # versatile defender's partial interior D credit
     "interior_defense_rebounder": 0.3,        # rebounding contributes to interior D score

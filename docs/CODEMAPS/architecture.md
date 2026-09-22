@@ -49,12 +49,12 @@ Three-layer NBA skill evaluation + roster builder platform with AI-assisted eval
 
 ## Layer 1: Skill Pipeline
 
-**Purpose**: Evaluate players on 21-skill taxonomy (stat-driven + Claude AI)
+**Purpose**: Evaluate players on 23-skill taxonomy (stat-driven + Claude AI)
 
 **Flow**:
 1. Backend fetches stats from NBA.com via `nba_api` → `player_stats` table
 2. `skill_engine` evaluates each skill using thresholds (JSONB conditions)
-3. `claude_assessment` asks Claude API for same 21-skill ratings
+3. `claude_assessment` asks Claude API for same 23-skill ratings
 4. `compositing.py` merges both ratings: agreements auto-accepted, disagreements create `skill_flags`
 5. Frontend review tool (`/review`) lets admins resolve flags manually
 
@@ -66,7 +66,7 @@ Three-layer NBA skill evaluation + roster builder platform with AI-assisted eval
 
 ## Layer 2: Legends Builder
 
-**Purpose**: Manually curate 36 all-time greats on the same 21-skill taxonomy
+**Purpose**: Manually curate 36 all-time greats on the same 23-skill taxonomy
 
 **Flow**:
 1. Admin selects a legend from `legends` table
@@ -149,7 +149,7 @@ stat ratings      claude ratings       │
 
 ## Key Constraints
 
-- **21-skill taxonomy** — immutable list, defined in `frontend/lib/skills.ts` and `backend/services/skills.py`
+- **23-skill taxonomy** — immutable list, defined in `frontend/lib/skills.ts` and `backend/services/skills.py`
 - **Skill thresholds** — stored as JSONB in `skill_thresholds` table, edited via calibration UI (not migrations)
 - **Volume gates** — conditions use per-game divisors (~70 games for full season conversion)
 - **Supabase RLS** — some tables use RLS, write endpoints protected by `@require_admin` decorator + Bearer JWT

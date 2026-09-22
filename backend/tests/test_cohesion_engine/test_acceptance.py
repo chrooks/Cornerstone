@@ -102,7 +102,7 @@ REFERENCE_PROFILES = {
         "spot_up_shooter": "Elite",
         "movement_shooter": "Proficient",
         "off_dribble_shooter": "Proficient",
-        "perimeter_disruptor": "Proficient",
+        "point_of_attack_defender": "Proficient",
         "versatile_defender": "Capable",
         "transition_threat": "Proficient",
         "cutter": "Proficient",
@@ -235,7 +235,7 @@ def test_reference_player_raw_composites_match_locked_formula_outputs(name):
 
 
 def test_named_defensive_bell_archetypes_match_expected_shapes():
-    assert compute_bell_params({"perimeter_disruptor": "None"}, 73, VALUES) == {
+    assert compute_bell_params({"point_of_attack_defender": "None"}, 73, VALUES) == {
         "amplitude": 0.5,
         "peak_center": 73,
         "range_down": 1,
@@ -318,7 +318,7 @@ def test_full_nine_player_roster_evaluates_126_lineups_under_100ms():
         player("Rudy Gobert", 6, "7-1", REFERENCE_PROFILES["Rudy Gobert"]),
         player("Connector", 7, "6-7", {"passer": "Proficient", "cutter": "Elite", "versatile_defender": "Proficient"}),
         player("Rebound Wing", 8, "6-8", {"rebounder": "Elite", "transition_threat": "Elite", "spot_up_shooter": "Proficient"}),
-        player("Screen Guard", 9, "6-4", {"screen_setter": "Proficient", "movement_shooter": "Elite", "perimeter_disruptor": "Elite"}),
+        player("Screen Guard", 9, "6-4", {"screen_setter": "Proficient", "movement_shooter": "Elite", "point_of_attack_defender": "Elite"}),
     ]
 
     start = time.perf_counter()

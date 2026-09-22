@@ -27,7 +27,7 @@ You must have a plausible path to each player via draft, trade, or free agency. 
 
 ## Skill Taxonomy
 
-Every player (including the superstar) is rated on 21 skills across four tiers:
+Every player (including the superstar) is rated on 23 skills across four tiers:
 
 - **None** — the player does not meaningfully possess this skill
 - **Capable** — the player is a competent practitioner of this skill
@@ -64,7 +64,8 @@ Every player (including the superstar) is rated on 21 skills across four tiers:
 *Must be distributed carefully. Excess creates conflict.*
 
 - **Versatile Defender** (`versatile_defender`) — Guards multiple positional groups effectively when switched
-- **Perimeter Disruptor** (`perimeter_disruptor`) — Disrupts ball handlers through active hands and pressure at point of attack
+- **Point of Attack Defender** (`point_of_attack_defender`) — Contains the ball handler, fights over screens, and takes the toughest perimeter assignment when asked
+- **Off-Ball Disruptor** (`off_ball_disruptor`) — Makes plays away from his own man by jumping passing lanes, digging at drivers and recovering, which creates deflections, steals and charges
 - **High Flyer** (`high_flyer`) — Elite explosive athleticism for above-the-rim plays and transition finishes
 
 ### Skill Confidence Tiers
@@ -75,7 +76,7 @@ Skills are also classified by how reliably the stat pipeline can evaluate them:
 |---|---|---|
 | **High** | spot_up_shooter, off_dribble_shooter, isolation_scorer, rebounder, offensive_rebounder, rim_protector | Claude is NOT called |
 | **Moderate** | movement_shooter, cutter, transition_threat, pnr_ball_handler, pnr_finisher, crafty_finisher, driver, vertical_spacer, screen_setter, passer, mid_post_player, low_post_player | Claude runs blind (sees stats, not stat tier) |
-| **Low** | versatile_defender, perimeter_disruptor, high_flyer | Claude runs informed (sees stats AND stat tier) |
+| **Low** | versatile_defender, point_of_attack_defender, off_ball_disruptor, high_flyer | Claude runs informed (sees stats AND stat tier) |
 
 ---
 
@@ -104,7 +105,7 @@ Skill-weight scoring system:
 ### Cohesion Engine (`cohesion_engine/`)
 Lineup and rotation chemistry scoring:
 - **Player composites** — normalized 0.0-10.0 scores per player (spacing, finishing, anchor, defense, etc.)
-- **Defensive bell curves** — height-based coverage modeling with rim protector → perimeter disruptor boosts
+- **Defensive bell curves** — height-based coverage modeling with rim protector → point of attack defender boosts
 - **Lineup subscores** — spacing, PnR pairing, defensive coverage, transition, rebounding
 - **Synergies** — pairwise bonuses (PnR handler+finisher, rim protector+perimeter defenders)
 - **Accentuation** — amplifying roster strengths and covering weaknesses
@@ -144,7 +145,7 @@ Pull from four layers:
 Deterministic rules map stat thresholds to skill tiers. Fully automated and auditable. Thresholds stored as JSONB in `skill_thresholds` table, editable via calibration UI. Volume gates use per-game conditions (~70 games divisor).
 
 ### Step 4 — Claude Pass
-Feed the statistical profile to Claude with a prompt asking it to independently rate the player on all 21 skills at None/Capable/Proficient/Elite. Claude contributes contextual knowledge that stats don't capture. The confidence tier determines whether Claude sees the stat-based rating.
+Feed the statistical profile to Claude with a prompt asking it to independently rate the player on all 23 skills at None/Capable/Proficient/Elite. Claude contributes contextual knowledge that stats don't capture. The confidence tier determines whether Claude sees the stat-based rating.
 
 ### Step 5 — Notability Score
 Before compositing, calculate a notability score (0-100) to determine how much weight Claude's assessment carries. Higher notability = more weight to Claude.
@@ -182,13 +183,13 @@ Flagged players enter a review queue. UI displays:
 ---
 
 ## All-Time Greats Skill Profiles
-No modern stats exist for historical legends. Profiles are manually curated. The list is finite (36 legends). Same 21-skill taxonomy and None/Capable/Proficient/Elite tiers apply.
+No modern stats exist for historical legends. Profiles are manually curated. The list is finite (36 legends). Same 23-skill taxonomy and None/Capable/Proficient/Elite tiers apply.
 
 ---
 
 ## Legends List (36 Players)
 
-One profile per player representing their peak era. All 36 are manually profiled using the 21-skill taxonomy at None/Capable/Proficient/Elite tiers.
+One profile per player representing their peak era. All 36 are manually profiled using the 23-skill taxonomy at None/Capable/Proficient/Elite tiers.
 
 1. Michael Jordan (Early 90s)
 2. LeBron James (Mid 2010s — Heat & 2nd Cavs)

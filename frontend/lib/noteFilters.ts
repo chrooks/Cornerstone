@@ -51,7 +51,7 @@ const DIMENSION_FALLBACK: Record<string, SuggestionFilter> = {
   off_ball_impact:    { skill: "cutter",             tier: "Capable or higher" },
   rebounding:         { skill: "rebounder",          tier: "Capable or higher" },
   passing:            { skill: "passer",             tier: "Capable or higher" },
-  perimeter_defense:  { skill: "perimeter_disruptor", tier: "Capable or higher" },
+  perimeter_defense:  { skill: "point_of_attack_defender", tier: "Capable or higher" },
   interior_defense:   { skill: "rim_protector",      tier: "Capable or higher" },
   defense_gap:        { skill: "versatile_defender", tier: "Capable or higher" },
 };

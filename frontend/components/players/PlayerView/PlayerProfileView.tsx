@@ -25,6 +25,14 @@ function tierOrder(tier: string | null | undefined): number {
   return TIER_ORDER[tier ?? "None"] ?? 4;
 }
 
+/** Sorts below "None" — an unrated Skill is not a judgement, so it reads last. */
+const UNRATED_ORDER = 5;
+
+/** The "--" a Skill with no rating gets, matching PlayerPanelView's TierBadge. */
+function UnratedTierMark() {
+  return <span className="text-[0.6875rem] italic text-[#0e0907]/20">--</span>;
+}
+
 /** Lazily-loaded, once-per-profile-view trace state shared by every SkillColumn. */
 type TraceStatus = "idle" | "loading" | "unavailable" | "loaded";
 
@@ -44,11 +52,12 @@ interface SkillColumnProps {
  * in-flow panel at the bottom has neither problem and works identically
  * in the full page and the modal. */
 function SkillColumn({ category, skillNames, skills, selectedSkill, onSelectSkill }: SkillColumnProps) {
-  const sorted = [...skillNames].sort((a, b) => {
-    const tierA = skills?.[a]?.final_tier;
-    const tierB = skills?.[b]?.final_tier;
-    return tierOrder(tierA) - tierOrder(tierB);
-  });
+  // An absent key is "never rated", which is not the "None" tier — the backend
+  // reads the same distinction (#152 leaves off_ball_disruptor absent until the
+  // post-split release). Unrated rows sort below every rated one.
+  const rank = (skillName: string) =>
+    skills?.[skillName] === undefined ? UNRATED_ORDER : tierOrder(skills[skillName]?.final_tier);
+  const sorted = [...skillNames].sort((a, b) => rank(a) - rank(b));
 
   return (
     <div id={`player-profile-skill-column-${category.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} className="flex flex-col gap-1 min-w-0">
@@ -56,6 +65,7 @@ function SkillColumn({ category, skillNames, skills, selectedSkill, onSelectSkil
         {category}
       </p>
       {sorted.map((skillName) => {
+        const rated = skills?.[skillName] !== undefined;
         const tier = (skills?.[skillName]?.final_tier ?? "None") as SkillTier;
         const isSelected = selectedSkill === skillName;
 
@@ -71,11 +81,11 @@ function SkillColumn({ category, skillNames, skills, selectedSkill, onSelectSkil
               isSelected ? "bg-[#ffa05c]/15" : "hover:bg-[#0e0907]/[0.03]"
             )}
           >
-            <span className={cn("text-xs leading-tight truncate", tier === "None" ? "text-[#0e0907]/35" : "text-[#0e0907]")}>
+            <span className={cn("text-xs leading-tight truncate", !rated || tier === "None" ? "text-[#0e0907]/35" : "text-[#0e0907]")}>
               {formatSkillName(skillName)}
             </span>
             <span className="flex items-center gap-1 shrink-0">
-              <SkillTierBadge tier={tier} size="sm" />
+              {rated ? <SkillTierBadge tier={tier} size="sm" /> : <UnratedTierMark />}
               {isSelected ? (
                 <ChevronUp className="h-3 w-3 text-[#0e0907]/45" />
               ) : (
@@ -91,7 +101,8 @@ function SkillColumn({ category, skillNames, skills, selectedSkill, onSelectSkil
 
 interface SkillDetailPanelProps {
   skillName: string;
-  tier: SkillTier;
+  /** null when the Skill has no rating at all — not the same as the "None" tier. */
+  tier: SkillTier | null;
   traceStatus: TraceStatus;
   trace: PlayerSkillTrace | null;
   onClose: () => void;
@@ -102,7 +113,11 @@ interface SkillDetailPanelProps {
  * fight a scroll container or guess which edge to open from. */
 function SkillDetailPanel({ skillName, tier, traceStatus, trace, onClose }: SkillDetailPanelProps) {
   const entry = trace?.skills?.[skillName];
-  const unavailable = traceStatus === "unavailable" || (traceStatus === "loaded" && !trace?.computed);
+  // A frozen trace is keyed by the taxonomy that was current when the Release
+  // was published, so a Skill added since (#152's off-ball key) has no entry.
+  // Without `!entry` the panel opens with a header and an empty body.
+  const unavailable =
+    traceStatus === "unavailable" || (traceStatus === "loaded" && (!trace?.computed || !entry));
 
   return (
     <div
@@ -112,7 +127,7 @@ function SkillDetailPanel({ skillName, tier, traceStatus, trace, onClose }: Skil
       <div className="mb-3 flex items-center justify-between gap-3 border-b border-[#d9d0c9] pb-2">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-[#0e0907]">{formatSkillName(skillName)}</span>
-          <SkillTierBadge tier={tier} size="sm" />
+          {tier ? <SkillTierBadge tier={tier} size="sm" /> : <UnratedTierMark />}
         </div>
         <button
           type="button"
@@ -129,9 +144,13 @@ function SkillDetailPanel({ skillName, tier, traceStatus, trace, onClose }: Skil
         <p className="text-[12px] text-[#0e0907]/45">Loading breakdown…</p>
       )}
       {unavailable && (
-        <p className="text-[12px] text-[#0e0907]/45">Trace temporarily unavailable for this player.</p>
+        <p className="text-[12px] text-[#0e0907]/45">
+          {tier
+            ? "Trace temporarily unavailable for this player."
+            : "Not rated yet \u2014 this Skill is evaluated in the next Player Snapshot."}
+        </p>
       )}
-      {traceStatus === "loaded" && trace?.computed && entry && (
+      {traceStatus === "loaded" && trace?.computed && entry && tier && (
         <SkillTraceDetail conditions={entry.condition_results} override={entry.override} finalTier={tier} />
       )}
     </div>
@@ -274,7 +293,9 @@ export function PlayerProfileView({
           {selectedSkill && (
             <SkillDetailPanel
               skillName={selectedSkill}
-              tier={(profile.skills[selectedSkill]?.final_tier ?? "None") as SkillTier}
+              tier={profile.skills[selectedSkill] === undefined
+                ? null
+                : ((profile.skills[selectedSkill]?.final_tier ?? "None") as SkillTier)}
               traceStatus={traceStatus}
               trace={trace}
               onClose={() => setSelectedSkill(null)}

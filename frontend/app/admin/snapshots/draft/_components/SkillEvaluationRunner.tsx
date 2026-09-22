@@ -4,9 +4,9 @@
  * SkillEvaluationRunner — staged-run trigger for the draft Pipeline tab.
  *
  * Lets an admin kick off a `skill_evaluation` run scoped to:
- *  - an optional Skill subset (multi-select over the canonical 21-skill taxonomy)
+ *  - an optional Skill subset (multi-select over the canonical Skill taxonomy)
  *  - an optional player subset (shared PlayerSubsetPicker — name search → chip list)
- * Either axis empty means "all" (all 21 Skills / all qualifying players).
+ * Either axis empty means "all" (every Skill / all qualifying players).
  *
  * On success it hands the new run_id back to the parent so the Pipeline tab
  * can deep-link to the staged run's diff preview — the same flow threshold
@@ -69,7 +69,7 @@ export function SkillEvaluationRunner({
   const skillCount = selectedSkills.size;
   const playerCount = selectedPlayers.length;
 
-  /* Either mode needs a Skill filter, so "all 21 Skills" is not what an empty
+  /* Either mode needs a Skill filter, so "all Skills" is not what an empty
      picker means there — it means the run cannot go. Say that, rather than
      promising a scope the layer note directly contradicts. */
   const needsSkillFilter = recomputeComposite || withClaude;

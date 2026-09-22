@@ -49,7 +49,7 @@ def make_player(name: str, height: str, skills: dict[str, str]) -> dict:
 
 def _fixture_lineup() -> list[dict]:
     return [
-        make_player("Handler", "6-3", {"pnr_ball_handler": "Elite", "passer": "Elite", "perimeter_disruptor": "Elite"}),
+        make_player("Handler", "6-3", {"pnr_ball_handler": "Elite", "passer": "Elite", "point_of_attack_defender": "Elite"}),
         make_player("Shooter", "6-5", {"movement_shooter": "Elite", "spot_up_shooter": "Elite"}),
         make_player("Cutter", "6-7", {"cutter": "Elite", "driver": "Proficient"}),
         make_player("Big", "7-0", {"rim_protector": "Elite", "rebounder": "Elite", "pnr_finisher": "Elite", "screen_setter": "Elite"}),
@@ -137,7 +137,7 @@ def test_v2_multiplier_appears_as_adjustment_and_reconciles():
     # No shooters and no creators: both count gates bind, so both ledgers
     # must carry an explicit gate adjustment line.
     lineup = [
-        make_player("D1", "6-5", {"perimeter_disruptor": "Elite"}),
+        make_player("D1", "6-5", {"point_of_attack_defender": "Elite"}),
         make_player("D2", "6-7", {"versatile_defender": "Elite"}),
         make_player("D3", "6-9", {"rim_protector": "Elite"}),
         make_player("D4", "6-10", {"rebounder": "Elite"}),

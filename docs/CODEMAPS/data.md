@@ -87,7 +87,7 @@ Indexes:
   "Scorer": "Elite",
   "Playmaker": "Proficient",
   "Defender": "Capable",
-  // ... 21 skills total
+  // ... 23 skills total
 }
 ```
 
@@ -289,7 +289,7 @@ NBA.com stats
          ├─→ stats_assembler.build_blob() ─→ processes into sections
          │
     ┌────▼──────────────────────────────┐
-    │  skill_engine.evaluate_all_skills  │  ← loops 21 skills
+    │  skill_engine.evaluate_all_skills  │  ← loops 23 skills
     │  - apply_pre_adjustments           │
     │  - check volume_gate               │
     │  - evaluate conditions             │
@@ -369,7 +369,7 @@ NBA.com stats
 
 1. **Per-game volume gates** — conditions use games_played as divisor (~70 games for season conversion)
 2. **JSONB thresholds** — never use migrations for threshold updates, use calibration API
-3. **Immutable skill list** — 21 skills defined in code (`backend/services/skills.py`, `frontend/lib/skills.ts`)
+3. **Immutable skill list** — 23 skills defined in code (`backend/services/skills.py`, `frontend/lib/skills.ts`)
 4. **Admin writes** — most write endpoints require `@require_admin` JWT decorator
 5. **Cascading deletes** — player deletion cascades to player_stats, skill_profiles, skill_flags, anchor_players, roster_slots
 

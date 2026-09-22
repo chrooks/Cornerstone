@@ -31,7 +31,7 @@ The universal individual unit. Every person in the system is a Player, whether a
 _Avoid_: Using Legend when the concept is type-agnostic
 
 **Legend**:
-A Player whose Skill Profile is manually curated rather than derived from the stat pipeline. Tagged `is_legend: true` in the data layer. Legends represent all-time greats evaluated on the same 21-skill taxonomy as active Players. In the Standard RuleSet, the Cornerstone must be a Legend.
+A Player whose Skill Profile is manually curated rather than derived from the stat pipeline. Tagged `is_legend: true` in the data layer. Legends represent all-time greats evaluated on the same 23-skill taxonomy as active Players. In the Standard RuleSet, the Cornerstone must be a Legend.
 _Avoid_: All-time great (as a data category; use Legend), historical player
 
 **Cornerstone**:

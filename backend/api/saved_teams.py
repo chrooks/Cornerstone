@@ -14,6 +14,7 @@ from api.auth import require_user
 from services.evaluation_versions import repo as eval_versions_repo
 from services.evaluation_versions.compat import diff_taxonomy
 from services.evaluation_versions.repo import get_active as get_active_eval_version
+from services.snapshot_versions.released_repo import lab_skills
 from services.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -569,10 +570,14 @@ def _resolve_players_for_rebuild(
         if player.get("is_cornerstone"):
             continue
 
+        # #152: both sides of the rebuild diff speak the current taxonomy, or
+        # the rename reads as a Skill change on a team the user built.
+        # ponytail: delete the wraps after prod runs a post-split release
+        saved_skills = lab_skills(player.get("skill_profile_snapshot") or {})
         saved_data = {
             "player_name_snapshot": player["player_name_snapshot"],
             "salary_snapshot": player.get("salary_snapshot", 0),
-            "skill_profile_snapshot": player.get("skill_profile_snapshot", {}),
+            "skill_profile_snapshot": saved_skills,
         }
 
         # Legend supporting players (FFA) — resolve via legends table
@@ -590,7 +595,7 @@ def _resolve_players_for_rebuild(
                         "salary": player.get("salary_snapshot", 0),
                         "team": player.get("team_snapshot"),
                         "position": player.get("position_snapshot"),
-                        "skill_profile_snapshot": player.get("skill_profile_snapshot", {}),
+                        "skill_profile_snapshot": saved_skills,
                     },
                 })
             else:
@@ -642,7 +647,7 @@ def _resolve_players_for_rebuild(
                     "salary": current_row["salary"],
                     "team": current_row.get("team"),
                     "position": current_row.get("position"),
-                    "skill_profile_snapshot": current_row.get("skill_profile_snapshot", {}),
+                    "skill_profile_snapshot": lab_skills(current_row.get("skill_profile_snapshot") or {}),
                 },
             })
         else:

@@ -40,7 +40,8 @@ export const SKILL_CATEGORIES: Record<string, string[]> = {
   ],
   "Low Confidence": [
     "versatile_defender",
-    "perimeter_disruptor",
+    "point_of_attack_defender",
+    "off_ball_disruptor",
     "high_flyer",
   ],
 };
@@ -59,7 +60,8 @@ export const TOTAL_SKILLS = ALL_SKILL_NAMES.length;
  */
 export const NO_BULK_TRUST_STATS_SKILLS = new Set([
   "versatile_defender",
-  "perimeter_disruptor",
+  "point_of_attack_defender",
+  "off_ball_disruptor",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -86,7 +88,8 @@ export const SKILL_LABELS: Record<string, string> = {
   mid_post_player:          "Mid-Post Player",
   low_post_player:          "Low-Post Player",
   versatile_defender:       "Versatile Defender",
-  perimeter_disruptor:      "Perimeter Disruptor",
+  point_of_attack_defender: "Point of Attack Defender",
+  off_ball_disruptor:       "Off-Ball Disruptor",
   high_flyer:               "Above the Rim Finishing",
   steady_hand:     "Steady Hand",
 };
@@ -112,7 +115,8 @@ export const SKILL_DESCRIPTIONS: Record<string, string> = {
   mid_post_player:          "Scores effectively from the mid-post and elbow area using face-up moves and mid-range shooting.",
   low_post_player:          "Scores effectively with back-to-basket moves in the low post.",
   versatile_defender:       "Can guard multiple positional groups effectively when switched.",
-  perimeter_disruptor:      "Disrupts ball handlers through active hands, pressure, and contests at the point of attack.",
+  point_of_attack_defender: "Contains the ball handler, fights over screens, and takes the toughest perimeter assignment when asked.",
+  off_ball_disruptor:       "Makes plays away from his own man by jumping passing lanes, digging at drivers and recovering, which creates deflections, steals and charges.",
   high_flyer:               "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, and transition finishes.",
   steady_hand:     "Protects possessions with a low turnover rate relative to ball responsibility — secure handling, safe decisions, and strong hands under pressure.",
 };
@@ -149,7 +153,8 @@ export const SKILL_ABBREV: Record<string, string> = {
   mid_post_player:          "Mid Post",
   low_post_player:          "Lo Post",
   versatile_defender:       "Versa Def",
-  perimeter_disruptor:      "Perim Disr",
+  point_of_attack_defender: "POA Def",
+  off_ball_disruptor:       "Off-Ball D",
   high_flyer:               "Above Rim",
   steady_hand:              "Steady Hand",
 };
@@ -178,7 +183,8 @@ export const SKILL_TYPE_PRIORITY: Record<string, number> = {
   mid_post_player:          1,
   low_post_player:          1,
   high_flyer:               1,
-  perimeter_disruptor:      1,
+  point_of_attack_defender: 1,
+  off_ball_disruptor:       1,
   steady_hand:     1,
   // Zero-sum (2) — team typically needs just one at a high level
   isolation_scorer:         2,
@@ -198,7 +204,7 @@ export const PUBLIC_SKILL_CATEGORIES: Record<string, string[]> = {
   "Off-Ball & Transition": ["cutter", "transition_threat", "pnr_finisher"],
   "Interior Scoring":      ["crafty_finisher", "high_flyer", "vertical_spacer", "mid_post_player", "low_post_player"],
   "Physicality":           ["screen_setter", "offensive_rebounder", "rebounder"],
-  "Defense":               ["rim_protector", "perimeter_disruptor", "versatile_defender"],
+  "Defense":               ["rim_protector", "point_of_attack_defender", "off_ball_disruptor", "versatile_defender"],
 };
 
 /** Profile-ordered flat list of all skill names — matches PUBLIC_SKILL_CATEGORIES order. */
@@ -242,7 +248,8 @@ export const SKILL_GROUPS: { label: string; skills: string[] }[] = [
     label: "Zero-Sum Skills",
     skills: [
       "versatile_defender",
-      "perimeter_disruptor",
+      "point_of_attack_defender",
+      "off_ball_disruptor",
       "high_flyer",
     ],
   },

@@ -60,7 +60,7 @@ def _make_lineup() -> list[dict]:
     """Five-player lineup with varied skills for parity testing."""
     return [
         {"id": "handler", "name": "Handler", "height": "6-3", "skills": {
-            "pnr_ball_handler": "Elite", "passer": "Elite", "perimeter_disruptor": "Elite",
+            "pnr_ball_handler": "Elite", "passer": "Elite", "point_of_attack_defender": "Elite",
         }},
         {"id": "shooter", "name": "Shooter", "height": "6-5", "skills": {
             "spot_up_shooter": "Elite", "movement_shooter": "Elite", "off_dribble_shooter": "Proficient",
@@ -226,3 +226,167 @@ class TestBallSecurityFallbackParity:
             assert hardcoded["ball_security"] == pytest.approx(
                 tier_values.get(steady_hand_tier, 0.0)
             )
+
+
+# ---------------------------------------------------------------------------
+# #152 — perimeter_disruptor split into point_of_attack_defender (on-ball) and
+# off_ball_disruptor (off-ball).
+# ---------------------------------------------------------------------------
+
+
+def _split_values() -> dict:
+    """Bootstrap values plus the two #152 coefficients (EV v10 shape)."""
+    values = copy.deepcopy(_load_bootstrap_version().payload["values"])
+    values["composite_coefficients"]["perimeter_defense_poa"] = 0.6
+    values["composite_coefficients"]["perimeter_defense_off_ball"] = 0.4
+    return values
+
+
+def _declarative(values: dict) -> dict:
+    """Same values with the exported declarative formulas attached."""
+    from services.cohesion_engine.formula_export import export_formulas
+
+    declarative = copy.deepcopy(values)
+    declarative["composite_formulas"] = export_formulas(
+        values["composite_coefficients"]
+    )
+    return declarative
+
+
+def _pre_split_perimeter_defense(pd_tier: str, vd_tier: str, values: dict) -> float:
+    """The pre-split expression, kept verbatim as the parity oracle.
+
+    Was: raw_perimeter_defense = _tv("perimeter_disruptor")
+                                 + c["perimeter_defense_versatile_defender"]
+                                   * _tv("versatile_defender")
+    """
+    tv = values["tier_values"]
+    c = values["composite_coefficients"]
+    return tv[pd_tier] + c["perimeter_defense_versatile_defender"] * tv[vd_tier]
+
+
+class TestPerimeterDefenseSplitParity:
+    """perimeter_defense = 0.6*POA + 0.4*OBD + 0.7*VD, and exactly the
+    pre-split 1.0*POA + 0.7*VD whenever off_ball_disruptor is key-absent."""
+
+    def test_both_rated_uses_the_split_coefficients(self):
+        values = _split_values()
+        skills = {
+            "point_of_attack_defender": "Elite",
+            "off_ball_disruptor": "Proficient",
+            "versatile_defender": "Capable",
+        }
+
+        raw = compute_raw_composites(skills, values)
+
+        # 0.6*8.0 + 0.4*4.0 + 0.7*1.0
+        assert raw["perimeter_defense"] == pytest.approx(7.1)
+
+    def test_off_ball_absent_scores_exactly_as_before_the_split(self):
+        values = _split_values()
+        skills = {
+            "point_of_attack_defender": "Elite",
+            "versatile_defender": "Capable",
+        }
+
+        raw = compute_raw_composites(skills, values)
+
+        assert raw["perimeter_defense"] == _pre_split_perimeter_defense(
+            "Elite", "Capable", values
+        )
+
+    def test_point_of_attack_none_still_counts_the_off_ball_term(self):
+        values = _split_values()
+        skills = {
+            "point_of_attack_defender": "None",
+            "off_ball_disruptor": "Elite",
+            "versatile_defender": "Capable",
+        }
+
+        raw = compute_raw_composites(skills, values)
+
+        # POA is present-at-None, so no fallback: 0.6*0.0 + 0.4*8.0 + 0.7*1.0
+        assert raw["perimeter_defense"] == pytest.approx(3.9)
+
+    @pytest.mark.parametrize("with_split_coefficients", [False, True])
+    def test_legacy_key_only_profile_is_byte_identical(self, with_split_coefficients):
+        """The parity bar: a pre-split profile carrying only the retired key
+        scores exactly what the pre-split code produced — under the old
+        coefficients AND under the EV v10 coefficients."""
+        values = (
+            _split_values()
+            if with_split_coefficients
+            else copy.deepcopy(_load_bootstrap_version().payload["values"])
+        )
+        skills = {"perimeter_disruptor": "Elite", "versatile_defender": "Capable"}
+
+        raw = compute_raw_composites(skills, values)
+
+        assert raw["perimeter_defense"] == _pre_split_perimeter_defense(
+            "Elite", "Capable", values
+        )
+
+    @pytest.mark.parametrize(
+        "skills",
+        [
+            {"perimeter_disruptor": "Elite", "versatile_defender": "Capable"},
+            {"point_of_attack_defender": "Elite", "versatile_defender": "Capable"},
+            {
+                "point_of_attack_defender": "Elite",
+                "off_ball_disruptor": "Proficient",
+                "versatile_defender": "Capable",
+            },
+            {"off_ball_disruptor": "Elite"},
+            {},
+        ],
+    )
+    def test_hardcoded_and_declarative_agree(self, skills):
+        values = _split_values()
+
+        hardcoded = compute_raw_composites(skills, values)
+        declarative = compute_raw_composites(skills, _declarative(values))
+
+        assert hardcoded["perimeter_defense"] == pytest.approx(
+            declarative["perimeter_defense"], abs=1e-9
+        )
+
+    def test_a_pre_split_evaluation_version_still_reads_the_new_key(self):
+        """EV v9's stored formulas still name perimeter_disruptor. A post-split
+        profile must score there too, or dev breaks between the push and the
+        v10 publish."""
+        values = copy.deepcopy(_load_bootstrap_version().payload["values"])
+        legacy_formulas = _declarative(values)
+
+        raw = compute_raw_composites(
+            {"point_of_attack_defender": "Elite", "versatile_defender": "Capable"},
+            {
+                **legacy_formulas,
+                "composite_formulas": {
+                    **legacy_formulas["composite_formulas"],
+                    "perimeter_defense": {
+                        "factors": [
+                            {"type": "skill", "key": "perimeter_disruptor", "coefficient": 1.0},
+                            {"type": "skill", "key": "versatile_defender", "coefficient": 0.7},
+                        ],
+                        "amplifiers": [],
+                        "depends_on": [],
+                    },
+                },
+            },
+        )
+
+        assert raw["perimeter_defense"] == _pre_split_perimeter_defense(
+            "Elite", "Capable", values
+        )
+
+    def test_theoretical_max_is_unchanged_by_the_split(self):
+        from services.cohesion_engine import weights
+
+        assert weights.THEORETICAL_MAX["perimeter_defense"] == 27.2
+        c = weights.COMPOSITE_COEFFICIENTS
+        atg = weights.TIER_VALUES["All-Time Great"]
+        assert (
+            c["perimeter_defense_poa"] * atg
+            + c["perimeter_defense_off_ball"] * atg
+            + c["perimeter_defense_versatile_defender"] * atg
+        ) == pytest.approx(27.2)

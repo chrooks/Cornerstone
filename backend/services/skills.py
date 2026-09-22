@@ -49,17 +49,19 @@ MODERATE_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
 # Skills where Claude runs informed (sees stats AND stat tier + confidence)
 LOW_CONFIDENCE_SKILLS: frozenset[str] = frozenset({
     "versatile_defender",
-    "perimeter_disruptor",
+    "point_of_attack_defender",
+    "off_ball_disruptor",
     "high_flyer",
 })
 
 # Skills a bulk "Trust Stats" must never resolve across many players at once.
 # Their tier drives an archetype label, and the stats engine is weakest exactly
 # there, so a human decides each one.
-# #152 swaps perimeter_disruptor for point_of_attack_defender + off_ball_disruptor; D19 labels read these tiers
+# #152 split perimeter_disruptor into point_of_attack_defender + off_ball_disruptor; D19 labels read these tiers
 NO_BULK_TRUST_STATS_SKILLS: frozenset[str] = frozenset({
     "versatile_defender",
-    "perimeter_disruptor",
+    "point_of_attack_defender",
+    "off_ball_disruptor",
 })
 
 # Composite entries whose `source` records a human review decision (issue #120).
@@ -102,7 +104,74 @@ SKILL_DEFINITIONS: dict[str, str] = {
     "mid_post_player":     "Scores effectively from the mid-post/elbow area using face-up moves and mid-range shooting.",
     "low_post_player":     "Scores effectively with back-to-basket moves in the low post.",
     "versatile_defender":  "Can guard multiple positional groups effectively when switched.",
-    "perimeter_disruptor": "Disrupts ball handlers through active hands, pressure, and contest at the point of attack.",
+    "point_of_attack_defender": "Contains the ball handler, fights over screens, and takes the toughest perimeter assignment when asked.",
+    "off_ball_disruptor":  "Makes plays away from his own man by jumping passing lanes, digging at drivers and recovering, which creates deflections, steals and charges.",
     "high_flyer":          "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, and transition finishes.",
     "steady_hand":      "Protects possessions with a low turnover rate relative to ball responsibility — secure handling, safe decisions, and strong hands under pressure.",
 }
+
+# Display names for every Skill. Mirrors SKILL_LABELS in frontend/lib/skills.ts —
+# keep the two in step. The archetype why-lines read this (never
+# claude_assessment._SKILL_DISPLAY_NAMES, which covers only the Claude-rated
+# Skills and pulls in the anthropic and supabase imports).
+SKILL_LABELS: dict[str, str] = {
+    "spot_up_shooter":          "Spot Up Shooter",
+    "off_dribble_shooter":      "Off-Dribble Shooter",
+    "offensive_rebounder":      "Offensive Rebounder",
+    "rebounder":                "Defensive Rebounding",
+    "rim_protector":            "Rim Protector",
+    "isolation_scorer":         "Isolation Scorer",
+    "steady_hand":              "Steady Hand",
+    "movement_shooter":         "Movement Shooter",
+    "cutter":                   "Cutter",
+    "transition_threat":        "Transition Threat",
+    "pnr_ball_handler":         "PnR Ball Handler",
+    "pnr_finisher":             "PnR Finisher",
+    "crafty_finisher":          "Below the Rim Finishing",
+    "driver":                   "Driver",
+    "vertical_spacer":          "Vertical Spacer",
+    "screen_setter":            "Screen Setter",
+    "passer":                   "Passer",
+    "mid_post_player":          "Mid-Post Player",
+    "low_post_player":          "Low-Post Player",
+    "versatile_defender":       "Versatile Defender",
+    "point_of_attack_defender": "Point of Attack Defender",
+    "off_ball_disruptor":       "Off-Ball Disruptor",
+    "high_flyer":               "Above the Rim Finishing",
+}
+
+
+# ---------------------------------------------------------------------------
+# Legacy key alias (#152)
+# ---------------------------------------------------------------------------
+
+# The one Skill the #152 split renamed. Old rows — a pre-split Snapshot Release,
+# a saved team, an Evaluation Version blob whose formulas still name the old key
+# — carry `perimeter_disruptor`; the code now reads `point_of_attack_defender`.
+# The alias runs both ways so either side can be the one that is current.
+_LEGACY_SKILL_ALIASES: tuple[tuple[str, str], ...] = (
+    ("perimeter_disruptor", "point_of_attack_defender"),
+)
+
+
+def with_legacy_skill_keys(skills: dict) -> dict:
+    """Return a copy of ``skills`` where each renamed Skill answers to both keys.
+
+    A present ``perimeter_disruptor`` fills an absent ``point_of_attack_defender``
+    and the reverse. A key already present is never overwritten, so a post-split
+    profile holding both keeps its own on-ball tier.
+
+    Key presence is what the engine reads (``present_keys`` in
+    ``composites.compute_raw_composites`` separates "rated None" from "never
+    rated"), so the alias copies the value as it is — an entry dict, a bare tier
+    string, or None for an unrated Skill.
+
+    # ponytail: delete after prod runs EV v10 and a post-split release
+    """
+    aliased = dict(skills or {})
+    for old, new in _LEGACY_SKILL_ALIASES:
+        if old in aliased and new not in aliased:
+            aliased[new] = aliased[old]
+        elif new in aliased and old not in aliased:
+            aliased[old] = aliased[new]
+    return aliased

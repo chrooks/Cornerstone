@@ -90,7 +90,7 @@ def test_archetype_guard_range():
     clusters = cluster_defense_gaps(coverage, gap_threshold=1.5)
     archetype, label = gap_cluster_archetype(clusters[0])
 
-    assert archetype == "perimeter_disruptor"
+    assert archetype == "point_of_attack_defender"
     assert "guard" in label.lower()
 
 
@@ -148,5 +148,5 @@ def test_two_clusters_get_different_archetypes():
     assert len(clusters) == 2
     arch1, _ = gap_cluster_archetype(clusters[0])
     arch2, _ = gap_cluster_archetype(clusters[1])
-    assert arch1 == "perimeter_disruptor"
+    assert arch1 == "point_of_attack_defender"
     assert arch2 == "rim_protector"

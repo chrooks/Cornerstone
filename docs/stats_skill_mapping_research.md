@@ -144,13 +144,15 @@ The `LeagueSeasonMatchups` endpoint is the key tool. Query by `DefPlayerID` to r
 
 ### 13. Point of Attack Defender
 
+> Written before the #152 split. The steals/deflections/charges half of this section is now the `off_ball_disruptor` Skill; the on-ball half reads `LeagueSeasonMatchups` (matchup difficulty, handler share) as `point_of_attack_defender`.
+
 **Current mapping (steals rate + deflections) is on the right track but should be expanded into a three-pronged composite.** The `LeagueHustleStatsPlayer` endpoint is essential here, providing `DEFLECTIONS`, `CONTESTED_SHOTS_3PT`, `LOOSE_BALLS_RECOVERED`, and `CHARGES_DRAWN`. Combine with STL% from advanced stats and DFG% from `LeagueDashPtDefend` with `DefenseCategory="3 Pointers"` and `"Overall"`.
 
 **What BBall Index recommends (their Perimeter Defense grade):** The three heaviest-weighted inputs are **steals/75 possessions**, **deflections/75 possessions**, and **3-point shot contest volume/rate**. Synergy defensive play-type data (PnR ball handler defense, isolation defense) receives small weight due to known classification errors. Luck-adjusted on/off data is incorporated but requires more complex computation.
 
 **Thresholds:** Elite: STL% > **2.0%** AND Deflections/G > **3.0** AND high Contested 3PT Shots/G, with negative DFG_PCT_PLUSMINUS across categories (Jrue Holiday, Alex Caruso, Derrick White, Dyson Daniels archetype). Capable: STL% **1.2–2.0%** or Deflections/G **1.5–3.0**. None: STL% < 1.2% and Deflections/G < 1.5.
 
-**Limitation:** Steals can reward gambling (the "Monta Ellis effect"). Deflections don't distinguish successful disruptions from risky reach-ins. The Ringer's survey rated public defensive metrics just **3.6 out of 10**. Screen navigation, communication, and recovery—critical perimeter disruptor skills—are invisible in all public data. **Confidence: LOW-MODERATE.** Supplement heavily with Claude assessment.
+**Limitation:** Steals can reward gambling (the "Monta Ellis effect"). Deflections don't distinguish successful disruptions from risky reach-ins. The Ringer's survey rated public defensive metrics just **3.6 out of 10**. Screen navigation, communication, and recovery—critical point-of-attack defense skills—are invisible in all public data. **Confidence: LOW-MODERATE.** Supplement heavily with Claude assessment.
 
 ### 14. Crafty Finisher
 
@@ -238,7 +240,8 @@ This table maps every skill to its primary and supplementary `nba_api` endpoints
 | Rim Protector | `LeagueDashPtDefend` + `LeagueDashPlayerStats` | `DefenseCategory='Less Than 6Ft'` / `MeasureType='Advanced'` (BLK%) | `LeagueHustleStatsPlayer` (CONTESTED_SHOTS_2PT) |
 | Rebounder | `LeagueDashPlayerStats` + `LeagueDashPtStats` | `MeasureType='Advanced'` (TRB%) / `PtMeasureType='Rebounding'` | `LeagueHustleStatsPlayer` (BOX_OUTS) |
 | Offensive Rebounder | `LeagueDashPlayerStats` + `LeagueDashPtStats` | `MeasureType='Advanced'` (ORB%) / `PtMeasureType='Rebounding'` | `SynergyPlayTypes` (`OffRebound`) |
-| perimeter disruptor | `LeagueHustleStatsPlayer` + `LeagueDashPtDefend` + `LeagueDashPlayerStats` | Deflections, Contested 3PT / `DefenseCategory='3 Pointers'` / STL% | — |
+| Point of Attack Defender | `LeagueSeasonMatchups` + `LeagueDashPtDefend` | `DefPlayerID` (matchup difficulty, handler share) / `DefenseCategory='3 Pointers'` | `LeagueHustleStatsPlayer` (Contested 3PT) |
+| Off-Ball Disruptor | `LeagueHustleStatsPlayer` + `LeagueDashPlayerStats` | Deflections, Charges Drawn, Loose Balls Recovered / STL% | — |
 | Crafty Finisher | `LeagueDashPtStats` + `ShotChartDetail` | `PtMeasureType='Drives'`+`'PaintTouch'` / ACTION_TYPE='Floating Jump shot' | `LeagueDashPlayerShotLocations` (Mid-Range) |
 | Mid Post Player | `SynergyPlayTypes` + `LeagueDashPtStats` + `LeagueDashPlayerShotLocations` | `PlayType='Postup'` / `PtMeasureType='ElbowTouch'` / Mid-Range zone | — |
 | Low Post Player | `SynergyPlayTypes` + `LeagueDashPtStats` + `LeagueDashPlayerShotLocations` | `PlayType='Postup'` / `PtMeasureType='PostTouch'` / Restricted Area | — |

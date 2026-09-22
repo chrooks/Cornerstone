@@ -22,6 +22,7 @@ import {
 import { getActiveEvaluationVersion } from "@/lib/api/evaluation-versions";
 import type { RuleSetSummary } from "@/lib/types";
 import type { EvaluationVersion } from "@/lib/types/evaluation-version";
+import { TOTAL_SKILLS } from "@/lib/skills";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -473,7 +474,7 @@ export default function AdminHubPage() {
             id="admin-hub-card-legends"
             href="/admin/legends"
             title="Legends"
-            description="Curate all-time greats and their 22-skill profiles."
+            description={`Curate all-time greats and their ${TOTAL_SKILLS}-skill profiles.`}
             glyph="L"
           />
         </div>

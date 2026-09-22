@@ -28,6 +28,7 @@ from flask import Blueprint, jsonify, request
 from services.cohesion_engine import evaluate_roster
 from services.cohesion_engine import weights as cohesion_weights
 from services.cohesion_engine.bell_curve import apply_rp_pd_boost, compute_bell_params, parse_height_inches
+from services.skills import with_legacy_skill_keys
 from services.cohesion_engine.cohesion import evaluate_lineup
 from services.cohesion_engine.engine import CohesionEngine
 from services.cohesion_engine.roster import SUBSCORE_ARCHETYPES
@@ -110,8 +111,8 @@ def _rp_pd_boost_details(
     for index, player in enumerate(original_lineup):
         if index == provider_index:
             continue
-        original_tier = player.get("skills", {}).get("perimeter_disruptor", "None")
-        effective_tier = boosted_lineup[index].get("skills", {}).get("perimeter_disruptor", "None")
+        original_tier = with_legacy_skill_keys(player.get("skills", {})).get("point_of_attack_defender", "None")
+        effective_tier = boosted_lineup[index].get("skills", {}).get("point_of_attack_defender", "None")
         original_value = cohesion_weights.AMPLITUDE_MAP.get(original_tier, 0.0)
         effective_value = cohesion_weights.AMPLITUDE_MAP.get(effective_tier, 0.0)
         if effective_value <= original_value:

@@ -43,6 +43,7 @@ from services.rotation_config import MAX_ROTATION_SLOTS
 from services.cohesion_engine import weights as weights_module
 from services.players_service import CURRENT_SEASON
 from services.snapshot_versions import distribution_cache
+from services.skills import with_legacy_skill_keys
 from services.snapshot_versions.distribution_cache import ensure_distributions
 from services.supabase_client import get_supabase
 
@@ -222,8 +223,8 @@ def _rp_pd_boost_details(
         if index == provider_index:
             continue
 
-        original_tier = player.get("skills", {}).get("perimeter_disruptor", "None")
-        effective_tier = boosted_lineup[index].get("skills", {}).get("perimeter_disruptor", "None")
+        original_tier = with_legacy_skill_keys(player.get("skills", {})).get("point_of_attack_defender", "None")
+        effective_tier = boosted_lineup[index].get("skills", {}).get("point_of_attack_defender", "None")
         original_value = weights_module.AMPLITUDE_MAP.get(original_tier, 0.0)
         effective_value = weights_module.AMPLITUDE_MAP.get(effective_tier, 0.0)
         if effective_value <= original_value:
@@ -897,8 +898,12 @@ def distribution_preview() -> tuple:
         result = run_query(source_query)
         for row in result.data:
             # Raw profile passed as-is: compute_raw_from_formulas default-fills
-            # internally and needs raw key-absence for fallback routing.
-            skills = _extract_skills(row["profile"])
+            # internally and needs raw key-absence for fallback routing. The
+            # #152 alias runs first — this is the one composite path that does
+            # not go through compute_raw_composites, and a draft row still
+            # holding the retired key would read the on-ball input as 0.
+            # ponytail: delete the wrap after the split migration has run
+            skills = with_legacy_skill_keys(_extract_skills(row["profile"]))
             raw = compute_raw_from_formulas(skills, formulas, tier_values, order=formula_order)
             raw_values.append(raw.get(composite_key, 0.0))
 

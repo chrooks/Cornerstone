@@ -111,7 +111,7 @@ yarn install
 **Integration**: `backend/services/claude_assessment.py`
 **Authentication**: `ANTHROPIC_API_KEY` environment variable
 **Usage**:
-- `rate_player(player_name, stats_blob)` → evaluates player on 21 skills
+- `rate_player(player_name, stats_blob)` → evaluates player on 23 skills
 - `suggest_skills_for_legend(legend_name, legend_era)` → pre-fills legend skill profile
 
 **Rate Limits**: Anthropic enforces request rate limits based on tier; see https://docs.anthropic.com/en/docs/resources/rate-limits

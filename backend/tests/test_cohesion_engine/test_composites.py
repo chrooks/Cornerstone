@@ -51,7 +51,7 @@ def sample_skills() -> dict[str, str]:
         "low_post_player": "Capable",
         "mid_post_player": "Elite",
         "rim_protector": "Elite",
-        "perimeter_disruptor": "Proficient",
+        "point_of_attack_defender": "Proficient",
         "versatile_defender": "Capable",
         "screen_setter": "Capable",
         "pnr_finisher": "Proficient",

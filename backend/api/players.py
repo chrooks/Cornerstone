@@ -1018,6 +1018,9 @@ def player_profile(player_id: str):
         # Fetch composite skill profile from released_players (active Snapshot Release).
         # After M3: draft_skill_profiles is admin-only; Lab reads use released_players.
         # flag_summary is always {0, 0} on Lab path — flags are admin/draft-only.
+        # #152: released_repo serves a pre-split release's perimeter_disruptor tier
+        # under point_of_attack_defender and drops the retired key, so this route
+        # needs no alias of its own (released_repo.lab_skills).
         try:
             active_release_id = get_active_release_id()
         except ActiveReleaseMissingError:

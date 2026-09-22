@@ -119,7 +119,7 @@ const FALLBACK_SKILLS: Array<{ label: string; tier: SkillTier }> = [
   { label: "Driver", tier: "All-Time Great" },
   { label: "Passer", tier: "Proficient" },
   { label: "Versatile Defender", tier: "Capable" },
-  { label: "Perimeter Disruptor", tier: "Elite" },
+  { label: "Point of Attack Defender", tier: "Elite" },
   { label: "Defensive Rebounding", tier: "Capable" },
 ];
 

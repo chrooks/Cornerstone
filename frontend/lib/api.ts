@@ -309,7 +309,7 @@ export async function getLeagueAverages(): Promise<ApiResponse<LeagueAverage[]>>
 // Skill Thresholds (Calibration)
 // ---------------------------------------------------------------------------
 
-/** Get all 19 skill threshold rules. */
+/** Get every Skill's threshold rule. */
 export async function getAllThresholds(): Promise<ApiResponse<ThresholdRow[]>> {
   return apiFetch<ThresholdRow[]>("/api/skills/thresholds");
 }
@@ -1304,7 +1304,7 @@ export type SkillEvaluationRunRequest = SkillEvaluationRequest & {
  *
  * Both axes of `opts` are optional:
  *  - player_ids omitted/empty → all qualifying players
- *  - skill_filter omitted/empty → all 21 Skills
+ *  - skill_filter omitted/empty → every Skill
  *
  * Returns the run_id on success; on a 409 the backend surfaces
  * `pending_commit_run_exists` in the `error` field of the envelope.

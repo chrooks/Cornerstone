@@ -64,7 +64,7 @@ def test_compute_bell_params_for_elite_versatile_defender():
 
 
 def test_compute_bell_params_applies_pd_and_rp_peak_shifts():
-    pd_only = compute_bell_params({"perimeter_disruptor": "Elite"}, 76, VALUES)
+    pd_only = compute_bell_params({"point_of_attack_defender": "Elite"}, 76, VALUES)
     rp_only = compute_bell_params({"rim_protector": "Elite"}, 82, VALUES)
 
     assert pd_only["peak_center"] == 75
@@ -87,24 +87,24 @@ def test_defensive_value_at_height_flat_taper_and_outside():
 def test_apply_rp_pd_boost_returns_copied_teammates_without_mutating_originals():
     lineup = [
         player("Anchor", "7-0", {"rim_protector": "Elite"}),
-        player("Guard", "6-3", {"perimeter_disruptor": "Proficient"}),
-        player("Wing", "6-7", {"perimeter_disruptor": "None"}),
+        player("Guard", "6-3", {"point_of_attack_defender": "Proficient"}),
+        player("Wing", "6-7", {"point_of_attack_defender": "None"}),
     ]
 
     boosted = apply_rp_pd_boost(lineup, VALUES)
 
-    assert lineup[1]["skills"]["perimeter_disruptor"] == "Proficient"
-    assert lineup[2]["skills"]["perimeter_disruptor"] == "None"
+    assert lineup[1]["skills"]["point_of_attack_defender"] == "Proficient"
+    assert lineup[2]["skills"]["point_of_attack_defender"] == "None"
     assert boosted[0] is lineup[0]
     assert boosted[1] is not lineup[1]
-    assert boosted[1]["skills"]["perimeter_disruptor"] == "Elite"
-    assert boosted[2]["skills"]["perimeter_disruptor"] == "Capable"
+    assert boosted[1]["skills"]["point_of_attack_defender"] == "Elite"
+    assert boosted[2]["skills"]["point_of_attack_defender"] == "Capable"
 
 
 def test_apply_rp_pd_boost_noops_without_elite_rim_protector():
     lineup = [
         player("Big", "6-11", {"rim_protector": "Proficient"}),
-        player("Guard", "6-3", {"perimeter_disruptor": "Capable"}),
+        player("Guard", "6-3", {"point_of_attack_defender": "Capable"}),
     ]
 
     assert apply_rp_pd_boost(lineup, VALUES) is lineup
@@ -112,7 +112,7 @@ def test_apply_rp_pd_boost_noops_without_elite_rim_protector():
 
 def test_compute_lineup_defense_stacks_values_and_reports_gaps():
     lineup = [
-        player("Guard", "6-2", {"perimeter_disruptor": "Elite"}),
+        player("Guard", "6-2", {"point_of_attack_defender": "Elite"}),
         player("Wing", "6-7", {"versatile_defender": "Elite"}),
         player("Big", "7-0", {"rim_protector": "Elite"}),
     ]
@@ -149,10 +149,51 @@ def test_compute_bell_params_guards_zero_flat_top_divisor():
     broken_values["bell"]["flat_top_divisor"] = 0
 
     params = compute_bell_params(
-        {"versatile_defender": "Elite", "perimeter_disruptor": "None", "rim_protector": "None"},
+        {"versatile_defender": "Elite", "point_of_attack_defender": "None", "rim_protector": "None"},
         80,
         broken_values,
     )
 
     assert params["flat_top_down"] == 0
     assert params["flat_top_up"] == 0
+
+
+# ---------------------------------------------------------------------------
+# #152 — the bell curve reads the on-ball key, and a pre-split profile still
+# carries its tier there through the legacy alias shim.
+# ---------------------------------------------------------------------------
+
+
+def test_compute_bell_params_treats_the_legacy_key_as_the_on_ball_key():
+    legacy = compute_bell_params({"perimeter_disruptor": "Elite"}, 76, VALUES)
+    split = compute_bell_params({"point_of_attack_defender": "Elite"}, 76, VALUES)
+
+    assert legacy == split
+    assert split["peak_center"] == 75
+
+
+def test_apply_rp_pd_boost_boosts_a_legacy_key_profile():
+    lineup = [
+        player("Anchor", "7-0", {"rim_protector": "Elite"}),
+        player("Guard", "6-3", {"perimeter_disruptor": "Proficient"}),
+    ]
+
+    boosted = apply_rp_pd_boost(lineup, VALUES)
+
+    assert lineup[1]["skills"] == {"perimeter_disruptor": "Proficient"}
+    assert boosted[1]["skills"]["point_of_attack_defender"] == "Elite"
+    # The retired key mirrors the boost so a pre-split Evaluation Version's
+    # formulas, which still name it, see the boosted tier.
+    assert boosted[1]["skills"]["perimeter_disruptor"] == "Elite"
+
+
+def test_apply_rp_pd_boost_mirrors_the_boost_onto_the_retired_key():
+    lineup = [
+        player("Anchor", "7-0", {"rim_protector": "Elite"}),
+        player("Guard", "6-3", {"point_of_attack_defender": "Proficient"}),
+    ]
+
+    boosted = apply_rp_pd_boost(lineup, VALUES)
+
+    assert boosted[1]["skills"]["point_of_attack_defender"] == "Elite"
+    assert boosted[1]["skills"]["perimeter_disruptor"] == "Elite"

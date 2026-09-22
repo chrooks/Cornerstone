@@ -57,13 +57,13 @@ Frontend (Next.js) ──HTTP + JWT──▶ Backend (Flask) ──SQL──▶ 
 
 **Layer 1 — Skill Pipeline** (admin tooling at `/admin/*`)
 - Stats fetched from NBA.com via `nba_api` → assembled by `stats_assembler.py` → stored in `player_stats`
-- `skill_engine/` evaluates each of 21 skills against JSONB threshold rules → `skill_profiles` (source: `"stats"`)
-- `claude_assessment.py` asks Claude API for the same 21 ratings → `skill_profiles` (source: `"claude"`)
+- `skill_engine/` evaluates each of 23 skills against JSONB threshold rules → `skill_profiles` (source: `"stats"`)
+- `claude_assessment.py` asks Claude API for the same 23 ratings → `skill_profiles` (source: `"claude"`)
 - `compositing.py` merges both: agreements auto-accepted, disagreements create `skill_flags` for manual review
 - Frontend tools: `/admin/calibration` (stat->skill threshold editor), `/admin/pipeline` (stat fetch trigger), `/admin/review` (flag resolver)
 
 **Layer 2 — Legends Builder** (`/admin/legends`)
-- Manual editor for all-time greats rated on the same 21-skill taxonomy
+- Manual editor for all-time greats rated on the same 23-skill taxonomy
 - `POST /api/legends/<id>/claude-suggestion` pre-populates ratings; admin accepts or overrides
 
 **Layer 3 — Lab Lifecycle** (`/lab/<ruleset>/legends` → `/lab/<ruleset>/build` → `/lab/<ruleset>/eval`)
@@ -182,7 +182,7 @@ frontend/
 - **Skill thresholds are JSONB, not SQL** — threshold updates always go through the calibration API (`PUT /api/skills/thresholds/<skill_name>`), never as SQL migrations. The calibration UI edits these live.
 - **Volume gates use per-game divisors** — `~70 games` for a full season. Never use raw per-season counts in threshold conditions.
 - **`apply_pre_adjustments` uses `copy.deepcopy`** — load-bearing; removing it causes stat mutations to bleed across multiple adjustments.
-- **21-skill taxonomy is immutable** — defined in `backend/services/skills.py` and `frontend/lib/skills.ts`. Adding a skill requires a DB migration.
+- **23-skill taxonomy is immutable** — defined in `backend/services/skills.py` and `frontend/lib/skills.ts`. Adding a skill requires a DB migration.
 - **Admin write endpoints require `@require_admin`** — decorator in `api/auth.py` verifies Supabase JWT and checks `user_roles` table. Grant admin via Supabase dashboard (`user_roles` table, `role = 'admin'`).
 - **`NEXT_PUBLIC_CALIBRATION_API_KEY`** — required in frontend `.env.local` for calibration write endpoints.
 - **Evaluation versions are immutable snapshots** — cohesion weights + composites get published as a version via `evaluation_versions/`. Saved teams reference a specific version. Active version loaded at startup (`_warm_cohesion_distributions`).

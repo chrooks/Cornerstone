@@ -291,7 +291,7 @@ Backend @require_admin decorator verifies JWT + admin role
 |------|-------|---------|
 | `lib/api.ts` | ~200 | All backend fetch calls |
 | `lib/types.ts` | ~350 | All TypeScript interfaces |
-| `lib/skills.ts` | ~50 | 21-skill taxonomy constants |
+| `lib/skills.ts` | ~50 | 23-skill taxonomy constants |
 | `lib/cohesionHelpers.ts` | ~100 | Cohesion score formatting + display utilities |
 | `app/admin/calibration/page.tsx` | ~400 | Complex threshold editor UI |
 | `app/admin/review/[player_id]/page.tsx` | ~300 | Flag resolver with manual overrides |

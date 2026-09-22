@@ -27,7 +27,7 @@ What you'll find:
 - Layer 3 (Roster Builder): roster scoring + synergies
 - Data flow diagram for skill evaluation
 - External service dependencies
-- Key constraints (21-skill taxonomy, per-game volume gates, JSONB thresholds)
+- Key constraints (23-skill taxonomy, per-game volume gates, JSONB thresholds)
 
 **Use this when**: Understanding the overall system, explaining to stakeholders, planning integrations
 
@@ -153,7 +153,7 @@ backend/api/calibration.py (576)        — Threshold tuning
 frontend/app/                           — Next.js 14 App Router pages
 frontend/lib/api.ts                     — Backend fetch client
 frontend/lib/types.ts                   — TypeScript interfaces
-frontend/lib/skills.ts                  — 21-skill constants
+frontend/lib/skills.ts                  — 23-skill constants
 frontend/components/                    — shadcn/ui + custom UI
 frontend/app/admin/                     — Admin tools (calibration, review, pipeline)
 ```

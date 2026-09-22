@@ -327,7 +327,7 @@ export function LineupBellCurveChart({ lineupSlots, weights, boostedBellCurves, 
       {boostProvider && (
         <div id="cohesion-cal-lineup-rp-pd-boosts" className="rounded border border-blue-400/40 bg-blue-100/60 px-2 py-1.5 space-y-1">
           <p id="cohesion-cal-lineup-rp-pd-boosts-title" className="text-[9px] font-semibold text-black">
-            {boostProvider.provider_name} {boostProvider.provider_rim_protector_tier} Rim Protector boosts teammate PD by +{boostProvider.boost.toFixed(1)}
+            {boostProvider.provider_name} {boostProvider.provider_rim_protector_tier} Rim Protector boosts teammate POA Def by +{boostProvider.boost.toFixed(1)}
           </p>
           <div id="cohesion-cal-lineup-rp-pd-boosts-list" className="flex flex-wrap gap-1.5">
             {rpPdBoosts.map((boost) => (
@@ -335,9 +335,9 @@ export function LineupBellCurveChart({ lineupSlots, weights, boostedBellCurves, 
                 key={`${boost.player_index}-${boost.player_name}`}
                 id={`cohesion-cal-lineup-rp-pd-boost-${boost.player_index}`}
                 className="rounded border border-blue-300 bg-white/70 px-1.5 py-0.5 text-[8px] text-black"
-                title={`${boost.player_name}: Perimeter Disruptor ${boost.original_pd_tier} (${boost.original_pd_value.toFixed(1)}) -> ${boost.effective_pd_tier} (${boost.effective_pd_value.toFixed(1)})`}
+                title={`${boost.player_name}: Point of Attack Defender ${boost.original_pd_tier} (${boost.original_pd_value.toFixed(1)}) -> ${boost.effective_pd_tier} (${boost.effective_pd_value.toFixed(1)})`}
               >
-                {boost.player_name}: PD {boost.original_pd_tier} {"->"} {boost.effective_pd_tier}
+                {boost.player_name}: POA Def {boost.original_pd_tier} {"->"} {boost.effective_pd_tier}
               </span>
             ))}
           </div>

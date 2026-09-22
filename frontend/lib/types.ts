@@ -459,7 +459,7 @@ export interface LegendSummary {
   team: string | null;
   position: string | null;
   nba_api_id?: number | null;
-  /** Number of the 20 skills that have been deliberately rated (even "None" counts) */
+  /** Number of Skills that have been deliberately rated (even "None" counts) */
   completion: number;
   completion_pct: number;
 }
@@ -467,7 +467,7 @@ export interface LegendSummary {
 /** Tier value for a legend skill — null means unrated (not yet evaluated) */
 export type LegendTier = "None" | "Capable" | "Proficient" | "Elite" | "All-Time Great" | null;
 
-/** Profile map for a legend — all 20 skills, each may be null (unrated) or a tier value */
+/** Profile map for a legend — every Skill, each may be null (unrated) or a tier value */
 export type LegendProfile = Record<string, LegendTier>;
 
 /** A single legend with full skill profile (used in editor view) */
@@ -1123,7 +1123,7 @@ export interface PipelineRun {
  * Request body for POST /api/pipeline/skill-evaluation.
  * Both axes are optional:
  *  - player_ids omitted/empty → all qualifying players
- *  - skill_filter omitted/empty → all 21 Skills
+ *  - skill_filter omitted/empty → every Skill
  */
 export interface SkillEvaluationRequest {
   player_ids?: string[];

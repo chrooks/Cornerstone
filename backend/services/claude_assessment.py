@@ -62,7 +62,8 @@ _SKILL_DISPLAY_NAMES: dict[str, str] = {
     "pnr_ball_handler":   "PnR Ball Handler",
     "pnr_finisher":       "PnR Finisher",
     "versatile_defender": "Versatile Defender",
-    "perimeter_disruptor": "Perimeter Disruptor",
+    "point_of_attack_defender": "Point of Attack Defender",
+    "off_ball_disruptor": "Off-Ball Disruptor",
     "high_flyer":         "Above the Rim Finishing",
 }
 
@@ -83,9 +84,13 @@ _INFORMED_GUIDANCE: dict[str, str] = {
         "lateral movement, and known defensive reputation should override the stats "
         "if they conflict; versatility includes defending bigs in the post."
     ),
-    "perimeter_disruptor": (
-        "Screen navigation, recovery speed, and overall defensive IQ are invisible in "
-        "these stats — weight your knowledge accordingly."
+    "point_of_attack_defender": (
+        "Rate what he can do on the ball if asked, not who his coach assigns; "
+        "matchup difficulty and handler share show deployment, not quality."
+    ),
+    "off_ball_disruptor": (
+        "Steals and deflections show activity; rate disruption that does not cost "
+        "the defense."
     ),
     "high_flyer": (
         "Athleticism is poorly captured by statistics — weight your knowledge of this "
@@ -96,7 +101,7 @@ _INFORMED_GUIDANCE: dict[str, str] = {
 # API configuration
 _DEFAULT_MODEL = "claude-sonnet-5"
 # Sonnet 5's tokenizer spends ~30% more tokens for the same text — 4000 keeps a
-# full 22-skill JSON response (tier + justification each) from truncating.
+# full 23-skill JSON response (tier + justification each) from truncating.
 _MAX_TOKENS = 4000
 
 # Rate limiter — enforces ≥200ms between Claude API request starts across all threads.

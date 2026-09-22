@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import type { SkillTier } from "@/lib/types";
 import { TIER_BADGE_CLASSES } from "@/lib/tiers";
+import { TOTAL_SKILLS } from "@/lib/skills";
 
 export const metadata: Metadata = {
   title: "FAQ · Cornerstone",
@@ -56,8 +57,8 @@ const MISC_QA: ReadonlyArray<{ q: string; a: React.ReactNode }> = [
     a: "Active Players use their real NBA contract for the current season. Legends are assigned a Cornerstone-equivalent figure for the $54M anchor slot, or a tier-based estimate when slotted into a supporting role. The cap forces tradeoffs: you cannot stack four max Players on one roster and call it a hypothetical.",
   },
   {
-    q: "Why 22 Skills and not 50?",
-    a: "22 is close to the smallest number that still describes a modern Player honestly. Fewer and the model collapses different roles into the same bucket. More and the Skills start overlapping, which makes evaluation noisier rather than sharper. The taxonomy is treated as immutable: adding or removing a Skill requires a database migration and a new Evaluation Version.",
+    q: `Why ${TOTAL_SKILLS} Skills and not 50?`,
+    a: `${TOTAL_SKILLS} is close to the smallest number that still describes a modern Player honestly. Fewer and the model collapses different roles into the same bucket. More and the Skills start overlapping, which makes evaluation noisier rather than sharper. The taxonomy is treated as immutable: adding or removing a Skill requires a database migration and a new Evaluation Version.`,
   },
   {
     q: "Can a Player be All-Time Great in a Skill that did not exist in their era?",
@@ -273,7 +274,7 @@ export default function FAQPage() {
               </h2>
               <Prose>
                 <p>
-                  A Skill is one atomic basketball ability. Cornerstone maintains a fixed taxonomy of 22 Skills. Every Player gets a rating in every Skill, and that rating lives on one of five Skill Tiers:
+                  A Skill is one atomic basketball ability. Cornerstone maintains a fixed taxonomy of {TOTAL_SKILLS} Skills. Every Player gets a rating in every Skill, and that rating lives on one of five Skill Tiers:
                 </p>
               </Prose>
 
@@ -290,7 +291,7 @@ export default function FAQPage() {
 
               <Prose>
                 <p className="mt-6">
-                  Skills cover the obvious categories (Isolation Scorer, Rim Protector, Defensive Rebounding) and the less obvious ones a single box-score column cannot capture, like PnR Ball Handler, Off-Ball Mover, and Versatile Defender. Together the 21 Skills form a Player&apos;s Skill Profile.
+                  Skills cover the obvious categories (Isolation Scorer, Rim Protector, Defensive Rebounding) and the less obvious ones a single box-score column cannot capture, like PnR Ball Handler, Movement Shooter, and Versatile Defender. Together the {TOTAL_SKILLS} Skills form a Player&apos;s Skill Profile.
                 </p>
               </Prose>
             </section>
@@ -317,7 +318,7 @@ export default function FAQPage() {
                     <strong>Statistical thresholds.</strong> A rules engine reads the Player&apos;s recent stats and grades each Skill against tunable volume gates and tier criteria. Per-game divisors, multi-season blending, and stabilization smoothing are all part of the math.
                   </li>
                   <li>
-                    <strong>Claude assessment.</strong> The same Player is sent to Claude with their context (stats, role, history). Claude returns its own Skill Tiers for the full 22-Skill taxonomy.
+                    <strong>Claude assessment.</strong> The same Player is sent to Claude with their context (stats, role, history). Claude returns its own Skill Tiers for the full {TOTAL_SKILLS}-Skill taxonomy.
                   </li>
                 </ol>
                 <p>
@@ -367,7 +368,7 @@ export default function FAQPage() {
               </h2>
               <Prose>
                 <p>
-                  A Lineup Subscore measures one component of how a five-Player Lineup is likely to perform. Cornerstone tracks subscores for offensive concepts like spacing and rim pressure, defensive concepts like perimeter disruption and rim protection, and transition concepts like rebounding and pace.
+                  A Lineup Subscore measures one component of how a five-Player Lineup is likely to perform. Cornerstone tracks subscores for offensive concepts like spacing and rim pressure, defensive concepts like perimeter defense and rim protection, and transition concepts like rebounding and pace.
                 </p>
                 <p>
                   Each subscore is computed from the Lineup&apos;s combined Impact Traits, with weights tuned by Evaluation Version. Subscores are the unit at which a result becomes interpretable: they are what feeds the GM Note and the visual score breakdown after evaluation.

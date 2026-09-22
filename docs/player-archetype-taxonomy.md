@@ -484,7 +484,8 @@ Three different things share the word "archetype". Keep them apart in code, copy
   new decision.
 - **Naming collisions to avoid:** `archetype_labels`, `archetype_details`, `archetype_diversity`,
   `ARCHETYPE_LABELS` (`weights.py`), `OPPORTUNITY_ARCHETYPES` (`notes.py`), `_ARCHETYPE_BANDS`
-  (`bell_curve.py`; it also names `perimeter_disruptor`, which #152 retires). The Player Archetype code key
+  (`bell_curve.py`; its guard band now names `point_of_attack_defender`, the on-ball half of the #152
+  split). The Player Archetype code key
   differs from all of these: the API field is `player_archetype`, role keys carry an `off_` or `def_` prefix
   (`def_anchor`), and pair keys a `pair_` prefix (`pair_3d_wing`).
 - **"Anchor" has four meanings already.** The Lexicon lists Anchor as an Impact Trait example and `anchor` as a

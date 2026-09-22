@@ -579,8 +579,9 @@ class TestSkillSetSizes:
     def test_moderate_confidence_exactly_12(self):
         assert len(MODERATE_CONFIDENCE_SKILLS) == 12
 
-    def test_low_confidence_exactly_3(self):
-        assert len(LOW_CONFIDENCE_SKILLS) == 3
+    def test_low_confidence_exactly_4(self):
+        # #152 split perimeter_disruptor into point_of_attack_defender + off_ball_disruptor
+        assert len(LOW_CONFIDENCE_SKILLS) == 4
 
     def test_steady_hand_in_taxonomy_and_legend_prompt(self):
         """steady_hand is a high-confidence skill and reaches the legends
@@ -630,9 +631,13 @@ class TestPromptConstruction:
                 "tier": "Capable", "stat_confidence": "low",
                 "driving_stats": {"matchup_defense.cross_group_fg_diff": 0.02},
             },
-            "perimeter_disruptor": {
+            "point_of_attack_defender": {
                 "tier": "None", "stat_confidence": "low",
-                "driving_stats": {"hustle.stl_pct": 0.015},
+                "driving_stats": {"matchup_defense.matchup_difficulty": 0.61},
+            },
+            "off_ball_disruptor": {
+                "tier": "None", "stat_confidence": "low",
+                "driving_stats": {"advanced.stl_pct": 0.015},
             },
             "high_flyer": {
                 "tier": "Capable", "stat_confidence": "low",

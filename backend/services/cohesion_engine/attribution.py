@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.skills import with_legacy_skill_keys
+
 from .composites import tier_value
 from .types import PlayerComposites
 
@@ -30,7 +32,7 @@ COMPOSITE_DRIVING_SKILLS: dict[str, list[str]] = {
     "shot_creation": ["isolation_scorer", "pnr_ball_handler", "off_dribble_shooter", "passer", "driver"],
     "ball_security": ["steady_hand", "passer", "pnr_ball_handler", "driver"],
     "transition": ["transition_threat", "high_flyer", "driver", "spot_up_shooter", "off_dribble_shooter", "passer"],
-    "perimeter_defense": ["perimeter_disruptor", "versatile_defender"],
+    "perimeter_defense": ["point_of_attack_defender", "off_ball_disruptor", "versatile_defender"],
     "interior_defense": ["rim_protector", "versatile_defender", "rebounder"],
     "defensive_rebounding": ["rebounder"],
     "offensive_rebounding": ["offensive_rebounder"],
@@ -49,7 +51,10 @@ def _driving_skills(player: dict[str, Any], composite: str, values: dict[str, An
     """The player's top contributing skills among the composite's formula
     inputs, ordered by input size (formula order breaks ties). Zero-input
     skills never appear."""
-    skills = player.get("skills", {})
+    # /api/builder/evaluate takes Skills from the client, so a stale tab can
+    # still post the retired #152 key. Labels only — the score paths shim
+    # for themselves. # ponytail: delete after prod runs a post-split release
+    skills = with_legacy_skill_keys(player.get("skills", {}))
     tv = values["tier_values"]
     candidates = COMPOSITE_DRIVING_SKILLS.get(composite, [])
     scored = [
