@@ -570,13 +570,23 @@ export async function getSkillBreakdown(
   return apiFetch(`/api/review/${playerId}/skill-breakdown?${params}`);
 }
 
-/** Resolve all unresolved flags for a player (trust_stats or trust_claude only). */
+/**
+ * Resolve all unresolved flags for a player (trust_stats or trust_claude only).
+ * Under trust_claude the server leaves flags with no Claude tier open and
+ * lists them in `skipped` (#154).
+ */
 export async function bulkResolveFlags(
   playerId: string,
   resolution: "trust_stats" | "trust_claude",
   notes?: string,
   season?: string
-): Promise<ApiResponse<{ resolved_count: number; all_flags_resolved: boolean }>> {
+): Promise<
+  ApiResponse<{
+    resolved_count: number;
+    all_flags_resolved: boolean;
+    skipped: { skill_name: string; player_id?: string; reason: string }[];
+  }>
+> {
   return apiFetch("/api/review/bulk-resolve", {
     method: "POST",
     body: JSON.stringify({ player_id: playerId, resolution, notes, season }),

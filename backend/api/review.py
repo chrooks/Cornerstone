@@ -21,6 +21,7 @@ from services.supabase_client import get_supabase, in_chunks, run_query
 from services.players_service import CURRENT_SEASON
 from services.skill_engine.cache import get_thresholds, get_league_averages
 from services.skill_engine.evaluator import collect_condition_results
+from services.skills import ALL_SKILLS, HIGH_CONFIDENCE_SKILLS
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,25 @@ def _validate_uuid(val: str) -> bool:
         return True
     except (ValueError, AttributeError):
         return False
+
+
+def _claude_tier(skill_name: str, flag: dict, profile_data: dict) -> str | None:
+    """Return Claude's tier for a flagged Skill, or None when Claude has none.
+
+    A flag's `claude_rating` is NOT NULL: the commit RPC writes
+    `COALESCE(claude_tier, 'None')`, so a HIGH Skill (Claude is never asked) or
+    a failed Claude call stores the string 'None'. Trusting that string would
+    write a false "reviewed None" over a real stats tier (#154). So the answer
+    comes from the Skill's confidence bucket and the composite entry's
+    `claude_tier`, not from the flag's string alone. A missing or malformed
+    entry fails closed (None): the flag's 'None' could still be the placeholder.
+    """
+    if skill_name in HIGH_CONFIDENCE_SKILLS:
+        return None
+    entry = profile_data.get(skill_name)
+    if not isinstance(entry, dict) or entry.get("claude_tier") is None:
+        return None
+    return flag.get("claude_rating")
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +234,7 @@ def player_flags(player_id: str):
         "player":    { id, name, team, position, age, games_played, minutes_per_game, height, weight },
         "flags":     [ { id, skill_name, stat_rating, claude_rating, flag_reason,
                          stat_values, claude_justification, resolution, resolved_value,
-                         resolved_at, notes } ],
+                         resolved_at, notes, has_claude_tier } ],
         "profiles":  { "stats": {skill: tier}, "claude": {skill: tier|null},
                        "composite": {skill: composite_result_dict} }
       }
@@ -270,6 +290,12 @@ def player_flags(player_id: str):
                 .execute()
             ))
             flags = flag_rows.data or []
+            # The page's stats-only count uses the same rule as the bulk skip (#154).
+            composite = profiles_by_source.get("composite") or {}
+            flags = [
+                {**f, "has_claude_tier": _claude_tier(f["skill_name"], f, composite) is not None}
+                for f in flags
+            ]
 
         # Normalize stats/claude profiles to {skill: tier_string} format.
         # The stored profile may have evolved to store full dicts per skill
@@ -338,6 +364,8 @@ def resolve_flag(player_id: str):
 
     Response data:
       { "flag_id": str, "resolved_tier": str, "all_flags_resolved": bool }
+
+    409 when resolution=trust_claude and the Skill has no Claude tier (#154).
     """
     if not _validate_uuid(player_id):
         return _err("Invalid player_id — must be a UUID")
@@ -404,7 +432,13 @@ def resolve_flag(player_id: str):
         if resolution == "trust_stats":
             resolved_tier = flag["stat_rating"]
         elif resolution == "trust_claude":
-            resolved_tier = flag["claude_rating"]
+            resolved_tier = _claude_tier(skill_name, flag, profile_data)
+            if resolved_tier is None:
+                # #154: the flag's 'None' is a placeholder, not Claude's tier.
+                return _err(
+                    f"No Claude tier for '{skill_name}' — use Trust Stats or Override",
+                    status=409,
+                )
         else:
             resolved_tier = resolved_value  # manual_override
 
@@ -478,6 +512,11 @@ def bulk_resolve():
     Supports "trust_stats" and "trust_claude" resolutions. Manual override
     is not supported in bulk mode since each skill would need its own value.
 
+    Under "trust_claude", a flag whose Skill has no Claude tier (a HIGH Skill,
+    or a failed Claude call — see _claude_tier) is skipped: its flag stays
+    open, its composite entry is untouched, and it is listed in `skipped`
+    (#154). Trusting the stored 'None' would erase a real stats tier.
+
     Request body (JSON):
       {
         "player_id":  str,                           // required
@@ -487,7 +526,8 @@ def bulk_resolve():
       }
 
     Response data:
-      { "resolved_count": int, "all_flags_resolved": bool }
+      { "resolved_count": int, "all_flags_resolved": bool,
+        "skipped": [ { "player_id": str, "skill_name": str, "reason": "no_claude_tier" } ] }
     """
     body       = request.get_json(silent=True) or {}
     player_id  = body.get("player_id", "").strip()
@@ -536,23 +576,30 @@ def bulk_resolve():
         flags = flag_rows.data or []
 
         if not flags:
-            return _ok({"resolved_count": 0, "all_flags_resolved": True})
+            return _ok({"resolved_count": 0, "all_flags_resolved": True, "skipped": []})
 
         resolved_at = datetime.now(timezone.utc).isoformat()
 
         # Determine resolved tier for each flag and build updates
         updated_profile = dict(profile_data)
         resolved_count  = 0
+        skipped: list[dict] = []
 
         for flag in flags:
             flag_id    = flag["id"]
             skill_name = flag["skill_name"]
 
-            resolved_tier = (
-                flag["stat_rating"]
-                if resolution == "trust_stats"
-                else flag["claude_rating"]
-            )
+            if resolution == "trust_stats":
+                resolved_tier = flag["stat_rating"]
+            else:
+                resolved_tier = _claude_tier(skill_name, flag, profile_data)
+                if resolved_tier is None:
+                    skipped.append({
+                        "player_id":  player_id,
+                        "skill_name": skill_name,
+                        "reason":     "no_claude_tier",
+                    })
+                    continue
 
             # Update the individual flag record
             supabase.table("draft_skill_flags").update({
@@ -572,10 +619,12 @@ def bulk_resolve():
 
             resolved_count += 1
 
-        # Persist the updated composite profile (all skills updated in one write)
-        supabase.table("draft_skill_profiles").update({
-            "profile": updated_profile,
-        }).eq("id", profile_id).execute()
+        # Persist the updated composite profile (all skills updated in one write);
+        # skip the rewrite when every flag was skipped.
+        if resolved_count:
+            supabase.table("draft_skill_profiles").update({
+                "profile": updated_profile,
+            }).eq("id", profile_id).execute()
 
         # Verify that no flags remain unresolved (guards against concurrent modifications)
         remaining = (
@@ -594,11 +643,15 @@ def bulk_resolve():
             }).eq("id", profile_id).execute()
 
         logger.info(
-            "Bulk-resolved %d flags for player=%s (%s)",
-            resolved_count, player_id, resolution,
+            "Bulk-resolved %d flags for player=%s (%s), skipped %d",
+            resolved_count, player_id, resolution, len(skipped),
         )
 
-        return _ok({"resolved_count": resolved_count, "all_flags_resolved": all_resolved})
+        return _ok({
+            "resolved_count":     resolved_count,
+            "all_flags_resolved": all_resolved,
+            "skipped":            skipped,
+        })
 
     except Exception:
         logger.exception("Error in POST /api/review/bulk-resolve")
@@ -646,6 +699,8 @@ def manual_override_skill(player_id: str):
 
     if not skill_name:
         return _err("'skill_name' is required")
+    if skill_name not in ALL_SKILLS:
+        return _err("unknown_skill")
     if resolved_value not in _VALID_TIERS:
         return _err("'resolved_value' must be None, Capable, Proficient, or Elite")
 
@@ -665,16 +720,8 @@ def manual_override_skill(player_id: str):
         if not profile_row.data:
             # No composite profile yet — create one pre-filled with all skills
             # set to "None" so the profile page renders every skill row editable.
-            _ALL_SKILLS = [
-                "spot_up_shooter", "off_dribble_shooter", "offensive_rebounder",
-                "rebounder", "rim_protector", "isolation_scorer",
-                "movement_shooter", "cutter", "transition_threat", "pnr_ball_handler",
-                "pnr_finisher", "crafty_finisher", "driver", "vertical_spacer",
-                "screen_setter", "passer", "mid_post_player", "low_post_player",
-                "versatile_defender", "perimeter_disruptor", "high_flyer",
-            ]
             _empty_skill = {"final_tier": "None", "stat_tier": None, "claude_tier": None, "source": "manual_override", "flagged": False}
-            profile_data = {skill: dict(_empty_skill) for skill in _ALL_SKILLS}
+            profile_data = {skill: dict(_empty_skill) for skill in ALL_SKILLS}
             new_profile_row = (
                 supabase.table("draft_skill_profiles")
                 .insert({

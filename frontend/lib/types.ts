@@ -240,7 +240,7 @@ export interface SkillFlag {
   id: string;
   skill_name: string;
   stat_rating: string;
-  claude_rating: string;
+  claude_rating: string | null;
   flag_reason: string;
   stat_values: Record<string, number> | null;
   claude_justification: string | null;
@@ -248,6 +248,8 @@ export interface SkillFlag {
   resolved_value: string | null;
   resolved_at: string | null;
   notes: string | null;
+  /** Server rule (#154): false for a HIGH Skill or a failed Claude call; Trust Claude skips these. */
+  has_claude_tier: boolean;
 }
 
 /** Composite skill result stored in the draft_skill_profiles.profile JSONB */

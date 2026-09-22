@@ -495,7 +495,13 @@ export default function PlayerReviewPage() {
       try {
         const res = await bulkResolveFlags(player_id, resolution, undefined, CURRENT_SEASON);
         if (res.success && res.data) {
-          toast.success(`Resolved ${res.data.resolved_count} flags`);
+          const skippedCount = res.data.skipped?.length ?? 0;
+          toast.success(
+            `Resolved ${res.data.resolved_count} flags` +
+              (skippedCount > 0
+                ? ` · ${skippedCount} left open (stats-only, no Claude tier)`
+                : "")
+          );
           await fetchDetail(); // Refresh all flags
         } else {
           toast.error(res.error ?? "Bulk resolve failed");
@@ -615,6 +621,11 @@ export default function PlayerReviewPage() {
   const { player, flags, profiles } = detail;
   const unresolvedFlags = flags.filter((f) => f.resolution == null);
   const resolvedFlags   = flags.filter((f) => f.resolution != null);
+  // Open flags Claude never rated (HIGH Skills, failed calls): Trust All Claude
+  // leaves these open instead of writing a false None (#154). The server sets
+  // has_claude_tier with the same rule its bulk skip uses.
+  const noClaudeCount = unresolvedFlags.filter((f) => !f.has_claude_tier).length;
+  const noClaudeAtAll = noClaudeCount === unresolvedFlags.length;
 
   return (
     <main id="player-review-page" className="max-w-3xl mx-auto px-4 py-8 space-y-6">
@@ -820,11 +831,17 @@ export default function PlayerReviewPage() {
             <button
               id="review-bulk-trust-claude-btn"
               type="button"
-              disabled={bulkSaving}
+              disabled={bulkSaving || noClaudeAtAll}
+              title={
+                noClaudeAtAll
+                  ? "No open flag has a Claude tier — use Trust All Stats or Override"
+                  : undefined
+              }
               onClick={() => handleBulkResolve("trust_claude")}
               className="text-xs px-3 py-1.5 rounded-md border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium transition-colors disabled:opacity-50"
             >
               Trust All Claude
+              {noClaudeCount > 0 && ` (${noClaudeCount} stats-only left open)`}
             </button>
           </div>
         )}
