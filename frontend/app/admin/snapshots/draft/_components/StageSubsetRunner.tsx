@@ -24,6 +24,7 @@ import {
   runCompositeBatchScoped,
 } from "@/lib/api";
 import type { CompositeBatchResult } from "@/lib/types";
+import { compositeErrorText } from "../_lib/compositeErrors";
 import { PlayerSubsetPicker, type PlayerLite } from "./PlayerSubsetPicker";
 
 type RunStage = "salary_scrape" | "bio_team_sync";
@@ -99,7 +100,7 @@ export function StageSubsetRunner({
           setCompositedIds(playerIds);
           return;
         }
-        setError(res.error || "Could not run compositing.");
+        setError(compositeErrorText(res.error, "Could not run compositing."));
         return;
       }
 

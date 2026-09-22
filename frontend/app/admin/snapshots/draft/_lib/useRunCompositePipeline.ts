@@ -25,6 +25,7 @@ import {
   getPipelineRun,
 } from "@/lib/api";
 import type { SnapshotDraftSummary } from "@/lib/types";
+import { compositeErrorText } from "./compositeErrors";
 import type { TabSlug } from "./tabRouting";
 
 /** Mode awaiting confirmation in `review` — both change ratings, so both revert. */
@@ -106,7 +107,7 @@ export function useRunCompositePipeline({
           season: draft.season,
         });
         if (!res.success || !res.data) {
-          toast.error(res.error ?? "Failed to run the compositing pipeline");
+          toast.error(compositeErrorText(res.error), { duration: 12_000 });
           return;
         }
         const { processed, flagged_for_review, errors, skipped_no_stats, estimated_cost_usd } =

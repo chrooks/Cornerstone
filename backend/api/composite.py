@@ -6,6 +6,10 @@ Endpoints:
   POST /api/players/<player_id>/composite-profile   — Full pipeline + persist
   POST /api/composite/batch                         — Batch composite for many players
 
+The two persisting routes REPLACE a player's composite profile, so both refuse
+with 409 "human_decisions_present" when the existing draft composite already
+holds a resolved or manual_override entry. Pass ?force=true to override.
+
 All responses use the standard envelope: {success, data, error}.
 Claude calls are rate-limited to max 5 concurrent with ≥200ms between starts
 (rate limiter lives in claude_assessment.call_claude, not here).
@@ -22,9 +26,12 @@ from supabase import Client
 
 from api.auth import require_admin, require_open_draft
 from services.pipeline_runs import repo as runs_repo
-from services.supabase_client import get_supabase
+from services.supabase_client import get_supabase, in_chunks
 from services.players_service import CURRENT_SEASON, DEFAULT_MIN_MPG
 from services import skill_engine
+# One source of truth for "this entry is a person's call, not stat output" —
+# the recompute path (issue #120) already protects exactly these two sources.
+from services.skills import HUMAN_DECISION_SOURCES
 from services.notability import get_notability_score, notability_tier
 from services.claude_assessment import (
     get_claude_assessment,
@@ -101,6 +108,43 @@ def _get_stat_skills(player_id: str, season: str, supabase: Client) -> dict:
         use_history=False,
         supabase=supabase,
     )
+
+
+def _force_requested() -> bool:
+    """True when the caller passed ?force=true to override the M2.19 guard."""
+    return request.args.get("force", "").lower() in ("true", "1", "yes")
+
+
+def _players_with_human_decisions(
+    player_ids: list[str], season: str, supabase: Client
+) -> list[str]:
+    """
+    Return the ids whose draft composite already holds a human's call.
+
+    An entry counts only when its `source` is one a human wrote: "resolved" (a
+    flag adjudicated in /admin/review) or "manual_override" (an admin's direct
+    tier). The engine's own sources ("auto_accepted", "flagged") do not count.
+    """
+    # ponytail: reads every composite in scope; filter in SQL if the whole-league
+    # read gets slow — it is one query per 100 players against 450 Claude calls.
+    blocked: list[str] = []
+    for chunk in in_chunks(player_ids):
+        result = (
+            supabase.table("draft_skill_profiles")
+            .select("player_id, profile")
+            .eq("source", "composite")
+            .eq("season", season)
+            .in_("player_id", chunk)
+            .execute()
+        )
+        for row in (result.data or []):
+            profile = row.get("profile") or {}
+            if any(
+                isinstance(entry, dict) and entry.get("source") in HUMAN_DECISION_SOURCES
+                for entry in profile.values()
+            ):
+                blocked.append(row["player_id"])
+    return blocked
 
 
 # ---------------------------------------------------------------------------
@@ -205,8 +249,15 @@ def composite_profile_endpoint(player_id: str):
     Path params:
       player_id — Supabase UUID
 
+    Query params:
+      force — "true" to persist over recorded human decisions (default: refuse)
+
     Request body (JSON, optional):
       { "season": "2025-26" }
+
+    Errors:
+      409 "human_decisions_present" — the existing composite holds a resolved or
+      manual_override entry and force was not set.
 
     Response data:
       {
@@ -232,6 +283,18 @@ def composite_profile_endpoint(player_id: str):
 
     try:
         supabase = get_supabase()
+
+        # This route REPLACES the whole composite, so it would erase any tier a
+        # human already decided. ponytail: guard, not a merge; the scoped run is
+        # the supported path (POST /api/pipeline/skill-evaluation).
+        if not _force_requested() and _players_with_human_decisions(
+            [player_id], season, supabase
+        ):
+            logger.warning(
+                "composite-profile refused for %s season %s — human decisions present",
+                player_id, season,
+            )
+            return _err("human_decisions_present", status=409)
 
         stat_skills = _get_stat_skills(player_id, season, supabase)
         if not stat_skills:
@@ -300,11 +363,18 @@ def composite_batch():
     Claude API calls run in parallel (max 5 concurrent) with ≥200ms between
     request starts to respect Anthropic rate limits.
 
+    Query params:
+      force — "true" to persist over recorded human decisions (default: refuse)
+
     Request body (JSON):
       {
         "player_ids": ["uuid1", ...],  // empty = all qualifying players
         "season":     "2025-26"         // optional, default current season
       }
+
+    Errors:
+      409 "human_decisions_present" — at least one player in scope holds a
+      resolved or manual_override composite entry and force was not set.
 
     Response data:
       {
@@ -374,6 +444,22 @@ def composite_batch():
                 "composite/batch: found %d qualifying players for season %s",
                 len(player_ids), season,
             )
+
+        # Every player here gets their composite replaced, so one human decision
+        # anywhere in the batch refuses the whole request. ponytail: guard, not a
+        # merge; the scoped run is the supported path.
+        if not _force_requested():
+            blocked = _players_with_human_decisions(player_ids, season, main_supabase)
+            if blocked:
+                logger.warning(
+                    "composite/batch refused — %d of %d players hold human decisions "
+                    "(first: %s)",
+                    len(blocked), len(player_ids), blocked[0],
+                )
+                runs_repo.complete_run(
+                    run_id, rows_processed=0, error="human_decisions_present"
+                )
+                return _err("human_decisions_present", status=409)
 
         total = len(player_ids)
         if total == 0:
