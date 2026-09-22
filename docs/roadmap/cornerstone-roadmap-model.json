@@ -64,7 +64,7 @@
       "group": "snapshot",
       "x": -350,
       "y": -350,
-      "description": "Follow-up to #86 (closed on the systemic fix: drift audit script + never-block publish drift log, commit 4de5484). Full-pool re-eval through the draft lifecycle to clear the 440 drifted stats_only pairs the sweep found; audit refinements (stale-vs-moved, Kong 414 batching).",
+      "description": "Follow-up to #86 (closed on the systemic fix: drift audit script + never-block publish drift log, commit 4de5484). Full-pool re-eval through the draft lifecycle to clear the 440 drifted stats_only pairs the sweep found; audit refinements (stale-vs-moved, Kong 414 batching). Two prerequisites shipped 2026-09-22: the dev-gateway id-list split into groups of 100 (fd16be3) and the recompute_composite passthrough (470481b). The recompute itself runs inside #119 plan M5 — the one dev Snapshot draft.",
       "meta": {
         "state": "open",
         "priority": "p2",
@@ -482,7 +482,7 @@
       "group": "snapshot",
       "x": -350,
       "y": -500,
-      "description": "DefPlayerIDNullable → DefPlayerID; one bulk call; recalibrate versatile_defender. Every active matchup_defense blob is the league total today.",
+      "description": "FETCH FIX SHIPPED (6ea91de) and the whole league refetched 2026-09-22: DefPlayerID, one bulk call, G/F/C buckets, matchup difficulty. Still open — the versatile_defender rule Chris approved is staged for #119 plan M5, the one dev Snapshot draft. The refetch covered only the 359 players at or above 15.0 mpg; the 37 it skipped still hold league totals (#160).",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/134",
         "state": "open"
@@ -698,7 +698,7 @@
       "group": "engine",
       "x": 600,
       "y": 280,
-      "description": "Decided in the #119 grill 2026-09-21 (right over on time). Two LOW-confidence defensive Skills; on-ball rule reads matchup deployment (needs #134). Runs in one Snapshot draft with #130.",
+      "description": "Decided in the #119 grill 2026-09-21 (right over on time). Two LOW-confidence defensive Skills; on-ball rule reads matchup deployment (needs #134). Runs in one Snapshot draft with #130. Plan steps 2-3 shipped 2026-09-22 as #155 — per-Skill bulk resolve (d2f7546) and the skill-scoped Claude run (470481b). The split itself is still open.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/152",
         "state": "open"
@@ -722,7 +722,7 @@
       "group": "snapshot",
       "x": -600,
       "y": -600,
-      "description": "Bulk trust_claude writes final_tier null on HIGH-Skill flags (claude_rating null). Fix before the #130 review queue.",
+      "description": "Bulk trust_claude wrote final_tier null on HIGH-Skill flags (claude_rating null). SERVER GUARD SHIPPED (3939010 — Trust Claude refuses a flag with no Claude tier) plus the toast fix (d725c4f), both proven headless on cornerstone-dev. Still open: the real-data drive, which happens in #119 plan M5 — the one dev Snapshot draft.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/154",
         "state": "open"
@@ -734,7 +734,7 @@
       "group": "engine",
       "x": 820,
       "y": 150,
-      "description": "#119 plan M2; sub-issue of #152. Scoped Claude run keeps human decisions; per-Skill agreements-only bulk review.",
+      "description": "#119 plan M2; sub-issue of #152. BUILD SHIPPED 2026-09-22: per-Skill agreements-only bulk resolve with defensive-key block and skip reasons (d2f7546), skill-scoped Claude run merging through the #120 guard (470481b), whole-profile Claude persists refusing with 409 (d944c3f), Discard for a run stuck at running (1da684a). Open: AC4 — drive the bulk bar, the runner checkboxes and Discard headless on cornerstone-dev.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/155",
         "state": "open"
@@ -774,6 +774,45 @@
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/158",
         "state": "open"
+      }
+    },
+    {
+      "id": "i159",
+      "label": "#159 Traded players keep per-stint\nplay-type numbers (P1 bug)",
+      "group": "snapshot",
+      "x": -130,
+      "y": -750,
+      "description": "_df_to_player_dict merges a traded player only when that one Synergy frame holds two rows for him, so a play type can keep per-stint possessions while box_score stays season-level. 36 blobs hold an incoherent play-type block and 29 of them pass the feed_cover check. Nine volume gates flip, on spot_up_shooter and transition_threat. Fix: merge per player across all play types, and add the per-type implied-total test to dev_checks. Found by the #119 M1.33 sweep.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/159",
+        "state": "open · afk",
+        "priority": "p1"
+      }
+    },
+    {
+      "id": "i160",
+      "label": "#160 37 sub-15-mpg players hold\nstale matchup data (P2 bug)",
+      "group": "snapshot",
+      "x": -350,
+      "y": -650,
+      "description": "The Stat Fetch pool is minutes_per_game >= 15.0, so the 2026-09-22 refetch covered 359 players and correctly skipped the rest — but 37 skipped blobs still carry a league-wide total_matchup_poss (1.18M / 1.21M) and sit inside a publishable release. dev_checks pinned one exact broken value and tested equality, so it reported zero. Fix: magnitude test, and clear the stale matchup_defense blocks.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/160",
+        "state": "open · afk",
+        "priority": "p2"
+      }
+    },
+    {
+      "id": "i161",
+      "label": "#161 Review decision lost when a\nrun is pending commit (P2 bug)",
+      "group": "snapshot",
+      "x": -600,
+      "y": -450,
+      "description": "The commit RPC writes the whole composite JSONB as merged at staging time. A flag resolved between staging and commit is replaced with no error and no audit row — the same whole-profile write that destroyed decisions in #121 and #122. M5 stages a ~45-minute Claude run during a review session, so that is the window. Cheapest fix: resolve_flag and bulk_resolve return 409 while a commit is pending.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/161",
+        "state": "open · afk",
+        "priority": "p2"
       }
     }
   ],
@@ -1017,6 +1056,30 @@
       "to": "i157",
       "label": "then recalibrate rim",
       "description": "Rim rule recalibration follows the split."
+    },
+    {
+      "from": "i134",
+      "to": "i160",
+      "label": "left behind by the refetch",
+      "description": "The refetch covered only the >= 15.0 mpg pool; the 37 skipped blobs keep their pre-#134 league totals."
+    },
+    {
+      "from": "i160",
+      "to": "i17",
+      "label": "needs its own sample gate",
+      "description": "matchup_difficulty has no sample gate; the archetype engine reads the raw signal and cannot borrow versatile_defender's 1,000-possession workaround."
+    },
+    {
+      "from": "i159",
+      "to": "i130",
+      "label": "fix before recompute",
+      "description": "A republish would bake in the flipped spot_up_shooter and transition_threat volume gates."
+    },
+    {
+      "from": "i161",
+      "to": "i130",
+      "label": "fix before the review session",
+      "description": "#130's recompute and review run inside M5; a decision made while a run waits to commit is silently overwritten."
     }
   ]
 }
