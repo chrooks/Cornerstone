@@ -38,6 +38,30 @@ from services.snapshot_versions.drift_audit import find_tier_drift  # noqa: E402
 from services.snapshot_versions.repo import get_working_season  # noqa: E402
 from services.supabase_client import get_supabase  # noqa: E402
 
+_PAGE = 1000  # PostgREST returns at most 1,000 rows per request
+
+
+def _composite_player_ids(client, season: str) -> list[str]:
+    """Every player with a composite profile this season, paged past 1,000 rows."""
+    ids: list[str] = []
+    start = 0
+    while True:
+        rows = (
+            client.table("draft_skill_profiles")
+            .select("player_id")
+            .eq("source", "composite")
+            .eq("season", season)
+            .order("player_id")
+            .range(start, start + _PAGE - 1)
+            .execute()
+            .data
+            or []
+        )
+        ids.extend(row["player_id"] for row in rows)
+        if len(rows) < _PAGE:
+            return ids
+        start += _PAGE
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -55,7 +79,13 @@ def main() -> None:
     season = args.season or get_working_season(client)
 
     print(f"Auditing stat-tier drift for season={season!r}...")
-    drift = find_tier_drift(season, client=client)
+    # Pass the paged id list so find_tier_drift reads in groups of 100
+    # (in_chunks) instead of one unpaged season-wide read.
+    player_ids = _composite_player_ids(client, season)
+    if not player_ids:
+        print("No composite profiles for this season.")
+        return
+    drift = find_tier_drift(season, client=client, player_ids=player_ids)
 
     if not drift:
         print("No drift found — every stats_only stored tier matches a fresh recompute.")

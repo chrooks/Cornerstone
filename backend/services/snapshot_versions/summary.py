@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from services.supabase_client import get_supabase, run_query
+from services.supabase_client import get_supabase, in_chunks, run_query
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +67,8 @@ def count_summary(draft_id: str, client=None) -> dict:
     # Players missing a composite profile
     missing_composite = 0
     if player_ids:
-        _CHUNK = 500
         composite_ids: set[str] = set()
-        for i in range(0, len(player_ids), _CHUNK):
-            chunk = player_ids[i: i + _CHUNK]
+        for chunk in in_chunks(player_ids):
             profiles = run_query(
                 lambda c_chunk=chunk: c.table("draft_skill_profiles")
                 .select("player_id")

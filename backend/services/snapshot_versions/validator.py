@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from services.supabase_client import get_supabase, run_query
+from services.supabase_client import get_supabase, in_chunks, run_query
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,20 @@ def _draft_season(draft_id: str, client) -> str:
         .execute()
     )
     return (row.data or {}).get("season")
+
+
+def _canonical_nba_ids(c, nba_ids: list[str]) -> set[str]:
+    """The subset of `nba_ids` that has a canonical_players row (ids in groups of 100)."""
+    matched: set[str] = set()
+    for chunk in in_chunks(nba_ids):
+        rows = run_query(
+            lambda c_chunk=chunk: c.table("canonical_players")
+            .select("nba_api_id")
+            .in_("nba_api_id", c_chunk)
+            .execute()
+        )
+        matched.update(str(r["nba_api_id"]) for r in (rows.data or []))
+    return matched
 
 
 def validate_publishable(
@@ -94,13 +108,7 @@ def validate_publishable(
     missing_canonical = 0
     missing_canonical_players: list[dict] = []
     if player_nba_ids:
-        canonical_rows = run_query(
-            lambda: c.table("canonical_players")
-            .select("nba_api_id")
-            .in_("nba_api_id", player_nba_ids)
-            .execute()
-        )
-        matched_ids = {str(r["nba_api_id"]) for r in (canonical_rows.data or [])}
+        matched_ids = _canonical_nba_ids(c, player_nba_ids)
         # Surface the Player identities (not just a count) so the publish gate can
         # name who's blocking and link to their review profile — mirrors
         # missing_composite_players. Players without an nba_api_id are not counted
@@ -136,15 +144,7 @@ def validate_publishable(
 
     legends_missing_canonical = 0
     if legend_nba_ids:
-        legend_canonical_rows = run_query(
-            lambda: c.table("canonical_players")
-            .select("nba_api_id")
-            .in_("nba_api_id", legend_nba_ids)
-            .execute()
-        )
-        legend_matched_ids = {
-            str(r["nba_api_id"]) for r in (legend_canonical_rows.data or [])
-        }
+        legend_matched_ids = _canonical_nba_ids(c, legend_nba_ids)
         legends_missing_canonical = sum(
             1 for nba_id in legend_nba_ids if nba_id not in legend_matched_ids
         )
@@ -154,10 +154,8 @@ def validate_publishable(
     missing_composite = 0
     missing_composite_players: list[dict] = []
     if player_ids:
-        _CHUNK = 500
         composite_player_ids: set[str] = set()
-        for i in range(0, len(player_ids), _CHUNK):
-            chunk = player_ids[i: i + _CHUNK]
+        for chunk in in_chunks(player_ids):
             profiles = run_query(
                 lambda c_chunk=chunk: c.table("draft_skill_profiles")
                 .select("player_id")
@@ -203,9 +201,7 @@ def validate_publishable(
 
     open_flags = 0
     if composite_profile_ids:
-        _FLAG_CHUNK = 500
-        for i in range(0, len(composite_profile_ids), _FLAG_CHUNK):
-            chunk = composite_profile_ids[i: i + _FLAG_CHUNK]
+        for chunk in in_chunks(composite_profile_ids):
             flags_result = run_query(
                 lambda c_chunk=chunk: c.table("draft_skill_flags")
                 .select("id")

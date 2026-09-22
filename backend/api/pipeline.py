@@ -24,7 +24,7 @@ from typing import Any
 from flask import Blueprint, g, jsonify, request
 
 from api.auth import require_admin, require_open_draft
-from services.supabase_client import get_supabase, run_query
+from services.supabase_client import get_supabase, in_chunks, run_query
 from services.players_service import (
     CURRENT_SEASON,
     DEFAULT_MIN_MPG,
@@ -118,9 +118,7 @@ def pipeline_status():
         total_flags_count = 0
         flagged_player_ids: set[str] = set()
 
-        _CHUNK = 500
-        for i in range(0, len(composite_ids), _CHUNK):
-            chunk = composite_ids[i: i + _CHUNK]
+        for chunk in in_chunks(composite_ids):
             unresolved = run_query(lambda c=chunk: (
                 supabase.table("draft_skill_flags")
                 .select("id, skill_profile_id")
@@ -134,13 +132,15 @@ def pipeline_status():
                 if pid:
                     flagged_player_ids.add(pid)
 
+            # A head count, not len(rows): 100 profiles can hold past 1,000
+            # flags, and PostgREST caps a page at 1,000 rows.
             all_flags = run_query(lambda c=chunk: (
                 supabase.table("draft_skill_flags")
-                .select("id")
+                .select("id", count="exact", head=True)
                 .in_("skill_profile_id", c)
                 .execute()
             ))
-            total_flags_count += len(all_flags.data or [])
+            total_flags_count += all_flags.count or 0
 
         # Include recent pipeline runs in the response
         recent_runs = runs_repo.list_recent(limit=5)
@@ -256,14 +256,16 @@ def _run_salary_scrape_job(run_id: str, player_ids: list[str]) -> None:
     rows = 0
     try:
         if player_ids:
-            rows_result = run_query(lambda: (
-                supabase.table("players")
-                .select("id, team")
-                .in_("id", player_ids)
-                .execute()
-            ))
+            player_rows: list[dict] = []
+            for chunk in in_chunks(player_ids):
+                player_rows.extend(run_query(lambda c=chunk: (
+                    supabase.table("players")
+                    .select("id, team")
+                    .in_("id", c)
+                    .execute()
+                )).data or [])
             team_map: dict[str, list[str]] = {}
-            for row in (rows_result.data or []):
+            for row in player_rows:
                 team = row.get("team")
                 if team:
                     team_map.setdefault(team, []).append(row["id"])

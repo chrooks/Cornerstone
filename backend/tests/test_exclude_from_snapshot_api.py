@@ -96,3 +96,25 @@ def test_exclude_rejects_bad_uuid(admin_client):
         json={"player_ids": ["not-a-uuid"], "excluded": True},
     )
     assert resp.status_code == 400
+
+
+def test_exclude_sends_ids_in_groups_of_100(admin_client, monkeypatch):
+    """The dev gateway returns 414 above ~220 UUIDs in one query string."""
+    import uuid
+
+    sizes: list[int] = []
+    sb = MagicMock()
+    sb.table.return_value.update.return_value.in_.side_effect = (
+        lambda _col, ids: sizes.append(len(ids)) or MagicMock()
+    )
+    monkeypatch.setattr("api.players.get_supabase", lambda: sb)
+    ids = [str(uuid.UUID(int=i + 1)) for i in range(401)]
+
+    resp = admin_client.post(
+        "/api/players/exclude-from-snapshot",
+        headers=admin_client.auth_header,
+        json={"player_ids": ids, "excluded": True},
+    )
+
+    assert resp.status_code == 200, resp.get_json()
+    assert sizes == [100, 100, 100, 100, 1]

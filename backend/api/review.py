@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 
 from api.auth import require_admin, require_open_draft
-from services.supabase_client import get_supabase, run_query
+from services.supabase_client import get_supabase, in_chunks, run_query
 from services.players_service import CURRENT_SEASON
 from services.skill_engine.cache import get_thresholds, get_league_averages
 from services.skill_engine.evaluator import collect_condition_results
@@ -105,9 +105,7 @@ def review_queue():
 
         # Step 2: Get all unresolved flags for those profiles (one query per chunk)
         all_unresolved: list[dict] = []
-        _CHUNK = 500
-        for i in range(0, len(composite_ids), _CHUNK):
-            chunk = composite_ids[i : i + _CHUNK]
+        for chunk in in_chunks(composite_ids):
             # Default arg captures chunk value so the lambda closure is correct
             rows = run_query(lambda c=chunk: (
                 supabase.table("draft_skill_flags")
@@ -142,8 +140,7 @@ def review_queue():
         # No season filter — players table has one row per player (nba_api_id UNIQUE),
         # so the season column is just the last-fetched season metadata, not a key.
         all_player_rows: list[dict] = []
-        for i in range(0, len(flagged_player_ids), _CHUNK):
-            chunk = flagged_player_ids[i : i + _CHUNK]
+        for chunk in in_chunks(flagged_player_ids):
             rows = run_query(lambda c=chunk: (
                 supabase.table("players")
                 .select("id, name, team, position")

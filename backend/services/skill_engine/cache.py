@@ -13,10 +13,12 @@ from typing import Any
 
 from supabase import Client
 
-from services.players_service import DEFAULT_MIN_MPG
+from services.players_service import DEFAULT_MIN_MPG, _blob_has_data
 from services.skill_engine.conditions import resolve_stat
+from services.supabase_client import in_chunks
 
 logger = logging.getLogger(__name__)
+_PAGE = 1000  # PostgREST returns at most 1,000 rows per request
 
 # ---------------------------------------------------------------------------
 # The 17 stat keys (dot notation) for which we compute league averages.
@@ -170,19 +172,39 @@ def compute_and_store_league_averages(season: str, supabase: Client) -> dict[str
 
     # Fetch stats blobs only for qualifying players using an IN filter.
     # This avoids pulling the entire player_stats table over the network.
-    stats_rows = (
-        supabase.table("player_stats")
-        .select("player_id, stats")
-        .eq("season", season)
-        .in_("player_id", list(qualifying_ids))
-        .execute()
-    )
+    # Ids go in groups of 100: the dev gateway returns 414 on a longer list.
+    # player_stats is insert-only (a row per fetch), so read newest first, page
+    # past the 1,000-row cap, and keep each player's newest USABLE row only —
+    # averaging every row would blend stale fetches and over-weight players
+    # fetched many times.
+    stats_data: list[dict] = []
+    seen: set[str] = set()
+    for chunk in in_chunks(list(qualifying_ids)):
+        start = 0
+        while True:
+            page = (
+                supabase.table("player_stats")
+                .select("player_id, stats")
+                .eq("season", season)
+                .in_("player_id", chunk)
+                .order("fetched_at", desc=True)
+                .range(start, start + _PAGE - 1)
+                .execute()
+                .data or []
+            )
+            for row in page:
+                if row["player_id"] not in seen and _blob_has_data(row.get("stats") or {}):
+                    seen.add(row["player_id"])
+                    stats_data.append(row)
+            if len(page) < _PAGE:
+                break
+            start += _PAGE
 
     # Accumulate per-stat values across qualifying players
     # Each key maps to a list of non-null float values
     accumulator: dict[str, list[float]] = {k: [] for k in _LEAGUE_AVG_STAT_KEYS}
 
-    for row in stats_rows.data or []:
+    for row in stats_data:
         # Only include qualifying players (min MPG filter)
         if row["player_id"] not in qualifying_ids:
             continue

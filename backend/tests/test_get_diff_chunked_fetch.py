@@ -28,7 +28,7 @@ def test_chunk_size_stays_under_postgrest_default_page():
 
 def test_fetch_in_chunks_aggregates_across_chunks():
     """Results from every chunk are concatenated into one list."""
-    values = list(range(450))  # > 2 chunks at chunk size 200
+    values = list(range(250))  # > 2 chunks at chunk size 100
     seen_chunks: list[list[int]] = []
 
     def fetch_chunk(chunk):
@@ -38,8 +38,8 @@ def test_fetch_in_chunks_aggregates_across_chunks():
     out = _fetch_in_chunks(values, fetch_chunk)
 
     assert [r["v"] for r in out] == values            # nothing dropped
-    assert len(seen_chunks) == 3                       # 200 + 200 + 50
-    assert [len(c) for c in seen_chunks] == [200, 200, 50]
+    assert len(seen_chunks) == 3                       # 100 + 100 + 50
+    assert [len(c) for c in seen_chunks] == [100, 100, 50]
     assert all(len(c) <= _DIFF_FETCH_CHUNK for c in seen_chunks)
 
 

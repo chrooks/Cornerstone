@@ -6,7 +6,7 @@ only use this on the server, never expose it to the frontend.
 
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TypeVar
 
 import httpx
@@ -21,6 +21,21 @@ logger = logging.getLogger(__name__)
 _client: Client | None = None
 
 T = TypeVar("T")
+
+
+def in_chunks(ids: Sequence[T], size: int = 100) -> list[list[T]]:
+    """Split an id list into successive slices of at most `size` items.
+
+    Every `.in_()` filter goes through this. The dev gateway (Kong) returns
+    HTTP 414 (URI too long) above about 220 UUIDs in one query string. A
+    100-id list also keeps a one-row-per-id read under PostgREST's 1,000-row
+    cap; multi-row tables (player_stats, draft_skill_flags) must still page
+    with `.range()` once rows per id can reach 10.
+    """
+    # ponytail: evaluation_only's stats read and drift_audit._fetch_latest_stats
+    # do not page yet — dev averages ~3 player_stats rows per player (max 14),
+    # about 310 rows per chunk; page them when a chunk nears 1,000 rows.
+    return [list(ids[i : i + size]) for i in range(0, len(ids), size)]
 
 
 def get_supabase() -> Client:

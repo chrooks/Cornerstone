@@ -95,8 +95,10 @@ class StagedFlagRow:
 # PostgREST returns at most 1000 rows per request by default. A single
 # .in_("player_id", [...]) over many players × several profile sources can
 # exceed that and silently truncate, so we page the IN-list in chunks small
-# enough that chunk × sources-per-player stays well under the cap.
-_DIFF_FETCH_CHUNK = 200
+# enough that chunk × sources-per-player stays well under the cap. 100, not
+# 200: the dev gateway returns HTTP 414 at about 220 UUIDs, so 200 left
+# almost no room (same size as supabase_client.in_chunks).
+_DIFF_FETCH_CHUNK = 100
 
 # Page size for paginating a single-filter fetch (e.g. all staged rows for one
 # run_id) that can itself exceed the 1000-row cap on a large bulk run.

@@ -33,7 +33,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from services.supabase_client import get_supabase, run_query
+from services.supabase_client import get_supabase, in_chunks, run_query
 from services.skill_engine.cache import get_thresholds, get_league_averages
 from services.skill_engine.evaluator import evaluate_all_skills, apply_auto_promotions
 from services.players_service import _blob_has_data
@@ -70,19 +70,25 @@ def _fetch_composite_profiles(
     season — the full-sweep case.
     """
 
-    def build_query():
+    def build_query(chunk=None):
         q = (
             client.table("draft_skill_profiles")
             .select("player_id, profile")
             .eq("source", "composite")
             .eq("season", season)
         )
-        if player_ids:
-            q = q.in_("player_id", player_ids)
+        if chunk:
+            q = q.in_("player_id", chunk)
         return q
 
-    result = run_query(lambda: build_query().execute())
-    return {row["player_id"]: row.get("profile") or {} for row in (result.data or [])}
+    if not player_ids:
+        result = run_query(lambda: build_query().execute())
+        rows = result.data or []
+    else:
+        rows = []
+        for chunk in in_chunks(player_ids):
+            rows.extend(run_query(lambda c=chunk: build_query(c).execute()).data or [])
+    return {row["player_id"]: row.get("profile") or {} for row in rows}
 
 
 def _fetch_latest_stats(client, season: str, player_ids: list[str]) -> dict[str, dict]:
@@ -95,16 +101,19 @@ def _fetch_latest_stats(client, season: str, player_ids: list[str]) -> dict[str,
     row. Ordering fetched_at desc and skipping empty blobs makes "first row
     wins" mean "newest usable row wins".
     """
-    stats_result = run_query(
-        lambda: client.table("player_stats")
-        .select("player_id, stats, fetched_at")
-        .eq("season", season)
-        .in_("player_id", player_ids)
-        .order("fetched_at", desc=True)
-        .execute()
-    )
+    # Each player sits in exactly one chunk, so newest-first holds per player.
+    rows: list[dict] = []
+    for chunk in in_chunks(player_ids):
+        rows.extend(run_query(
+            lambda c=chunk: client.table("player_stats")
+            .select("player_id, stats, fetched_at")
+            .eq("season", season)
+            .in_("player_id", c)
+            .order("fetched_at", desc=True)
+            .execute()
+        ).data or [])
     stats_by_player: dict[str, dict] = {}
-    for row in stats_result.data or []:
+    for row in rows:
         pid = row["player_id"]
         if pid in stats_by_player:
             continue
@@ -116,10 +125,13 @@ def _fetch_latest_stats(client, season: str, player_ids: list[str]) -> dict[str,
 
 
 def _fetch_player_names(client, player_ids: list[str]) -> dict[str, str]:
-    result = run_query(
-        lambda: client.table("players").select("id, name").in_("id", player_ids).execute()
-    )
-    return {row["id"]: row.get("name") for row in (result.data or [])}
+    names: dict[str, str] = {}
+    for chunk in in_chunks(player_ids):
+        result = run_query(
+            lambda c=chunk: client.table("players").select("id, name").in_("id", c).execute()
+        )
+        names.update({row["id"]: row.get("name") for row in (result.data or [])})
+    return names
 
 
 def find_tier_drift(

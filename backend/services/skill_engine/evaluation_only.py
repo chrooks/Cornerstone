@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from services.supabase_client import get_supabase, run_query
+from services.supabase_client import get_supabase, in_chunks, run_query
 from services.skill_engine.cache import get_thresholds, get_league_averages
 from services.skill_engine.evaluator import evaluate_all_skills, apply_auto_promotions
 from services.compositing import composite_skill, _tier_index
@@ -212,16 +212,18 @@ def evaluate_skills_for_run(
     # in whatever order it likes and the "first row wins" loop below picks one
     # ARBITRARILY: skill evaluation was silently nondeterministic, and could rate
     # a player off a stale April row, or off an all-null failed-fetch row.
-    # Newest-first makes "first row wins" mean "newest row wins".
-    stats_result = run_query(
-        lambda: client.table("player_stats")
-        .select("player_id, season, stats, fetched_at")
-        .eq("season", season)
-        .in_("player_id", player_ids)
-        .order("fetched_at", desc=True)
-        .execute()
-    )
-    stats_rows = stats_result.data or []
+    # Newest-first makes "first row wins" mean "newest row wins". Each player
+    # sits in exactly one id chunk, so the order still holds per player.
+    stats_rows: list[dict] = []
+    for chunk in in_chunks(player_ids):
+        stats_rows.extend(run_query(
+            lambda c=chunk: client.table("player_stats")
+            .select("player_id, season, stats, fetched_at")
+            .eq("season", season)
+            .in_("player_id", c)
+            .order("fetched_at", desc=True)
+            .execute()
+        ).data or [])
 
     # Build lookup: player_id -> stats_blob. Newest USABLE row wins.
     #
@@ -257,16 +259,17 @@ def evaluate_skills_for_run(
     if recompute_composite:
         affected_skills = list(skill_filter) if skill_filter else []
         needs_notability = any(s not in HIGH_CONFIDENCE_SKILLS for s in affected_skills)
-        comp_result = run_query(
-            lambda: client.table("draft_skill_profiles")
-            .select("player_id, profile")
-            .eq("source", "composite")
-            .eq("season", season)
-            .in_("player_id", player_ids)
-            .execute()
-        )
-        for row in (comp_result.data or []):
-            existing_composite_by_player[row["player_id"]] = row.get("profile") or {}
+        for chunk in in_chunks(player_ids):
+            comp_result = run_query(
+                lambda c=chunk: client.table("draft_skill_profiles")
+                .select("player_id, profile")
+                .eq("source", "composite")
+                .eq("season", season)
+                .in_("player_id", c)
+                .execute()
+            )
+            for row in (comp_result.data or []):
+                existing_composite_by_player[row["player_id"]] = row.get("profile") or {}
 
     staged_profiles: list[StagedProfileRow] = []
     staged_flags: list[StagedFlagRow] = []
