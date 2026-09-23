@@ -473,7 +473,8 @@ def cmd_negatives(sb, args) -> None:
             e = es[k]
             print(f"      {k}: source={e.get('source')} human_reviewed={bool(e.get('human_reviewed'))} "
                   f"open flag={open_by.get((p['id'], k), 'none')}"
-                  + (" (HIGH: no flag; needs a manual override to count)" if k in HIGH_CONFIDENCE_SKILLS else ""))
+                  + (" (HIGH: no flag; needs a manual override to count)"
+                     if k in HIGH_CONFIDENCE_SKILLS and (p["id"], k) not in open_by else ""))
     if missing_core:
         print(f"  ({missing_core} composites lack a core key and were skipped — before the #152 split, {OBD} is absent)")
     print(f"(2) carried claim Nones — {POA} None from a human decision, no human_reviewed, no open flag:")
