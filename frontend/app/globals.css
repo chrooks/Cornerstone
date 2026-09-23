@@ -49,6 +49,13 @@
   }
 }
 
+/* NavBar phone menu panel: a short drop-in from under the bar. Applied with
+   motion-safe:, so reduced-motion users get the panel with no movement. */
+@keyframes navbar-panel-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes reveal-pop {
   0% {
     opacity: 0;

@@ -11,6 +11,9 @@ import { getBrowserSupabase } from "@/lib/supabase/client";
 // the Snapshots draft workspace; their standalone routes still resolve as
 // thin wrappers for legacy deep-links.
 const ADMIN_LINKS = [
+  // The review queue also lives in the Snapshots draft workspace; the direct
+  // link is the phone path to it (flags get resolved one-handed there).
+  { href: "/admin/review",                label: "Review"      },
   { href: "/admin/snapshots/draft",       label: "Snapshots"   },
   { href: "/admin/evaluator-calibration", label: "Evaluator"   },
   { href: "/admin/rulesets",              label: "RuleSets"    },
@@ -23,9 +26,31 @@ export function NavBar() {
 
   const [adminOpen, setAdminOpen]     = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  // Below md the links do not fit a phone, so they live in a menu panel.
+  const [menuOpen, setMenuOpen]       = useState(false);
 
   const adminRef   = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+  const menuRef    = useRef<HTMLDivElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Any navigation closes the phone menu.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  // Escape closes the phone menu and hands focus back to its button.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        menuBtnRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [menuOpen]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -35,6 +60,9 @@ export function NavBar() {
       }
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setProfileOpen(false);
+      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
@@ -76,7 +104,7 @@ export function NavBar() {
             Cornerstone
           </Link>
 
-          <div id="navbar-links" className="flex items-center gap-5">
+          <div id="navbar-links" className="hidden md:flex items-center gap-5">
             {/* Public links */}
             {publicNav.map(({ href, label }) => {
               const isActive = pathname === href || pathname.startsWith(`${href}/`);
@@ -152,6 +180,7 @@ export function NavBar() {
           </div>
         </div>
 
+        <div ref={menuRef} className="flex items-center gap-2">
         {/* ── Right: profile (logged in) or Log in link ── */}
         {!loading && (
           <div id="navbar-auth" className="flex items-center">
@@ -202,13 +231,94 @@ export function NavBar() {
               <Link
                 id="navbar-login-link"
                 href="/login"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                className="flex min-h-11 items-center px-1 text-sm font-medium text-foreground hover:text-foreground/80 transition-colors md:min-h-0 md:px-0 md:text-muted-foreground md:hover:text-foreground"
               >
                 Log in
               </Link>
             )}
           </div>
         )}
+
+        {/* ── Phone menu button (below md) ── */}
+        <button
+          id="navbar-menu-btn"
+          ref={menuBtnRef}
+          type="button"
+          aria-expanded={menuOpen}
+          aria-controls="navbar-mobile-panel"
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          onClick={() => setMenuOpen((v) => !v)}
+          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-md text-foreground hover:bg-[#0e0907]/5 md:hidden"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+            {menuOpen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+            )}
+          </svg>
+        </button>
+
+        {/* ── Phone menu panel: every link as a full-width, thumb-sized row ── */}
+        {menuOpen && (
+          <div
+            id="navbar-mobile-panel"
+            className="absolute inset-x-0 top-full border-b border-border bg-popover shadow-lg md:hidden motion-safe:animate-[navbar-panel-in_160ms_cubic-bezier(0.16,1,0.3,1)]"
+          >
+            <ul className="mx-auto max-w-screen-2xl px-2 py-2">
+              {publicNav.map(({ href, label }) => {
+                const isActive = pathname === href || pathname.startsWith(`${href}/`);
+                return (
+                  <li key={href}>
+                    <Link
+                      id={`navbar-mobile-link-${label.toLowerCase()}`}
+                      href={href}
+                      aria-current={isActive ? "page" : undefined}
+                      onClick={() => setMenuOpen(false)}
+                      className={cn(
+                        "flex min-h-12 items-center rounded-md px-3 text-base transition-colors",
+                        isActive
+                          ? "bg-primary/15 font-semibold text-foreground"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                    >
+                      {label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+            {isAdmin && (
+              <div className="mx-auto max-w-screen-2xl border-t border-border px-2 py-2">
+                <p className="px-3 pb-1 pt-1 text-xs font-medium text-muted-foreground">Admin</p>
+                <ul>
+                  {ADMIN_LINKS.map(({ href, label }) => {
+                    const isActive = pathname.startsWith(href);
+                    return (
+                      <li key={href}>
+                        <Link
+                          id={`navbar-mobile-admin-link-${label.toLowerCase()}`}
+                          href={href}
+                          aria-current={isActive ? "page" : undefined}
+                          onClick={() => setMenuOpen(false)}
+                          className={cn(
+                            "flex min-h-12 items-center rounded-md px-3 text-base transition-colors",
+                            isActive
+                              ? "bg-primary/15 font-semibold text-foreground"
+                              : "text-foreground hover:bg-muted"
+                          )}
+                        >
+                          {label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        </div>
 
       </div>
     </nav>
