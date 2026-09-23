@@ -596,3 +596,51 @@ test.describe("review page #165 Trust labels name what the click writes", () => 
     expect(resolveBodies[0]).toMatchObject({ skill_name: "point_of_attack_defender", resolution: "trust_stats" });
   });
 });
+
+// The queue list: every column lines up with its header, whatever a row's
+// reasons are, and a reason kind shows once however many tiers it carries.
+test.describe("review queue list layout", () => {
+  test.skip(!hasE2eLogin(), E2E_LOGIN_MISSING);
+  test.use({ storageState: E2E_ADMIN_STATE });
+
+  test.beforeAll(async ({ browser }) => {
+    await loginAsE2eAdmin(browser);
+  });
+
+  test("columns align across rows and reason kinds are grouped", async ({ page }) => {
+    const row = (id: string, name: string, reasons: string[]) => ({
+      player_id: id, player_name: name, team: "PHX", position: "G",
+      unresolved_flag_count: reasons.length, flag_reasons: reasons,
+    });
+    const queue = [
+      row("00000000-0000-4000-8000-00000000a001", "Nickeil Alexander-Walker", [
+        "always_flag_for_review", "data_missing", "human_decision_contradicted:manual_override:None",
+        "human_decision_contradicted:manual_override:Proficient", "human_decision_contradicted:resolved:Elite",
+        "one_tier_low_confidence", "tier_bump_applied",
+      ]),
+      row("00000000-0000-4000-8000-00000000a002", "Jo", ["low_notability"]),
+    ];
+    await blockUnmockedApi(page);
+    await page.route("**/api/review/queue**", (route) => ok(route, queue));
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(`${E2E_BASE_URL}/admin/review`, { waitUntil: "networkidle" });
+
+    const header = page.locator("#review-player-table-header > span");
+    const rows = page.locator("#review-player-table li a");
+    await expect(rows).toHaveCount(2);
+    const headerX = await header.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
+    for (let i = 0; i < 2; i++) {
+      const cellX = await rows.nth(i).locator("> span").evaluateAll((els) =>
+        els.map((e) => Math.round(e.getBoundingClientRect().left)));
+      expect(cellX).toEqual(headerX);
+    }
+    // The long name is not truncated away by a wide reasons cell.
+    await expect(rows.nth(0)).toContainText("Nickeil Alexander-Walker");
+
+    // Three contradiction strings → one chip; the tiers live in its tooltip.
+    const chip = rows.nth(0).getByText("Contradicts your call", { exact: true });
+    await expect(chip).toHaveCount(1);
+    await expect(chip).toHaveAttribute("title", /manual override None, manual override Proficient, resolved Elite/);
+    await expect(page.locator("#review-reason-select option", { hasText: "Contradicts your call" })).toHaveCount(1);
+  });
+});

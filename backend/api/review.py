@@ -169,7 +169,8 @@ def review_queue():
       ?search=name         (case-insensitive player name search)
       ?team=BOS            (filter by team abbreviation)
       ?position=F          (filter by position, partial match)
-      ?flag_reason=...     (filter by flag_reason value)
+      ?flag_reason=...     (filter by flag_reason value, or a family:
+                            "human_decision_contradicted" matches every variant)
       ?skill_name=high_flyer  (only players with an open flag on that Skill;
                                each entry then also carries agreement_count)
 
@@ -279,7 +280,12 @@ def review_queue():
                 continue
             if pos_filter and pos_filter.lower() not in (player.get("position") or "").lower():
                 continue
-            if reason_filter and reason_filter not in flag_info["reasons"]:
+            # A reason matches exactly or by family: "human_decision_contradicted"
+            # matches every "human_decision_contradicted:<source>:<tier>".
+            if reason_filter and not any(
+                r == reason_filter or r.startswith(reason_filter + ":")
+                for r in flag_info["reasons"]
+            ):
                 continue
 
             entry = {

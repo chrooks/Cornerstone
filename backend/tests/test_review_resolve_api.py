@@ -979,3 +979,31 @@ def _all_skills() -> set[str]:
     )
 
     return set(ALL_SKILLS) - set(HIGH_CONFIDENCE_SKILLS) - set(NO_BULK_TRUST_STATS_SKILLS)
+
+
+def test_review_queue_reason_filter_matches_a_reason_family(admin_client, db):
+    """?flag_reason=human_decision_contradicted matches every
+    human_decision_contradicted:<source>:<tier> variant, so the queue's
+    reason filter lists one entry per kind instead of one per tier."""
+    _seed_player(
+        db, PID, PROFILE_ID,
+        {"high_flyer": _entry("None", "Capable", "Capable")},
+        [{"id": "f-h1", "skill_name": "high_flyer", "stat_rating": "Capable", "claude_rating": "Capable",
+          "flag_reason": "human_decision_contradicted:resolved:Elite"}],
+        name="Contradicted Player",
+    )
+    _seed_player(
+        db, PID2, PROFILE_ID2,
+        {"passer": _entry("None", "Capable", "Elite")},
+        [{"id": "f-p1", "skill_name": "passer", "stat_rating": "Capable", "claude_rating": "Elite",
+          "flag_reason": "low_notability"}],
+        name="Other Player",
+    )
+
+    family = admin_client.get("/api/review/queue?flag_reason=human_decision_contradicted").get_json()["data"]
+    exact = admin_client.get("/api/review/queue?flag_reason=low_notability").get_json()["data"]
+    prefix_only = admin_client.get("/api/review/queue?flag_reason=human_decision").get_json()["data"]
+
+    assert [e["player_id"] for e in family] == [PID]
+    assert [e["player_id"] for e in exact] == [PID2]
+    assert prefix_only == []   # a family is matched whole, never by a partial word

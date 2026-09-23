@@ -21,14 +21,34 @@ import {
   NO_BULK_TRUST_STATS_SKILLS,
   formatSkillName,
 } from "@/lib/skills";
+import { REASON_KINDS, formatReasonKind, groupReasons } from "@/lib/flag-reasons";
 
-const FLAG_REASON_LABELS: Record<string, string> = {
-  two_tier_disagreement:   "2-Tier Disagree",
-  one_tier_low_confidence: "1-Tier (Low Conf)",
-  low_notability:          "Low Notability",
-  claude_low_confidence:   "Claude Low Conf",
-  data_missing:            "Data Missing",
-};
+function ReasonChip({ kind, details }: { kind: string; details: string[] }) {
+  const label = formatReasonKind(kind);
+  // The tiers under dispute stay one hover away, not in the row itself.
+  const title = details.length > 0 ? `${label}: ${details.join(", ")}` : label;
+  return (
+    <span
+      title={title}
+      className={cn(
+        "inline-flex items-center whitespace-nowrap rounded-sm border px-1.5 py-px text-[11px] font-medium leading-4",
+        REASON_KINDS[kind]?.tone === "attention"
+          ? "border-primary/60 bg-primary/15 text-foreground"
+          : "border-border bg-transparent text-muted-foreground"
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+/**
+ * One column template for the header and every row. Each row is its own grid
+ * (a row is a link), so `auto` tracks would size to that row alone and drift
+ * out of line with the header. Fixed tracks keep every column aligned.
+ */
+const QUEUE_COLUMNS =
+  "sm:grid-cols-[minmax(10rem,15rem)_3.5rem_3rem_3rem_minmax(0,1fr)]";
 
 /** Claude is never asked about a HIGH Skill, so it can have no agreements. */
 const HIGH_CONFIDENCE_SKILLS = new Set(SKILL_CATEGORIES["High Confidence"]);
@@ -74,30 +94,6 @@ function describeSkips(skipped: { reason: string }[]): string {
   }).join(", ");
 }
 
-function formatFlagReason(reason: string): string {
-  return FLAG_REASON_LABELS[reason] ?? reason.replace(/_/g, " ");
-}
-
-function FlagReasonBadge({ reason }: { reason: string }) {
-  const colorMap: Record<string, string> = {
-    two_tier_disagreement:   "bg-red-100 text-red-700 border-red-200",
-    one_tier_low_confidence: "bg-amber-100 text-amber-700 border-amber-200",
-    low_notability:          "bg-slate-100 text-slate-600 border-slate-200",
-    claude_low_confidence:   "bg-purple-100 text-purple-700 border-purple-200",
-    data_missing:            "bg-slate-100 text-slate-500 border-slate-200",
-  };
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border",
-        colorMap[reason] ?? "bg-muted text-muted-foreground border-border"
-      )}
-    >
-      {formatFlagReason(reason)}
-    </span>
-  );
-}
-
 export function ReviewQueueWorkspace() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -124,7 +120,11 @@ export function ReviewQueueWorkspace() {
   const [teamFilter, setTeamFilter]         = useState("");
   const [posFilter, setPosFilter]           = useState("");
   const [reasonFilter, setReasonFilter]     = useState("");
-  const [skillFilter, setSkillFilter]       = useState("");
+  /* A Skill in the URL (?skill=, set by the player page's back link) opens
+     the queue already filtered. Validated: it comes from the address bar. */
+  const skillParam = searchParams.get("skill") ?? "";
+  const initialSkill = ALL_SKILL_NAMES.includes(skillParam) ? skillParam : "";
+  const [skillFilter, setSkillFilter]       = useState(initialSkill);
 
   /* The Skill the CURRENT rows were fetched under — set only after a
      successful fetch, so the bulk bar's counts always describe the queue on
@@ -155,12 +155,17 @@ export function ReviewQueueWorkspace() {
 
   useEffect(() => {
     setLoading(true);
-    getReviewQueue().then((res) => {
-      if (res.success && res.data) {
-        setAllPlayers(res.data);
-        setPlayers(res.data);
+    Promise.all([
+      getReviewQueue(),
+      initialSkill ? getReviewQueue({ skill_name: initialSkill }) : null,
+    ]).then(([all, scoped]) => {
+      const shown = scoped ?? all;
+      if (all.success && all.data) setAllPlayers(all.data);
+      if (shown.success && shown.data) {
+        setPlayers(shown.data);
+        setAppliedSkill(initialSkill || null);
       } else {
-        setError(res.error ?? "Failed to load review queue");
+        setError(shown.error ?? "Failed to load review queue");
       }
       setLoading(false);
     });
@@ -200,9 +205,9 @@ export function ReviewQueueWorkspace() {
   const allPositions = Array.from(
     new Set(allPlayers.map((p) => p.position).filter(Boolean) as string[])
   ).sort();
-  const allReasons = Array.from(
-    new Set(allPlayers.flatMap((p) => p.flag_reasons))
-  ).sort();
+  const allReasonKinds = groupReasons(
+    Array.from(new Set(allPlayers.flatMap((p) => p.flag_reasons)))
+  ).map((g) => g.kind);
 
   /* Apply the subset scope on top of the server-side filters (#76). */
   const visiblePlayers = scopedIds
@@ -350,8 +355,8 @@ export function ReviewQueueWorkspace() {
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="">All reasons</option>
-            {allReasons.map((r) => (
-              <option key={r} value={r}>{formatFlagReason(r)}</option>
+            {allReasonKinds.map((k) => (
+              <option key={k} value={k}>{formatReasonKind(k)}</option>
             ))}
           </select>
         </div>
@@ -443,25 +448,29 @@ export function ReviewQueueWorkspace() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              id="review-skill-bulk-trust-claude-btn"
-              type="button"
-              disabled={bulkSaving || isHighSkill || agreementTotal === 0}
-              onClick={() => runSkillBulk("trust_claude", agreementTotal, true)}
-              className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {bulkSaving
-                ? "Resolving…"
-                : `Trust Claude for ${agreementTotal} ${skillLabel} agreement${agreementTotal === 1 ? "" : "s"}`}
-            </button>
+          <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+            {/* A HIGH Skill has no Claude tier, so this button could never act:
+                the note above says why, and the button stays out of the way. */}
+            {!isHighSkill && (
+              <button
+                id="review-skill-bulk-trust-claude-btn"
+                type="button"
+                disabled={bulkSaving || agreementTotal === 0}
+                onClick={() => runSkillBulk("trust_claude", agreementTotal, true)}
+                className="min-h-11 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:min-h-0 sm:py-1.5"
+              >
+                {bulkSaving
+                  ? "Resolving…"
+                  : `Trust Claude for ${agreementTotal} ${skillLabel} agreement${agreementTotal === 1 ? "" : "s"}`}
+              </button>
+            )}
             {canTrustStats && (
               <button
                 id="review-skill-bulk-trust-stats-btn"
                 type="button"
                 disabled={bulkSaving || skillFlagTotal === 0}
                 onClick={() => runSkillBulk("trust_stats", skillFlagTotal, false)}
-                className="px-3 py-1.5 rounded-md border border-input bg-background text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="min-h-11 px-3 rounded-md border border-input bg-background text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:min-h-0 sm:py-1.5"
               >
                 {bulkSaving
                   ? "Resolving…"
@@ -531,50 +540,64 @@ export function ReviewQueueWorkspace() {
 
       {!loading && !error && visiblePlayers.length > 0 && (
         <div id="review-player-table" className="rounded-lg border border-border overflow-hidden">
-          <div id="review-player-table-header" className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-4 py-2 bg-muted/40 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          <div
+            id="review-player-table-header"
+            className={cn(
+              "hidden sm:grid gap-x-4 px-4 py-2 bg-muted/40 border-b border-border text-xs font-medium text-muted-foreground",
+              QUEUE_COLUMNS
+            )}
+          >
             <span>Player</span>
-            <span className="text-right">Team</span>
-            <span className="text-right">Pos</span>
+            <span>Team</span>
+            <span>Pos</span>
             <span className="text-right">Flags</span>
             <span>Reasons</span>
           </div>
 
-          <div className="divide-y divide-border">
+          <ul className="divide-y divide-border">
             {visiblePlayers.map((player) => (
-              <Link
-                key={player.player_id}
-                href={`/admin/review/${player.player_id}`}
-                className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-4 py-3 items-center hover:bg-muted/30 transition-colors group"
-              >
-                <span className="font-medium text-sm text-foreground group-hover:text-primary transition-colors truncate">
-                  {player.player_name}
-                </span>
-                <span className="text-xs text-muted-foreground text-right">
-                  {player.team ?? "—"}
-                </span>
-                <span className="text-xs text-muted-foreground text-right">
-                  {player.position ?? "—"}
-                </span>
-                <span
+              <li key={player.player_id}>
+                <Link
+                  id={`review-queue-row-${player.player_id}`}
+                  href={`/admin/review/${player.player_id}${appliedSkill ? `?skill=${appliedSkill}` : ""}`}
                   className={cn(
-                    "text-sm font-bold tabular-nums text-right",
-                    player.unresolved_flag_count >= 5
-                      ? "text-red-600"
-                      : player.unresolved_flag_count >= 3
-                      ? "text-amber-600"
-                      : "text-muted-foreground"
+                    "group grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1.5 px-4 py-2.5",
+                    "transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    QUEUE_COLUMNS
                   )}
                 >
-                  {player.unresolved_flag_count}
-                </span>
-                <div className="flex flex-wrap gap-1 justify-end">
-                  {player.flag_reasons.map((r) => (
-                    <FlagReasonBadge key={r} reason={r} />
-                  ))}
-                </div>
-              </Link>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-foreground group-hover:text-primary transition-colors">
+                      {player.player_name}
+                    </span>
+                    {/* Below sm the Team and Pos columns fold under the name. */}
+                    <span className="block font-mono text-xs text-muted-foreground sm:hidden">
+                      {[player.team, player.position].filter(Boolean).join(" · ") || "—"}
+                    </span>
+                  </span>
+                  <span className="hidden sm:block font-mono text-xs text-muted-foreground">
+                    {player.team ?? "—"}
+                  </span>
+                  <span className="hidden sm:block font-mono text-xs text-muted-foreground">
+                    {player.position ?? "—"}
+                  </span>
+                  {/* No count color: the list is sorted by this number, so a
+                      color would only repeat what the order already says. */}
+                  <span className="text-right font-mono text-sm tabular-nums text-foreground">
+                    {player.unresolved_flag_count}
+                    <span className="font-sans text-xs text-muted-foreground sm:hidden">
+                      {player.unresolved_flag_count === 1 ? " flag" : " flags"}
+                    </span>
+                  </span>
+                  <span className="col-span-2 flex flex-wrap gap-1 sm:col-span-1">
+                    {groupReasons(player.flag_reasons).map((g) => (
+                      <ReasonChip key={g.kind} kind={g.kind} details={g.details} />
+                    ))}
+                  </span>
+                </Link>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
     </div>
