@@ -69,6 +69,17 @@ function TierPicker({
 }
 
 /**
+ * Open flags in display order. Arriving from a Skill-filtered queue, that
+ * Skill's flag comes first — on a phone it is the one card the reviewer came
+ * for. The render, the j/k keys and the auto-scroll all read this one order.
+ */
+function openFlagsInOrder(flags: SkillFlag[], firstSkill: string | null): SkillFlag[] {
+  return flags
+    .filter((f) => f.resolution == null)
+    .sort((a, b) => Number(b.skill_name === firstSkill) - Number(a.skill_name === firstSkill));
+}
+
+/**
  * A single skill row in the review panel.
  * Shows stat tier | flag reason | claude tier, plus resolution buttons.
  */
@@ -410,8 +421,7 @@ export default function PlayerReviewPage() {
         return;
       }
 
-      const unresolvedFlags =
-        detail?.flags.filter((f) => f.resolution == null) ?? [];
+      const unresolvedFlags = openFlagsInOrder(detail?.flags ?? [], skill);
 
       if (e.key === "j" || e.key === "ArrowDown") {
         setFocusedIdx((i) => Math.min(i + 1, unresolvedFlags.length - 1));
@@ -425,18 +435,16 @@ export default function PlayerReviewPage() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [detail, prevEntry, nextEntry, router, withSkill]);
+  }, [detail, prevEntry, nextEntry, router, withSkill, skill]);
 
   // Auto-scroll focused row into view
   useEffect(() => {
-    const unresolvedFlags =
-      detail?.flags.filter((f) => f.resolution == null) ?? [];
+    const unresolvedFlags = openFlagsInOrder(detail?.flags ?? [], skill);
     if (unresolvedFlags[focusedIdx]) {
-      const skill = unresolvedFlags[focusedIdx].skill_name;
-      const el    = rowRefs.current.get(skill);
+      const el = rowRefs.current.get(unresolvedFlags[focusedIdx].skill_name);
       el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
-  }, [focusedIdx, detail]);
+  }, [focusedIdx, detail, skill]);
 
   // Resolve a single flag
   const handleResolve = useCallback(
@@ -637,7 +645,7 @@ export default function PlayerReviewPage() {
   }
 
   const { player, flags, profiles } = detail;
-  const unresolvedFlags = flags.filter((f) => f.resolution == null);
+  const unresolvedFlags = openFlagsInOrder(flags, skill);
   const resolvedFlags   = flags.filter((f) => f.resolution != null);
   // Open flags Claude never rated (HIGH Skills, failed calls): Trust All Claude
   // leaves these open instead of writing a false None (#154). The server sets
