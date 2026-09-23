@@ -276,13 +276,14 @@ test.describe("#166 swipe deck (mocked data)", () => {
 
   test("ac7 — a disputed call needs one flip before it takes an answer", async ({ page }) => {
     const mocks = await mockDeck(page, [
-      makeCard(1, { flag_reason: "human_decision_contradicted:resolved:Elite" }),
+      // The longest real reason text (seen on dev as "manual override Capable").
+      makeCard(1, { flag_reason: "human_decision_contradicted:manual_override:Capable" }),
       makeCard(2),
     ]);
     await openDeck(page);
 
-    await expect(page.locator("#card-lock-note")).toBeVisible();
-    await expect(page.locator("#tier-strip-elite")).toContainText("yours"); // the tier Chris set before
+    await expect(page.locator("#card-lock-note")).toBeInViewport({ ratio: 1 }); // not clipped by the card
+    await expect(page.locator("#tier-strip-capable")).toContainText("yours"); // the tier Chris set before
     await expect(page.locator("#trust-stats-btn")).toBeDisabled();
     await expect(page.locator("#trust-claude-btn")).toBeDisabled();
     await expect(page.locator("#tier-strip-capable")).toBeDisabled();
@@ -556,6 +557,9 @@ test.describe("#166 swipe deck on real dev data (ac14, read only)", () => {
     await expect(topName(page)).not.toBeEmpty();
     await expect(page.locator("#deck-done-count")).toHaveText(/^0 \/ \d+ done$/);
     await expect(page.locator("#card-thresholds tbody tr, #card-thresholds p:has-text('No threshold rows')").first()).toBeVisible({ timeout: 15_000 });
+    if (await page.locator("#card-lock-note").count()) {
+      await expect(page.locator("#card-lock-note")).toBeInViewport({ ratio: 1 });
+    }
     await page.screenshot({ path: "test-results/review-deck-ac14-real.png" });
     expect(blocked).toEqual([]);
   });

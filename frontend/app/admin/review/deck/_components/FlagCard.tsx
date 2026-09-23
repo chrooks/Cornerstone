@@ -283,7 +283,11 @@ export const FlagCard = forwardRef<FlagCardHandle, FlagCardProps>(function FlagC
           </div>
 
           {flag.claude_justification && (
-            <p id="card-claude-line" className="mt-2 line-clamp-2 shrink-0 text-sm text-muted-foreground">
+            <p
+              id="card-claude-line"
+              // A locked card also carries the lock note, so Claude gets one line here, not two.
+              className={cn("mt-2 shrink-0 text-sm text-muted-foreground", lockedUntilFlip ? "line-clamp-1" : "line-clamp-2")}
+            >
               <span className="text-foreground">Claude:</span> {flag.claude_justification}
             </p>
           )}
@@ -291,15 +295,18 @@ export const FlagCard = forwardRef<FlagCardHandle, FlagCardProps>(function FlagC
           {lockedUntilFlip && (
             <p
               id="card-lock-note"
-              className="mt-2 rounded-[4px] border border-primary/60 bg-primary/15 px-2.5 py-1.5 text-xs text-foreground"
+              className="mt-2 shrink-0 rounded-[4px] border border-primary/60 bg-primary/15 px-2.5 py-1.5 text-xs text-foreground"
             >
               This disputes a tier you set. Flip it and read Claude&apos;s reason before you call it.
             </p>
           )}
 
-          <p id="card-flip-hint" className="mt-auto shrink-0 pt-2 text-center text-xs text-muted-foreground">
-            Tap the card for the full reason
-          </p>
+          {/* The lock note already says to flip; the hint would only push it off the card. */}
+          {!lockedUntilFlip && (
+            <p id="card-flip-hint" className="mt-auto shrink-0 pt-2 text-center text-xs text-muted-foreground">
+              Tap the card for the full reason
+            </p>
+          )}
         </div>
       ) : (
         <div id="flag-card-back" className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pt-4 pb-3">
