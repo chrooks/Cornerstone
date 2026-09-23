@@ -817,15 +817,15 @@
     },
     {
       "id": "i165",
-      "label": "#165 Trust buttons write a different\ntier than their label (P1 bug)",
-      "group": "snapshot",
+      "label": "✅ #165 Trust labels = what\nthe click writes — CLOSED (cdd6081)",
+      "group": "done",
       "x": -850,
       "y": -530,
-      "description": "On the review flag card the Trust Stats / Trust Claude labels come from today's stats and Claude profiles, but the click writes the tier stored on the flag row. On 46 dev flags they differ: 26 old contradiction flags would write an old tier over Chris's decision, and 20 fresh ones write the recomputed tier under a raw-stats label. M5.9 notes route Chris to Override on all 46.",
+      "description": "Shipped: the review card's Trust labels read the flag row the click writes; contradiction flags store the raw stats tier; the commit RPC drops open flags a recompute no longer raises. Dev repair: 26 stale flags deleted, 20 stat tiers corrected.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/165",
-        "state": "open · afk",
-        "priority": "p1"
+        "state": "closed",
+        "milestone": "Player Archetypes"
       }
     }
   ],
