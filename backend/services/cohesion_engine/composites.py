@@ -375,6 +375,15 @@ def build_distributions(
     If fewer than MIN_DISTRIBUTION_SIZE player profiles exist, callers will still
     receive the small distribution, but normalization falls back to theoretical
     maxima until the cache has enough population data.
+
+    #119 (D6): ``values["normalization_legend_clip_axes"]`` names the axes on
+    which a Legend must not set the top of the scale. Legends are rated on the
+    same 21-Skill taxonomy as actives, so their raw defense composites sit far
+    above every active's and stretch the percentile scale, squashing real
+    defenders toward the bottom. On a clipped axis each Legend's raw value
+    enters the distribution capped at the best active's raw value. A clipped
+    Legend still normalizes to 10.0: his own raw is above the (now lower)
+    empirical max, and _percentile_normalize clamps the interpolation at 1.0.
     """
     logger.info(
         "Building composite distributions for season %s, release %s", season, release_id
@@ -382,6 +391,16 @@ def build_distributions(
 
     client = _get_supabase_client()
     all_raw: dict[str, list[float]] = {name: [] for name in COMPOSITE_NAMES}
+    clip_axes = set(values.get("normalization_legend_clip_axes") or [])
+    unknown_axes = clip_axes - set(all_raw)
+    if unknown_axes:
+        # Hand-edited Evaluation Version JSON is a trust boundary: name the typo
+        # rather than KeyError-ing every evaluation, or silently clipping nothing.
+        logger.warning(
+            "normalization_legend_clip_axes names unknown composites, ignoring: %s",
+            sorted(unknown_axes),
+        )
+        clip_axes -= unknown_axes
 
     # Regular players — source_player_id is non-null, is_legend=false
     profiles = _run_query(
@@ -400,6 +419,8 @@ def build_distributions(
             all_raw[name].append(value)
 
     # Legends — is_legend=true; composite already frozen at publish
+    active_max = {name: max(all_raw[name], default=0.0) for name in clip_axes}
+
     legend_profiles = _run_query(
         lambda: client.table("released_players")
         .select("skill_profile_snapshot")
@@ -411,6 +432,8 @@ def build_distributions(
         skills = _extract_skills(row["skill_profile_snapshot"] or {})
         raw = compute_raw_composites(skills, values)
         for name, value in raw.items():
+            if name in active_max:
+                value = min(value, active_max[name])
             all_raw[name].append(value)
 
     return {name: sorted(vals) for name, vals in all_raw.items()}

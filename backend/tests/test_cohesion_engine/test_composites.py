@@ -342,6 +342,68 @@ def test_build_distributions_reads_current_and_legend_profiles(monkeypatch):
     assert distribution_cache.get_state().distributions == {}
 
 
+def test_build_distributions_clips_legends_at_active_max_on_configured_axes(monkeypatch):
+    """#119 (D6): a Legend must not set the top of a clipped axis's scale.
+
+    Legends are rated on the same 21-Skill taxonomy as actives, so their raw
+    defense composites sit far above every active's and stretch the percentile
+    scale, squashing real defenders toward the bottom. With
+    ``normalization_legend_clip_axes`` set, each Legend's raw value on those
+    axes enters the distribution capped at the best active's raw value.
+    Axes not listed are untouched.
+    """
+    FAKE_RELEASE_ID = "clip-release-id"
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    class FakeQuery:
+        def __init__(self):
+            self.filters = {}
+
+        def select(self, _columns):
+            return self
+
+        def eq(self, key, value):
+            self.filters[key] = value
+            return self
+
+        def execute(self):
+            assert self.filters.get("snapshot_release_id") == FAKE_RELEASE_ID
+            if self.filters.get("is_legend") is True:
+                # perimeter_defense raw 16.0, spacing raw 16.0
+                return FakeResult([{"skill_profile_snapshot": {
+                    "point_of_attack_defender": {"final_tier": "All-Time Great"},
+                    "movement_shooter": {"final_tier": "All-Time Great"},
+                }}])
+            # active: perimeter_defense raw 8.0, spacing raw 0.0
+            return FakeResult([{"skill_profile_snapshot": {
+                "point_of_attack_defender": {"final_tier": "Elite"},
+            }}])
+
+    class FakeClient:
+        def table(self, _name):
+            return FakeQuery()
+
+    monkeypatch.setattr(composites, "_get_supabase_client", lambda: FakeClient())
+    monkeypatch.setattr(composites, "_run_query", lambda query: query())
+
+    unclipped = composites.build_distributions("2025-26", VALUES, FAKE_RELEASE_ID)
+    assert max(unclipped["perimeter_defense"]) == 16.0
+
+    clipped_values = {**VALUES, "normalization_legend_clip_axes": ["perimeter_defense"]}
+    clipped = composites.build_distributions("2025-26", clipped_values, FAKE_RELEASE_ID)
+
+    assert max(clipped["perimeter_defense"]) == 8.0
+    # An axis left out of the key is untouched
+    assert clipped["spacing"] == unclipped["spacing"]
+    # The clipped Legend still normalizes to 10.0 — the clamp holds the ceiling
+    assert composites._percentile_normalize(
+        16.0, clipped["perimeter_defense"], 0.6, 6.0
+    ) == 10.0
+
+
 class _FlippableReleaseFixture:
     """Fake DB where the active release id can flip mid-process (#61).
 

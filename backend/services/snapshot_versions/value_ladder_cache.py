@@ -69,13 +69,21 @@ def _overall_for(profile: dict | None, values: dict, distributions, weights, ble
     return compute_overall(normalized, weights, blend)
 
 
-def build_ladder_from_release(
+def release_overalls(
     season: str, values: dict[str, Any], release_id: str, distributions
-) -> ValueLadder:
-    """Read the released pool + real salaries and build the value price ladder.
+) -> tuple[dict[str, float], list[int], dict[str, float]]:
+    """Read the released pool + real salaries and compute every `overall`.
+
+    Returns ``(active_overalls, active_salaries, legend_overalls)`` — exactly
+    the three arguments value_price.build_ladder takes. Split out of
+    build_ladder_from_release (#119) so the Ringer 100 harness can compute the
+    same production overalls without going through the ladder.
 
     Pure-ish: the release id and warm distributions are supplied by the caller
-    (the cache policy owns resolving them). Paginates every read.
+    (the cache policy owns resolving them). Paginates every read, and orders
+    every paginated read: PostgREST gives no stable row order across .range()
+    pages without an ORDER BY, and row order also settles the tie-break when
+    two players share a rounded `overall`.
     """
     from services.supabase_client import get_supabase
 
@@ -89,6 +97,7 @@ def build_ladder_from_release(
             .select("source_player_id, skill_profile_snapshot")
             .eq("snapshot_release_id", release_id)
             .eq("is_legend", False)
+            .order("source_player_id")
         )
     )
     salary_by_id = {
@@ -97,6 +106,7 @@ def build_ladder_from_release(
             lambda: client.table("players")
             .select("id, salary")
             .eq("season", season)
+            .order("id")
         )
     }
 
@@ -120,6 +130,7 @@ def build_ladder_from_release(
             .select("canonical_player_id, skill_profile_snapshot")
             .eq("snapshot_release_id", release_id)
             .eq("is_legend", True)
+            .order("canonical_player_id")
         )
     )
     canonical_ids = [
@@ -150,7 +161,16 @@ def build_ladder_from_release(
             row.get("skill_profile_snapshot"), values, distributions, weights, blend
         )
 
-    return value_price.build_ladder(active_overalls, active_salaries, legend_overalls)
+    return active_overalls, active_salaries, legend_overalls
+
+
+def build_ladder_from_release(
+    season: str, values: dict[str, Any], release_id: str, distributions
+) -> ValueLadder:
+    """Read the released pool + real salaries and build the value price ladder."""
+    return value_price.build_ladder(
+        *release_overalls(season, values, release_id, distributions)
+    )
 
 
 class ValueLadderCache:
