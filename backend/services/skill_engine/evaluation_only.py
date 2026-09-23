@@ -141,7 +141,10 @@ def _merge_composite_for_skills(
                     ),
                     season=season,
                     claude_tier=flag_claude_tier,
-                    stats_tier=fresh_tier,
+                    # #165: the RAW stats tier, as on every other flag. Trust Stats
+                    # writes this value under a "Stats" label; the recomputed
+                    # blend only decides whether to flag.
+                    stats_tier=stat_result.get("tier") or "None",
                     claude_justification=flag_justification,
                     stat_values=stat_result.get("driving_stats") or None,
                 ))

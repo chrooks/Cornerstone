@@ -357,7 +357,7 @@ def test_recompute_flags_when_it_contradicts_human_decision():
     assert len(rows) == 1
     flag = rows[0]
     assert flag.skill_name == "rim_protector"
-    assert flag.stats_tier == "Proficient"           # freshly recomputed tier
+    assert flag.stats_tier == "Proficient"           # raw stats tier (#165)
     assert "manual_override" in flag.flag_reason      # records human source
     assert "All-Time Great" in flag.flag_reason       # records human's current tier
     assert flag.season == "2025-26"
@@ -485,3 +485,22 @@ def test_merge_keeps_human_entry_and_flags_with_fresh_claude_tier():
     assert "resolved" in flag.flag_reason
     assert flag.claude_justification == "Elite cutter on tape."
     assert flag.stat_values == {"cut_pts": 4.2}
+
+
+def test_contradiction_flag_stat_rating_is_the_raw_stats_tier():
+    """#165: a contradiction flag's stat tier is the raw stats tier, not the
+    recomputed composite tier. Trust Stats writes the flag's stat tier, and the
+    review card labels it "Trust Stats" — the two must name the same tier."""
+    existing = {"cutter": {"final_tier": "None", "source": "resolved"}}
+    fresh = {"cutter": {"tier": "Capable", "confidence": "high",
+                        "justification": "Occasional cutter.", "claude_failed": False}}
+
+    _, flags, _ = _merge(
+        existing, fresh,
+        {"final_tier": "Capable", "flagged": False},   # recompute follows Claude
+        stat_result={"tier": "Proficient"},            # raw stats say Proficient
+    )
+
+    assert len(flags) == 1
+    assert flags[0].stats_tier == "Proficient"
+    assert flags[0].claude_tier == "Capable"
