@@ -1,4 +1,4 @@
-"""scripts/stage_threshold_edit.py stays dev-only and stage-only (#119 plan, M5.2-M5.4).
+"""scripts/stage_threshold_edit.py stays dev-only and stage-only (#119 plan, M5.2-M5.8).
 
 No real network: the HTTP layer is a fake that records every call it is asked to make.
 """
@@ -20,6 +20,14 @@ DEV_ENV = (
 BACKEND_ENV = "SUPABASE_URL=http://127.0.0.1:8092\n"
 E2E_ENV = "E2E_ADMIN_EMAIL=dev-admin@example.test\nE2E_ADMIN_PASSWORD=not-a-real-password\n"
 RULE = {"tiers": {"Elite": {"logic": "AND", "conditions": []}}}
+PLAYERS = [
+    {"id": "uuid-og", "name": "OG Anunoby", "team": "NYK", "position": "F"},
+    {"id": "uuid-dw", "name": "Derrick White", "team": "BOS", "position": "G"},
+    {"id": "uuid-ad", "name": "Andre Drummond", "team": "PHI", "position": "C"},
+    {"id": "uuid-jw", "name": "Jalen Williams", "team": "OKC", "position": "F"},
+    {"id": "uuid-jaw", "name": "Jaylin Williams", "team": "OKC", "position": "C"},
+]
+DEFENSE_SKILLS = "point_of_attack_defender,off_ball_disruptor,versatile_defender"
 
 
 def _load():
@@ -45,16 +53,25 @@ class _FakeRequests:
 
     def __init__(self, run_status="success"):
         self.calls = []
+        self.bodies = []
         self.run_status = run_status
 
     def request(self, method, url, **kwargs):
         self.calls.append((method, url))
+        self.bodies.append(kwargs.get("json"))
         if "/auth/v1/token" in url:
             return _FakeResponse({"access_token": "fake-jwt"})
+        if url.endswith("/players/search"):
+            q = (kwargs.get("params") or {}).get("q", "")
+            return _ok([r for r in PLAYERS if q.lower() in r["name"].lower()])
+        if url.endswith("/skill-evaluation"):
+            return _ok({"run_id": "run-1", "status": "running"})
         if url.endswith("/save"):
             return _ok({"run_id": "run-1"})
         if url.endswith("/commit"):
             return _ok({"committed_at": "2026-09-23T00:00:00Z"})
+        if url.endswith("/discard"):
+            return _ok({"discarded": "run-1"})
         if url.endswith("/diff"):
             return _ok({
                 "run_id": "run-1",
@@ -177,3 +194,169 @@ def test_dry_run_authenticates_but_stages_nothing(harness, tmp_path):
 
     assert any("/auth/v1/token" in url for _m, url in fake.calls)
     assert not any(url.endswith("/save") for _m, url in fake.calls)
+
+
+# ---------------------------------------------------------------------------
+# run — the pipeline half (M5.5-M5.8)
+# ---------------------------------------------------------------------------
+
+
+def _started(fake):
+    """The body of the skill-evaluation request, or None if none was sent."""
+    for (_m, url), body in zip(fake.calls, fake.bodies):
+        if url.endswith("/skill-evaluation"):
+            return body
+    return None
+
+
+def test_run_refuses_a_production_target(harness, tmp_path):
+    _, fake, run, _ = harness
+    (tmp_path / "dev.env").write_text(DEV_ENV.replace(
+        "https://cornerstone-dev-db.hestia.chrooks.com", "https://ojtncdjioiafhiiyzcyd.supabase.co"))
+
+    with pytest.raises(SystemExit) as exc:
+        run("run")
+
+    assert "supabase.co" in str(exc.value)
+    assert fake.calls == [], "aborted before any request left the machine"
+
+
+def test_run_rejects_a_skill_outside_the_taxonomy(harness):
+    _, fake, run, _ = harness
+
+    with pytest.raises(SystemExit) as exc:
+        run("run", "--skills", "rim_protector,off_ball_disrupter", "--recompute-composite")
+
+    assert "unknown skill 'off_ball_disrupter'" in str(exc.value)
+    assert fake.calls == [], "a typo never reaches the API"
+
+
+def test_with_claude_without_recompute_is_refused_locally(harness):
+    _, fake, run, _ = harness
+
+    with pytest.raises(SystemExit) as exc:
+        run("run", "--skills", DEFENSE_SKILLS, "--with-claude", "--yes")
+
+    assert "--with-claude needs --recompute-composite" in str(exc.value)
+    assert fake.calls == [], "the server never has to say it — nothing was sent"
+
+
+def test_composite_recompute_without_skills_is_refused_locally(harness):
+    _, fake, run, _ = harness
+
+    with pytest.raises(SystemExit) as exc:
+        run("run", "--recompute-composite")
+
+    assert "must name their Skills" in str(exc.value)
+    assert fake.calls == []
+
+
+def test_with_claude_without_yes_prints_the_cost_and_stops(harness):
+    _, fake, run, _ = harness
+
+    with pytest.raises(SystemExit) as exc:
+        run("run", "--skills", DEFENSE_SKILLS, "--recompute-composite", "--with-claude")
+
+    message = str(exc.value)
+    assert "COST" in message and "about 45 minutes" in message
+    assert "--yes" in message
+    assert fake.calls == [], "a ~400-player spend never starts by accident"
+
+
+def test_with_claude_and_yes_sends_both_flags(harness):
+    _, fake, run, _ = harness
+
+    run("run", "--skills", DEFENSE_SKILLS, "--recompute-composite", "--with-claude", "--yes")
+
+    assert _started(fake) == {
+        "player_ids": [],
+        "skill_filter": ["point_of_attack_defender", "off_ball_disruptor", "versatile_defender"],
+        "recompute_composite": True,
+        "with_claude": True,
+    }
+
+
+def test_m5_5_repair_run_sends_all_skills_and_both_flags_off(harness):
+    _, fake, run, _ = harness
+
+    run("run")
+
+    assert _started(fake) == {
+        "player_ids": [], "skill_filter": None,
+        "recompute_composite": False, "with_claude": False,
+    }
+
+
+def test_player_names_resolve_to_ids(harness):
+    _, fake, run, _ = harness
+
+    run("run", "--skills", DEFENSE_SKILLS, "--players", "OG Anunoby, Derrick White",
+        "--recompute-composite", "--with-claude", "--yes")
+
+    assert _started(fake)["player_ids"] == ["uuid-og", "uuid-dw"]
+
+
+def test_an_ambiguous_player_name_stops_before_the_run_starts(harness):
+    _, fake, run, _ = harness
+
+    with pytest.raises(SystemExit) as exc:
+        run("run", "--players", "Williams")
+
+    assert "matches 2 players" in str(exc.value)
+    assert _started(fake) is None
+
+
+def test_an_unknown_player_name_stops_before_the_run_starts(harness):
+    _, fake, run, _ = harness
+
+    with pytest.raises(SystemExit) as exc:
+        run("run", "--players", "Og Anunobi")
+
+    assert "no player named 'Og Anunobi'" in str(exc.value)
+    assert _started(fake) is None
+
+
+def test_run_never_commits(harness, tmp_path, capsys):
+    """Every run shape, including the ones that succeed: no commit call, ever."""
+    _, fake, run, _ = harness
+
+    run("run", "--wait")
+    run("run", "--skills", "rim_protector", "--recompute-composite", "--wait")
+    run("run", "--skills", DEFENSE_SKILLS, "--recompute-composite", "--with-claude", "--yes", "--wait")
+    for tail_args in (["--commit"], ["--commit-run", "run-1"], ["--discard-run", "run-1"]):
+        with pytest.raises(SystemExit) as exc:
+            run("run", *tail_args)
+        assert "run never commits" in str(exc.value)
+
+    assert not any(url.endswith("/commit") for _m, url in fake.calls)
+    assert "not committed — run never commits" in capsys.readouterr().out
+
+
+def test_discard_run_throws_the_staged_rows_away(harness):
+    """How M5.7 ends — an explicit second act, exactly like --commit-run."""
+    _, fake, run, _ = harness
+
+    run("--discard-run", "run-1")
+
+    assert ("POST", "https://cornerstone-dev.hestia.chrooks.com/api/pipeline-runs/run-1/discard") in fake.calls
+    assert not any(url.endswith("/commit") for _m, url in fake.calls)
+
+
+def test_run_waits_and_prints_the_same_diff_summary(harness, capsys):
+    _, _fake, run, _ = harness
+
+    run("run", "--skills", "rim_protector", "--recompute-composite", "--wait")
+
+    out = capsys.readouterr().out
+    assert "None -> Capable: 1" in out and "Elite -> Proficient: 1" in out
+    assert "versatile_defender / always_flag_for_review: 219" in out
+
+
+def test_run_refuses_the_threshold_flags(harness, tmp_path):
+    _, fake, run, _ = harness
+
+    with pytest.raises(SystemExit) as exc:
+        run("run", *_rule_args(tmp_path))
+
+    assert "--skills" in str(exc.value)
+    assert fake.calls == []
