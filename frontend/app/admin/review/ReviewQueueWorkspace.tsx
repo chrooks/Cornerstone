@@ -15,32 +15,15 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getReviewQueue, bulkResolveFlags, type ReviewQueueEntry } from "@/lib/api";
 import { PlayerSearchCombobox } from "@/components/PlayerSearchCombobox";
+import { ReasonChip } from "@/components/ReasonChip";
+import { UNSAVED_KEY, describeUnsaved, takeUnsaved } from "./deck/_lib/deck";
 import {
   ALL_SKILL_NAMES,
   SKILL_CATEGORIES,
   NO_BULK_TRUST_STATS_SKILLS,
   formatSkillName,
 } from "@/lib/skills";
-import { REASON_KINDS, formatReasonKind, groupReasons } from "@/lib/flag-reasons";
-
-function ReasonChip({ kind, details }: { kind: string; details: string[] }) {
-  const label = formatReasonKind(kind);
-  // The tiers under dispute stay one hover away, not in the row itself.
-  const title = details.length > 0 ? `${label}: ${details.join(", ")}` : label;
-  return (
-    <span
-      title={title}
-      className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-sm border px-1.5 py-px text-[11px] font-medium leading-4",
-        REASON_KINDS[kind]?.tone === "attention"
-          ? "border-primary/60 bg-primary/15 text-foreground"
-          : "border-border bg-transparent text-muted-foreground"
-      )}
-    >
-      {label}
-    </span>
-  );
-}
+import { formatReasonKind, groupReasons } from "@/lib/flag-reasons";
 
 /**
  * One column template for the header and every row. Each row is its own grid
@@ -133,6 +116,17 @@ export function ReviewQueueWorkspace() {
   const [bulkError, setBulkError]           = useState<string | null>(null);
   const [bulkResult, setBulkResult]         = useState<string | null>(null);
   const [bulkSaving, setBulkSaving]         = useState(false);
+  /* #166: a swipe-deck call that failed after the deck closed (back link). */
+  const [deckUnsaved, setDeckUnsaved]       = useState<string | null>(null);
+  useEffect(() => {
+    const show = () => {
+      const text = describeUnsaved(takeUnsaved());
+      if (text) setDeckUnsaved(text);
+    };
+    show();
+    window.addEventListener(UNSAVED_KEY, show);
+    return () => window.removeEventListener(UNSAVED_KEY, show);
+  }, []);
 
   const fetchQueue = useCallback(async () => {
     setLoading(true);
@@ -415,6 +409,40 @@ export function ReviewQueueWorkspace() {
             Show full queue
           </button>
         </div>
+      )}
+
+      {deckUnsaved && (
+        <div
+          id="review-deck-unsaved"
+          role="alert"
+          className="flex items-start justify-between gap-3 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          <p>{deckUnsaved}</p>
+          <button
+            id="review-deck-unsaved-dismiss-btn"
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setDeckUnsaved(null)}
+            className="-my-1 min-h-9 min-w-9 shrink-0 rounded-[4px] hover:bg-destructive/10"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* #166: the same Skill as a swipe deck — one card per open flag, one thumb.
+          The deck holds every open flag on the Skill, whatever the other
+          filters show, so the link names no count; the deck header does.
+          Hidden under a subset scope for the same reason. */}
+      {!loading && !error && appliedSkill && !scopedIds && visiblePlayers.length > 0 && (
+        <Link
+          id="review-open-deck-link"
+          href={`/admin/review/deck?skill=${appliedSkill}`}
+          className="flex min-h-11 items-center justify-between gap-3 rounded-[4px] bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-[#fe6d34] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:inline-flex sm:justify-start"
+        >
+          <span>Swipe the {skillLabel} deck</span>
+          <span aria-hidden>→</span>
+        </Link>
       )}
 
       {/* Per-Skill bulk bar (#152, M2.10) — only after a Skill filter applied. */}

@@ -49,6 +49,18 @@
   }
 }
 
+/* #166 swipe deck: the next card settles onto the stack. No fill mode, so the
+   card's own drag transform takes over the moment the entrance ends. */
+@keyframes deck-card-in {
+  from { opacity: 0.4; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .deck-card-in {
+    animation: deck-card-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
 /* NavBar phone menu panel: a short drop-in from under the bar. Applied with
    motion-safe:, so reduced-motion users get the panel with no movement. */
 @keyframes navbar-panel-in {

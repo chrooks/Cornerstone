@@ -235,6 +235,21 @@ export interface FlaggedPlayerSummary {
   flag_reasons: string[];
 }
 
+/**
+ * The swipe deck's card data (#166) — the one open flag a Skill-filtered
+ * review-queue row carries. `claude_tier` is null when Claude has no tier
+ * (HIGH Skill, failed call), so Trust Claude must not be offered.
+ */
+export interface DeckFlag {
+  id: string;
+  skill_name: string;
+  flag_reason: string | null;
+  stat_rating: string | null;
+  claude_tier: string | null;
+  claude_justification: string | null;
+  tier_now: string | null;
+}
+
 /** A single skill flag record from the draft_skill_flags table */
 export interface SkillFlag {
   id: string;

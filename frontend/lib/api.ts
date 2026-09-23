@@ -71,31 +71,36 @@ export async function apiFetch<T>(
   const method = options?.method?.toUpperCase() ?? "GET";
   const isWrite = ["PUT", "POST", "DELETE", "PATCH"].includes(method);
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(isWrite && CALIBRATION_KEY ? { "X-Calibration-Key": CALIBRATION_KEY } : {}),
-  };
-
   // Attach the Supabase JWT on all requests when running in the browser.
   // Admin-only GET endpoints (e.g. /api/evaluator/*) need the token too.
   // Public endpoints simply ignore the Authorization header.
+  let token: string | null = null;
   if (typeof window !== "undefined") {
     try {
       const { getAccessToken } = await import("./supabase/client");
-      const token = await getAccessToken();
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
+      token = await getAccessToken();
     } catch {
       // No session or not in a browser context — continue without auth header
     }
   }
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers,
+    headers: requestHeaders(isWrite, token),
     ...options,
   });
+  return readEnvelope<T>(res);
+}
 
+function requestHeaders(isWrite: boolean, token: string | null): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    ...(isWrite && CALIBRATION_KEY ? { "X-Calibration-Key": CALIBRATION_KEY } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/** The `{ success, data, error }` envelope, or a readable error when the body is not JSON. */
+async function readEnvelope<T>(res: Response): Promise<ApiResponse<T>> {
   const rawBody = await res.text();
   try {
     return JSON.parse(rawBody) as ApiResponse<T>;
@@ -497,10 +502,15 @@ export async function runCompositeBatch(season?: string): Promise<ApiResponse<{
 /**
  * A review-queue row. `agreement_count` is only present when the queue was
  * fetched with `skill_name` (#152, M2.3): the player's open flags on that Skill
- * where Claude's tier is real and equals the stat tier.
+ * where Claude's tier is real and equals the stat tier. The same filter adds
+ * the swipe deck's card (#166): the open flag and the player line.
  */
 export type ReviewQueueEntry = FlaggedPlayerSummary & {
   agreement_count?: number;
+  games_played?: number | null;
+  minutes_per_game?: number | null;
+  nba_api_id?: number | null;
+  flag?: import("./types").DeckFlag;
 };
 
 /** Get players with unresolved flags, with optional filters. */
@@ -541,12 +551,35 @@ export async function resolveFlag(
     resolved_value?: string | null;
     notes?: string | null;
     season?: string;
+    /** Resolve exactly this open flag; 409 "flag_changed" when it is gone (#166). */
+    flag_id?: string;
   }
 ): Promise<ApiResponse<{ flag_id: string; resolved_tier: string; all_flags_resolved: boolean }>> {
   return apiFetch(`/api/review/${playerId}/resolve`, {
     method: "POST",
     body: JSON.stringify(params),
   });
+}
+
+/**
+ * Resolve a flag with no await before `fetch`, using a token read earlier.
+ *
+ * `keepalive` only protects a request once `fetch` has been called; `apiFetch`
+ * first awaits the session lookup, which a closing tab may never finish. The
+ * swipe deck (#166) sends its held call through this so leaving the page still
+ * lands the write.
+ */
+export function resolveFlagNow(
+  playerId: string,
+  params: { skill_name: string; resolution: FlagResolution; resolved_value?: string | null; flag_id: string },
+  accessToken: string | null
+): Promise<ApiResponse<{ flag_id: string; resolved_tier: string; all_flags_resolved: boolean }>> {
+  return fetch(`${API_BASE_URL}/api/review/${playerId}/resolve`, {
+    method: "POST",
+    keepalive: true,
+    headers: requestHeaders(true, accessToken),
+    body: JSON.stringify(params),
+  }).then((res) => readEnvelope(res));
 }
 
 /** Manually override the final tier for any skill (flagged or not). */

@@ -16,7 +16,7 @@ const SECTION_LABELS: Record<string, string> = {
  * Format a condition value for display.
  * Percentage stats (ending in _pct) are shown as XX.X%, others as X.XX.
  */
-function fmtValue(c: ConditionResult, v: number | null): string {
+export function fmtValue(c: ConditionResult, v: number | null): string {
   if (v === null) return "—";
   // Percentage stats
   if (c.stat.endsWith("_pct") || c.stat.endsWith("_fg3_pct") || c.stat.endsWith("_fg_pct")) {
