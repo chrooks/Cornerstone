@@ -541,3 +541,58 @@ test.describe("M2.20 — draft Pipeline tab", () => {
     await expect(page.locator("#run-diff-preview-running")).toBeVisible();
   });
 });
+
+// #165: a flag whose stored tiers differ from today's profiles — the case where
+// the old card labels named one tier and the click wrote another.
+const STALE_ID = "00000000-0000-4000-8000-000000000165";
+const STALE_DETAIL = {
+  player: { ...DETAIL.player, id: STALE_ID },
+  flags: [
+    { ...FLAG, id: "flag-poa", skill_name: "point_of_attack_defender", stat_rating: "Capable", claude_rating: "Capable", flag_reason: "human_decision_contradicted:resolved:Elite", has_claude_tier: true },
+    { ...FLAG, id: "flag-rim2", skill_name: "rim_protector", stat_rating: "Proficient", claude_rating: "None", flag_reason: "human_decision_contradicted:resolved:Elite", has_claude_tier: false },
+  ],
+  profiles: {
+    // Today's profiles disagree with the flag row on purpose.
+    stats: { point_of_attack_defender: "Elite", rim_protector: "Elite" },
+    claude: { point_of_attack_defender: "Elite", rim_protector: "Elite" },
+    composite: {
+      point_of_attack_defender: { final_tier: "Elite", stat_tier: "Elite", claude_tier: "Elite", source: "resolved", flagged: false },
+      rim_protector: { final_tier: "Elite", stat_tier: "Elite", claude_tier: null, source: "resolved", flagged: false },
+    },
+  },
+};
+
+test.describe("review page #165 Trust labels name what the click writes", () => {
+  test.skip(!hasE2eLogin(), E2E_LOGIN_MISSING);
+  test.use({ storageState: E2E_ADMIN_STATE });
+
+  test.beforeAll(async ({ browser }) => {
+    await loginAsE2eAdmin(browser);
+  });
+
+  test("labels read the flag row, not today's profiles", async ({ page }) => {
+    const resolveBodies: Record<string, unknown>[] = [];
+    await blockUnmockedApi(page);
+    await page.route(`**/api/review/${STALE_ID}/flags**`, (route) => ok(route, STALE_DETAIL));
+    await page.route("**/api/players/*/stats**", (route) => ok(route, null));
+    await page.route("**/api/review/queue**", (route) => ok(route, []));
+    await page.route(`**/api/review/${STALE_ID}/resolve`, (route) => {
+      resolveBodies.push(route.request().postDataJSON());
+      return ok(route, { flag_id: "flag-poa", resolved_tier: "Capable", all_flags_resolved: false });
+    });
+
+    await page.goto(`${E2E_BASE_URL}/admin/review/${STALE_ID}`, { waitUntil: "networkidle" });
+    expect(new URL(page.url()).pathname).not.toMatch(/^\/(login|unauthorized)/);
+
+    // The server writes flag.stat_rating / flag.claude_rating — the labels must say so.
+    await expect(page.locator("#review-flag-point_of_attack_defender-trust-stats-btn")).toHaveText("Trust Stats (Capable)");
+    await expect(page.locator("#review-flag-point_of_attack_defender-trust-claude-btn")).toHaveText("Trust Claude (Capable)");
+    await expect(page.locator("#review-flag-rim_protector-trust-stats-btn")).toHaveText("Trust Stats (Proficient)");
+    // No Claude tier the server would accept (#154) → no Trust Claude button.
+    await expect(page.locator("#review-flag-rim_protector-trust-claude-btn")).toHaveCount(0);
+
+    await page.locator("#review-flag-point_of_attack_defender-trust-stats-btn").click();
+    await expect.poll(() => resolveBodies.length).toBe(1);
+    expect(resolveBodies[0]).toMatchObject({ skill_name: "point_of_attack_defender", resolution: "trust_stats" });
+  });
+});

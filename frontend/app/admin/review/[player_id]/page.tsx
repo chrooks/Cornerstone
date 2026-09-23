@@ -82,8 +82,6 @@ function TierPicker({
  */
 function SkillReviewRow({
   flag,
-  statTier,
-  claudeTier,
   isFocused,
   onRowMount,
   onResolve,
@@ -92,8 +90,6 @@ function SkillReviewRow({
   season,
 }: {
   flag: SkillFlag;
-  statTier: string | null;
-  claudeTier: string | null;
   isFocused: boolean;
   /** Ref callback — called with the outer div element once mounted */
   onRowMount?: (el: HTMLDivElement | null) => void;
@@ -104,6 +100,12 @@ function SkillReviewRow({
 }) {
   const [showOverride, setShowOverride] = useState(false);
   const [overrideTier, setOverrideTier] = useState<SkillTier | "">("");
+
+  // #165: one authority. Trust Stats / Trust Claude write the tiers stored on
+  // the flag row, so the columns and the button labels read the same row.
+  // Trust Claude shows only when the server would accept it (#154 rule).
+  const statTier = flag.stat_rating;
+  const claudeTier = flag.has_claude_tier ? flag.claude_rating : null;
 
   // Lazy-loaded condition breakdown
   const [breakdown, setBreakdown]           = useState<ConditionResult[] | null>(null);
@@ -227,6 +229,7 @@ function SkillReviewRow({
           <div className="flex gap-2 flex-wrap">
             {/* Trust Stats */}
             <button
+              id={`review-flag-${flag.skill_name}-trust-stats-btn`}
               type="button"
               disabled={saving}
               onClick={() => onResolve("trust_stats")}
@@ -242,6 +245,7 @@ function SkillReviewRow({
             {/* Trust Claude */}
             {claudeTier && (
               <button
+                id={`review-flag-${flag.skill_name}-trust-claude-btn`}
                 type="button"
                 disabled={saving}
                 onClick={() => onResolve("trust_claude")}
@@ -257,6 +261,7 @@ function SkillReviewRow({
 
             {/* Override */}
             <button
+              id={`review-flag-${flag.skill_name}-override-btn`}
               type="button"
               disabled={saving}
               onClick={() => setShowOverride((v) => !v)}
@@ -277,6 +282,7 @@ function SkillReviewRow({
             <div className="flex items-center gap-2">
               <TierPicker value={overrideTier} onChange={setOverrideTier} />
               <button
+                id={`review-flag-${flag.skill_name}-set-override-btn`}
                 type="button"
                 disabled={!overrideTier || saving}
                 onClick={() => {
@@ -868,8 +874,6 @@ export default function PlayerReviewPage() {
             <SkillReviewRow
               key={flag.id}
               flag={flag}
-              statTier={profiles.stats[flag.skill_name] ?? null}
-              claudeTier={profiles.claude[flag.skill_name] ?? null}
               isFocused={idx === focusedIdx}
               onRowMount={(el) => {
                 if (el) {
@@ -899,8 +903,6 @@ export default function PlayerReviewPage() {
             <SkillReviewRow
               key={flag.id}
               flag={flag}
-              statTier={profiles.stats[flag.skill_name] ?? null}
-              claudeTier={profiles.claude[flag.skill_name] ?? null}
               isFocused={false}
               onResolve={() => {}}
               saving={false}
