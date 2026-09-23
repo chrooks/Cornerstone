@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Fragment, useState, useEffect, useCallback, useRef } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Toaster, toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -19,17 +19,9 @@ import type {
 } from "@/lib/types";
 import { SKILL_TIERS, TIER_PICKER_ACTIVE_CLASS } from "@/lib/tiers";
 import { ALL_SKILL_NAMES, formatSkillName } from "@/lib/skills";
+import { REASON_KINDS, formatReason, reasonKind } from "@/lib/flag-reasons";
 
 const CURRENT_SEASON = "2025-26";
-
-// Human-readable flag reason labels
-const FLAG_REASON_LABELS: Record<string, string> = {
-  two_tier_disagreement:   "2-tier disagreement",
-  one_tier_low_confidence: "1-tier (low confidence)",
-  low_notability:          "Low notability",
-  claude_low_confidence:   "Claude reported low confidence",
-  data_missing:            "Data missing",
-};
 
 /** Source badge for the composite result's source field. */
 function SourceBadge({ source }: { source: string }) {
@@ -63,7 +55,7 @@ function TierPicker({
           type="button"
           onClick={() => onChange(t)}
           className={cn(
-            "text-xs px-2 py-1 rounded border transition-colors",
+            "min-h-10 px-3 text-xs rounded border transition-colors sm:min-h-0 sm:px-2 sm:py-1",
             value === t
               ? TIER_PICKER_ACTIVE_CLASS[t]
               : "border-input text-muted-foreground hover:border-foreground"
@@ -145,12 +137,19 @@ function SkillReviewRow({
       )}
     >
       {/* Skill name + flag reason */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50">
-        <span className="font-medium text-sm text-foreground flex-1">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-3 py-2 border-b border-border/50">
+        <span className="min-w-0 flex-1 font-medium text-sm text-foreground">
           {formatSkillName(flag.skill_name)}
         </span>
-        <span className="text-xs text-muted-foreground italic">
-          {FLAG_REASON_LABELS[flag.flag_reason] ?? flag.flag_reason}
+        <span
+          className={cn(
+            "basis-full text-xs sm:basis-auto",
+            REASON_KINDS[reasonKind(flag.flag_reason)]?.tone === "attention"
+              ? "font-medium text-foreground"
+              : "text-muted-foreground"
+          )}
+        >
+          {formatReason(flag.flag_reason)}
         </span>
         {isResolved && (
           <span className="text-xs text-emerald-600 font-medium">✓ Resolved</span>
@@ -226,7 +225,7 @@ function SkillReviewRow({
       {/* Resolution buttons — only shown for unresolved flags */}
       {!isResolved && (
         <div className="px-3 pb-3 space-y-2">
-          <div className="flex gap-2 flex-wrap">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {/* Trust Stats */}
             <button
               id={`review-flag-${flag.skill_name}-trust-stats-btn`}
@@ -234,7 +233,7 @@ function SkillReviewRow({
               disabled={saving}
               onClick={() => onResolve("trust_stats")}
               className={cn(
-                "text-xs px-3 py-1.5 rounded-md border font-medium transition-colors",
+                "min-h-11 px-3 text-xs rounded-md border font-medium transition-colors sm:min-h-0 sm:py-1.5",
                 "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100",
                 saving && "opacity-50 cursor-not-allowed"
               )}
@@ -250,7 +249,7 @@ function SkillReviewRow({
                 disabled={saving}
                 onClick={() => onResolve("trust_claude")}
                 className={cn(
-                  "text-xs px-3 py-1.5 rounded-md border font-medium transition-colors",
+                  "min-h-11 px-3 text-xs rounded-md border font-medium transition-colors sm:min-h-0 sm:py-1.5",
                   "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100",
                   saving && "opacity-50 cursor-not-allowed"
                 )}
@@ -266,7 +265,9 @@ function SkillReviewRow({
               disabled={saving}
               onClick={() => setShowOverride((v) => !v)}
               className={cn(
-                "text-xs px-3 py-1.5 rounded-md border font-medium transition-colors",
+                "min-h-11 px-3 text-xs rounded-md border font-medium transition-colors sm:min-h-0 sm:py-1.5",
+                // With both Trust buttons on the first row, Override takes the second.
+                claudeTier && "col-span-2",
                 showOverride
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-input text-muted-foreground hover:text-foreground hover:border-foreground",
@@ -279,7 +280,7 @@ function SkillReviewRow({
 
           {/* Override picker */}
           {showOverride && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <TierPicker value={overrideTier} onChange={setOverrideTier} />
               <button
                 id={`review-flag-${flag.skill_name}-set-override-btn`}
@@ -289,7 +290,7 @@ function SkillReviewRow({
                   if (overrideTier) onResolve("manual_override", overrideTier);
                 }}
                 className={cn(
-                  "text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-medium transition-colors",
+                  "min-h-11 px-3 text-xs rounded-md bg-primary text-primary-foreground font-medium transition-colors sm:min-h-0 sm:py-1.5",
                   "hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                 )}
               >
@@ -311,13 +312,22 @@ export default function PlayerReviewPage() {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
 
+  // The Skill filter the reviewer came from (?skill=), so Next walks that
+  // Skill's queue, not the whole league. A URL value is validated first.
+  const skillParam = useSearchParams().get("skill");
+  const skill = skillParam && ALL_SKILL_NAMES.includes(skillParam) ? skillParam : null;
+  const withSkill = useCallback(
+    (path: string) => (skill ? `${path}?skill=${skill}` : path),
+    [skill]
+  );
+
   // Ordered review queue for prev/next navigation
   const [queue, setQueue] = useState<FlaggedPlayerSummary[]>([]);
   useEffect(() => {
-    getReviewQueue().then((res) => {
+    getReviewQueue(skill ? { skill_name: skill } : undefined).then((res) => {
       if (res.success && res.data) setQueue(res.data);
     });
-  }, []);
+  }, [skill]);
   const queueIdx  = queue.findIndex((p) => p.player_id === player_id);
   const prevEntry = queueIdx > 0 ? queue[queueIdx - 1] : null;
   const nextEntry = queueIdx >= 0 && queueIdx < queue.length - 1 ? queue[queueIdx + 1] : null;
@@ -408,14 +418,14 @@ export default function PlayerReviewPage() {
       } else if (e.key === "k" || e.key === "ArrowUp") {
         setFocusedIdx((i) => Math.max(i - 1, 0));
       } else if (e.key === "ArrowRight" && nextEntry) {
-        router.push(`/admin/review/${nextEntry.player_id}`);
+        router.push(withSkill(`/admin/review/${nextEntry.player_id}`));
       } else if (e.key === "ArrowLeft" && prevEntry) {
-        router.push(`/admin/review/${prevEntry.player_id}`);
+        router.push(withSkill(`/admin/review/${prevEntry.player_id}`));
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [detail, prevEntry, nextEntry, router]);
+  }, [detail, prevEntry, nextEntry, router, withSkill]);
 
   // Auto-scroll focused row into view
   useEffect(() => {
@@ -636,7 +646,7 @@ export default function PlayerReviewPage() {
   const noClaudeAtAll = noClaudeCount === unresolvedFlags.length;
 
   return (
-    <main id="player-review-page" className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+    <main id="player-review-page" className="max-w-3xl mx-auto px-4 pt-8 pb-28 space-y-6 sm:pb-8">
       <Toaster position="top-right" richColors />
 
       {/* Delete confirmation modal */}
@@ -690,11 +700,11 @@ export default function PlayerReviewPage() {
         <button
           id="review-prev-btn"
           type="button"
-          onClick={() => router.push(`/admin/review/${prevEntry.player_id}`)}
+          onClick={() => router.push(withSkill(`/admin/review/${prevEntry.player_id}`))}
           title={`← ${prevEntry.player_name}`}
           className={cn(
             "fixed left-3 top-1/2 -translate-y-1/2 z-40",
-            "flex flex-col items-center gap-1",
+            "hidden sm:flex flex-col items-center gap-1",
             "p-2 rounded-lg border border-border bg-background/80 backdrop-blur-sm shadow-sm",
             "text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors group"
           )}
@@ -709,11 +719,11 @@ export default function PlayerReviewPage() {
         <button
           id="review-next-btn"
           type="button"
-          onClick={() => router.push(`/admin/review/${nextEntry.player_id}`)}
+          onClick={() => router.push(withSkill(`/admin/review/${nextEntry.player_id}`))}
           title={`${nextEntry.player_name} →`}
           className={cn(
             "fixed right-3 top-1/2 -translate-y-1/2 z-40",
-            "flex flex-col items-center gap-1",
+            "hidden sm:flex flex-col items-center gap-1",
             "p-2 rounded-lg border border-border bg-background/80 backdrop-blur-sm shadow-sm",
             "text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors group"
           )}
@@ -725,16 +735,47 @@ export default function PlayerReviewPage() {
         </button>
       )}
 
+      {/* Phones: a thumb-reach bar replaces the side arrows. */}
+      {(prevEntry || nextEntry) && (
+        <nav
+          id="review-mobile-nav"
+          aria-label="Review queue navigation"
+          className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border bg-background px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:hidden"
+        >
+          <button
+            id="review-mobile-prev-btn"
+            type="button"
+            disabled={!prevEntry}
+            onClick={() => prevEntry && router.push(withSkill(`/admin/review/${prevEntry.player_id}`))}
+            className="min-h-11 min-w-0 truncate rounded-md border border-border px-3 text-left text-sm text-foreground disabled:opacity-40"
+          >
+            ‹ {prevEntry?.player_name ?? "Start"}
+          </button>
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {queueIdx + 1}/{queue.length}
+          </span>
+          <button
+            id="review-mobile-next-btn"
+            type="button"
+            disabled={!nextEntry}
+            onClick={() => nextEntry && router.push(withSkill(`/admin/review/${nextEntry.player_id}`))}
+            className="min-h-11 min-w-0 truncate rounded-md border border-primary/60 bg-primary/15 px-3 text-right text-sm font-medium text-foreground disabled:opacity-40"
+          >
+            {nextEntry?.player_name ?? "End"} ›
+          </button>
+        </nav>
+      )}
+
       {/* Back link + player header */}
       <div id="review-player-header">
         <Link
           id="review-back-link"
-          href="/admin/snapshots/draft?tab=review"
+          href={skill ? `/admin/review?skill=${skill}` : "/admin/snapshots/draft?tab=review"}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           ← Review Queue
         </Link>
-        <div className="mt-2 flex items-start justify-between gap-4">
+        <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="flex items-start gap-3">
             <PlayerHeadshot nba_api_id={player.nba_api_id} size={72} name={player.name} />
             <div>
@@ -797,7 +838,7 @@ export default function PlayerReviewPage() {
             </div>
           </div>
           {/* Top-right actions: profile link + delete */}
-          <div className="flex flex-col items-end gap-2 flex-shrink-0">
+          <div className="flex flex-row items-center gap-3 flex-shrink-0 sm:flex-col sm:items-end sm:gap-2">
             <Link
               id="review-view-profile-link"
               href={`/admin/players/${player_id}`}
@@ -818,7 +859,7 @@ export default function PlayerReviewPage() {
       </div>
 
       {/* Summary + bulk actions */}
-      <div id="review-summary-bar" className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3">
+      <div id="review-summary-bar" className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div id="review-summary-counts" className="text-sm">
           <span className="font-semibold text-foreground">{unresolvedFlags.length}</span>
           <span className="text-muted-foreground"> unresolved · </span>
@@ -826,13 +867,13 @@ export default function PlayerReviewPage() {
           <span className="text-muted-foreground"> resolved of {flags.length} flags</span>
         </div>
         {unresolvedFlags.length > 0 && (
-          <div id="review-bulk-actions" className="flex gap-2">
+          <div id="review-bulk-actions" className="grid grid-cols-2 gap-2 sm:flex">
             <button
               id="review-bulk-trust-stats-btn"
               type="button"
               disabled={bulkSaving}
               onClick={() => handleBulkResolve("trust_stats")}
-              className="text-xs px-3 py-1.5 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium transition-colors disabled:opacity-50"
+              className="min-h-11 px-3 text-xs rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium transition-colors disabled:opacity-50 sm:min-h-0 sm:py-1.5"
             >
               Trust All Stats
             </button>
@@ -846,7 +887,7 @@ export default function PlayerReviewPage() {
                   : undefined
               }
               onClick={() => handleBulkResolve("trust_claude")}
-              className="text-xs px-3 py-1.5 rounded-md border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium transition-colors disabled:opacity-50"
+              className="min-h-11 px-3 text-xs rounded-md border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium transition-colors disabled:opacity-50 sm:min-h-0 sm:py-1.5"
             >
               Trust All Claude
               {noClaudeCount > 0 && ` (${noClaudeCount} stats-only left open)`}
@@ -857,7 +898,7 @@ export default function PlayerReviewPage() {
 
       {/* Keyboard shortcut hint */}
       {unresolvedFlags.length > 0 && (
-        <p className="text-xs text-muted-foreground">
+        <p className="hidden text-xs text-muted-foreground sm:block">
           Use <kbd className="px-1 py-0.5 rounded bg-muted text-foreground text-[10px] font-mono">j</kbd> /{" "}
           <kbd className="px-1 py-0.5 rounded bg-muted text-foreground text-[10px] font-mono">k</kbd>{" "}
           to navigate between flags.
@@ -943,7 +984,7 @@ export default function PlayerReviewPage() {
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground">Skill</th>
                     <th className="text-center px-3 py-2 font-medium text-muted-foreground">Tier</th>
-                    <th className="text-center px-3 py-2 font-medium text-muted-foreground">Source</th>
+                    <th className="hidden text-center px-3 py-2 font-medium text-muted-foreground sm:table-cell">Source</th>
                     <th className="px-3 py-2" />
                   </tr>
                 </thead>
@@ -953,53 +994,64 @@ export default function PlayerReviewPage() {
                     const isOverriding = overridingSkill === skill;
 
                     return (
-                      <tr key={skill} className="border-b border-border last:border-0 hover:bg-muted/20">
-                        <td className="px-3 py-2 font-medium">{formatSkillName(skill)}</td>
-                        <td className="px-3 py-2 text-center">
-                          <SkillTierBadge tier={composite.final_tier as SkillTier} />
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <SourceBadge source={composite.source} />
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {isOverriding ? (
-                            <div className="flex items-center justify-end gap-2">
-                              <TierPicker
-                                value={overrideTier}
-                                onChange={setOverrideTier}
-                              />
+                      <Fragment key={skill}>
+                        <tr className={cn("border-b border-border hover:bg-muted/20", isOverriding && "border-b-0 bg-muted/20")}>
+                          <td className="px-3 py-2 font-medium">{formatSkillName(skill)}</td>
+                          <td className="px-3 py-2 text-center">
+                            <SkillTierBadge tier={composite.final_tier as SkillTier} />
+                          </td>
+                          <td className="hidden px-3 py-2 text-center sm:table-cell">
+                            <SourceBadge source={composite.source} />
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {!isOverriding && (
                               <button
+                                id={`review-all-skills-${skill}-override-btn`}
                                 type="button"
-                                disabled={!overrideTier || overrideSaving}
-                                onClick={() =>
-                                  overrideTier && handleManualOverride(skill, overrideTier)
-                                }
-                                className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground font-medium disabled:opacity-40 hover:opacity-80 transition-opacity"
+                                onClick={() => {
+                                  setOverridingSkill(skill);
+                                  setOverrideTier(composite.final_tier as SkillTier ?? "");
+                                }}
+                                className="min-h-10 px-3 text-xs rounded border border-border text-muted-foreground hover:text-foreground hover:border-foreground transition-colors sm:min-h-0 sm:px-2 sm:py-1"
                               >
-                                {overrideSaving ? "…" : "Save"}
+                                Override
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => { setOverridingSkill(null); setOverrideTier(""); }}
-                                className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOverridingSkill(skill);
-                                setOverrideTier(composite.final_tier as SkillTier ?? "");
-                              }}
-                              className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
-                            >
-                              Override
-                            </button>
-                          )}
-                        </td>
-                      </tr>
+                            )}
+                          </td>
+                        </tr>
+                        {/* The editor gets its own full-width row, so the tier
+                            picker never has to fit in the last cell of a phone row. */}
+                        {isOverriding && (
+                          <tr className="border-b border-border bg-muted/20">
+                            <td colSpan={4} className="px-3 pb-3">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                                <TierPicker value={overrideTier} onChange={setOverrideTier} />
+                                <div className="grid grid-cols-2 gap-2 sm:flex">
+                                  <button
+                                    id={`review-all-skills-${skill}-save-btn`}
+                                    type="button"
+                                    disabled={!overrideTier || overrideSaving}
+                                    onClick={() =>
+                                      overrideTier && handleManualOverride(skill, overrideTier)
+                                    }
+                                    className="min-h-11 px-3 text-xs rounded bg-primary text-primary-foreground font-medium disabled:opacity-40 hover:opacity-80 transition-opacity sm:min-h-0 sm:py-1"
+                                  >
+                                    {overrideSaving ? "Saving…" : "Save"}
+                                  </button>
+                                  <button
+                                    id={`review-all-skills-${skill}-cancel-btn`}
+                                    type="button"
+                                    onClick={() => { setOverridingSkill(null); setOverrideTier(""); }}
+                                    className="min-h-11 px-3 text-xs rounded border border-border text-muted-foreground hover:text-foreground sm:min-h-0 sm:py-1"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
