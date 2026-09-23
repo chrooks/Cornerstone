@@ -364,6 +364,16 @@ def format_report(result: Mapping[str, Any]) -> str:
         lines.append(f"  #152 split keys in this release: {counts}")
         lines.append("      -> this run does not exercise the split weighting; "
                      "reproducing the pre-split numbers is forced, not evidence")
+    seasons = result.get("season_coverage")
+    if seasons:
+        stored = ", ".join(f"{s} {n}" for s, n in seasons["rows_by_season"].items())
+        lines.append(f"  #164 what these ratings can see: player_stats rows by season: {stored}")
+        lines.append(f"      -> regular season only (no postseason anywhere in the pipeline), and "
+                     f"history.py blends {seasons['blend_seasons']} of 3 weighted seasons")
+        if seasons["blend_seasons"] < 2:
+            lines.append("      -> the 3-season blend redistributes 100% onto one season, so every "
+                         "rating below is ONE regular season. The Ringer ranks partly on playoffs "
+                         "this engine cannot see: do not tune the gap away.")
     lines.append(f"  #119 pass line: {'PASS' if result['passes'] else 'FAIL'}")
     return "\n".join(lines)
 
@@ -518,6 +528,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             .order("id")
         )
     )
+
+    # #164: what these ratings can actually see. Counted here rather than
+    # trusted from a document, because the answer changes the moment someone
+    # backfills a season and nobody re-reads the document.
+    rows_by_season: dict[str, int] = {}
+    for row in pages(
+        lambda: client.table("player_stats").select("season").order("id")
+    ):
+        season_key = row.get("season") or "unknown"
+        rows_by_season[season_key] = rows_by_season.get(season_key, 0) + 1
+    from services.skill_engine import history as _history
+
+    result["season_coverage"] = {
+        "rows_by_season": dict(sorted(rows_by_season.items())),
+        "blend_seasons": sum(
+            1 for s in _history._HISTORY_WEIGHTS if rows_by_season.get(s)
+        ),
+    }
 
     print(f"Evaluation Version {version.slug}  release {release_id}  "
           f"pool {len(active_overalls)} actives, {len(legend_overalls)} legends")
