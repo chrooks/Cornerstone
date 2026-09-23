@@ -827,6 +827,32 @@
         "state": "closed",
         "milestone": "Player Archetypes"
       }
+    },
+    {
+      "id": "i166",
+      "label": "#166 Swipe deck for the review\nqueue on a phone (V1, P1 feature)",
+      "group": "snapshot",
+      "description": "One card per open flag on one Skill: swipe left = Trust Stats, right = Trust Claude, up = skip, one-tap tier strip, 5 s undo, rounds of 20. Speeds up the #119 M5 review of ~1000 flags from a phone.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/166",
+        "state": "open · afk",
+        "priority": "p2"
+      },
+      "x": -850,
+      "y": -400
+    },
+    {
+      "id": "i167",
+      "label": "#167 Review read endpoints answer\nwithout an admin login (V1, P2 bug)",
+      "group": "snapshot",
+      "description": "GET /review/queue, /review/<id>/flags and /review/<id>/skill-breakdown have no @require_admin. Add it; the admin screens already send the JWT.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/167",
+        "state": "open · afk",
+        "priority": "p2"
+      },
+      "x": -850,
+      "y": -270
     }
   ],
   "edges": [

@@ -22,7 +22,7 @@
     { "id": "community", "label": "Community + profile\n+ players explorer", "group": "frontend", "x": -300, "y": -400,
       "description": "Leaderboard of public Saved Teams, user profile, player explorer.", "meta": { "tech": "Next.js" } },
     { "id": "admin", "label": "Admin surfaces\n/admin/*", "group": "frontend", "x": -30, "y": -400,
-      "description": "Calibration (threshold editor), pipeline dashboard, snapshot drafts + skill-evaluation runner (Skill scope, run-mode checkboxes, Discard a stuck run), review queue (Skill filter + per-Skill bulk bar), legends editor, rulesets, cohesion calibration. Requires user_roles.role = 'admin'.", "meta": { "tech": "Next.js + Monaco" } },
+      "description": "Calibration (threshold editor), pipeline dashboard, snapshot drafts + skill-evaluation runner (Skill scope, run-mode checkboxes, Discard a stuck run), review queue (Skill filter + per-Skill bulk bar) and its phone swipe deck (/admin/review/deck, #166: one Skill-filtered queue request loads every card; answers go through the same resolve endpoint, held 5 s in the browser for undo), legends editor, rulesets, cohesion calibration. Requires user_roles.role = 'admin'.", "meta": { "tech": "Next.js + Monaco" } },
     { "id": "apifetch", "label": "apiFetch<T>()\nlib/api.ts", "group": "frontend", "x": 250, "y": -400,
       "description": "Single chokepoint for all backend calls — injects JWT + base URL. Types in lib/types.ts mirror backend shapes. Envelope: { success, data, error }.", "meta": { "tech": "TypeScript" } },
 
