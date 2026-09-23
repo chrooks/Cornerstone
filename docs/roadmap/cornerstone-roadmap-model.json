@@ -814,6 +814,19 @@
         "state": "open · afk",
         "priority": "p2"
       }
+    },
+    {
+      "id": "i165",
+      "label": "#165 Trust buttons write a different\ntier than their label (P1 bug)",
+      "group": "snapshot",
+      "x": -850,
+      "y": -530,
+      "description": "On the review flag card the Trust Stats / Trust Claude labels come from today's stats and Claude profiles, but the click writes the tier stored on the flag row. On 46 dev flags they differ: 26 old contradiction flags would write an old tier over Chris's decision, and 20 fresh ones write the recomputed tier under a raw-stats label. M5.9 notes route Chris to Override on all 46.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/165",
+        "state": "open · afk",
+        "priority": "p1"
+      }
     }
   ],
   "edges": [
@@ -1080,6 +1093,12 @@
       "to": "i130",
       "label": "fix before the review session",
       "description": "#130's recompute and review run inside M5; a decision made while a run waits to commit is silently overwritten."
+    },
+    {
+      "from": "i165",
+      "to": "i152",
+      "label": "hazard in the review session",
+      "description": "M5.11 resolves the on-ball and versatile contradiction flags; a Trust click on one of the 46 overwrites a human decision or writes a tier the label did not show."
     }
   ]
 }
