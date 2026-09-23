@@ -68,7 +68,8 @@ class _FakeQuery:
         self._filters.append(lambda row: row.get(key) in values)
         return self
 
-    def order(self, *_args, **_kwargs):
+    def order(self, column, *_args, desc: bool = False, **_kwargs):
+        self._order = (column, desc)
         return self
 
     def limit(self, n, *_args, **_kwargs):
@@ -86,6 +87,9 @@ class _FakeQuery:
         if self._update_payload is not None:
             return _FakeResult(self.db.update(self.table_name, self._filters, self._update_payload))
         rows = self.db.select(self.table_name, self._filters)
+        if getattr(self, "_order", None):
+            column, desc = self._order
+            rows.sort(key=lambda r: (r.get(column) is None, r.get(column)), reverse=desc)
         if self._range is not None:
             start, end = self._range
             rows = rows[start : end + 1]
@@ -1007,3 +1011,152 @@ def test_review_queue_reason_filter_matches_a_reason_family(admin_client, db):
     assert [e["player_id"] for e in family] == [PID]
     assert [e["player_id"] for e in exact] == [PID2]
     assert prefix_only == []   # a family is matched whole, never by a partial word
+
+
+# ---------------------------------------------------------------------------
+# #166 — a Skill-filtered queue entry carries its card (the swipe deck)
+# ---------------------------------------------------------------------------
+
+
+def test_review_queue_skill_filter_carries_the_deck_card(admin_client, db):
+    """One request loads a deck: each entry holds its flag and the player line."""
+    _seed_player(
+        db, PID, PROFILE_ID,
+        {"high_flyer": _entry("None", "Proficient", "None")},
+        [{"id": "f-hf", "skill_name": "high_flyer", "stat_rating": "Proficient",
+          "claude_rating": "None", "flag_reason": "two_tier_disagreement",
+          "claude_justification": "Rarely finishes above the rim."}],
+        name="Deck Player",
+    )
+    db.rows["players"][0].update({"games_played": 70, "minutes_per_game": 31.5, "nba_api_id": 1628384})
+
+    entry = admin_client.get("/api/review/queue?skill_name=high_flyer").get_json()["data"][0]
+
+    assert entry["flag"] == {
+        "id":                   "f-hf",
+        "skill_name":           "high_flyer",
+        "flag_reason":          "two_tier_disagreement",
+        "stat_rating":          "Proficient",
+        "claude_tier":          "None",
+        "claude_justification": "Rarely finishes above the rim.",
+        "tier_now":             "None",
+    }
+    assert (entry["games_played"], entry["minutes_per_game"], entry["nba_api_id"]) == (70, 31.5, 1628384)
+
+
+def test_review_queue_deck_card_has_no_claude_tier_on_a_high_skill(admin_client, db):
+    """The flag's 'None' is a placeholder on a HIGH Skill, never Claude's tier (#154)."""
+    _seed_player(
+        db, PID, PROFILE_ID,
+        {"rim_protector": _entry("Elite", "Elite", None)},
+        [{"id": "f-rim", "skill_name": "rim_protector", "stat_rating": "Elite", "claude_rating": "None"}],
+    )
+
+    entry = admin_client.get("/api/review/queue?skill_name=rim_protector").get_json()["data"][0]
+
+    assert entry["flag"]["claude_tier"] is None
+    assert entry["flag"]["tier_now"] == "Elite"
+
+
+def test_review_queue_without_skill_name_has_no_deck_card(admin_client, db):
+    _seed(db)
+    db.rows["players"] = [{"id": PID, "name": "OG", "team": "BOS", "position": "F"}]
+
+    entry = admin_client.get("/api/review/queue").get_json()["data"][0]
+
+    assert "flag" not in entry
+    assert "nba_api_id" not in entry
+
+
+def test_duplicate_open_flags_card_and_resolve_pick_the_same_flag(admin_client, db):
+    """#166: with two open flags on one Skill, the deck card and the write target one row.
+
+    The rows are stored out of id order on purpose; both paths must pick the
+    lowest id, so the tier the card shows is the tier the click writes.
+    """
+    _seed_player(
+        db, PID, PROFILE_ID,
+        {"high_flyer": _entry("None", "Capable", "Elite")},
+        [
+            {"id": "f-b", "skill_name": "high_flyer", "stat_rating": "Proficient", "claude_rating": "Elite"},
+            {"id": "f-a", "skill_name": "high_flyer", "stat_rating": "Capable", "claude_rating": "Elite"},
+        ],
+    )
+
+    entry = admin_client.get("/api/review/queue?skill_name=high_flyer").get_json()["data"][0]
+    assert entry["flag"]["id"] == "f-a"
+    assert entry["flag"]["stat_rating"] == "Capable"
+
+    resp = _resolve(admin_client, "high_flyer", resolution="trust_stats")
+    assert resp.status_code == 200, resp.get_json()
+    assert resp.get_json()["data"]["flag_id"] == "f-a"
+    assert _flag(db, "f-a")["resolved_value"] == "Capable"
+    assert _flag(db, "f-b")["resolution"] is None
+
+
+def test_resolving_an_already_resolved_flag_returns_the_404_the_deck_reads(admin_client, db):
+    """The deck drops a card on this exact message (describeSaveError) — pin it."""
+    _seed(db)
+    assert _resolve(admin_client, "high_flyer").status_code == 200
+
+    resp = _resolve(admin_client, "high_flyer")
+
+    assert resp.status_code == 404
+    assert resp.get_json()["error"].startswith("No unresolved flag found for skill 'high_flyer'")
+
+
+def test_resolve_with_flag_id_writes_exactly_that_flag(admin_client, db):
+    """#166: the deck names the flag it showed; the write lands on that row only."""
+    _seed_player(
+        db, PID, PROFILE_ID,
+        {"high_flyer": _entry("None", "Capable", "Elite")},
+        [
+            {"id": "aaaaaaaa-0000-4000-8000-00000000000a", "skill_name": "high_flyer", "stat_rating": "Capable", "claude_rating": "Elite"},
+            {"id": "bbbbbbbb-0000-4000-8000-00000000000b", "skill_name": "high_flyer", "stat_rating": "Proficient", "claude_rating": "Elite"},
+        ],
+    )
+
+    resp = admin_client.post(
+        f"/api/review/{PID}/resolve",
+        json={"skill_name": "high_flyer", "resolution": "trust_stats", "flag_id": "bbbbbbbb-0000-4000-8000-00000000000b"},
+        headers=admin_client.auth_header,
+    )
+
+    assert resp.status_code == 200, resp.get_json()
+    assert resp.get_json()["data"]["flag_id"] == "bbbbbbbb-0000-4000-8000-00000000000b"
+    assert _flag(db, "bbbbbbbb-0000-4000-8000-00000000000b")["resolved_value"] == "Proficient"
+    assert _flag(db, "aaaaaaaa-0000-4000-8000-00000000000a")["resolution"] is None
+
+
+def test_resolve_with_a_stale_flag_id_refuses_and_writes_nothing(admin_client, db):
+    """A pipeline commit replaced the flag the card showed: never write the new one blind."""
+    _seed_player(
+        db, PID, PROFILE_ID,
+        {"high_flyer": _entry("None", "Capable", "Elite")},
+        [{"id": "eeeeeeee-0000-4000-8000-00000000000e", "skill_name": "high_flyer", "stat_rating": "Elite", "claude_rating": "Elite"}],
+    )
+
+    resp = admin_client.post(
+        f"/api/review/{PID}/resolve",
+        json={"skill_name": "high_flyer", "resolution": "trust_stats", "flag_id": "dddddddd-0000-4000-8000-00000000000d"},
+        headers=admin_client.auth_header,
+    )
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "flag_changed"
+    assert db.updates == []
+
+
+def test_resolve_rejects_a_flag_id_that_is_not_a_uuid(admin_client, db):
+    """A malformed id is a 400 before any query, never a database cast error."""
+    _seed(db)
+
+    resp = admin_client.post(
+        f"/api/review/{PID}/resolve",
+        json={"skill_name": "high_flyer", "resolution": "trust_stats", "flag_id": "not-a-uuid"},
+        headers=admin_client.auth_header,
+    )
+
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "'flag_id' must be a UUID"
+    assert db.updates == []

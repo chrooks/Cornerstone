@@ -125,12 +125,17 @@ def _is_human_decision(flag: dict, entry) -> bool:
 
 
 def _open_flag_query(supabase, profile_ids, skill_name: str, columns: str):
-    """Unresolved flags for a chunk of composite profiles, optionally one Skill."""
+    """Unresolved flags for a chunk of composite profiles, optionally one Skill.
+
+    Ordered by id: when a player holds two open flags on one Skill, the deck
+    card (#166) and `resolve_flag` must both pick the same row.
+    """
     q = (
         supabase.table("draft_skill_flags")
         .select(columns)
         .in_("skill_profile_id", profile_ids)
         .is_("resolution", "null")
+        .order("id")
     )
     return q.eq("skill_name", skill_name) if skill_name else q
 
@@ -149,6 +154,30 @@ def _is_negative_candidate(profile_data: dict) -> bool:
         if tier != "None":
             return False
     return True
+
+
+def _deck_card(skill_name: str, flag: dict, player: dict, profile_data_by_id: dict) -> dict:
+    """The swipe deck's card for one player's open flag on one Skill (#166).
+
+    Claude's tier goes through `_claude_tier`, the same rule the resolve
+    endpoint enforces, so a card never offers a Trust Claude the server refuses.
+    """
+    profile_data = profile_data_by_id.get(flag["skill_profile_id"], {})
+    entry = profile_data.get(skill_name)
+    return {
+        "games_played":     player.get("games_played"),
+        "minutes_per_game": player.get("minutes_per_game"),
+        "nba_api_id":       player.get("nba_api_id"),
+        "flag": {
+            "id":                   flag["id"],
+            "skill_name":           flag["skill_name"],
+            "flag_reason":          flag.get("flag_reason"),
+            "stat_rating":          flag.get("stat_rating"),
+            "claude_tier":          _claude_tier(skill_name, flag, profile_data),
+            "claude_justification": flag.get("claude_justification"),
+            "tier_now":             entry.get("final_tier") if isinstance(entry, dict) else entry,
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -172,12 +201,18 @@ def review_queue():
       ?flag_reason=...     (filter by flag_reason value, or a family:
                             "human_decision_contradicted" matches every variant)
       ?skill_name=high_flyer  (only players with an open flag on that Skill;
-                               each entry then also carries agreement_count)
+                               each entry then also carries agreement_count and
+                               its swipe-deck card, #166)
 
     Response data: list of {
       player_id, player_name, team, position,
       unresolved_flag_count, flag_reasons: str[],
-      agreement_count?: int    // only when ?skill_name= is set
+      // only when ?skill_name= is set:
+      agreement_count?: int,
+      games_played?, minutes_per_game?, nba_api_id?,
+      flag?: { id, skill_name, flag_reason, stat_rating,
+               claude_tier,            // null when Claude has no tier (#154)
+               claude_justification, tier_now }
     }
     """
     season      = request.args.get("season", CURRENT_SEASON)
@@ -221,7 +256,8 @@ def review_queue():
                 _open_flag_query(
                     supabase, c, skill_filter,
                     "id, skill_profile_id, skill_name, flag_reason, "
-                    "stat_rating, claude_rating",
+                    "stat_rating, claude_rating"
+                    + (", claude_justification" if skill_filter else ""),
                 ).execute()
             ))
             all_unresolved.extend(rows.data or [])
@@ -237,7 +273,9 @@ def review_queue():
             if not pid:
                 continue
             if pid not in player_flag_info:
-                player_flag_info[pid] = {"count": 0, "reasons": set(), "agreements": 0}
+                # With a Skill filter the first open flag is the player's deck
+                # card; a rare duplicate comes back on the next deck load.
+                player_flag_info[pid] = {"count": 0, "reasons": set(), "agreements": 0, "flag": flag}
             player_flag_info[pid]["count"] += 1
             if skill_filter and _is_agreement(
                 flag, profile_data_by_id.get(flag["skill_profile_id"], {})
@@ -257,7 +295,10 @@ def review_queue():
         for chunk in in_chunks(flagged_player_ids):
             rows = run_query(lambda c=chunk: (
                 supabase.table("players")
-                .select("id, name, team, position")
+                .select(
+                    "id, name, team, position"
+                    + (", games_played, minutes_per_game, nba_api_id" if skill_filter else "")
+                )
                 .in_("id", c)
                 .execute()
             ))
@@ -298,6 +339,7 @@ def review_queue():
             }
             if skill_filter:
                 entry["agreement_count"] = flag_info["agreements"]
+                entry.update(_deck_card(skill_filter, flag_info["flag"], player, profile_data_by_id))
             queue.append(entry)
 
         # Sort by unresolved count descending, then by name
@@ -461,13 +503,16 @@ def resolve_flag(player_id: str):
         "resolution":     "trust_stats"|"trust_claude"|"manual_override",  // required
         "resolved_value": "None"|"Capable"|"Elite"|null,       // required only for manual_override
         "notes":          str | null,                           // optional
-        "season":         "2025-26"                            // optional, default current
+        "season":         "2025-26",                           // optional, default current
+        "flag_id":        str | null                            // optional (#166): resolve exactly this open flag
       }
 
     Response data:
       { "flag_id": str, "resolved_tier": str, "all_flags_resolved": bool }
 
     409 when resolution=trust_claude and the Skill has no Claude tier (#154).
+    409 "flag_changed" when `flag_id` names a flag that is no longer open for
+    this Skill — e.g. a pipeline commit replaced it after the caller read it.
     """
     if not _validate_uuid(player_id):
         return _err("Invalid player_id — must be a UUID")
@@ -478,6 +523,7 @@ def resolve_flag(player_id: str):
     resolved_value = body.get("resolved_value")
     notes      = body.get("notes")
     season     = body.get("season", CURRENT_SEASON)
+    flag_id_in = body.get("flag_id")
 
     # Input validation
     if not skill_name:
@@ -489,6 +535,8 @@ def resolve_flag(player_id: str):
             return _err(
                 "'resolved_value' must be None/Capable/Proficient/Elite when resolution=manual_override"
             )
+    if flag_id_in is not None and not (isinstance(flag_id_in, str) and _validate_uuid(flag_id_in)):
+        return _err("'flag_id' must be a UUID")
 
     try:
         supabase = get_supabase()
@@ -514,15 +562,22 @@ def resolve_flag(player_id: str):
         # duplicate flags (e.g. one manual_override + one auto-flagged, or a prior
         # resolved row alongside a new proficient_tier_review flag) don't cause the
         # already-resolved row to be targeted, leaving the real unresolved flag stuck.
-        flag_row = (
+        flag_query = (
             supabase.table("draft_skill_flags")
             .select("id, stat_rating, claude_rating, resolution")
             .eq("skill_profile_id", profile_id)
             .eq("skill_name", skill_name)
             .is_("resolution", "null")
-            .limit(1)
-            .execute()
         )
+        if flag_id_in:
+            # #166: the caller showed this exact flag's tiers. If it is gone, a
+            # newer flag may carry different tiers — refuse rather than write
+            # a tier the reviewer never saw.
+            flag_row = flag_query.eq("id", flag_id_in).limit(1).execute()
+            if not flag_row.data:
+                return _err("flag_changed", status=409)
+        else:
+            flag_row = flag_query.order("id").limit(1).execute()  # the row the deck card shows
         if not flag_row.data:
             return _err(
                 f"No unresolved flag found for skill '{skill_name}' on player {player_id}", status=404
