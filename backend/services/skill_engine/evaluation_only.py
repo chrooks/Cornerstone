@@ -18,7 +18,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
-from services.supabase_client import get_supabase, in_chunks, run_query
+from services.supabase_client import get_supabase, in_chunks, paged_rows, run_query
 from services.skill_engine.cache import get_thresholds, get_league_averages
 from services.skill_engine.evaluator import evaluate_all_skills, apply_auto_promotions
 from services.claude_assessment import get_claude_assessment
@@ -70,6 +70,7 @@ def _merge_composite_for_skills(
     player_id: str,
     season: str,
     fresh_claude: Optional[dict] = None,
+    kept_calls: Optional[set] = None,
 ) -> tuple[dict, list[StagedFlagRow]]:
     """Recompute the affected skills' composite entries, merged into the existing profile.
 
@@ -92,6 +93,11 @@ def _merge_composite_for_skills(
     contradicts the human's final_tier, a review flag is raised so a human
     re-adjudicates in /admin/review instead of the decision silently standing
     against new thresholds. Returns (merged_profile, human_contradiction_flags).
+
+    Issue #177: kept_calls holds (player_id, skill, stats_tier, claude_tier,
+    final_tier) for every call a reviewer already kept against those opinions
+    (_read_kept_calls). A contradiction that matches one is not raised again; a
+    new stats tier or a new Claude opinion still asks. None = no history.
     """
     merged = dict(existing_composite)
     protected_flags: list[StagedFlagRow] = []
@@ -131,7 +137,10 @@ def _merge_composite_for_skills(
             merged[skill_name] = existing_entry
             human_tier = existing_entry.get("final_tier")
             fresh_tier = recomputed.get("final_tier")
-            if _tier_index(fresh_tier) != _tier_index(human_tier):
+            stats_tier = stat_result.get("tier") or "None"
+            already_kept = (player_id, skill_name, stats_tier, flag_claude_tier or "None",
+                            human_tier) in (kept_calls or ())
+            if _tier_index(fresh_tier) != _tier_index(human_tier) and not already_kept:
                 protected_flags.append(StagedFlagRow(
                     player_id=player_id,
                     skill_name=skill_name,
@@ -144,7 +153,7 @@ def _merge_composite_for_skills(
                     # #165: the RAW stats tier, as on every other flag. Trust Stats
                     # writes this value under a "Stats" label; the recomputed
                     # blend only decides whether to flag.
-                    stats_tier=stat_result.get("tier") or "None",
+                    stats_tier=stats_tier,
                     claude_justification=flag_justification,
                     stat_values=stat_result.get("driving_stats") or None,
                 ))
@@ -162,11 +171,12 @@ def _stage_composite_for_player(
     existing_composite: dict,
     notability_score: int,
     fresh_claude: Optional[dict] = None,
+    kept_calls: Optional[set] = None,
 ) -> tuple[StagedProfileRow, list[StagedFlagRow]]:
     """Build the merged composite profile row + any review flags for one player."""
     merged_composite, protected_flags = _merge_composite_for_skills(
         skills_result, affected_skills, existing_composite, notability_score,
-        player_id, season, fresh_claude=fresh_claude,
+        player_id, season, fresh_claude=fresh_claude, kept_calls=kept_calls,
     )
     profile_row = StagedProfileRow(
         player_id=player_id,
@@ -276,21 +286,60 @@ def _merged_claude_row(
     )
 
 
-def _read_profiles_by_source(client, player_ids: list[str], season: str, source: str) -> dict[str, dict]:
-    """Batch-read one draft_skill_profiles source into {player_id: profile}."""
+def _read_rows_by_source(client, player_ids: list[str], season: str, source: str) -> dict[str, dict]:
+    """Batch-read one draft_skill_profiles source into {player_id: {id, player_id, profile}}."""
     by_player: dict[str, dict] = {}
     for chunk in in_chunks(player_ids):
         result = run_query(
             lambda c=chunk: client.table("draft_skill_profiles")
-            .select("player_id, profile")
+            .select("id, player_id, profile")
             .eq("source", source)
             .eq("season", season)
             .in_("player_id", c)
             .execute()
         )
         for row in (result.data or []):
-            by_player[row["player_id"]] = row.get("profile") or {}
+            by_player[row["player_id"]] = row
     return by_player
+
+
+def _read_profiles_by_source(client, player_ids: list[str], season: str, source: str) -> dict[str, dict]:
+    """Batch-read one draft_skill_profiles source into {player_id: profile}."""
+    rows = _read_rows_by_source(client, player_ids, season, source)
+    return {pid: row.get("profile") or {} for pid, row in rows.items()}
+
+
+def _read_kept_calls(client, composites: dict[str, dict], skills: list[str]) -> set[tuple[str, str, str, str, str]]:
+    """#177: the calls reviewers already kept, as (player_id, skill, stats_tier, claude_tier, final_tier).
+
+    composites is player_id -> composite row ({"id", "profile"}). A resolved flag
+    records the opinions the reviewer decided against (stat_rating, claude_rating)
+    and the tier they kept (resolved_value), so the guard can skip asking the same
+    question. A data_missing flag is left out: its "None" is not a stats verdict.
+    Only players holding a human call in `skills` are read.
+    """
+    owners = {
+        row["id"]: pid for pid, row in composites.items()
+        if row.get("id") and any(
+            isinstance(e, dict) and e.get("source") in _HUMAN_DECISION_SOURCES
+            for e in ((row.get("profile") or {}).get(s) for s in skills)
+        )
+    }
+    kept: set[tuple[str, str, str, str, str]] = set()
+    for chunk in in_chunks(list(owners)):
+        for f in paged_rows(
+            lambda c=chunk: client.table("draft_skill_flags")
+            .select("skill_profile_id, skill_name, stat_rating, claude_rating, resolved_value, flag_reason")
+            .in_("skill_profile_id", c)
+            .in_("skill_name", skills)
+            .not_.is_("resolution", "null")
+            .order("id")
+        ):
+            if (f.get("flag_reason") or "").startswith("data_missing"):
+                continue
+            kept.add((owners[f["skill_profile_id"]], f["skill_name"], f["stat_rating"] or "None",
+                      f.get("claude_rating") or "None", f["resolved_value"]))
+    return kept
 
 
 def evaluate_skills_for_run(
@@ -332,8 +381,9 @@ def evaluate_skills_for_run(
         - Reads player_stats from Supabase.
         - Calls evaluate_all_skills + apply_auto_promotions.
         - Calls stage_profile_rows (writes to pipeline_run_results).
-        - When recompute_composite: also reads draft_skill_profiles (composite)
-          and notability, and calls composite_skill.
+        - When recompute_composite: also reads draft_skill_profiles (composite),
+          the resolved draft_skill_flags of its human calls (#177) and
+          notability, and calls composite_skill.
         - When skill_filter without recompute_composite: reads the stats profile
           so the filtered run keeps the skills it did not evaluate.
         - When with_claude: reads draft_skill_profiles (claude) and calls the
@@ -433,12 +483,16 @@ def evaluate_skills_for_run(
     existing_composite_by_player: dict[str, dict] = {}
     affected_skills: list[str] = []
     needs_notability = False
+    kept_calls: set[tuple[str, str, str, str, str]] = set()
     if recompute_composite:
         affected_skills = list(skill_filter) if skill_filter else []
         needs_notability = any(s not in HIGH_CONFIDENCE_SKILLS for s in affected_skills)
-        existing_composite_by_player = _read_profiles_by_source(
-            client, player_ids, season, "composite"
-        )
+        composite_rows = _read_rows_by_source(client, player_ids, season, "composite")
+        existing_composite_by_player = {
+            pid: row.get("profile") or {} for pid, row in composite_rows.items()
+        }
+        # #177: contradictions a reviewer already resolved are not asked again.
+        kept_calls = _read_kept_calls(client, composite_rows, affected_skills)
 
     # A filtered stats run stages a whole row, and commit replaces it — so merge
     # the filtered result into what the player already has, or the skills this
@@ -515,6 +569,7 @@ def evaluate_skills_for_run(
             profile_row, flag_rows = _stage_composite_for_player(
                 player_id, season, skills_result, affected_skills,
                 existing_composite, notability, fresh_claude=fresh_claude,
+                kept_calls=kept_calls,
             )
             staged_profiles.append(profile_row)
             staged_flags.extend(flag_rows)

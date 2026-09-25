@@ -121,13 +121,14 @@ def matchups_from_pickle(path: str, blobs: dict[str, dict], nba_ids: dict[str, i
     return out
 
 
-def flag_rows(skill, result, comp, pid, season):
+def flag_rows(skill, result, comp, pid, season, kept_calls=None):
     from services.skill_engine.evaluation_only import _stage_composite_for_player
 
     # ponytail: notability from the stored record (low <=> a low_notability flag), not get_notability_score,
     # which fetches from NBA.com and inserts career rows.
     notability = 0 if any(isinstance(e, dict) and e.get("flag_reason") == "low_notability" for e in comp.values()) else 100
-    _, flags = _stage_composite_for_player(pid, season, {skill: result}, [skill], comp, notability)
+    _, flags = _stage_composite_for_player(pid, season, {skill: result}, [skill], comp, notability,
+                                           kept_calls=kept_calls)
     return flags
 
 
@@ -159,7 +160,11 @@ def main(argv=None) -> None:
     blobs = newest_blobs(sb, list(name), args.season)
     if args.from_pickle:
         blobs = matchups_from_pickle(args.from_pickle, blobs, {p["id"]: p["nba_api_id"] for p in players})
-    comps = {pid: c["profile"] or {} for pid, c in composites(sb, args.season).items()}
+    from services.skill_engine.evaluation_only import _read_kept_calls
+
+    comp_rows = composites(sb, args.season)
+    comps = {pid: c["profile"] or {} for pid, c in comp_rows.items()}
+    kept = _read_kept_calls(sb, comp_rows, [args.skill])  # #177: as the run reads it
 
     moves, flags_now, flags_new = Counter(), Counter(), Counter()
     rows: dict[str, dict] = {}
@@ -169,8 +174,8 @@ def main(argv=None) -> None:
         moves[(now["tier"] if now else "-", new["tier"])] += 1
         if pid in comps:
             if now:
-                flags_now.update(f.flag_reason.split(":")[0] for f in flag_rows(args.skill, now, comps[pid], pid, args.season))
-            flags_new.update(f.flag_reason.split(":")[0] for f in flag_rows(args.skill, new, comps[pid], pid, args.season))
+                flags_now.update(f.flag_reason.split(":")[0] for f in flag_rows(args.skill, now, comps[pid], pid, args.season, kept))
+            flags_new.update(f.flag_reason.split(":")[0] for f in flag_rows(args.skill, new, comps[pid], pid, args.season, kept))
         rows[pid] = {"now": now["tier"] if now else "-", "new": new["tier"]}
 
     paths = stat_paths(candidate)

@@ -325,18 +325,23 @@ class World:
     rules: dict      # skill -> stored rule (draft_skill_thresholds)
     league_avgs: dict
     comps: dict      # player_id -> composite profile
+    kept: set        # calls reviewers already kept (#177), as the pipeline reads them
 
 
 def load_world(sb, season: str) -> World:
+    from services.skill_engine.evaluation_only import _read_kept_calls
+
     logging.getLogger().setLevel(logging.WARNING)
     block_side_effect_paths()
     names = {p["id"]: p["name"] for p in pages(lambda: sb.table("players").select("id, name")
                                                .eq("season", season).gte("minutes_per_game", MIN_MPG).order("id"))}
     rules = {r["skill_name"]: r["thresholds"]
              for r in sb.table("draft_skill_thresholds").select("skill_name, thresholds").execute().data or []}
+    comp_rows = composites(sb, season)
     return World(names=names, blobs=newest_blobs(sb, list(names), season), rules=rules,
                  league_avgs=get_league_averages(season, sb),
-                 comps={pid: c["profile"] or {} for pid, c in composites(sb, season).items()})
+                 comps={pid: c["profile"] or {} for pid, c in comp_rows.items()},
+                 kept=_read_kept_calls(sb, comp_rows, list(rules)))
 
 
 def stage(world: World, skill: str, pid: str, result: dict):
@@ -347,7 +352,8 @@ def stage(world: World, skill: str, pid: str, result: dict):
     # ponytail: notability from the stored record (as sim_threshold_candidate.flag_rows does);
     # get_notability_score would fetch from NBA.com.
     notability = 0 if any(isinstance(e, dict) and e.get("flag_reason") == "low_notability" for e in comp.values()) else 100
-    row, flags = _stage_composite_for_player(pid, SEASON, {skill: result}, [skill], comp, notability)
+    row, flags = _stage_composite_for_player(pid, SEASON, {skill: result}, [skill], comp, notability,
+                                             kept_calls=world.kept)
     return (row.profile.get(skill) or {}), flags
 
 
