@@ -1116,6 +1116,20 @@
         "priority": "p3",
         "milestone": "Evaluation Version Publishing"
       }
+    },
+    {
+      "id": "i185",
+      "label": "#185 overall underprices non-creators:\ncenters, stretch bigs, spacing wings (V1, P1)",
+      "group": "value",
+      "x": 130,
+      "y": 280,
+      "description": "The widened #119 fix (M6.2, 2026-09-25). Gobert Ringer 39 → ours 218, Towns 12 → 77, Cam Johnson 90 → 224. Creation axes carry the price; rim defense, rebounding, screening do not. One design pass, one new Evaluation Version, measured on the Ringer 100. Lands before #164.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/185",
+        "state": "open",
+        "priority": "p1",
+        "milestone": "V1 launch"
+      }
     }
   ],
   "edges": [
@@ -1418,6 +1432,18 @@
       "to": "i130",
       "label": "blocks near-zero drift",
       "description": "#130 acceptance 2 needs near-zero drift after publish; #181's 27 stale tiers fail it."
+    },
+    {
+      "from": "i185",
+      "to": "i119",
+      "label": "widens the fix",
+      "description": "#185 replaces #119's 3-and-D-only pair-as-peak fallback; #119 closes when its pass line is re-read on #185's version."
+    },
+    {
+      "from": "i185",
+      "to": "i164",
+      "label": "lands before",
+      "description": "#185 changes the tiers→overall Seam in memory; #164's backfill changes stats→tiers and raises a review wave. #164 re-runs ringer_fit afterwards."
     }
   ]
 }
