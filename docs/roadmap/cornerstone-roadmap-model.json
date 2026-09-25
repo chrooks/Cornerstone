@@ -1033,6 +1033,48 @@
         "priority": "p2",
         "milestone": "Data debt (post-V1)"
       }
+    },
+    {
+      "id": "i179",
+      "label": "#179 Publish dialog: season dropdown\n(P3, AFK)",
+      "group": "snapshot",
+      "x": 130,
+      "y": -610,
+      "description": "Replace the free-text season box in the publish dialog with a dropdown of seasons that have player data.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/179",
+        "state": "open · afk",
+        "priority": "p3",
+        "milestone": "Snapshot Version Publishing"
+      }
+    },
+    {
+      "id": "i180",
+      "label": "#180 After publish, land on the\npublic changelog (P3, AFK)",
+      "group": "snapshot",
+      "x": 130,
+      "y": -470,
+      "description": "Keep #131's drift report hold; its continue action (or a no-drift publish) lands on the public changelog.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/180",
+        "state": "open · afk",
+        "priority": "p3",
+        "milestone": "Snapshot Version Publishing"
+      }
+    },
+    {
+      "id": "i181",
+      "label": "#181 Rule changes skip published\nplayers < 15 mpg (P2 bug)",
+      "group": "snapshot",
+      "x": -600,
+      "y": -300,
+      "description": "Runs rate 15+ mpg players; the publish freezes everyone. 27 stale tiers across 22 players in 2025-26 V1. Blocks #130's near-zero drift.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/181",
+        "state": "open",
+        "priority": "p2",
+        "milestone": "Data debt (post-V1)"
+      }
     }
   ],
   "edges": [
@@ -1323,6 +1365,18 @@
       "to": "i170",
       "label": "labels to review",
       "description": "The deck reviews the legend archetype labels and writes the override through the #17 routes (M7.19)."
+    },
+    {
+      "from": "i131",
+      "to": "i180",
+      "label": "keeps its hold",
+      "description": "#180 changes where the post-publish flow lands; #131's drift report still shows first."
+    },
+    {
+      "from": "i181",
+      "to": "i130",
+      "label": "blocks near-zero drift",
+      "description": "#130 acceptance 2 needs near-zero drift after publish; #181's 27 stale tiers fail it."
     }
   ]
 }
