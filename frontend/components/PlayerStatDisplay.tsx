@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { isPer48Stat } from "@/lib/stat-keys";
 import { getPlayerStats } from "@/lib/api";
 import type { StatsBlob } from "@/lib/types";
 
@@ -63,6 +64,8 @@ const STAT_LABELS: Record<string, string> = {
   oreb_pct: "OReb%",
   dreb_pct: "DReb%",
   reb_pct: "Reb%",
+  blk_pct: "Blocks per 48",
+  stl_pct: "Steals per 48",
   tm_tov_pct: "TOV%",
   pace: "Pace",
   pie: "PIE",
@@ -275,6 +278,7 @@ const SECTION_LABELS: Record<string, string> = {
 
 function formatStatValue(key: string, value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
+  if (isPer48Stat(key)) return (value * 100).toFixed(1);
   // Format percentages (keys ending in _pct or _freq)
   if (key.endsWith("_pct") || key.endsWith("_freq")) {
     return (value * 100).toFixed(1) + "%";

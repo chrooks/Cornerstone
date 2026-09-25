@@ -66,6 +66,8 @@ const STAT_LABELS: Record<string, string> = {
   oreb_pct: "OReb%",
   dreb_pct: "DReb%",
   reb_pct: "Reb%",
+  blk_pct: "Blocks per 48",
+  stl_pct: "Steals per 48",
   tm_tov_pct: "TOV%",
   pace: "Pace",
   pie: "PIE",
@@ -200,6 +202,7 @@ const STAT_ORDER: Record<string, string[]> = {
     "off_rating", "def_rating", "net_rating",
     "ast_pct", "ast_to", "ast_ratio",
     "oreb_pct", "dreb_pct", "reb_pct",
+    "blk_pct", "stl_pct",
     "tm_tov_pct", "pace", "pie",
   ],
   tracking_shooting: [
@@ -330,6 +333,17 @@ export const ALL_STAT_KEYS: StatKeyOption[] = buildStatKeyOptions();
  * Look up a human-readable label for a raw stat key (e.g. "tracking_shooting.catch_shoot_fg3_pct").
  * Falls back to a title-cased version of the key if not found.
  */
+/**
+ * advanced.blk_pct / stl_pct are not percentages. stats_assembler._compute_per48_pct
+ * stores blocks (steals) per 48 minutes ÷ 100, like a _pct stat, so they display ×100
+ * with no "%": 0.022 reads "2.2" blocks per 48.
+ */
+const PER_48_KEYS = new Set(["blk_pct", "stl_pct"]);
+
+export function isPer48Stat(key: string): boolean {
+  return PER_48_KEYS.has(key.split(".").pop() ?? key);
+}
+
 export function getStatLabel(value: string): string {
   const found = ALL_STAT_KEYS.find((o) => o.value === value);
   if (found) return found.label;

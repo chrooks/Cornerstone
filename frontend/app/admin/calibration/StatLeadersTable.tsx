@@ -16,6 +16,7 @@
 
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { isPer48Stat } from "@/lib/stat-keys";
 import type { PlayerStatRow } from "@/lib/types";
 import { resolveComputedValue, type ComputedStatDef } from "./computed-stats";
 
@@ -187,6 +188,7 @@ function getPlayerSkillTier(
  */
 function formatStatValue(key: string, value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
+  if (isPer48Stat(key)) return (value * 100).toFixed(1);
   const isPercent = key.endsWith("_pct") || key.endsWith("_freq");
   if (isPercent) return (value * 100).toFixed(1) + "%";
   return value.toFixed(2);

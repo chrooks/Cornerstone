@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { formatSkillName } from "@/lib/skills";
 import { SkillPickerBar } from "./SkillPickerBar";
-import { ALL_STAT_KEYS, getStatLabel } from "@/lib/stat-keys";
+import { ALL_STAT_KEYS, getStatLabel, isPer48Stat } from "@/lib/stat-keys";
 import type {
   ThresholdRow,
   ThresholdRule,
@@ -684,7 +684,8 @@ function AnchorConditionBreakdown({
   if (grouped.length === 0) return null;
 
   const fmt = (c: ConditionResult, v: number | null) =>
-    v === null ? "—" : c.stat.endsWith("_pct") ? (v * 100).toFixed(1) + "%" : v.toFixed(2);
+    v === null ? "—" : isPer48Stat(c.stat) ? (v * 100).toFixed(1)
+      : c.stat.endsWith("_pct") ? (v * 100).toFixed(1) + "%" : v.toFixed(2);
 
   return (
     <div className="mt-1.5">

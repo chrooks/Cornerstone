@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { isPer48Stat } from "@/lib/stat-keys";
 import type { ConditionResult } from "@/lib/types";
 
 const SECTION_LABELS: Record<string, string> = {
@@ -18,6 +19,7 @@ const SECTION_LABELS: Record<string, string> = {
  */
 export function fmtValue(c: ConditionResult, v: number | null): string {
   if (v === null) return "—";
+  if (isPer48Stat(c.stat)) return (v * 100).toFixed(1);
   // Percentage stats
   if (c.stat.endsWith("_pct") || c.stat.endsWith("_fg3_pct") || c.stat.endsWith("_fg_pct")) {
     return (v * 100).toFixed(1) + "%";

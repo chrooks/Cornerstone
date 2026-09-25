@@ -1,6 +1,6 @@
 import { Check, X as XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getStatLabel } from "@/lib/stat-keys";
+import { getStatLabel, isPer48Stat } from "@/lib/stat-keys";
 import { SkillTierBadge } from "@/components/SkillTierBadge";
 import type { ConditionResult, SkillOverride, SkillTier } from "@/lib/types";
 
@@ -68,10 +68,12 @@ function shortLabel(rawStat: string): string {
 
 /** Round to 3 decimal places and drop trailing zeros (4 stays "4", 6.8 stays
  * "6.8", 0.3409134063641106 becomes "0.341"). Raw backend floats are never
- * pre-rounded, so this is the only place display precision is decided. */
-function fmtNumber(value: number | null): string {
+ * pre-rounded, so this is the only place display precision is decided.
+ * A per-48 stat is stored ÷100 and reads ×100 ("2.2" blocks per 48). */
+function fmtNumber(value: number | null, stat?: string): string {
   if (value === null) return "—";
-  return String(Math.round(value * 1000) / 1000);
+  const shown = stat && isPer48Stat(stat) ? value * 100 : value;
+  return String(Math.round(shown * 1000) / 1000);
 }
 
 /**
@@ -139,7 +141,7 @@ function ConditionMeter({ condition }: { condition: ConditionResult }) {
     <div
       id={`skill-trace-meter-${condition.stat}`}
       className="relative h-2 w-full rounded-sm bg-[#0e0907]/8"
-      title={`Target: ${fmtNumber(condition.threshold)}`}
+      title={`Target: ${fmtNumber(condition.threshold, condition.stat)}`}
     >
       <div
         className={cn("absolute inset-y-0 rounded-sm transition-[width]", fillColor)}
@@ -174,11 +176,11 @@ function ConditionRow({ condition }: { condition: ConditionResult }) {
           {label}
         </span>
         <span className="font-mono text-[11px] tabular-nums text-[#0e0907]">
-          {fmtNumber(condition.actual_value)}
+          {fmtNumber(condition.actual_value, condition.stat)}
         </span>
         <span className="text-[10px] text-[#0e0907]/35">{condition.operator}</span>
         <span className="font-mono text-[11px] tabular-nums text-[#0e0907]/55">
-          {fmtNumber(condition.threshold)}
+          {fmtNumber(condition.threshold, condition.stat)}
         </span>
       </div>
       {showMeter && <ConditionMeter condition={condition} />}
