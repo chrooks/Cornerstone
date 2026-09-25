@@ -1,0 +1,407 @@
+{
+ "normalization_top_percentile": 0.98,
+ "composite_formulas": {
+  "passing": {
+   "factors": [
+    {
+     "key": "passer",
+     "type": "skill",
+     "coefficient": 1.0
+    }
+   ],
+   "amplifiers": [],
+   "depends_on": []
+  },
+  "spacing": {
+   "factors": [
+    {
+     "key": "movement_shooter",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "spot_up_shooter",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "off_dribble_shooter",
+     "type": "skill",
+     "coefficient": 0.5
+    }
+   ],
+   "amplifiers": [],
+   "depends_on": []
+  },
+  "finishing": {
+   "factors": [
+    {
+     "key": "crafty_finisher",
+     "type": "skill",
+     "coefficient": 1.3
+    },
+    {
+     "key": "high_flyer",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "vertical_spacer",
+     "type": "skill",
+     "coefficient": 0.5
+    },
+    {
+     "key": "pnr_finisher",
+     "type": "skill",
+     "coefficient": 0.35
+    }
+   ],
+   "amplifiers": [],
+   "depends_on": []
+  },
+  "post_game": {
+   "factors": [
+    {
+     "key": "low_post_player",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "mid_post_player",
+     "type": "skill",
+     "coefficient": 0.7
+    }
+   ],
+   "amplifiers": [],
+   "depends_on": []
+  },
+  "transition": {
+   "factors": [
+    {
+     "key": "transition_threat",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "high_flyer",
+     "type": "skill",
+     "coefficient": 0.7
+    },
+    {
+     "key": "driver",
+     "type": "skill",
+     "coefficient": 0.3
+    },
+    {
+     "key": "spot_up_shooter",
+     "type": "skill",
+     "coefficient": 0.2
+    },
+    {
+     "key": "off_dribble_shooter",
+     "type": "skill",
+     "coefficient": 0.18
+    },
+    {
+     "key": "passer",
+     "type": "skill",
+     "coefficient": 0.4
+    }
+   ],
+   "amplifiers": [],
+   "depends_on": []
+  },
+  "paint_touch": {
+   "factors": [
+    {
+     "key": "driver",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "vertical_spacer",
+     "type": "skill",
+     "coefficient": 0.6
+    },
+    {
+     "key": "low_post_player",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "mid_post_player",
+     "type": "skill",
+     "coefficient": 0.7
+    },
+    {
+     "key": "offensive_rebounder",
+     "type": "skill",
+     "coefficient": 0.4
+    }
+   ],
+   "amplifiers": [
+    {
+     "floor": 0.9,
+     "scale": 0.08,
+     "source": "finishing"
+    }
+   ],
+   "depends_on": [
+    "finishing"
+   ]
+  },
+  "pnr_screener": {
+   "factors": [
+    {
+     "key": "pnr_finisher",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "screen_setter",
+     "type": "skill",
+     "coefficient": 1.0
+    }
+   ],
+   "amplifiers": [
+    {
+     "floor": 1.0,
+     "scale": 0.15,
+     "source": {
+      "skills": [
+       "vertical_spacer",
+       "spot_up_shooter"
+      ]
+     },
+     "applies_to": [
+      0
+     ]
+    }
+   ],
+   "depends_on": []
+  },
+  "ball_security": {
+   "factors": [
+    {
+     "key": "steady_hand",
+     "type": "skill",
+     "coefficient": 1.0
+    }
+   ],
+   "fallback": {
+    "factors": [
+     {
+      "key": "passer",
+      "type": "skill",
+      "coefficient": 1.0
+     },
+     {
+      "key": "pnr_ball_handler",
+      "type": "skill",
+      "coefficient": 0.45
+     },
+     {
+      "key": "driver",
+      "type": "skill",
+      "coefficient": 0.35
+     }
+    ],
+    "when_missing": [
+     "steady_hand"
+    ]
+   },
+   "amplifiers": [],
+   "depends_on": []
+  },
+  "shot_creation": {
+   "factors": [
+    {
+     "key": "pnr_orchestration",
+     "type": "composite",
+     "coefficient": 1.0
+    },
+    {
+     "key": "passer",
+     "type": "skill",
+     "coefficient": 0.5
+    },
+    {
+     "key": "off_dribble_shooter",
+     "type": "skill",
+     "coefficient": 0.5
+    },
+    {
+     "key": "isolation_scorer",
+     "type": "skill",
+     "coefficient": 0.8
+    },
+    {
+     "key": "spacing",
+     "type": "composite",
+     "coefficient": 0.3
+    },
+    {
+     "key": "paint_touch",
+     "type": "composite",
+     "coefficient": 0.3
+    }
+   ],
+   "amplifiers": [],
+   "depends_on": [
+    "pnr_orchestration",
+    "spacing",
+    "paint_touch"
+   ]
+  },
+  "off_ball_impact": {
+   "factors": [
+    {
+     "key": "spacing",
+     "type": "composite",
+     "coefficient": 1.0
+    },
+    {
+     "key": "movement_shooter",
+     "type": "skill",
+     "coefficient": 0.25
+    },
+    {
+     "key": "screen_setter",
+     "type": "skill",
+     "coefficient": 0.2
+    },
+    {
+     "key": "cutter",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "passer",
+     "type": "skill",
+     "coefficient": 0.3
+    }
+   ],
+   "amplifiers": [
+    {
+     "floor": 1.0,
+     "scale": 0.08,
+     "source": "finishing",
+     "applies_to": [
+      3
+     ]
+    }
+   ],
+   "depends_on": [
+    "spacing",
+    "finishing"
+   ]
+  },
+  "interior_defense": {
+   "factors": [
+    {
+     "key": "rim_protector",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "versatile_defender",
+     "type": "skill",
+     "coefficient": 0.25
+    },
+    {
+     "key": "rebounder",
+     "type": "skill",
+     "coefficient": 0.3
+    }
+   ],
+   "amplifiers": [],
+   "depends_on": []
+  },
+  "perimeter_defense": {
+   "factors": [
+    {
+     "key": "point_of_attack_defender",
+     "type": "skill",
+     "coefficient": 0.6
+    },
+    {
+     "key": "off_ball_disruptor",
+     "type": "skill",
+     "coefficient": 0.4
+    },
+    {
+     "key": "versatile_defender",
+     "type": "skill",
+     "coefficient": 0.7
+    }
+   ],
+   "fallback": {
+    "factors": [
+     {
+      "key": "point_of_attack_defender",
+      "type": "skill",
+      "coefficient": 1.0
+     },
+     {
+      "key": "versatile_defender",
+      "type": "skill",
+      "coefficient": 0.7
+     }
+    ],
+    "when_missing": [
+     "off_ball_disruptor"
+    ]
+   },
+   "amplifiers": [],
+   "depends_on": []
+  },
+  "pnr_orchestration": {
+   "factors": [
+    {
+     "key": "pnr_ball_handler",
+     "type": "skill",
+     "coefficient": 1.0
+    },
+    {
+     "key": "passer",
+     "type": "skill",
+     "coefficient": 0.3
+    },
+    {
+     "key": "driver",
+     "type": "skill",
+     "coefficient": 0.3
+    },
+    {
+     "key": "off_dribble_shooter",
+     "type": "skill",
+     "coefficient": 0.2
+    }
+   ],
+   "amplifiers": [],
+   "depends_on": []
+  },
+  "defensive_rebounding": {
+   "factors": [
+    {
+     "key": "rebounder",
+     "type": "skill",
+     "coefficient": 1.0
+    }
+   ],
+   "amplifiers": [],
+   "depends_on": []
+  },
+  "offensive_rebounding": {
+   "factors": [
+    {
+     "key": "offensive_rebounder",
+     "type": "skill",
+     "coefficient": 1.0
+    }
+   ],
+   "amplifiers": [],
+   "depends_on": []
+  }
+ }
+}

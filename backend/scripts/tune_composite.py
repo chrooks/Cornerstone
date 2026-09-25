@@ -9,6 +9,7 @@ Usage:
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 from collections import Counter
@@ -28,6 +29,7 @@ from services.cohesion_engine.weights import (
     TIER_VALUES,
     NORMALIZATION_BREAKPOINT_PERCENTILE,
     NORMALIZATION_BREAKPOINT_SCORE,
+    NORMALIZATION_TOP_PERCENTILE,
     MIN_DISTRIBUTION_SIZE,
 )
 from services.skills import ALL_SKILLS
@@ -118,7 +120,7 @@ def compute_proposed_shot_creation(skills: dict, raw_composites: dict, coefficie
     )
 
 
-def pct_normalize(raw: float, distribution: list[float]) -> float:
+def pct_normalize(raw: float, distribution: list[float], top_percentile: float = 1.0) -> float:
     """Percentile normalization matching composites.py logic."""
     if raw <= 0 or not distribution:
         return 0.0
@@ -130,7 +132,8 @@ def pct_normalize(raw: float, distribution: list[float]) -> float:
     bs = NORMALIZATION_BREAKPOINT_SCORE
     p_break_index = int(n * bp)
     p_break_value = distribution[min(p_break_index, n - 1)]
-    empirical_max = distribution[-1]
+    # #185: mirrors composites._percentile_normalize — same anchor, same key.
+    empirical_max = distribution[max(0, math.ceil(n * top_percentile) - 1)]
     if percentile <= bp:
         return round(percentile / bp * bs, 1)
     elif empirical_max <= p_break_value:
@@ -306,9 +309,10 @@ def main() -> None:
     proposed_dist = sorted(proposed_raw_all)
 
     # Add normalized values
+    top_percentile = VALUES.get("normalization_top_percentile", NORMALIZATION_TOP_PERCENTILE)
     for rec in records:
-        rec["current_norm"] = pct_normalize(rec["current_shot_creation"], current_dist)
-        rec["proposed_norm"] = pct_normalize(rec["proposed_shot_creation"], proposed_dist)
+        rec["current_norm"] = pct_normalize(rec["current_shot_creation"], current_dist, top_percentile)
+        rec["proposed_norm"] = pct_normalize(rec["proposed_shot_creation"], proposed_dist, top_percentile)
 
     # Print reference players comparison
     print(f"{'Name':<28} {'Pos':>4} {'L':>2} | {'cur_raw':>8} {'cur_norm':>9} | {'new_raw':>8} {'new_norm':>9} | {'Δ_norm':>7}")

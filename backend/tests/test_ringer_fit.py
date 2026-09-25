@@ -253,6 +253,30 @@ def test_missing_gated_wing_is_reported_and_has_no_ratio():
 
 
 # ---------------------------------------------------------------------------
+# #185 groups — clause C's quotient, per named group
+# ---------------------------------------------------------------------------
+
+
+def test_groups_reuse_the_ladder_quotient_and_skip_players_outside_the_ringer_100():
+    a, p, rows, by_nba = _pool(21.5)
+    groups = {"centers": ["Dillon Brooks", "Nobody Here"], "wings": ["Kilo Fourteen"]}
+
+    r = rf.measure(a, p, rows, by_nba, ("Dillon Brooks",), groups=groups)
+
+    centers = r["groups"]["centers"]
+    assert centers["players"]["Nobody Here"] is None
+    assert centers["players"]["Dillon Brooks"]["price_ratio"] == r["wing_ratios"]["Dillon Brooks"]["price_ratio"]
+    assert centers["mean_ratio"] == round(21.5 / 26, 2)  # the missing player is excluded
+    assert centers["ok"] is True  # 0.83 > 0.50
+    # Kilo Fourteen: Ringer 40 in a 15-deep ladder takes the last rung (Brooks, $21.5M).
+    assert r["groups"]["wings"]["players"]["Kilo Fourteen"]["ladder_price"] == 21_500_000
+    text = rf.format_groups(r)
+    assert "Nobody Here              not in Ringer 100" in text
+    assert "centers > 0.50: PASS" in text
+    assert "stretch >= 0.43: FAIL" in text  # no such group in this run
+
+
+# ---------------------------------------------------------------------------
 # Spearman, including ties
 # ---------------------------------------------------------------------------
 

@@ -17,6 +17,7 @@ never the reverse.
 from __future__ import annotations
 
 import logging
+import math
 from bisect import bisect_left, bisect_right
 from typing import Any, Mapping
 
@@ -27,6 +28,7 @@ from .types import PlayerComposites
 from .weights import (
     COMPOSITE_NAMES,
     MIN_DISTRIBUTION_SIZE,
+    NORMALIZATION_TOP_PERCENTILE,
 )
 
 logger = logging.getLogger(__name__)
@@ -244,6 +246,7 @@ def _percentile_normalize(
     distribution: list[float],
     breakpoint_percentile: float,
     breakpoint_score: float,
+    top_percentile: float = 1.0,
 ) -> float:
     """Hybrid percentile normalization from the implementation spec.
 
@@ -275,7 +278,9 @@ def _percentile_normalize(
 
     p_break_index = int(n * breakpoint_percentile)
     p_break_value = distribution[min(p_break_index, n - 1)]
-    empirical_max = distribution[-1]
+    # #185: the scale's top is the raw at rank ceil(n * top_percentile) counting
+    # from 1, so 0.98 on 1..100 reads 98.0; 1.0 is the largest raw, as before.
+    empirical_max = distribution[max(0, math.ceil(n * top_percentile) - 1)]
 
     if percentile <= breakpoint_percentile:
         result = percentile / breakpoint_percentile * breakpoint_score
@@ -324,13 +329,14 @@ def normalize_composites(
     theoretical_max = values["theoretical_max"]
     breakpoint_percentile = values["normalization_breakpoint_percentile"]
     breakpoint_score = values["normalization_breakpoint_score"]
+    top_percentile = float(values.get("normalization_top_percentile", NORMALIZATION_TOP_PERCENTILE))
 
     if distributions_ready(distributions):
         assert distributions is not None
         return {
             name: _percentile_normalize(
                 value, distributions.get(name, []),
-                breakpoint_percentile, breakpoint_score,
+                breakpoint_percentile, breakpoint_score, top_percentile,
             )
             for name, value in raw.items()
         }

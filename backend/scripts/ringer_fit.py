@@ -68,6 +68,21 @@ REPORTED = (
     "Toumani Camara", "Cam Johnson", "Jalen Suggs",
 )
 
+# #185's groups: the players the issue names, spelled as ringer100.json spells
+# them (the join key — "Cam Johnson", not players.name's "Cameron Johnson").
+# --groups prints each one's price ratio (clause C's quotient) and the group mean.
+GROUPS = {
+    "centers": ["Rudy Gobert", "Collin Murray-Boyles", "Donovan Clingan", "Jarrett Allen"],
+    "stretch": ["Karl-Anthony Towns", "Lauri Markkanen", "Naz Reid"],
+    "wings": ["Cam Johnson", "Devin Vassell", "Julian Champagnie"],
+    "3-and-D": ["OG Anunoby", "Jaden McDaniels", "Mikal Bridges", "Alex Caruso", "Derrick White"],
+    "overpriced": ["Jrue Holiday", "Jalen Suggs", "VJ Edgecombe", "Ausar Thompson", "Zion Williamson"],
+}
+# #185 decision 2: (bar, strict). Centers must clear 0.50; wings and stretch
+# bigs must not fall below today's means (0.39, 0.43). The bars are today's
+# two-decimal means, so the two-decimal mean is what gets compared.
+GROUP_BARS = {"centers": (0.50, True), "wings": (0.39, False), "stretch": (0.43, False)}
+
 # peer_ratio's pool (the research's second reading): actives off rookie deals.
 PEER_MIN_AGE = 25
 PEER_MIN_SALARY = 16_000_000
@@ -178,6 +193,7 @@ def measure(
     reported: Sequence[str] = (),
     salary_by_id: Mapping[str, int] | None = None,
     age_by_id: Mapping[str, Any] | None = None,
+    groups: Mapping[str, Sequence[str]] = GROUPS,
 ) -> dict:
     """The whole #119 pass line, from an already-priced pool. No I/O.
 
@@ -230,11 +246,12 @@ def measure(
     # prices ARE the pool's real salaries, rank-paired (value_price.build_ladder),
     # so the salary ladder is just the price list sorted high to low.
     sals_desc = sorted(prices.values(), reverse=True)
-    wing_ratios: dict[str, dict] = {}
-    for name in list(wings) + [n for n in reported if n not in wings]:
+
+    def _ladder_row(name: str) -> tuple[dict, float | None] | None:
+        """(row, exact ratio) for a Ringer player we price; None if we cannot."""
         pid = pid_by_name.get(name)
         if pid is None or pid not in prices:
-            continue
+            return None
         ringer = ringer_by_name[name]
         # ponytail: a Ringer rank past the end of the pool takes the last rung.
         # The real pool is 401 actives against 100 ranks, so only tests hit it.
@@ -243,14 +260,26 @@ def measure(
         # Gate on the exact quotient; round only for the printed table, or a
         # 0.7996 would pass the 0.80 money bar on a display artefact.
         exact = price / ladder_price if ladder_price else None
-        ratio = round(exact, 3) if exact is not None else None
-        is_gated = name in wings
-        wing_ratios[name] = {
+        row = {
             "ringer": ringer,
             "ours": our_rank[pid],
             "price": price,
             "ladder_price": ladder_price,
-            "price_ratio": ratio,
+            "price_ratio": round(exact, 3) if exact is not None else None,
+        }
+        return row, exact
+
+    wing_ratios: dict[str, dict] = {}
+    for name in list(wings) + [n for n in reported if n not in wings]:
+        hit = _ladder_row(name)
+        if hit is None:
+            continue
+        row, exact = hit
+        pid = pid_by_name[name]
+        price = row["price"]
+        is_gated = name in wings
+        wing_ratios[name] = {
+            **row,
             "peer_ratio": (
                 _peer_ratio(pid, price, prices, salary_by_id, age_by_id)
                 if salary_by_id is not None and age_by_id is not None
@@ -258,6 +287,23 @@ def measure(
             ),
             "gated": is_gated,
             "ok": (not is_gated) or (exact is not None and exact >= PRICE_BAR),
+        }
+
+    # --- #185 groups: the same quotient, per named group -------------------
+    group_rows: dict[str, dict] = {}
+    for group, names in groups.items():
+        players = {name: (hit[0] if (hit := _ladder_row(name)) else None) for name in names}
+        ratios = [p["price_ratio"] for p in players.values() if p and p["price_ratio"] is not None]
+        mean = round(statistics.mean(ratios), 2) if ratios else None
+        bar = GROUP_BARS.get(group)
+        group_rows[group] = {
+            "players": players,
+            "mean_ratio": mean,
+            "bar": bar[0] if bar else None,
+            "ok": (
+                None if bar is None or mean is None
+                else (mean > bar[0] if bar[1] else mean >= bar[0])
+            ),
         }
 
     # --- fit over the whole list, and over the holdout --------------------
@@ -284,6 +330,7 @@ def measure(
         "top10_found": len(top10),
         "top10_floor_8": top10_in_top15 >= TOP10_FLOOR,
         "wing_ratios": wing_ratios,
+        "groups": group_rows,
         "missing_gated": missing_gated,
         "spearman100": round(spearman(ringer_ranks, ours_ranks), 3) if found else 0.0,
         "within15": sum(1 for e in errors if e <= 15),
@@ -378,6 +425,30 @@ def format_report(result: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def format_groups(result: Mapping[str, Any]) -> str:
+    """The --groups table: per group, each player's ranks and price ratio, then
+    the mean; then the #185 bar per group. Pure."""
+    lines: list[str] = []
+    for group, g in result["groups"].items():
+        lines.append(f"  {group}:")
+        for name, p in g["players"].items():
+            if p is None:
+                lines.append(f"      {name:<24} not in Ringer 100")
+                continue
+            lines.append(
+                f"      {name:<24} ringer {p['ringer']:>3}  ours {p['ours']:>3}  "
+                f"${p['price'] / 1e6:>5.1f}M / ${p['ladder_price'] / 1e6:>5.1f}M = {p['price_ratio']}"
+            )
+        lines.append(f"      mean price ratio {g['mean_ratio'] if g['mean_ratio'] is not None else '-'}")
+    bars = []
+    for group, (bar, strict) in GROUP_BARS.items():
+        g = result["groups"].get(group)
+        verdict = "PASS" if g and g["ok"] else "FAIL"
+        bars.append(f"{group} {'>' if strict else '>='} {bar:.2f}: {verdict}")
+    lines.append("  #185 group bar: " + "   ".join(bars))
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # main() — everything that touches the database or the network lives here
 # ---------------------------------------------------------------------------
@@ -460,6 +531,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument(
         "--allow-prod", action="store_true",
         help="permit a *.supabase.co SUPABASE_URL (the plan never passes this)",
+    )
+    ap.add_argument(
+        "--groups", action="store_true",
+        help="print the #185 groups (centers, stretch, wings, 3-and-D, overpriced) "
+             "with each player's price ratio, the group mean, and the group bar",
     )
     ap.add_argument(
         "--no-parity", action="store_true",
@@ -552,6 +628,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.patch:
         print(f"patch (in memory only): {args.patch}")
     print(format_report(result))
+    if args.groups:
+        print(format_groups(result))
 
     # Parity against the Surface the Lab serves — only meaningful unpatched.
     if args.patch or args.no_parity:

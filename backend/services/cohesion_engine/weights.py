@@ -127,6 +127,10 @@ THEORETICAL_MAX: dict[str, float] = {
 # This compresses the crowded middle and spreads out the top end.
 NORMALIZATION_BREAKPOINT_PERCENTILE: float = 0.6  # 60th percentile = inflection point
 NORMALIZATION_BREAKPOINT_SCORE: float = 6.0        # maps to score 6 on the 0-10 scale
+# 1.0 anchors the top of each axis scale on the single largest raw value in the
+# pool (one outlier such as Curry on spacing squashes everyone else); a Version
+# sets 0.98 to anchor on the 98th percentile instead (#185).
+NORMALIZATION_TOP_PERCENTILE: float = 1.0
 MIN_DISTRIBUTION_SIZE: int = 20                    # need ≥20 players to build a reliable curve
 
 

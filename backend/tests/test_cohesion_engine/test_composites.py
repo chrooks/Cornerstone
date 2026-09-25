@@ -143,6 +143,46 @@ def test_percentile_normalize_uses_sixtieth_percentile_breakpoint():
     assert composites._percentile_normalize(19.0, distribution, 0.6, 6.0) == 10.0
 
 
+def test_percentile_normalize_anchors_at_top_percentile():
+    """#185: the top of the upper-half scale is the raw at ``top_percentile``,
+    not the single largest raw in the pool (one giraffe squashes everyone)."""
+    distribution = [float(value) for value in range(1, 101)]
+
+    assert composites._percentile_normalize(98.0, distribution, 0.6, 6.0, 0.98) == 10.0
+    assert composites._percentile_normalize(100.0, distribution, 0.6, 6.0, 0.98) == 10.0
+    # The default anchors on the largest raw, as before.
+    assert composites._percentile_normalize(98.0, distribution, 0.6, 6.0) < 10.0
+    assert composites._percentile_normalize(100.0, distribution, 0.6, 6.0) == 10.0
+
+
+def test_normalize_composites_reads_the_top_percentile_from_values():
+    distributions = {
+        name: [float(value) for value in range(1, 101)] for name in composites.COMPOSITE_NAMES
+    }
+    raw = {name: 98.0 for name in composites.COMPOSITE_NAMES}
+
+    without_key = composites.normalize_composites(raw, VALUES, distributions)
+    with_key = composites.normalize_composites(
+        raw, {**VALUES, "normalization_top_percentile": 0.98}, distributions
+    )
+
+    assert all(value < 10.0 for value in without_key.values())
+    assert all(value == 10.0 for value in with_key.values())
+
+
+def test_tune_composite_normalizer_matches_the_engine_at_every_anchor():
+    """#185: scripts/tune_composite.py carries its own copy of the normalizer;
+    if it drifts from the engine its tuning numbers lie."""
+    import scripts.tune_composite as tune_composite  # no DB at import time
+
+    distribution = [float(value) for value in range(1, 101)]
+    for top_percentile in (1.0, 0.98):
+        for raw in (1.0, 30.0, 61.0, 75.0, 98.0, 99.0, 100.0):
+            assert tune_composite.pct_normalize(raw, distribution, top_percentile) == (
+                composites._percentile_normalize(raw, distribution, 0.6, 6.0, top_percentile)
+            ), (top_percentile, raw)
+
+
 def test_percentile_normalize_scores_a_zero_by_how_common_zeros_are():
     """A raw 0 means "doesn't do this", not "worst in the NBA" (#114).
 
