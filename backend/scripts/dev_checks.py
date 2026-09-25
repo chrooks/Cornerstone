@@ -420,31 +420,31 @@ def cmd_thresholds(sb, args) -> None:
         print(body)
 
 
-def stats_tiers(sb, season: str) -> dict[str, dict[str, str]]:
-    """player_id -> {skill: tier} from the stats profile, the engine's current tier.
-
-    A composite entry's own `stat_tier` goes stale for human entries: the #120 guard keeps
-    them verbatim through a recompute, and resolve spreads the old entry.
-    """
-    out: dict[str, dict[str, str]] = {}
-    for r in pages(lambda: sb.table("draft_skill_profiles").select("id, player_id, profile")
-                   .eq("source", "stats").eq("season", season).order("id")):
-        out[r["player_id"]] = {k: (v.get("tier") if isinstance(v, dict) else v) or "None"
-                               for k, v in (r["profile"] or {}).items()}
-    return out
-
-
 def cmd_damage(sb, args) -> None:
-    """The #154 damage pattern: a HIGH entry resolved to 'None' over a real stats tier."""
+    """The #154 damage pattern: a HIGH entry resolved to 'None' where the engine rates the player.
+
+    The engine's tier is evaluated now (full run, auto-promotions included): a human entry keeps
+    its old stat_tier through a recompute (#120), and threshold-edit commits leave the stats
+    profile stale (#176).
+    """
+    from rule_lab import evaluate  # lazy: rule_lab imports this module
+    from services.skill_engine.cache import get_league_averages
+
     comps = composites(sb, args.season)
-    fresh = stats_tiers(sb, args.season)
-    hits = [(pid, s, fresh.get(pid, {}).get(s, "None")) for pid, c in comps.items() for s, e in (c["profile"] or {}).items()
-            if s in HIGH_CONFIDENCE_SKILLS and isinstance(e, dict) and e.get("final_tier") == "None"
-            and e.get("source") == "resolved" and fresh.get(pid, {}).get(s, "None") != "None"]
+    cands = [(pid, s) for pid, c in comps.items() for s, e in (c["profile"] or {}).items()
+             if s in HIGH_CONFIDENCE_SKILLS and isinstance(e, dict) and e.get("final_tier") == "None"
+             and e.get("source") == "resolved"]
+    rules = {r["skill_name"]: r["thresholds"]
+             for r in sb.table("draft_skill_thresholds").select("skill_name, thresholds").execute().data or []}
+    blobs = newest_blobs(sb, {pid for pid, _ in cands}, args.season)
+    league_avgs = get_league_averages(args.season, sb)
+    hits = [(pid, s, tier) for pid, s in cands if pid in blobs
+            for tier in [evaluate({pid: blobs[pid]}, rules, league_avgs, s, rules[s], full_run=True)[pid]["tier"]]
+            if tier != "None"]
     names = names_for(sb, [h[0] for h in hits])
-    print(f"#154 damage entries: {len(hits)}")
+    print(f"#154 damage entries: {len(hits)} (of {len(cands)} resolved-None HIGH entries)")
     for pid, s, st in hits:
-        print(f"  {names.get(pid, pid)} {s}: final None over stat {st}  {review_link(pid)}")
+        print(f"  {names.get(pid, pid)} {s}: final None over engine tier {st}  {review_link(pid)}")
 
 
 def cmd_career_stale(sb, args) -> None:
