@@ -83,6 +83,8 @@ const STAT_LABELS: Record<string, string> = {
   pullup_fg3m: "Pull-Up 3PM",
   pullup_fg3a: "Pull-Up 3PA",
   pullup_fg3_pct: "Pull-Up 3P%",
+  pullup_fg2a: "Pull-Up 2PA",
+  pullup_fg2_pct: "Pull-Up 2P%",
   pullup_pts: "Pull-Up Pts",
   // Tracking — Drives
   drives: "Drives",
@@ -205,6 +207,7 @@ const STAT_ORDER: Record<string, string[]> = {
     "catch_shoot_fgm", "catch_shoot_fga", "catch_shoot_fg_pct",
     "catch_shoot_pts",
     "pullup_fg3m", "pullup_fg3a", "pullup_fg3_pct",
+    "pullup_fg2a", "pullup_fg2_pct",
     "pullup_fgm", "pullup_fga", "pullup_fg_pct",
     "pullup_pts",
   ],
