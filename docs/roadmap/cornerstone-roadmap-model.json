@@ -1008,14 +1008,14 @@
     },
     {
       "id": "i177",
-      "label": "#177 #120 guard re-asks a kept call\n(P2 bug; batch-1 decision 7)",
-      "group": "engine",
+      "label": "✅ #177 Kept calls not re-asked\n— CLOSED (c7ca795)",
+      "group": "done",
       "x": 1560,
       "y": 400,
-      "description": "A recompute re-raises a contradiction the reviewer already resolved against the same stats tier: 14 of Rim Protector's 17 batch-1 flags, 5 of Isolation Scorer's 18.",
+      "description": "The run reads resolved flags once; the guard skips a contradiction matching (player, Skill, stats tier, Claude tier, kept tier). Rim Protector P 17 -> 3 flags. Walkthrough: docs/walkthroughs/177-kept-calls-not-reasked.md",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/177",
-        "state": "open",
+        "state": "closed",
         "priority": "p2",
         "milestone": "Data debt (post-V1)"
       }
