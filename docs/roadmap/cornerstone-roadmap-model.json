@@ -882,7 +882,7 @@
     },
     {
       "id": "i168",
-      "label": "#168 16 Skills lack a Proficient tier\n(Data debt, P2; 2 of 16 fixed)",
+      "label": "#168 15 Skills lack a Proficient tier\n(Data debt, P2; batch 1 = 4 High)",
       "group": "engine",
       "description": "Two-tier rules make Proficient a bump artifact. Fixed by decision doc + staged run: Spot Up (V6, 2026-09-25) and Off-Dribble (pull-up twos ladder, run bdc52ddc, 2026-09-25). 14 Skills remain.",
       "x": 1000,
@@ -975,6 +975,34 @@
         "url": "https://github.com/chrooks/Cornerstone/issues/163",
         "state": "open",
         "priority": "p3",
+        "milestone": "Data debt (post-V1)"
+      }
+    },
+    {
+      "id": "i175",
+      "label": "#175 Rule lab: lint, measure,\nverify-run (P2, AFK)",
+      "group": "engine",
+      "x": 1340,
+      "y": 270,
+      "description": "One read-only command measures any stat rule the way a threshold-edit run stages it, lints all 23 rules, and checks a staged run against the simulation. Built 2026-09-25 (1754a3e); batch 1 = the 4 High Skills.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/175",
+        "state": "open · afk",
+        "priority": "p2",
+        "milestone": "Data debt (post-V1)"
+      }
+    },
+    {
+      "id": "i176",
+      "label": "#176 Threshold-edit runs skip auto-\npromotions; stats profile stale (P2 bug)",
+      "group": "engine",
+      "x": 1340,
+      "y": 660,
+      "description": "A threshold-edit run evaluates only the edited rule (no auto-promotions: 3 Spot Up players) and its commit never refreshes the source='stats' profile, which composite recompute and review still read.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/176",
+        "state": "open",
+        "priority": "p2",
         "milestone": "Data debt (post-V1)"
       }
     }
@@ -1249,6 +1277,12 @@
       "to": "i152",
       "label": "hazard in the review session",
       "description": "M5.11 resolves the on-ball and versatile contradiction flags; a Trust click on one of the 46 overwrites a human decision or writes a tier the label did not show."
+    },
+    {
+      "from": "i175",
+      "to": "i168",
+      "label": "measures each batch",
+      "description": "#168's remaining 15 Skills are drafted and verified with the rule lab, in batches."
     }
   ]
 }
