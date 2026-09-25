@@ -147,53 +147,62 @@ def anchor_ok(expected: str, got: str) -> bool:
                    "None": ("None",)}[expected]
 
 
-def match_name(query: str, names: dict[str, str]) -> str | None:
-    """player_id for a name or nickname: exact normalized match, else one unique substring match."""
+def name_candidates(query: str, names: dict[str, str]) -> list[str]:
+    """player_ids for a name or nickname: the exact normalized match, else every substring match."""
     q = norm(ALIASES.get(norm(query), query))
     exact = [pid for pid, n in names.items() if norm(n) == q]
-    if exact:
-        return exact[0]
-    loose = [pid for pid, n in names.items() if q in norm(n)]
-    return loose[0] if len(loose) == 1 else None
+    return exact[:1] or [pid for pid, n in names.items() if q in norm(n)]
+
+
+def match_name(query: str, names: dict[str, str]) -> str | None:
+    """player_id when exactly one player matches, else None (absent or ambiguous)."""
+    found = name_candidates(query, names)
+    return found[0] if len(found) == 1 else None
+
+
+def unmatched(query: str, names: dict[str, str]) -> str:
+    """Why a name did not match: 'not in pool' or 'ambiguous: <names>'."""
+    found = name_candidates(query, names)
+    return f"ambiguous: {', '.join(names[p] for p in found)}" if found else "not in pool"
 
 
 def compare_staged(skill: str, staged: dict[str, dict], current: dict[str, dict],
                    sim: dict[str, dict], flags: dict[str, list[dict]]) -> dict:
-    """Check a staged run against a measured variant.
+    """Check a staged run against a measured variant; every difference is a mismatch.
 
     staged / current: player_id -> composite profile (staged row / live row).
-    sim: player_id -> {"tier": simulated stats tier, "final": simulated staged final_tier}.
+    sim: player_id -> {"entry": the staged entry the lab simulated (None: no composite, not
+         staged), "flags": [[skill_name, flag_reason, stats_tier], ...] it simulated}.
     flags: player_id -> staged flag rows ({"skill_name", "flag_reason", "stats_tier"}).
     """
     counts = Counter()
     bad: list[list] = []
+    expected = {pid for pid, x in sim.items() if x.get("entry") is not None}
+    for pid in sorted(expected - set(staged)):
+        bad.append(["simulated player not staged", pid])
+    for pid in sorted(set(flags) - set(staged)):
+        bad.append(["flag without a staged composite", pid, flags[pid]])
     for pid, new_prof in staged.items():
-        cur_prof = current.get(pid) or {}
-        for k in (set(cur_prof) | set(new_prof or {})) - {skill}:
-            if cur_prof.get(k) != (new_prof or {}).get(k):
-                counts["other_skill_changed"] += 1
-                bad.append(["other Skill changed", pid, k])
-        if pid not in sim:
+        new_prof, cur_prof = new_prof or {}, current.get(pid) or {}
+        if pid not in expected:
+            bad.append(["staged player not in simulation", pid])
             continue
-        cur, new = cur_prof.get(skill) or {}, (new_prof or {}).get(skill) or {}
-        contra = [f for f in flags.get(pid, []) if f["skill_name"] == skill
-                  and f["flag_reason"].startswith("human_decision_contradicted")]
-        if cur.get("source") in HUMAN:
-            if new != cur:
-                bad.append(["human entry changed", pid])
-            else:
-                counts["human_untouched"] += 1
-            if sim[pid]["tier"] != cur.get("final_tier"):
-                if any(f.get("stats_tier") == sim[pid]["tier"] for f in contra):
-                    counts["contradiction_flagged"] += 1
-                else:
-                    bad.append(["disagreement without a matching flag", pid, sim[pid]["tier"], contra])
-            elif contra:
-                bad.append(["contradiction flag where the call agrees", pid])
-        elif new.get("final_tier") == sim[pid]["final"]:
-            counts["auto_at_sim"] += 1
+        for k in sorted((set(cur_prof) | set(new_prof)) - {skill}):
+            if cur_prof.get(k) != new_prof.get(k):
+                bad.append(["other Skill changed", pid, k])
+        cur, new = cur_prof.get(skill) or {}, new_prof.get(skill) or {}
+        if cur.get("source") in HUMAN and new != cur:
+            bad.append(["human entry changed", pid])
+        elif new != sim[pid]["entry"]:
+            bad.append(["entry differs from the simulation", pid, new, sim[pid]["entry"]])
         else:
-            bad.append(["auto tier differs from the simulation", pid, new.get("final_tier"), sim[pid]["final"]])
+            counts["human_untouched" if cur.get("source") in HUMAN else "auto_at_sim"] += 1
+        got = Counter((f["skill_name"], f["flag_reason"], f.get("stats_tier")) for f in flags.get(pid, []))
+        want = Counter(tuple(f) for f in sim[pid]["flags"])
+        if got != want:
+            bad.append(["flags differ", pid, sorted(got.elements()), sorted(want.elements())])
+        else:
+            counts["flags_matched"] += sum(got.values())
     return {"counts": dict(counts), "mismatches": bad}
 
 
@@ -210,9 +219,25 @@ def stat_map(rule: dict, blob: dict, league_avgs: dict) -> dict:
     return {**sm, "stabilized": {k[len("stabilized."):]: v for k, v in stab.items()}}
 
 
+def season_stats(node) -> list[str]:
+    """Stats that some condition reads with per: "season" (value x games played)."""
+    if isinstance(node, dict):
+        own = [node["stat"]] if node.get("per") == "season" and isinstance(node.get("stat"), str) else []
+        return own + [p for v in node.values() for p in season_stats(v)]
+    return [p for v in node for p in season_stats(v)] if isinstance(node, list) else []
+
+
 def promoters(rules: dict, skill: str) -> list[str]:
     """Skills whose auto_promotions set a minimum tier on `skill`."""
     return [s for s, r in rules.items() if any(p.get("then_set_skill") == skill for p in r.get("auto_promotions") or [])]
+
+
+def safe_stat_map(rule: dict, blob: dict, league_avgs: dict) -> dict | None:
+    """stat_map, or None where the engine would record an evaluation_error for this player."""
+    try:
+        return stat_map(rule, blob, league_avgs)
+    except Exception:  # ponytail: mirrors evaluate_all_skills' catch-all; the player is skipped
+        return None
 
 
 def evaluate(blobs: dict, rules: dict, league_avgs: dict, skill: str, rule: dict,
@@ -236,33 +261,42 @@ def _check(block: dict, sm: dict, gp: int):
 
 
 def bump_effects(blobs: dict, rules: dict, league_avgs: dict, skill: str, rule: dict) -> list[dict]:
-    """Per bump: gate passers whose condition holds, and final tiers it actually changes."""
+    """Per bump: gate passers whose condition holds; tiers it changes when removed; tiers it
+    changes when it is the only bump. The evaluator applies the first bump-up that fires, so an
+    overlapping bump can change nothing when removed and still act alone. DEAD = cannot act alone.
+    """
+    bumps = rule.get("tier_bumps") or []
     base = evaluate(blobs, rules, league_avgs, skill, rule)
+    bare = evaluate(blobs, rules, league_avgs, skill, {**rule, "tier_bumps": []}) if bumps else base
+    gate = [pid for pid in base if base[pid].get("volume_gate_passed")]
     out = []
-    for i, bump in enumerate(rule.get("tier_bumps") or []):
-        without = copy.deepcopy(rule)
-        del without["tier_bumps"][i]
-        alt = evaluate(blobs, rules, league_avgs, skill, without)
-        changed = sorted(pid for pid in base if base[pid]["tier"] != alt[pid]["tier"])
-        gate = [pid for pid in base if base[pid].get("volume_gate_passed")]
-        fires = sum(_check(bump.get("condition") or {}, stat_map(rule, blobs[pid], league_avgs),
-                           int((blobs[pid].get("metadata") or {}).get("games_played") or 0)) is True
-                    for pid in gate)
+    for i, bump in enumerate(bumps):
+        without = evaluate(blobs, rules, league_avgs, skill, {**rule, "tier_bumps": bumps[:i] + bumps[i + 1:]})
+        alone = evaluate(blobs, rules, league_avgs, skill, {**rule, "tier_bumps": [bump]})
+        changed = sorted(pid for pid in base if base[pid]["tier"] != without[pid]["tier"])
+        reach = sum(alone[pid]["tier"] != bare[pid]["tier"] for pid in base)
+        fires = 0
+        for pid in gate:
+            sm = safe_stat_map(rule, blobs[pid], league_avgs)
+            gp = int((blobs[pid].get("metadata") or {}).get("games_played") or 0)
+            fires += sm is not None and _check(bump.get("condition") or {}, sm, gp) is True
         out.append({"index": i, "effect": bump.get("effect"),
                     "limit": bump.get("max_tier") or bump.get("min_tier"),
                     "fires_among_gate_passers": fires, "gate_passers": len(gate),
-                    "changes": len(changed), "dead": not changed, "changed_ids": changed})
+                    "changes": len(changed), "reach_alone": reach, "dead": reach == 0,
+                    "changed_ids": changed})
     return out
 
 
 def null_gate(blobs: dict, league_avgs: dict, rule: dict, results: dict) -> dict[str, list[str]]:
-    """player_id -> gate stats that are null, for every player the rule reports data_missing."""
-    gate_paths = stat_paths(rule.get("volume_gate") or {})
+    """player_id -> null stats the rule reads (gate first), for every data_missing player."""
+    paths = [p for p in stat_paths(rule.get("volume_gate") or {}) + stat_paths(rule.get("tiers") or {})
+             + stat_paths(rule.get("tier_bumps") or []) if not p.startswith("stabilized.")]
     out = {}
     for pid, res in results.items():
         if res.get("data_missing"):
-            sm = stat_map(rule, blobs[pid], league_avgs)
-            out[pid] = [p for p in gate_paths if resolve_stat(sm, p) is None]
+            sm = safe_stat_map(rule, blobs[pid], league_avgs) or {}
+            out[pid] = list(dict.fromkeys(p for p in paths if resolve_stat(sm, p) is None))
     return out
 
 
@@ -271,7 +305,7 @@ def stabilization_noops(blobs: dict, league_avgs: dict, rule: dict) -> list[str]
     paths = [e.get("stat") for e in rule.get("stabilization") or []]
     seen = {p: False for p in paths}
     for blob in blobs.values():
-        stab = stat_map(rule, blob, league_avgs)["stabilized"]
+        stab = (safe_stat_map(rule, blob, league_avgs) or {"stabilized": {}})["stabilized"]
         for p in paths:
             seen[p] = seen[p] or stab.get(p) is not None
         if all(seen.values()):
@@ -324,7 +358,8 @@ def anchor_rows(world: World, skill: str, tiers_by_variant: dict[str, dict[str, 
             pid = match_name(name, world.names)
             got = {v: t[pid] for v, t in tiers_by_variant.items()} if pid else {}
             rows.append({"anchor": name, "player": world.names.get(pid), "expected": expected, "tiers": got,
-                         "ok": {v: anchor_ok(expected, t) for v, t in got.items()}})
+                         "ok": {v: anchor_ok(expected, t) for v, t in got.items()},
+                         "unmatched": None if pid else unmatched(name, world.names)})
     return rows
 
 
@@ -396,25 +431,33 @@ def cmd_measure(sb, args) -> None:
         res = evaluate(world.blobs, world.rules, world.league_avgs, skill, rule)
         players, reasons = {}, Counter()
         for pid, r in res.items():
-            entry, flags = stage(world, skill, pid, r) if pid in world.comps else ({}, [])
+            # A threshold-edit run stages only players who already have a composite row.
+            staged = pid in world.comps
+            entry, flags = stage(world, skill, pid, r) if staged else (None, [])
             reasons.update(f.flag_reason.split(":")[0] for f in flags if f.skill_name == skill)
-            players[pid] = {"tier": r["tier"], "final": entry.get("final_tier"), "gate": bool(r.get("volume_gate_passed")),
-                            "data_missing": bool(r.get("data_missing")), "bumped": bool(r.get("tier_bump_applied")),
-                            "auto_promoted": bool(r.get("auto_promoted"))}
+            players[pid] = {"tier": r["tier"], "final": (entry or {}).get("final_tier"), "staged": staged,
+                            "entry": entry, "flags": [[f.skill_name, f.flag_reason, f.stats_tier] for f in flags],
+                            "gate": bool(r.get("volume_gate_passed")), "data_missing": bool(r.get("data_missing")),
+                            "bumped": bool(r.get("tier_bump_applied")), "auto_promoted": bool(r.get("auto_promoted"))}
         tiers = {pid: p["tier"] for pid, p in players.items()}
         tiers_by_variant[vname] = tiers
         gate = [pid for pid, p in players.items() if p["gate"]]
         dist = {}
-        maps = [stat_map(rule, world.blobs[pid], world.league_avgs) for pid in gate]
+        maps = [(m, int((world.blobs[pid].get("metadata") or {}).get("games_played") or 0))
+                for pid in gate for m in [safe_stat_map(rule, world.blobs[pid], world.league_avgs)] if m is not None]
+        season_paths = set(season_stats(rule))
         for path in stat_paths(rule):
             if path.startswith("stabilized."):
                 continue
-            dist[path] = {"raw": percentiles([resolve_stat(m, path) for m in maps])}
-            if any(path in m["stabilized"] for m in maps):
-                dist[path]["stabilized"] = percentiles([m["stabilized"].get(path) for m in maps])
+            dist[path] = {"raw": percentiles([resolve_stat(m, path) for m, _ in maps])}
+            if any(path in m["stabilized"] for m, _ in maps):
+                dist[path]["stabilized"] = percentiles([m["stabilized"].get(path) for m, _ in maps])
+            if path in season_paths:  # a per: "season" condition compares value x games played
+                dist[path]["season"] = percentiles([v * gp for m, gp in maps for v in [resolve_stat(m, path)] if v is not None])
         pack["variants"][vname] = {
             "rule": rule,
             "counts": {t: sum(1 for x in tiers.values() if x == t) for t in TIER_ORDER},
+            "counts_staged": {t: sum(1 for p in players.values() if p["staged"] and p["tier"] == t) for t in TIER_ORDER},
             "gate_passers": len(gate),
             "data_missing": sum(p["data_missing"] for p in players.values()),
             "bumped": sum(p["bumped"] for p in players.values()),
@@ -437,7 +480,7 @@ def cmd_measure(sb, args) -> None:
     pack["composite_drift"] = [world.names[p] for p, x in today_players.items() if p in world.comps
                                and isinstance(world.comps[p].get(skill), dict)
                                and world.comps[p][skill].get("source") not in HUMAN
-                               and world.comps[p][skill].get("final_tier") != x["final"]]
+                               and world.comps[p][skill] != x["entry"]]
     # A full recompute would also apply other Skills' auto-promotions into this one.
     if promoters(world.rules, skill):
         full = evaluate(world.blobs, world.rules, world.league_avgs, skill, world.rules[skill], full_run=True)
@@ -448,14 +491,13 @@ def cmd_measure(sb, args) -> None:
     pack["named"] = []
     for query, pid in named:
         if not pid:
-            pack["named"].append({"query": query, "player": None})
+            pack["named"].append({"query": query, "player": None, "unmatched": unmatched(query, world.names)})
             continue
-        maps = {v: stat_map(r, world.blobs[pid], world.league_avgs) for v, r in variants.items()}
-        inputs = {}
+        inputs = {}  # variant -> path -> values: a candidate may stabilize or derive a stat differently
         for v, rule in variants.items():
-            for path in stat_paths(rule):
-                if not path.startswith("stabilized."):
-                    inputs.setdefault(path, {"raw": resolve_stat(maps[v], path), "stabilized": maps[v]["stabilized"].get(path)})
+            m = safe_stat_map(rule, world.blobs[pid], world.league_avgs) or {"stabilized": {}}
+            inputs[v] = {path: {"raw": resolve_stat(m, path), "stabilized": m["stabilized"].get(path)}
+                         for path in stat_paths(rule) if not path.startswith("stabilized.")}
         call = (world.comps.get(pid) or {}).get(skill) or {}
         pack["named"].append({"query": query, "player": world.names[pid], "inputs": inputs,
                               "tiers": {v: t[pid] for v, t in tiers_by_variant.items()},
@@ -494,7 +536,10 @@ def render_markdown(pack: dict) -> str:
         fp = pack["full_run_promotions"]
         out.append(f"A full recompute would also apply auto-promotions from {fp['from']}: "
                    f"{len(fp['players'])} players {fp['players'][:8]}")
-    out += ["", "## Counts", "", render_counts(pack), ""]
+    staged = pack["variants"]["today"]["counts_staged"]
+    out += ["", "## Counts", "", f"Counts cover all {pack['pool']} pool players. A threshold-edit run writes only the "
+            f"{sum(staged.values())} with a composite row (today: " + " / ".join(str(staged[t]) for t in TIER_ORDER[1:]) + ").",
+            "", render_counts(pack), ""]
     for v, d in pack["variants"].items():
         out += [f"## {v}", ""]
         dg = d["diagnostics"]
@@ -516,15 +561,23 @@ def render_markdown(pack: dict) -> str:
     vs = list(pack["variants"])
     out += ["## Anchors (design doc)", "", "| anchor | expected | " + " | ".join(vs) + " |", "|---|---|" + "---|" * len(vs)]
     for a in pack["anchors"]:
-        cells = [f"{a['tiers'][v]}{'' if a['ok'][v] else ' ✗'}" for v in vs] if a["player"] else ["not in pool"] * len(vs)
+        cells = [f"{a['tiers'][v]}{'' if a['ok'][v] else ' ✗'}" for v in vs] if a["player"] else [a["unmatched"]] * len(vs)
         out.append(f"| {a['anchor']} | {a['expected']} | " + " | ".join(cells) + " |")
     out += ["", "## Named players", "", "| player | call | " + " | ".join(vs) + " | inputs (raw / stabilized) |", "|---|---|" + "---|" * (len(vs) + 1)]
     for r in pack["named"]:
         if not r["player"]:
-            out.append(f"| {r['query']} | not in pool |" + " |" * (len(vs) + 1))
+            out.append(f"| {r['query']} | {r['unmatched']} |" + " |" * (len(vs) + 1))
             continue
-        ins = "; ".join(f"{p.split('.')[-1]} {fmt(x['raw'])}" + (f"/{fmt(x['stabilized'])}" if x["stabilized"] is not None else "")
-                        for p, x in r["inputs"].items())
+        shown: dict[str, str] = {}  # one value per stat; a variant that computes it differently adds its own
+        for v in vs:
+            for p, x in r["inputs"][v].items():
+                text = fmt(x["raw"]) + (f"/{fmt(x['stabilized'])}" if x["stabilized"] is not None else "")
+                key = p.split(".")[-1]
+                if key not in shown:
+                    shown[key] = text
+                elif text not in shown[key]:
+                    shown[key] += f" ({v}: {text})"
+        ins = "; ".join(f"{k} {t}" for k, t in shown.items())
         out.append(f"| {r['player']} | {r['call'] or '—'} | " + " | ".join(r["tiers"][v] for v in vs) + f" | {ins} |")
     calls = pack["human_calls"]
     out += ["", f"## Human calls ({len(calls)})", ""] + [
@@ -549,12 +602,20 @@ def cmd_verify_run(sb, args) -> None:
         flags.setdefault(f["player_id"], []).append(f)
     current = {pid: c["profile"] or {} for pid, c in composites(sb, pack["season"]).items()}
     result = compare_staged(args.skill, staged, current, sim, flags)
+    # The run must stage the measured rule: a threshold-edit run records it in its params.
+    run = (sb.table("pipeline_runs").select("pipeline_name, params").eq("id", args.run).execute().data or [{}])[0]
+    params = run.get("params") or {}
+    if run.get("pipeline_name") == "threshold_edit" and (params.get("skill_name") != args.skill
+                                                         or params.get("thresholds") != pack["variants"][args.variant]["rule"]):
+        result["mismatches"].insert(0, ["the run's rule is not the measured variant's rule", params.get("skill_name")])
     n_flags = sum(len(v) for v in flags.values())
     print(f"run {args.run} vs {pack['skill']} variant {args.variant}: {len(staged)} staged composites, {n_flags} staged flags")
     print("counts:", result["counts"])
     print(f"MISMATCHES: {len(result['mismatches'])}")
     for m in result["mismatches"][:40]:
         print("  ", m)
+    if result["mismatches"]:
+        print("A review action after `measure` also shows here: re-run measure, then verify again.")
     sys.exit(1 if result["mismatches"] else 0)
 
 

@@ -79,8 +79,19 @@ def test_bump_effects_reports_a_live_bump_and_the_off_dribble_dead_bump_down():
              "mid": _blob(70, pullup_fg3a=3.0, pullup_fg3_pct=0.35)}
     rule = _rule([live_up, dead_down])
     up, down = lab.bump_effects(blobs, {"x": rule}, {}, "x", rule)
-    assert (up["changes"], up["dead"], up["changed_ids"]) == (1, False, ["hi"])
+    assert (up["changes"], up["reach_alone"], up["dead"], up["changed_ids"]) == (1, 1, False, ["hi"])
     assert down["fires_among_gate_passers"] == 1 and down["changes"] == 0 and down["dead"]
+
+
+def test_overlapping_bumps_are_not_called_dead():
+    # The evaluator applies the first bump-up that fires, so removing either one changes nothing.
+    b5 = {"effect": "bump_up_one_tier", "max_tier": "Elite", "condition": {"stat": A3, "operator": ">=", "value": 5.0}}
+    b4 = {"effect": "bump_up_one_tier", "max_tier": "Elite", "condition": {"stat": A3, "operator": ">=", "value": 4.0}}
+    blobs = {"p": _blob(70, pullup_fg3a=6.0, pullup_fg3_pct=0.34)}
+    rule = _rule([b5, b4])
+    first, second = lab.bump_effects(blobs, {"x": rule}, {}, "x", rule)
+    assert (first["changes"], second["changes"]) == (0, 0)
+    assert not first["dead"] and not second["dead"]
 
 
 def test_null_gate_names_the_missing_stat():
@@ -88,23 +99,31 @@ def test_null_gate_names_the_missing_stat():
     blobs = {"big": _blob(60, pullup_fg3a=None, pullup_fg3_pct=None)}
     results = lab.evaluate(blobs, {"x": rule}, {}, "x", rule)
     assert results["big"]["data_missing"]
-    assert lab.null_gate(blobs, {}, rule, results) == {"big": [A3]}
+    assert lab.null_gate(blobs, {}, rule, results) == {"big": [A3, P3]}  # gate stat first
 
 
 def test_compare_staged_passes_a_clean_run_and_catches_each_failure():
     human = {"source": "manual_override", "final_tier": "Elite"}
+    auto = {"source": "stats_only", "final_tier": "Capable", "stat_tier": "Capable"}
     current = {"h": {"s": human, "t": {"final_tier": "None"}}, "a": {"s": {"source": "stats_only", "final_tier": "None"}}}
-    staged = {"h": {"s": human, "t": {"final_tier": "None"}}, "a": {"s": {"source": "stats_only", "final_tier": "Capable"}}}
-    sim = {"h": {"tier": "Proficient", "final": "Elite"}, "a": {"tier": "Capable", "final": "Capable"}}
-    flags = {"h": [{"skill_name": "s", "flag_reason": "human_decision_contradicted:manual_override:Elite", "stats_tier": "Proficient"}]}
+    staged = {"h": {"s": human, "t": {"final_tier": "None"}}, "a": {"s": auto}}
+    contra = ["s", "human_decision_contradicted:manual_override:Elite", "Proficient"]
+    sim = {"h": {"entry": human, "flags": [contra]}, "a": {"entry": auto, "flags": []}, "gone": {"entry": None, "flags": []}}
+    flags = {"h": [{"skill_name": contra[0], "flag_reason": contra[1], "stats_tier": contra[2]}]}
     clean = lab.compare_staged("s", staged, current, sim, flags)
-    assert clean["mismatches"] == [] and clean["counts"] == {"human_untouched": 1, "contradiction_flagged": 1, "auto_at_sim": 1}
+    assert clean["mismatches"] == [] and clean["counts"] == {"human_untouched": 1, "auto_at_sim": 1, "flags_matched": 1}
 
-    changed = {**staged, "h": {"s": {**human, "final_tier": "Proficient"}, "t": {"final_tier": "None"}}}
-    assert lab.compare_staged("s", changed, current, sim, flags)["mismatches"][0][0] == "human entry changed"
-    assert lab.compare_staged("s", staged, current, sim, {})["mismatches"][0][0] == "disagreement without a matching flag"
-    other = {**staged, "a": {**staged["a"], "t": {"final_tier": "Elite"}}}
-    assert lab.compare_staged("s", other, current, sim, flags)["mismatches"][0][0] == "other Skill changed"
+    def first(st=staged, fl=flags, sm=sim):
+        return lab.compare_staged("s", st, current, sm, fl)["mismatches"][0][0]
+
+    assert first(st={**staged, "h": {"s": {**human, "final_tier": "Proficient"}, "t": {"final_tier": "None"}}}) == "human entry changed"
+    assert first(fl={}) == "flags differ"
+    assert first(fl={**flags, "a": [{"skill_name": "s", "flag_reason": "data_missing", "stats_tier": "None"}]}) == "flags differ"
+    assert first(st={**staged, "a": {"s": {**auto, "flagged": True}}}) == "entry differs from the simulation"
+    assert first(st={**staged, "a": {"s": auto, "t": {"final_tier": "Elite"}}}) == "other Skill changed"
+    assert first(st={"h": staged["h"]}) == "simulated player not staged"
+    assert first(st={**staged, "x": {"s": auto}}) == "staged player not in simulation"
+    assert first(fl={**flags, "x": [{"skill_name": "s", "flag_reason": "data_missing", "stats_tier": None}]}) == "flag without a staged composite"
 
 
 def test_the_lab_only_builds_the_guarded_read_only_client():
