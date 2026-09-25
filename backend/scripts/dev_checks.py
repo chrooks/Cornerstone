@@ -420,12 +420,27 @@ def cmd_thresholds(sb, args) -> None:
         print(body)
 
 
+def stats_tiers(sb, season: str) -> dict[str, dict[str, str]]:
+    """player_id -> {skill: tier} from the stats profile, the engine's current tier.
+
+    A composite entry's own `stat_tier` goes stale for human entries: the #120 guard keeps
+    them verbatim through a recompute, and resolve spreads the old entry.
+    """
+    out: dict[str, dict[str, str]] = {}
+    for r in pages(lambda: sb.table("draft_skill_profiles").select("id, player_id, profile")
+                   .eq("source", "stats").eq("season", season).order("id")):
+        out[r["player_id"]] = {k: (v.get("tier") if isinstance(v, dict) else v) or "None"
+                               for k, v in (r["profile"] or {}).items()}
+    return out
+
+
 def cmd_damage(sb, args) -> None:
     """The #154 damage pattern: a HIGH entry resolved to 'None' over a real stats tier."""
     comps = composites(sb, args.season)
-    hits = [(pid, s, e.get("stat_tier")) for pid, c in comps.items() for s, e in (c["profile"] or {}).items()
+    fresh = stats_tiers(sb, args.season)
+    hits = [(pid, s, fresh.get(pid, {}).get(s, "None")) for pid, c in comps.items() for s, e in (c["profile"] or {}).items()
             if s in HIGH_CONFIDENCE_SKILLS and isinstance(e, dict) and e.get("final_tier") == "None"
-            and e.get("source") == "resolved" and e.get("stat_tier") not in (None, "None")]
+            and e.get("source") == "resolved" and fresh.get(pid, {}).get(s, "None") != "None"]
     names = names_for(sb, [h[0] for h in hits])
     print(f"#154 damage entries: {len(hits)}")
     for pid, s, st in hits:
