@@ -36,7 +36,7 @@
     { "id": "claude-assess", "label": "claude_assessment\n+ compositing", "group": "backend-services", "x": -30, "y": -65,
       "description": "Claude rates a chosen subset of the 23 skills (all 23 by default); compositing merges vs stat ratings — agreements auto-accepted, disagreements become skill_flags for the review queue. Fresh Claude tiers merge through the human-decision guard (#120), so a human entry stays put and gets a flag instead. Staged flags carry claude_justification + stat_values, so the diff preview can show why Claude disagreed.", "meta": { "dir": "backend/services" } },
     { "id": "cohesion", "label": "cohesion_engine/\nteam evaluation", "group": "backend-services", "x": 230, "y": -65,
-      "description": "Sole evaluation engine: lineup subscores, composites, synergies, accentuation, rotation combos, bell-curve normalization, Claude narrative. Warmed from the active Evaluation Version at startup.", "meta": { "dir": "backend/services/cohesion_engine" } },
+      "description": "Sole evaluation engine: lineup subscores, composites, synergies, accentuation, rotation combos, percentile normalization (each axis scale anchored at values.normalization_top_percentile of the pool, default the single top raw; v12 sets 0.98, #185), Claude narrative. Warmed from the active Evaluation Version at startup.", "meta": { "dir": "backend/services/cohesion_engine" } },
     { "id": "eval-versions", "label": "evaluation_versions/\nimmutable snapshots", "group": "backend-services", "x": 460, "y": -65,
       "description": "Publishes cohesion weights + composites as immutable versions. One active at a time; Saved Teams pin a version.", "meta": { "dir": "backend/services/evaluation_versions" } },
 
