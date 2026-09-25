@@ -60,13 +60,13 @@
     },
     {
       "id": "i130",
-      "label": "🧍 #130 recompute 440 drifted\ntiers + republish (P2 chore)",
-      "group": "snapshot",
+      "label": "✅ #130 recompute drifted tiers\n— CLOSED (V1.1, 2026-09-25)",
+      "group": "done",
       "x": -350,
       "y": -350,
-      "description": "Follow-up to #86 (closed on the systemic fix: drift audit script + never-block publish drift log, commit 4de5484). Full-pool re-eval through the draft lifecycle to clear the 440 drifted stats_only pairs the sweep found; audit refinements (stale-vs-moved, Kong 414 batching). Two prerequisites shipped 2026-09-22: the dev-gateway id-list split into groups of 100 (fd16be3) and the recompute_composite passthrough (470481b). The recompute itself runs inside #119 plan M5 — the one dev Snapshot draft.",
+      "description": "Closed after the 2025-26 V1.1 publish; walkthrough docs/walkthroughs/130-*.md.",
       "meta": {
-        "state": "open",
+        "state": "closed",
         "priority": "p2",
         "url": "https://github.com/chrooks/Cornerstone/issues/130"
       }
@@ -478,14 +478,14 @@
     },
     {
       "id": "i134",
-      "label": "#134 Matchup fetch sends wrong\nparams — league totals (V1, P1)",
-      "group": "snapshot",
+      "label": "✅ #134 matchup fetch params\n— CLOSED (V1.1, 2026-09-25)",
+      "group": "done",
       "x": -350,
       "y": -500,
-      "description": "FETCH FIX SHIPPED (6ea91de) and the whole league refetched 2026-09-22: DefPlayerID, one bulk call, G/F/C buckets, matchup difficulty. Still open — the versatile_defender rule Chris approved is staged for #119 plan M5, the one dev Snapshot draft. The refetch covered only the 359 players at or above 15.0 mpg; the 37 it skipped still hold league totals (#160).",
+      "description": "Closed after the 2025-26 V1.1 publish; walkthrough docs/walkthroughs/134-*.md.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/134",
-        "state": "open"
+        "state": "closed"
       }
     },
     {
@@ -694,14 +694,14 @@
     },
     {
       "id": "i152",
-      "label": "🧍 #152 Split Perimeter Disruptor\ninto on-ball + off-ball (V1, P1)",
-      "group": "engine",
+      "label": "✅ #152 perimeter split\n— CLOSED (V1.1, 2026-09-25)",
+      "group": "done",
       "x": 600,
       "y": 280,
-      "description": "Decided in the #119 grill 2026-09-21 (right over on time). Two LOW-confidence defensive Skills; on-ball rule reads matchup deployment (needs #134). Runs in one Snapshot draft with #130. Plan steps 2-3 shipped 2026-09-22 as #155 — per-Skill bulk resolve (d2f7546) and the skill-scoped Claude run (470481b). The split itself is still open.",
+      "description": "Closed after the 2025-26 V1.1 publish; walkthrough docs/walkthroughs/152-*.md.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/152",
-        "state": "open"
+        "state": "closed"
       }
     },
     {
@@ -718,14 +718,14 @@
     },
     {
       "id": "i154",
-      "label": "#154 \"Trust All Claude\" nulls\nstats-only tiers (V1, P1 bug)",
-      "group": "snapshot",
+      "label": "✅ #154 Trust Claude nulls\n— CLOSED (V1.1, 2026-09-25)",
+      "group": "done",
       "x": -600,
       "y": -600,
-      "description": "Bulk trust_claude wrote final_tier null on HIGH-Skill flags (claude_rating null). SERVER GUARD SHIPPED (3939010 — Trust Claude refuses a flag with no Claude tier) plus the toast fix (d725c4f), both proven headless on cornerstone-dev. Still open: the real-data drive, which happens in #119 plan M5 — the one dev Snapshot draft.",
+      "description": "Closed after the 2025-26 V1.1 publish; walkthrough docs/walkthroughs/154-*.md.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/154",
-        "state": "open"
+        "state": "closed"
       }
     },
     {
@@ -1074,6 +1074,47 @@
         "state": "open",
         "priority": "p2",
         "milestone": "Data debt (post-V1)"
+      }
+    },
+    {
+      "id": "i182",
+      "label": "#182 Admin reads and a writing GET\nhave no auth (P1, V1 launch)",
+      "group": "snapshot",
+      "x": -1000,
+      "y": -600,
+      "description": "GET review queue/flags and pipeline status skip @require_admin; GET league-averages?refresh=true writes. Fix before production.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/182",
+        "state": "open",
+        "priority": "p1",
+        "milestone": "V1 launch"
+      }
+    },
+    {
+      "id": "i183",
+      "label": "#183 Toast wording + lost rulesets\ntoast (P3, AFK)",
+      "group": "lab",
+      "x": 1000,
+      "y": 1150,
+      "description": "Per-player Trust All toast names one skip reason; rulesets publish toast lost on reload.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/183",
+        "state": "open · afk",
+        "priority": "p3"
+      }
+    },
+    {
+      "id": "i184",
+      "label": "#184 EV v10/v11 keep the old\nOff-Ball wording (P3)",
+      "group": "engine",
+      "x": 1560,
+      "y": 660,
+      "description": "A wording-only label change would trigger the saved-team compat dialog.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/184",
+        "state": "open · afk",
+        "priority": "p3",
+        "milestone": "Evaluation Version Publishing"
       }
     }
   ],
