@@ -879,6 +879,104 @@
       },
       "x": 0,
       "y": 1360
+    },
+    {
+      "id": "i168",
+      "label": "#168 16 Skills lack a Proficient tier\n(Data debt, P2; 2 of 16 fixed)",
+      "group": "engine",
+      "description": "Two-tier rules make Proficient a bump artifact. Fixed by decision doc + staged run: Spot Up (V6, 2026-09-25) and Off-Dribble (pull-up twos ladder, run bdc52ddc, 2026-09-25). 14 Skills remain.",
+      "x": 1000,
+      "y": 400,
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/168",
+        "state": "open",
+        "priority": "p2",
+        "milestone": "Data debt (post-V1)"
+      }
+    },
+    {
+      "id": "i164",
+      "label": "#164 One regular season, no postseason\n(Data debt, P2)",
+      "group": "engine",
+      "description": "Ratings read a single regular season; the 3-season blend has nothing to blend. Every threshold cut is calibrated to 2025-26 alone.",
+      "x": 1000,
+      "y": 530,
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/164",
+        "state": "open",
+        "priority": "p2",
+        "milestone": "Data debt (post-V1)"
+      }
+    },
+    {
+      "id": "i169",
+      "label": "#169 Stabilize toward career prior\n(Data debt, P3, parked)",
+      "group": "engine",
+      "description": "Pad shooting percentages toward the player's own career rate (shooting_history) instead of the league average. About 1 session; decide with #164.",
+      "x": 1000,
+      "y": 660,
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/169",
+        "state": "open",
+        "priority": "p3",
+        "milestone": "Data debt (post-V1)"
+      }
+    },
+    {
+      "id": "i173",
+      "label": "#173 League averages are unweighted\n(Data debt, P3, parked)",
+      "group": "engine",
+      "description": "Stored league averages are plain means of per-player rates (pull-up 3P% .302 vs .332 weighted), so stabilization pads everyone toward a low number. 1-2 sessions + re-sim.",
+      "x": 1000,
+      "y": 790,
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/173",
+        "state": "open",
+        "priority": "p3",
+        "milestone": "Data debt (post-V1)"
+      }
+    },
+    {
+      "id": "i174",
+      "label": "#174 drive / post-touch FG% never stabilize\n(Data debt, P3)",
+      "group": "engine",
+      "description": "apply_stabilization looks for drive_fga / post_touch_fga, which no blob holds, so driver, crafty_finisher and low_post_player read raw percentages.",
+      "x": 1340,
+      "y": 790,
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/174",
+        "state": "open",
+        "priority": "p3",
+        "milestone": "Data debt (post-V1)"
+      }
+    },
+    {
+      "id": "i172",
+      "label": "#172 Spacing credit from pull-up twos\n(Data debt, P3, parked)",
+      "group": "engine",
+      "description": "The Off-Dribble tier now counts pull-up twos; spacing takes 0.5 x that tier, so 14 players gain spacing credit from mid-range pull-ups. Needs a threes-range signal + a new Evaluation Version.",
+      "x": 1340,
+      "y": 400,
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/172",
+        "state": "open",
+        "priority": "p3",
+        "milestone": "Data debt (post-V1)"
+      }
+    },
+    {
+      "id": "i163",
+      "label": "#163 Versatile Defender: matchup spread only\n(Data debt, P3)",
+      "group": "engine",
+      "description": "VD reads matchup spread, not coverage or scheme versatility.",
+      "x": 1340,
+      "y": 530,
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/163",
+        "state": "open",
+        "priority": "p3",
+        "milestone": "Data debt (post-V1)"
+      }
     }
   ],
   "edges": [
