@@ -830,8 +830,8 @@
     },
     {
       "id": "i166",
-      "label": "#166 Swipe deck for the review\nqueue on a phone (V1, P1 feature)",
-      "group": "snapshot",
+      "label": "✅ #166 Swipe deck for the review\nqueue — CLOSED (27802ba)",
+      "group": "done",
       "description": "One card per open flag on one Skill: swipe left = Trust Stats, right = Trust Claude, up = skip, one-tap tier strip, 5 s undo, rounds of 20. Speeds up the #119 M5 review of ~1000 flags from a phone.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/166",
