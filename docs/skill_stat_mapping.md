@@ -398,11 +398,14 @@ Query `LeagueDashPtDefend` across `DefenseCategory` values (`"Less Than 6Ft"`, `
 1. Primary metric: `reb_pct`
 2. Quality bonus: `dreb_contest_pct` ≥ 60% (majority of rebounds are contested) bumps borderline cases up
 
-| Tier | TRB% |
-|---|---|
-| **Elite** | ≥ 15% |
-| **Capable** | 10–15% |
-| **None** | < 10% |
+| Tier | TRB% | Games played |
+|---|---|---|
+| **Elite** | ≥ 15% | ≥ 15 |
+| **Proficient** | 11–15% | ≥ 15 |
+| **Capable** | 9–11% (or 11%+ on fewer than 15 games) | — |
+| **None** | < 9% | — |
+
+*Updated 2026-09-25 (#168 batch 1): Proficient added, Capable lowered from 10% to 9%, the `dreb_contest_pct` bump removed (it changed one player), and a 15-game floor to rate above Capable (#178).*
 
 **Note:** This means many guards are None, which is correct — a guard averaging 4 RPG at 6% TRB% is not someone you can rely on as a rebounder for your team construction purposes.
 
@@ -422,11 +425,14 @@ Query `LeagueDashPtDefend` across `DefenseCategory` values (`"Less Than 6Ft"`, `
 1. Primary metric: `oreb_pct`
 2. Volume check: `oreb_chances` confirms the player is in position to get offensive boards (not just mathematically high ORB% on 2 chances/game)
 
-| Tier | ORB% | Min OREB Chances/Game |
-|---|---|---|
-| **Elite** | ≥ 8% | ≥ 2.5 |
-| **Capable** | 4–8% | ≥ 1.5 |
-| **None** | < 4% or below volume gate | — |
+| Tier | ORB% | Min OREB Chances/Game | Games played |
+|---|---|---|---|
+| **Elite** | ≥ 11% | ≥ 2.5 | ≥ 15 |
+| **Proficient** | 7–11% | ≥ 2.0 | ≥ 15 |
+| **Capable** | 4–7% (or 7%+ on fewer than 15 games) | ≥ 1.5 | — |
+| **None** | < 4% or below volume gate | — | — |
+
+*Updated 2026-09-25 (#168 batch 1): Proficient added, Elite raised from 8% to 11% (8% rated the top quarter of gate passers Elite), a null chances count reads 0, and a 15-game floor to rate above Capable (#178).*
 
 ---
 

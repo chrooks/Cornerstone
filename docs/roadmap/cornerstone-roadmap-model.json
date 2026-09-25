@@ -882,7 +882,7 @@
     },
     {
       "id": "i168",
-      "label": "#168 15 Skills lack a Proficient tier\n(Data debt, P2; batch 1 = 4 High)",
+      "label": "#168 13 Skills lack a Proficient tier\n(Data debt, P2; batch 1: 2 of 4 landed)",
       "group": "engine",
       "description": "Two-tier rules make Proficient a bump artifact. Fixed by decision doc + staged run: Spot Up (V6, 2026-09-25) and Off-Dribble (pull-up twos ladder, run bdc52ddc, 2026-09-25). 14 Skills remain.",
       "x": 1000,
@@ -1022,15 +1022,15 @@
     },
     {
       "id": "i178",
-      "label": "#178 No games floor for rate stats\n(P3, parked)",
+      "label": "#178 Games floor: 15+ games above\nCapable (decided; rolling out)",
       "group": "engine",
       "x": 1560,
       "y": 530,
-      "description": "Rate stats read a few games at face value (Kessler Elite on 5 games). Decide once for all 23 Skills.",
+      "description": "Decided 2026-09-25: Proficient and Elite need 15+ games, as a rule condition. Live on Offensive Rebounder and Rebounder; Rim/Iso next; the 3-tier rules get it after #177 (16 ratings).",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/178",
         "state": "open",
-        "priority": "p3",
+        "priority": "p2",
         "milestone": "Data debt (post-V1)"
       }
     }
