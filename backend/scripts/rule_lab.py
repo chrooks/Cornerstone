@@ -70,8 +70,9 @@ TIER_ORDER = ["All-Time Great", "Elite", "Proficient", "Capable", "None"]
 HUMAN = ("resolved", "manual_override")
 QUANTILES = (10, 25, 50, 75, 90, 95)
 ANCHOR_DOC = Path(__file__).resolve().parents[2] / "docs" / "skill_stat_mapping.md"
-# The design doc's section 18 "Ball Dominator" is the rule stored under isolation_scorer.
-LEGACY_ANCHOR_LABELS = {"isolation_scorer": "Ball Dominator"}
+# Skills whose anchor row sits under an older label. isolation_scorer read the "Ball Dominator"
+# row until 2026-09-25, when #168 batch 1 redefined it on isolation data; it has no row now.
+LEGACY_ANCHOR_LABELS: dict[str, str] = {}
 ALIASES = {"wemby": "Victor Wembanyama", "sga": "Shai Gilgeous-Alexander",
            "giannis": "Giannis Antetokounmpo", "stephcurry": "Stephen Curry"}
 

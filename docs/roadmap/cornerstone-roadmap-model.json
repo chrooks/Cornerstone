@@ -882,9 +882,9 @@
     },
     {
       "id": "i168",
-      "label": "#168 13 Skills lack a Proficient tier\n(Data debt, P2; batch 1: 2 of 4 landed)",
+      "label": "#168 11 Skills lack a Proficient tier\n(Data debt, P2; batch 1 done)",
       "group": "engine",
-      "description": "Two-tier rules make Proficient a bump artifact. Fixed by decision doc + staged run: Spot Up (V6, 2026-09-25) and Off-Dribble (pull-up twos ladder, run bdc52ddc, 2026-09-25). 14 Skills remain.",
+      "description": "Fixed: Spot Up, Off-Dribble, and batch 1 (Offensive Rebounder, Rebounder, Rim Protector, Isolation Scorer — redefined on iso data). 11 Moderate/Low Skills remain; prep: check the lab against a real run on Claude-rated Skills.",
       "x": 1000,
       "y": 400,
       "meta": {
@@ -980,14 +980,14 @@
     },
     {
       "id": "i175",
-      "label": "#175 Rule lab: lint, measure,\nverify-run (P2, AFK)",
-      "group": "engine",
+      "label": "✅ #175 Rule lab — CLOSED\n(1754a3e, 5ad4642)",
+      "group": "done",
       "x": 1340,
       "y": 270,
-      "description": "One read-only command measures any stat rule the way a threshold-edit run stages it, lints all 23 rules, and checks a staged run against the simulation. Built 2026-09-25 (1754a3e); batch 1 = the 4 High Skills.",
+      "description": "lint / measure / verify-run, read-only. Guarded 5 live commits and stopped one #161 race. Walkthrough: docs/walkthroughs/175-rule-lab.md",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/175",
-        "state": "open · afk",
+        "state": "closed",
         "priority": "p2",
         "milestone": "Data debt (post-V1)"
       }
@@ -1026,7 +1026,7 @@
       "group": "engine",
       "x": 1560,
       "y": 530,
-      "description": "Decided 2026-09-25: Proficient and Elite need 15+ games, as a rule condition. Live on Offensive Rebounder and Rebounder; Rim/Iso next; the 3-tier rules get it after #177 (16 ratings).",
+      "description": "15+ games to rate above Capable, as a rule condition. Live on the 4 batch-1 rules and Steady Hand; Crafty Finisher and Point of Attack held (a recompute there raises ~90 flags; investigate first).",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/178",
         "state": "open",

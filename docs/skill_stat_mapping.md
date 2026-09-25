@@ -375,11 +375,14 @@ Query `LeagueDashPtDefend` across `DefenseCategory` values (`"Less Than 6Ft"`, `
 2. Primary: `defended_at_rim_fg_pct` — lower is better. League average is ~60%.
 3. Secondary: `blk_pct` adds shot-blocking dimension beyond just contesting
 
-| Tier | Defended at Rim FG% | BLK% | Defended at Rim FGA/G |
-|---|---|---|---|
-| **Elite** | ≤ 54% | ≥ 3.5% | ≥ 6.0 |
-| **Capable** | 54–60% | ≥ 1.5% | ≥ 4.0 |
-| **None** | > 60% or BLK% < 1.5% or below volume gate | — | — |
+| Tier | Defended at Rim FG% | Blocks per 48 (`blk_pct` ×100) | Defended at Rim FGA/G | Games played |
+|---|---|---|---|---|
+| **Elite** | ≤ 54% | ≥ 2.4 | ≥ 6.0 | ≥ 15 |
+| **Proficient** | ≤ 56% | ≥ 2.0 | ≥ 5.0 | ≥ 15 |
+| **Capable** | ≤ 60% | ≥ 1.5 | ≥ 4.0 | — |
+| **None** | > 60%, under 1.5 blocks per 48, or below volume gate | — | — | — |
+
+*Updated 2026-09-25 (#168 batch 1): `advanced.blk_pct` is stored as blocks per 48 minutes ÷ 100, not block percentage, so the old 3.5% Elite cut sat at the 95th percentile (3 Elite). Proficient added; Elite's block cut lowered to 2.4 per 48 (the 75th percentile); a 15-game floor to rate above Capable (#178). A quality rule is parked in #157.*
 
 **Stat confidence: HIGH.** Best-measured defensive skill. Minimum 75 defended FGA for reliable classification.
 
@@ -583,6 +586,19 @@ Query `LeagueDashPtDefend` across `DefenseCategory` values (`"Less Than 6Ft"`, `
 ## Zero-Sum Skills
 
 ### 18. Ball Dominator
+
+> **2026-09-25 (#168 batch 1):** the `isolation_scorer` Skill no longer uses this rule. Chris redefined it on isolation data (below). This section keeps the Ball Dominator design for reference.
+>
+> **Isolation Scorer (current rule).** Volume leads, with an efficiency floor. Gate: 1.0+ isolation possessions a game (`play_type.isolation_poss`; no iso data reads 0). Tiers on stabilized isolation PPP (`play_type.isolation_ppp`, K = 50, league average .881):
+>
+> | Tier | Isolations a game | Stabilized iso PPP | Games played |
+> |---|---|---|---|
+> | **Elite** | ≥ 3.5 | ≥ .88 | ≥ 15 |
+> | **Proficient** | ≥ 2.5 | ≥ .88 | ≥ 15 |
+> | **Capable** | ≥ 1.5 | ≥ .85 | — |
+> | **None** | below the gate or the Capable floors | — | — |
+>
+> It has no anchor row yet.
 
 **Justification:** Usage rate measures the share of team possessions a player ends (shots, FTs, turnovers) while time of possession measures literal ball-holding — together they capture both scoring burden and on-ball control that defines ball dominance.
 

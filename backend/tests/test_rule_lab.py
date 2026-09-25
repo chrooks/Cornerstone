@@ -42,7 +42,7 @@ def test_anchor_table_parses_the_real_design_doc():
     table = lab.parse_anchor_table(DOC.read_text())
     assert table["rebounder"]["Elite"] == ["Domantas Sabonis", "Rudy Gobert"]
     assert lab.anchors_for("offensive_rebounder", table)["Capable"] == ["Giannis"]
-    assert lab.anchors_for("isolation_scorer", table)["Elite"] == ["Luka Doncic", "SGA"]  # legacy Ball Dominator row
+    assert lab.anchors_for("isolation_scorer", table) == {}  # redefined on isolation data; no anchor row yet
     assert lab.anchors_for("vertical_spacer", table)["Elite"] == ["Clint Capela", "Nic Claxton"]
     assert lab.anchor_ok("Capable", "Proficient") and not lab.anchor_ok("Elite", "Proficient")
 
