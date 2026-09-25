@@ -81,7 +81,7 @@ Ringer harness, unpatched, on the published Version, API parity ok against `http
 
 Stars under v12: SGA 1, Giannis 2, Dončić 3, Wembanyama 4, Curry 5, Jokić 6. Kawhi Leonard at 16 is the one top-10 miss.
 
-Exploit finder, `concentration_harness.py --seed 0`: max active appearance **40%** (Clingan, 20 of 50 top rosters), against 36% (Derrick Jones Jr.) under v11. The #111 rule is "no player over 40%"; the plan's criterion said "under". Clingan and Gobert carry identical big-man Skill sets; under v12 both read 10.0 on both rebounding axes (7.9 before) and 9.2 on interior defense (8.0 before), and Clingan is $0.7M cheaper, so the optimizer leans on him. Chris's call on record in the issue.
+Exploit finder, `concentration_harness.py --seed 0`: max active appearance **40%** (Clingan, 20 of 50 top rosters), against 36% (Derrick Jones Jr.) under v11. The #111 rule is "no player over 40%"; the plan's criterion said "under". Clingan and Gobert carry the same four Elite big-man Skills; under v12 both read 10.0 on both rebounding axes (7.9 before) and 9.2 on interior defense (8.0 before), a jump the lineup evaluator values more than the ladder prices it ($14.1M and $13.4M). Clingan edges Gobert because his profile adds steady_hand and low_post (ball security 7.7 against 1.7). Chris's call on record in the issue.
 
 `dev_checks.py damage`: 0.
 
