@@ -851,8 +851,34 @@
         "state": "open · afk",
         "priority": "p2"
       },
-      "x": -850,
-      "y": -270
+      "x": -1000,
+      "y": -335
+    },
+    {
+      "id": "i170",
+      "label": "#170 Legend label review as a\nswipe deck (parked, P3)",
+      "group": "archetypes",
+      "description": "The #166 deck pattern for the one-time legend label review on /admin/legends: one card per legend, rounds with a summary. About 1 session; start when the legend pass is next.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/170",
+        "state": "open · afk",
+        "priority": "p2"
+      },
+      "x": 1000,
+      "y": 250
+    },
+    {
+      "id": "i171",
+      "label": "🧍 #171 Lab build as a draft in\nrounds (post-V1, P3)",
+      "group": "lab",
+      "description": "The \"$15 starting five\" as a game: each round fills one roster slot from cards at a price tier. Needs a design frame (/idea-to-design, /sketch) first. About 3-5 sessions; after V1.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/171",
+        "state": "open · afk",
+        "priority": "p2"
+      },
+      "x": 0,
+      "y": 1360
     }
   ],
   "edges": [
