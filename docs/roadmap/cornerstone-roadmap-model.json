@@ -1005,6 +1005,34 @@
         "priority": "p2",
         "milestone": "Data debt (post-V1)"
       }
+    },
+    {
+      "id": "i177",
+      "label": "#177 #120 guard re-asks a kept call\n(P2 bug; batch-1 decision 7)",
+      "group": "engine",
+      "x": 1560,
+      "y": 400,
+      "description": "A recompute re-raises a contradiction the reviewer already resolved against the same stats tier: 14 of Rim Protector's 17 batch-1 flags, 5 of Isolation Scorer's 18.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/177",
+        "state": "open",
+        "priority": "p2",
+        "milestone": "Data debt (post-V1)"
+      }
+    },
+    {
+      "id": "i178",
+      "label": "#178 No games floor for rate stats\n(P3, parked)",
+      "group": "engine",
+      "x": 1560,
+      "y": 530,
+      "description": "Rate stats read a few games at face value (Kessler Elite on 5 games). Decide once for all 23 Skills.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/178",
+        "state": "open",
+        "priority": "p3",
+        "milestone": "Data debt (post-V1)"
+      }
     }
   ],
   "edges": [
@@ -1283,6 +1311,12 @@
       "to": "i168",
       "label": "measures each batch",
       "description": "#168's remaining 15 Skills are drafted and verified with the rule lab, in batches."
+    },
+    {
+      "from": "i177",
+      "to": "i168",
+      "label": "before Rim / Iso land",
+      "description": "Batch 1 lands Rim Protector and Isolation Scorer after #177, so 19 repeat questions never reach the queue."
     }
   ]
 }
