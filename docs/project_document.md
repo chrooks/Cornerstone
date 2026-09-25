@@ -65,7 +65,7 @@ Every player (including the superstar) is rated on 23 skills across four tiers:
 
 - **Versatile Defender** (`versatile_defender`) — Guards multiple positional groups effectively when switched
 - **Point of Attack Defender** (`point_of_attack_defender`) — Contains the ball handler, fights over screens, and takes the toughest perimeter assignment when asked
-- **Off-Ball Disruptor** (`off_ball_disruptor`) — Makes plays away from his own man by jumping passing lanes, digging at drivers and recovering, which creates deflections, steals and charges
+- **Off-Ball Disruptor** (`off_ball_disruptor`) — Disrupts the offense away from his own man: holds the right help position, rotates and recovers on the perimeter, digs at drivers and jumps passing lanes, creating deflections, steals and charges
 - **High Flyer** (`high_flyer`) — Elite explosive athleticism for above-the-rim plays and transition finishes
 
 ### Skill Confidence Tiers

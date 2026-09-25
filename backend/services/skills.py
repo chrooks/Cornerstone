@@ -105,7 +105,7 @@ SKILL_DEFINITIONS: dict[str, str] = {
     "low_post_player":     "Scores effectively with back-to-basket moves in the low post.",
     "versatile_defender":  "Can guard multiple positional groups effectively when switched.",
     "point_of_attack_defender": "Contains the ball handler, fights over screens, and takes the toughest perimeter assignment when asked.",
-    "off_ball_disruptor":  "Makes plays away from his own man by jumping passing lanes, digging at drivers and recovering, which creates deflections, steals and charges.",
+    "off_ball_disruptor":  "Disrupts the offense away from his own man: holds the right help position, rotates and recovers on the perimeter, digs at drivers and jumps passing lanes, creating deflections, steals and charges.",
     "high_flyer":          "Possesses elite explosive athleticism for above-the-rim plays, highlight dunks, and transition finishes.",
     "steady_hand":      "Protects possessions with a low turnover rate relative to ball responsibility — secure handling, safe decisions, and strong hands under pressure.",
 }
