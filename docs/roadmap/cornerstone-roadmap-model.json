@@ -856,12 +856,12 @@
     },
     {
       "id": "i170",
-      "label": "#170 Legend label review as a\nswipe deck (parked, P3)",
+      "label": "#170 Legend label review as a\nswipe deck (blocked by #17, P3)",
       "group": "archetypes",
-      "description": "The #166 deck pattern for the one-time legend label review on /admin/legends: one card per legend, rounds with a summary. About 1 session; start when the legend pass is next.",
+      "description": "The #166 deck pattern for the one-time legend label review on /admin/legends: one card per legend, rounds with a summary. Blocked: the labels come from the #17 archetype engine (#119 M7.5-M7.21), which does not exist yet. Needs a short grill when unblocked (card evidence, one-thumb role change, one card or two per legend, replace M7.22 or not).",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/170",
-        "state": "open · afk",
+        "state": "open · blocked",
         "priority": "p2"
       },
       "x": 1000,
@@ -1317,6 +1317,12 @@
       "to": "i168",
       "label": "before Rim / Iso land",
       "description": "Batch 1 lands Rim Protector and Isolation Scorer after #177, so 19 repeat questions never reach the queue."
+    },
+    {
+      "from": "i17",
+      "to": "i170",
+      "label": "labels to review",
+      "description": "The deck reviews the legend archetype labels and writes the override through the #17 routes (M7.19)."
     }
   ]
 }
