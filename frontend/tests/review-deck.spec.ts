@@ -152,6 +152,25 @@ test.describe("#166 swipe deck (mocked data)", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
   });
 
+  test("a per-48 stat reads per 48 minutes, not as a percent", async ({ page }) => {
+    // advanced.blk_pct is blocks per 48 minutes ÷ 100 (stats_assembler._compute_per48_pct).
+    await mockDeck(page, deckOf(1));
+    await page.route("**/api/review/*/skill-breakdown**", (route) => ok(route, {
+      ...BREAKDOWN,
+      condition_results: [
+        { section: "elite", stat: "advanced.blk_pct", operator: ">=", threshold: 0.024, actual_value: 0.0222, passed: false, per: null, stabilized: false, group_id: 2, group_logic: "AND", depth: 0 },
+        ...BREAKDOWN.condition_results,
+      ],
+    }));
+    await openDeck(page);
+
+    const row = page.locator("#card-thresholds tr", { hasText: "Blocks per 48" });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText("2.2");
+    await expect(row).toContainText(">= 2.4");
+    await expect(row).not.toContainText("%");
+  });
+
   test("ac1 — the deck fits one phone screen and shows where you are", async ({ page }) => {
     await mockDeck(page, deckOf(21));
     await openDeck(page);
