@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 _PAGE = 1000  # PostgREST returns at most 1,000 rows per request
 
 # ---------------------------------------------------------------------------
-# The 17 stat keys (dot notation) for which we compute league averages.
+# The stat keys (dot notation) for which we compute league averages.
 # These cover the most commonly stabilized percentage and PPP stats.
 # ---------------------------------------------------------------------------
 
@@ -44,6 +44,7 @@ _LEAGUE_AVG_STAT_KEYS: list[str] = [
     "play_type.cut_ppp",
     "play_type.transition_ppp",
     "play_type.postup_ppp",
+    "play_type.isolation_ppp",  # Isolation Scorer pads iso PPP (#168 batch 1)
 ]
 
 # ---------------------------------------------------------------------------
@@ -144,7 +145,7 @@ def compute_and_store_league_averages(season: str, supabase: Client) -> dict[str
     Compute league average values from the player_stats table and persist them.
 
     Only includes players with minutes_per_game >= DEFAULT_MIN_MPG (15).
-    Computes the mean for each of the 17 required stat keys, ignoring nulls.
+    Computes the mean for each key in _LEAGUE_AVG_STAT_KEYS, ignoring nulls.
     Upserts into league_averages on (season, stat_key) conflict.
 
     Returns the computed averages dict (same shape as get_league_averages).
