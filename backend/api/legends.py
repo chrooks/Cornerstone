@@ -714,7 +714,7 @@ def claude_suggestion(legend_id: str):
       {
         "skills": {
           "<skill_key>": {
-            "tier": "None | Capable | Elite | All-Time Great",
+            "tier": "None | Capable | Proficient | Elite | All-Time Great",
             "justification": "..."
           },
           ...
