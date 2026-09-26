@@ -598,14 +598,14 @@
     },
     {
       "id": "i143",
-      "label": "#143 Block over-cap / incomplete Builds\n(V1 Lab fix, P1)",
-      "group": "lab",
+      "label": "✅ #143 forbidden Builds blocked\n— CLOSED (2026-09-26)",
+      "group": "done",
       "x": -467,
       "y": 1050,
-      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "description": "One legality check (complete + under cap) gates Evaluate on the Build and turns the Final Eval into an Error/Empty State with no engine or LLM call. c201cb0. lab-build-fixes.spec.ts 9/9 on dev.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/143",
-        "state": "open"
+        "state": "closed"
       }
     },
     {

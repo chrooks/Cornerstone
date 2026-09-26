@@ -112,7 +112,8 @@ for (const [width, height, label] of [[1440, 900, "desktop"], [390, 844, "phone"
     const players = await pool(page);
     const overCap = overCapUrl(players);
     let evaluateCalls = 0;
-    page.on("request", (r) => { if (r.url().includes("/api/builder/evaluate")) evaluateCalls++; });
+    // Count only calls made from the Final Eval — the Build page fires its own live eval on load.
+    page.on("request", (r) => { if (r.url().includes("/api/builder/evaluate") && page.url().includes("/eval")) evaluateCalls++; });
 
     // Build page: Evaluate is disabled and says why, in dollars.
     await page.goto(`${BASE}/lab/standard/build?${overCap}`, { waitUntil: "networkidle" });
