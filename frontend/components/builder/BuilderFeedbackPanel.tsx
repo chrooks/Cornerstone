@@ -689,6 +689,39 @@ function AnimatedScoreCaption({ score }: { score: number }) {
   );
 }
 
+/**
+ * #149: below five starters the star badge would read 0.00 — a verdict the
+ * engine has not given. Show starter progress in its place; the glyph caption
+ * above names the slots to fill (01–05).
+ */
+function StarterProgressCaption({ filledCount }: { filledCount: number }) {
+  return (
+    <div
+      id="builder-new-feedback-starter-progress"
+      className="mt-2 flex justify-center"
+      role="status"
+      aria-label={`${filledCount} of 5 starters picked`}
+    >
+      <div className="flex items-center gap-2.5 rounded-sm border border-[oklch(0.83_0.02_62)] bg-[oklch(0.94_0.035_64)] px-3 py-2">
+        <span aria-hidden="true" className="flex gap-1">
+          {Array.from({ length: 5 }, (_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-3 w-3 border transition-colors duration-150",
+                i < filledCount ? "border-[#0e0907] bg-[#0e0907]" : "border-[#0e0907]/35",
+              )}
+            />
+          ))}
+        </span>
+        <span className="font-mono text-sm leading-none tabular-nums text-[oklch(0.16_0.018_45)]">
+          {filledCount} of 5 starters
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function NewFeedbackRead({
   allSlots,
   latestEval,
@@ -877,7 +910,9 @@ function NewFeedbackRead({
           />
         </div>
 
-        {latestEval && <AnimatedScoreCaption score={latestEval.star_rating} />}
+        {latestEval && (filledCount >= 5
+          ? <AnimatedScoreCaption score={latestEval.star_rating} />
+          : <StarterProgressCaption filledCount={filledCount} />)}
 
         {/* #92 feedforward: ghost preview of the eval after adding the hovered candidate */}
         {latestEval &&

@@ -540,7 +540,7 @@ export function TeamShapeGlyph({
           {filledCount === 0
             ? "Pick a Cornerstone to start the Build."
             : filledCount < 5
-              ? `Add ${5 - filledCount} more Player${5 - filledCount === 1 ? "" : "s"} — the Team Shape forms at 5.`
+              ? `Fill ${5 - filledCount} more starting slot${5 - filledCount === 1 ? "" : "s"} (01–05) — the Team Shape forms at 5.`
               : "Scoring this Build…"}
         </p>
       )}
