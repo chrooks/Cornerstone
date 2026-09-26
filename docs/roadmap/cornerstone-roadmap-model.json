@@ -574,14 +574,14 @@
     },
     {
       "id": "i142",
-      "label": "#142 Build: score strip above Team Shape\n(V1 Lab fix, P1)",
-      "group": "lab",
+      "label": "✅ #142 score strip pinned\n— CLOSED (2026-09-26)",
+      "group": "done",
       "x": 698,
       "y": 900,
-      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "description": "Star badge / starter progress / hover preview moved into a strip above the scrolling read; glyph stays below. 4debccc, 1c20822. lab-build-fixes.spec.ts 6/6 on dev.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/142",
-        "state": "open"
+        "state": "closed"
       }
     },
     {
