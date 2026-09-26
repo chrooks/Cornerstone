@@ -502,14 +502,14 @@
     },
     {
       "id": "i136",
-      "label": "#136 Phone navbar collapse\n(V1 Lab fix, P1)",
-      "group": "lab",
+      "label": "✅ #136 phone navbar menu\n— CLOSED (2026-09-26)",
+      "group": "done",
       "x": -700,
       "y": 900,
-      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "description": "Shipped 2026-09-23 in 97d3c94 (menu button below md, native panel). navbar-mobile.spec.ts 4/4 on dev at 320/390/1280.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/136",
-        "state": "open"
+        "state": "closed"
       }
     },
     {
@@ -526,14 +526,14 @@
     },
     {
       "id": "i138",
-      "label": "#138 Picker: sort by Value, drop unpriced\n(V1 Lab fix, P1)",
-      "group": "lab",
+      "label": "✅ #138 picker sorts by Value,\nunpriced disabled — CLOSED (2026-09-26)",
+      "group": "done",
       "x": -234,
       "y": 900,
-      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "description": "Picker and /players open on Value desc; /players gains a Value column ahead of Salary; unpriced players disabled with 'No Value price' on value RuleSets. 39d8356, 48d28a8. lab-build-fixes.spec.ts 4/4 on dev.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/138",
-        "state": "open"
+        "state": "closed"
       }
     },
     {
@@ -586,14 +586,14 @@
     },
     {
       "id": "i149",
-      "label": "#149 Build: starter progress, not 0.00\n(V1 Lab fix, P1)",
-      "group": "lab",
+      "label": "✅ #149 starter progress replaces\n0.00 stars — CLOSED (2026-09-26)",
+      "group": "done",
       "x": -700,
       "y": 1050,
-      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "description": "Below five starters the score badge gives way to five slot squares + 'N of 5 starters'; glyph caption names slots 01–05. a66f272. Proven on dev at 1440 and 390.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/149",
-        "state": "open"
+        "state": "closed"
       }
     },
     {
