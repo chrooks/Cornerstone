@@ -34,15 +34,15 @@ for (const [width, height, label] of [[1440, 900, "desktop"], [390, 844, "phone"
 
     // #149: one starter picked → progress, not a 0.00 star badge.
     const progress = page.locator("#builder-new-feedback-starter-progress");
-    if (label === "phone") await page.getByRole("tab", { name: "Feedback" }).or(page.getByText("Feedback", { exact: true })).first().click();
+    if (label === "phone") await page.locator("#builder-narrow-workspace-tab-feedback").click();
     await expect(progress).toContainText("1 of 5 starters");
     await expect(page.locator("#builder-new-feedback-score")).toHaveCount(0);
     await expect(page.locator("#team-shape-progress")).toContainText("Fill 4 more starting slots (01–05)");
 
     // #138: the picker opens on Value, highest first.
-    if (label === "phone") await page.getByText("Players", { exact: true }).first().click();
+    if (label === "phone") await page.locator("#builder-narrow-workspace-tab-players").click();
     const picker = page.locator("#player-picker-panel");
-    await expect(picker).toContainText("Value ▼");
+    await expect(picker).toContainText(/Value\s*▼/);
     const prices = await picker.locator("tbody tr").locator("td:nth-child(4)").allInnerTexts();
     const top = prices.slice(0, 3).map(toMillions);
     expect(top[0]).toBeGreaterThanOrEqual(top[1]);
@@ -60,7 +60,7 @@ for (const [width, height, label] of [[1440, 900, "desktop"], [390, 844, "phone"
     await page.setViewportSize({ width, height });
     await page.goto(`${BASE}/players`, { waitUntil: "networkidle" });
     const browser = page.locator("#players-pool-browser");
-    await expect(browser).toContainText("Value ▼");
+    await expect(browser).toContainText(/Value\s*▼/);
     const headers = await browser.locator("thead th").allInnerTexts();
     expect(headers.map((h) => h.trim())).toEqual(expect.arrayContaining(["Salary", "Value"]));
     const valueCol = headers.findIndex((h) => h.trim() === "Value") + 1;

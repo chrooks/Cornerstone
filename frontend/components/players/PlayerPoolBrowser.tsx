@@ -751,6 +751,7 @@ export function PlayerPoolBrowser({
         onSortKeysChange={updateSortKeys}
         hiddenColumns={hiddenColumns}
         sortFieldOptions={sortFieldOptions}
+        currency={currency}
       />
 
       <div

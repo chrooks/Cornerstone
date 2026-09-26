@@ -57,10 +57,11 @@ const META_COLUMNS: ColDef[] = [
   { key: "headshot",              label: "",        defaultWidth: 36,  minWidth: 36,  sticky: true },
   { key: "name",                  label: "Name",    defaultWidth: 160, minWidth: 120, sticky: true },
   { key: "position",              label: "Pos",     defaultWidth: 70,  minWidth: 50 },
-  { key: "salary",                label: "Salary",  defaultWidth: 90,  minWidth: 70 },
-  // #138: the skill-derived Value price beside the real salary. On a value
-  // Surface the salary column already shows it, so the column hides there.
+  // #138: the skill-derived Value price leads the real salary — it is the number
+  // the default sort uses, so it must be the first price a phone shows. On a
+  // value Surface the salary column already shows it, so the column hides there.
   { key: "value_price",           label: "Value",   defaultWidth: 90,  minWidth: 70 },
+  { key: "salary",                label: "Salary",  defaultWidth: 90,  minWidth: 70 },
   // Tier 2 — high value
   { key: "capable_plus_count",    label: "Cap+",    defaultWidth: 65,  minWidth: 50 },
   { key: "proficient_plus_count", label: "Pro+",    defaultWidth: 65,  minWidth: 50 },

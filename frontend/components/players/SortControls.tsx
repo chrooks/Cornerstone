@@ -10,6 +10,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { DEFAULT_CURRENCY, type RuleSetCurrency } from "@/lib/builder-config";
 import { ALL_SKILL_NAMES, SKILL_LABELS } from "./playerFilters";
 
 // ---------------------------------------------------------------------------
@@ -84,6 +85,8 @@ interface SortControlsProps {
   hiddenColumns?: Set<string>;
   /** Context-specific sortable field allowlist. Defaults to all fields. */
   sortFieldOptions?: string[];
+  /** #138: on a value Surface the price field is labelled "Value", as its column is. */
+  currency?: RuleSetCurrency;
 }
 
 export function SortControls({
@@ -91,7 +94,10 @@ export function SortControls({
   onSortKeysChange,
   hiddenColumns,
   sortFieldOptions = SORT_FIELD_OPTIONS,
+  currency = DEFAULT_CURRENCY,
 }: SortControlsProps) {
+  const fieldLabel = (field: string) =>
+    field === "salary" && currency === "value" ? "Value" : (SORT_FIELD_LABELS[field] ?? field);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -152,7 +158,7 @@ export function SortControls({
             </span>
           )}
           {/* Field label */}
-          <span>{SORT_FIELD_LABELS[key.field] ?? key.field}</span>
+          <span>{fieldLabel(key.field)}</span>
           {/* Direction toggle */}
           <button
             type="button"
@@ -199,7 +205,7 @@ export function SortControls({
                     field === ALL_SKILL_NAMES[0] ? "border-t border-border mt-1 pt-2" : "",
                   )}
                 >
-                  {SORT_FIELD_LABELS[field] ?? field}
+                  {fieldLabel(field)}
                 </button>
               ))}
             </div>
