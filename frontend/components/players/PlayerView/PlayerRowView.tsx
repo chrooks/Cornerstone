@@ -68,6 +68,7 @@ export function PlayerRowView({
   return (
     <tr
       id={`player-row-view-${player.id}`}
+      aria-disabled={disabled || undefined}
       draggable={!!onDragStart && !disabled}
       onDragStart={onDragStart && !disabled ? onDragStart : undefined}
       onClick={onClick}

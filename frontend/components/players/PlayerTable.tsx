@@ -58,6 +58,9 @@ const META_COLUMNS: ColDef[] = [
   { key: "name",                  label: "Name",    defaultWidth: 160, minWidth: 120, sticky: true },
   { key: "position",              label: "Pos",     defaultWidth: 70,  minWidth: 50 },
   { key: "salary",                label: "Salary",  defaultWidth: 90,  minWidth: 70 },
+  // #138: the skill-derived Value price beside the real salary. On a value
+  // Surface the salary column already shows it, so the column hides there.
+  { key: "value_price",           label: "Value",   defaultWidth: 90,  minWidth: 70 },
   // Tier 2 — high value
   { key: "capable_plus_count",    label: "Cap+",    defaultWidth: 65,  minWidth: 50 },
   { key: "proficient_plus_count", label: "Pro+",    defaultWidth: 65,  minWidth: 50 },
@@ -408,7 +411,8 @@ export function PlayerTable({
 
   // ── Visible columns ──────────────────────────────────────────────────────
 
-  const visibleColumns = ALL_COLUMNS.filter((c) => !hiddenColumns.has(c.key));
+  const currencyColumns = currency === "value" ? ALL_COLUMNS.filter((c) => c.key !== "value_price") : ALL_COLUMNS;
+  const visibleColumns = currencyColumns.filter((c) => !hiddenColumns.has(c.key));
 
   // ── Cell renderers ───────────────────────────────────────────────────────
 
@@ -471,12 +475,16 @@ export function PlayerTable({
         return <span>{formatHeight(player.height) || "—"}</span>;
       case "weight":
         return <span>{player.weight != null ? `${player.weight}` : "—"}</span>;
-      case "salary":
-        return (
-          <span className="tabular-nums">
-            {formatSalary(getPlayerPrice(player, currency))}
-          </span>
-        );
+      case "salary": {
+        const price = getPlayerPrice(player, currency);
+        // #138: on a value Surface an unpriced player cannot be bought, so say so.
+        if (price == null && currency === "value") {
+          return <span className="text-xs text-muted-foreground">No Value price</span>;
+        }
+        return <span className="tabular-nums">{formatSalary(price)}</span>;
+      }
+      case "value_price":
+        return <span className="tabular-nums">{formatSalary(player.value_price ?? null)}</span>;
       case "games_played":
         return <span className="tabular-nums text-muted-foreground">{player.games_played ?? "—"}</span>;
       case "capable_plus_count": {
@@ -721,7 +729,7 @@ export function PlayerTable({
                 <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 px-1">
                   Toggle Columns
                 </div>
-                {ALL_COLUMNS.filter((col) => col.key !== "headshot").map((col) => (
+                {currencyColumns.filter((col) => col.key !== "headshot").map((col) => (
                   <label
                     key={col.key}
                     className="flex items-center gap-2 px-1 py-0.5 rounded-sm hover:bg-muted cursor-pointer text-xs"

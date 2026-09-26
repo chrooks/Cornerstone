@@ -156,6 +156,8 @@ export function PlayerPickerPanel({
     if (rosterPlayerIds.has(player.id)) return true;
     if (!hasAvailableBuildSlot) return true;
     const price = getPlayerPrice(player, currency);
+    // #138: a value RuleSet cannot price a player with no Value; they would cost $0.
+    if (currency === "value" && price == null) return true;
     if (remainingSalary !== null && price != null && price > remainingSalary) return true;
     return false;
   }, [hasAvailableBuildSlot, rosterPlayerIds, remainingSalary, currency]);
@@ -263,7 +265,7 @@ export function PlayerPickerPanel({
           className="flex flex-col gap-1.5 flex-1 min-h-0"
           players={players}
           currency={currency}
-          defaultSortKeys={[{ field: "name", direction: "asc" }]}
+          defaultSortKeys={[{ field: "salary", direction: "desc" }]}
           defaultPageSize={ROW_DEFAULT_PAGE_SIZE}
           defaultPageSizeByViewSize={{ row: ROW_DEFAULT_PAGE_SIZE, card: CARDS_DEFAULT_PAGE_SIZE, panel: PANELS_DEFAULT_PAGE_SIZE }}
           pageSizeOptions={[8, 16, 32]}

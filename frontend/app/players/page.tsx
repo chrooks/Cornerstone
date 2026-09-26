@@ -159,15 +159,18 @@ function parseFiltersFromUrl(searchParams: URLSearchParams): FilterEntry[] {
 }
 
 /** Parse initial SortKey[] from URLSearchParams. */
+// #138: open on the players worth arguing about — highest Value first.
+const DEFAULT_PLAYERS_SORT: SortKey[] = [{ field: "value_price", direction: "desc" }];
+
 function parseSortFromUrl(searchParams: URLSearchParams): SortKey[] {
   const sParams = searchParams.getAll("s");
-  if (sParams.length === 0) return [{ field: "name", direction: "asc" }];
+  if (sParams.length === 0) return [...DEFAULT_PLAYERS_SORT];
   const keys: SortKey[] = sParams.flatMap((raw) => {
     const [field, dir] = raw.split("|");
     if (!field) return [];
     return [{ field, direction: dir === "desc" ? "desc" : "asc" } as SortKey];
   });
-  return keys.length > 0 ? keys : [{ field: "name", direction: "asc" }];
+  return keys.length > 0 ? keys : [...DEFAULT_PLAYERS_SORT];
 }
 
 // ---------------------------------------------------------------------------
@@ -467,7 +470,7 @@ function PlayersPageContent() {
           players={players}
           initialFilterEntries={filterEntries}
           initialSortKeys={sortKeys}
-          defaultSortKeys={[{ field: "name", direction: "asc" }]}
+          defaultSortKeys={DEFAULT_PLAYERS_SORT}
           defaultPageSize={PLAYERS_ROW_PAGE_SIZE}
           defaultPageSizeByViewSize={{ row: PLAYERS_ROW_PAGE_SIZE, card: PLAYERS_CARD_PAGE_SIZE, panel: PLAYERS_PANEL_PAGE_SIZE }}
           pageSizeOptions={[8, 16, 32, 48, 96]}

@@ -58,7 +58,7 @@ export function PlayerCardView({
     player.age != null ? `Age ${player.age}` : null,
     formatHeight(player.height) || null,
     player.weight != null ? `${player.weight} lbs` : null,
-    price != null ? formatPlayerSalary(price) : null,
+    price != null ? formatPlayerSalary(price) : currency === "value" ? "No Value price" : null,
     player.peak_year != null ? `${player.peak_year}` : null,
   ].filter(Boolean).join(" · ");
 

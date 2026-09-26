@@ -85,7 +85,7 @@ export function PlayerPanelView({
     player.age != null ? [isLegend ? "Peak Age" : "Age", String(player.age)] : null,
     player.height ? ["Height", formatHeight(player.height)] : null,
     player.weight != null ? ["Weight", `${player.weight} lbs`] : null,
-    price != null ? [priceLabel, formatPlayerSalary(price)] : null,
+    price != null ? [priceLabel, formatPlayerSalary(price)] : currency === "value" ? [priceLabel, "No price"] : null,
   ].filter(Boolean) as [string, string][];
 
   const isPortrait = orientation === "portrait";

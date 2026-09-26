@@ -28,6 +28,7 @@ function compareByKey(
       // Sort the price column by the effective price for the active currency so
       // the ordering matches the displayed number (value_price on value surfaces).
       case "salary": return getPlayerPrice(player, currency);
+      case "value_price": return player.value_price ?? null;
       case "games_played": return player.games_played;
       case "minutes_per_game": return player.minutes_per_game;
       case "peak_year": return player.peak_year ?? null;
