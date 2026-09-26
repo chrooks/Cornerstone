@@ -61,9 +61,10 @@ for (const [width, height, label] of [[1440, 900, "desktop"], [390, 844, "phone"
     await page.goto(`${BASE}/players`, { waitUntil: "networkidle" });
     const browser = page.locator("#players-pool-browser");
     await expect(browser).toContainText(/Value\s*▼/);
-    const headers = await browser.locator("thead th").allInnerTexts();
-    expect(headers.map((h) => h.trim())).toEqual(expect.arrayContaining(["Salary", "Value"]));
-    const valueCol = headers.findIndex((h) => h.trim() === "Value") + 1;
+    const headers = (await browser.locator("thead th").allInnerTexts()).map((h) => h.replace(/[▲▼]/g, "").trim());
+    expect(headers).toEqual(expect.arrayContaining(["Salary", "Value"]));
+    const valueCol = headers.indexOf("Value") + 1;
+    expect(valueCol).toBeLessThan(headers.indexOf("Salary") + 1);
     const values = await browser.locator("tbody tr").locator(`td:nth-child(${valueCol})`).allInnerTexts();
     const top = values.slice(0, 3).map(toMillions);
     expect(top[0]).toBeGreaterThanOrEqual(top[1]);
