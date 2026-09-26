@@ -19,7 +19,8 @@ interface BuilderHeaderProps {
   ruleset: string;
   /** Team label from rules_json (e.g. "Lineup", "Rotation", "Roster") */
   teamLabel?: string;
-  allSlotsFilled: boolean;
+  /** #143: why Evaluate is blocked (cap or open slots), or null when the Build is legal. */
+  evaluateBlockReason: string | null;
 }
 
 /* ── Breadcrumb ── */
@@ -53,8 +54,9 @@ export function BuilderHeader({
   cornerstone,
   ruleset,
   teamLabel = "Rotation",
-  allSlotsFilled,
+  evaluateBlockReason,
 }: BuilderHeaderProps) {
+  const canEvaluate = evaluateBlockReason === null;
   const searchParams = useSearchParams();
   const teamSize = searchParams.get("team_size");
 
@@ -84,21 +86,35 @@ export function BuilderHeader({
         </h1>
 
         {/* Evaluate CTA */}
-        <div id="builder-header-actions" className="flex shrink-0 items-center gap-4">
+        <div id="builder-header-actions" className="flex shrink-0 flex-col items-end gap-1">
           <Link
             id="builder-evaluate-btn"
-            href={allSlotsFilled ? `/lab/${ruleset}/eval?${searchParams.toString()}` : "#"}
-            aria-disabled={!allSlotsFilled}
-            onClick={(e) => { if (!allSlotsFilled) e.preventDefault(); }}
+            href={canEvaluate ? `/lab/${ruleset}/eval?${searchParams.toString()}` : "#"}
+            aria-disabled={!canEvaluate}
+            aria-describedby={canEvaluate ? undefined : "builder-evaluate-reason"}
+            title={evaluateBlockReason ?? undefined}
+            onClick={(e) => { if (!canEvaluate) e.preventDefault(); }}
             className={cn(
               "inline-flex items-center px-5 py-2 rounded-md text-[0.8125rem] font-medium tracking-[0.01em] transition-all duration-150",
-              !allSlotsFilled
+              !canEvaluate
                 ? "bg-[#d9d0c9]/50 text-[#0e0907]/30 cursor-not-allowed"
                 : "bg-[#ffa05c] text-[#0e0907] hover:bg-[#fe6d34] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffa05c]",
             )}
           >
             Evaluate {teamLabel} →
           </Link>
+          {/* #143: say why, in the RuleSet's terms — the cap is a rule, the open slots are progress. */}
+          {evaluateBlockReason && (
+            <p
+              id="builder-evaluate-reason"
+              className={cn(
+                "font-mono text-[0.6875rem] tabular-nums",
+                evaluateBlockReason.includes("over the") ? "font-semibold text-[#b91c1c]" : "text-[#0e0907]/50",
+              )}
+            >
+              {evaluateBlockReason}
+            </p>
+          )}
         </div>
       </div>
     </div>

@@ -1,7 +1,8 @@
 /**
  * Lab V1 fixes on the dev Surface: #138 (picker and /players sort by Value,
  * unpriced players disabled), #149 (starter progress instead of 0.00 stars)
- * #142 (the score strip pinned above the Team Shape) and #141 (the touch picker).
+ * #142 (the score strip pinned above the Team Shape), #141 (the touch picker) and
+ * #143 (Builds the RuleSet forbids are blocked from Evaluate and Save).
  *
  * Run: PLAYWRIGHT_BASE_URL=https://cornerstone-dev.hestia.chrooks.com \
  *      npx playwright test tests/lab-build-fixes.spec.ts --reporter=line
@@ -30,6 +31,18 @@ function fullRotationUrl(players: Row[]): string {
   const params = new URLSearchParams({ cornerstone: legend.id, s1: legend.id });
   cheapest.forEach((p, i) => params.set(`s${i + 2}`, p.id));
   return `${BASE}/lab/standard/build?${params}`;
+}
+
+/** A Rotation over the value cap: the Legend plus the 8 dearest priced actives. */
+function overCapUrl(players: Row[]): string {
+  const legend = players.find((p) => p.is_legend)!;
+  const dearest = players
+    .filter((p) => !p.is_legend && p.value_price != null && p.value_price > 0)
+    .sort((a, b) => b.value_price! - a.value_price!)
+    .slice(0, 8);
+  const params = new URLSearchParams({ cornerstone: legend.id, s1: legend.id });
+  dearest.forEach((p, i) => params.set(`s${i + 2}`, p.id));
+  return params.toString();
 }
 
 function toMillions(text: string): number {
@@ -92,6 +105,40 @@ for (const [width, height, label] of [[1440, 900, "desktop"], [390, 844, "phone"
       await expect(strip.locator("#builder-eval-preview-delta")).toContainText(/★ \d\.\d\d → \d\.\d\d/, { timeout: 5_000 });
       await expect(strip).toBeInViewport({ ratio: 1 });
     }
+  });
+
+  test(`#143 the RuleSet blocks an over-cap or incomplete Build from Evaluate and Save at ${label}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    const players = await pool(page);
+    const overCap = overCapUrl(players);
+    let evaluateCalls = 0;
+    page.on("request", (r) => { if (r.url().includes("/api/builder/evaluate")) evaluateCalls++; });
+
+    // Build page: Evaluate is disabled and says why, in dollars.
+    await page.goto(`${BASE}/lab/standard/build?${overCap}`, { waitUntil: "networkidle" });
+    await expect(page.locator("#builder-evaluate-btn")).toHaveAttribute("aria-disabled", "true");
+    await expect(page.locator("#builder-evaluate-reason")).toContainText(/\$\d+(\.\d)?M over the \$195M cap/);
+
+    // Final Eval, over the cap: Error State, no star, Save disabled, no engine call.
+    evaluateCalls = 0;
+    await page.goto(`${BASE}/lab/standard/eval?${overCap}`, { waitUntil: "networkidle" });
+    await expect(page.locator("#eval-over-cap")).toBeVisible();
+    await expect(page.locator("#eval-blocked-title")).toContainText(/over the \$195M cap/);
+    await expect(page.locator("#cohesion-score-rating")).toHaveCount(0);
+    await expect(page.locator("#eval-save-btn")).toBeDisabled();
+    expect(evaluateCalls).toBe(0);
+
+    // Final Eval, incomplete: Empty State with the count, Back to Build, no engine call.
+    evaluateCalls = 0;
+    const legend = players.find((p) => p.is_legend)!;
+    await page.goto(`${BASE}/lab/standard/eval?cornerstone=${legend.id}&s1=${legend.id}`, { waitUntil: "networkidle" });
+    await expect(page.locator("#eval-incomplete")).toBeVisible();
+    await expect(page.locator("#eval-blocked-title")).toHaveText("1 of 9 slots filled");
+    await expect(page.locator("#cohesion-score-rating")).toHaveCount(0);
+    await expect(page.locator("#eval-save-btn")).toBeDisabled();
+    expect(evaluateCalls).toBe(0);
+    await page.locator("#eval-blocked-back-btn").click();
+    await expect(page).toHaveURL(/\/lab\/standard\/build\?/);
   });
 
   test(`#138 /players carries a Value column, sorted first, at ${label}`, async ({ page }) => {

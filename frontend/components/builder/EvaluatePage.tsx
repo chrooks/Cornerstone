@@ -22,6 +22,8 @@ import { normalizeCohesionNotes } from "@/lib/cohesionHelpers";
 import { useAdminStatus } from "@/lib/hooks/useAdminStatus";
 import { readSlotsFromParams, buildPlayerPayload } from "@/lib/roster-utils";
 import { resolveRuleSetRules } from "@/lib/rulesets";
+import { cn } from "@/lib/utils";
+import { checkBuildLegality, describeBuildBlock, type BuildLegality } from "./buildLegality";
 import { getPlayerPrice, teamLabelForSize } from "@/lib/builder-config";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { CohesionScoreDisplay } from "./CohesionScoreDisplay";
@@ -186,7 +188,8 @@ function RotationSummary({ allSlots, cornerstoneId }: { allSlots: (PlayerWithSki
 // EvaluatePage
 // ---------------------------------------------------------------------------
 
-type EvalState = "loading" | "evaluating" | "ready" | "error";
+// #143: "blocked" — the RuleSet forbids this Build (incomplete or over the cap); no engine call, no LLM call.
+type EvalState = "loading" | "evaluating" | "ready" | "error" | "blocked";
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 interface DataReady {
@@ -268,6 +271,7 @@ export function EvaluatePage() {
   const [savedTeam, setSavedTeam] = useState<SavedTeamSummary | null>(null);
   const [resolvedRuleSet, setResolvedRuleSet] = useState<RuleSetSummary | null>(null);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
+  const [blocked, setBlocked] = useState<{ legality: BuildLegality; reason: string; teamLabel: string } | null>(null);
 
   /* Shared no_active_release Error State + retry bookkeeping (#62) */
   const { noActiveRelease, retryToken, retrying, detectNoActiveRelease, retry, settleRetry } =
@@ -326,8 +330,15 @@ export function EvaluatePage() {
         }
 
         if (cancelled) return;
+        // #143: gate before any engine or LLM call. The check is the one the Build page uses.
+        const legality = checkBuildLegality(slots, {
+          salaryCap: typeof matched?.rules?.salary_cap === "number" ? (matched.rules.salary_cap as number) : null,
+          currency: resolvedRules.currency,
+        });
+        const blockReason = describeBuildBlock(legality, resolvedRules.teamLabel);
+        setBlocked(blockReason ? { legality, reason: blockReason, teamLabel: resolvedRules.teamLabel } : null);
         setDataReady({ slots, legend });
-        setEvalState("evaluating");
+        setEvalState(blockReason ? "blocked" : "evaluating");
         settleRetry();
       })
       .catch((err: unknown) => {
@@ -346,7 +357,7 @@ export function EvaluatePage() {
 
   // Phase 2: evaluate once data AND admin status are both resolved
   useEffect(() => {
-    if (!dataReady || adminLoading) return;
+    if (!dataReady || adminLoading || blocked) return;
 
     const players = buildPlayerPayload(dataReady.slots, dataReady.legend, cornerstoneId);
     const descriptionCacheKey = teamDescriptionCacheKey(dataReady.slots, dataReady.legend);
@@ -565,6 +576,7 @@ export function EvaluatePage() {
           id="eval-save-btn"
           type="button"
           disabled={saveDisabled}
+          title={blocked?.reason ?? undefined}
           onClick={handleSaveClick}
           className="ml-auto shrink-0 rounded-[4px] border border-[#0e0907] bg-[#ffa05c] px-3 py-1.5 text-sm font-medium text-[#0e0907] transition-colors hover:bg-[#fe6d34] disabled:cursor-not-allowed disabled:border-[#d9d0c9] disabled:bg-[#f0f0f0] disabled:text-[#0e0907]/40"
         >
@@ -616,6 +628,40 @@ export function EvaluatePage() {
       {/* Rotation summary */}
       {dataReady && (
         <RotationSummary allSlots={dataReady.slots} cornerstoneId={cornerstoneId} />
+      )}
+
+      {/* #143: the RuleSet forbids this Build. Over the cap is an Error State; open slots is an Empty State. */}
+      {evalState === "blocked" && blocked && (
+        <section
+          id={blocked.legality.overCapBy > 0 ? "eval-over-cap" : "eval-incomplete"}
+          role={blocked.legality.overCapBy > 0 ? "alert" : "status"}
+          className={cn(
+            "rounded-md border p-6",
+            blocked.legality.overCapBy > 0 ? "border-[#e53e3e]/40 bg-[#e53e3e]/[0.06]" : "border-[#d9d0c9] bg-[#f7f7f7]",
+          )}
+        >
+          <p className={cn("text-[0.6875rem] font-medium uppercase tracking-[0.08em]", blocked.legality.overCapBy > 0 ? "text-[#b91c1c]" : "text-[#a34400]")}>
+            {blocked.legality.overCapBy > 0 ? "Over the cap" : `${blocked.teamLabel} incomplete`}
+          </p>
+          <h2 id="eval-blocked-title" className="mt-2 font-display text-[1.5rem] font-semibold leading-[1.15] tracking-[-0.01em] text-[#0e0907]">
+            {blocked.legality.overCapBy > 0
+              ? blocked.reason
+              : `${blocked.legality.filled} of ${blocked.legality.teamSize} slots filled`}
+          </h2>
+          <p id="eval-blocked-message" className="mt-2 max-w-prose text-[0.9375rem] leading-relaxed text-[#0e0907]/60">
+            {blocked.legality.overCapBy > 0
+              ? `The ${resolvedRuleSet?.name ?? "active"} RuleSet does not allow this ${blocked.teamLabel} to be evaluated or saved. Trim it under the cap in the Build.`
+              : `Fill the open slots in the Build to get a Final Eval. The engine scores a full ${blocked.teamLabel}, not a partial one.`}
+          </p>
+          <button
+            id="eval-blocked-back-btn"
+            type="button"
+            onClick={() => router.push(backHref)}
+            className="mt-4 rounded-[4px] border border-[#0e0907] bg-[#ffa05c] px-3 py-1.5 text-sm font-medium text-[#0e0907] transition-colors hover:bg-[#fe6d34]"
+          >
+            ← Back to Build
+          </button>
+        </section>
       )}
 
       {/* Loading skeleton — shown while player data loads (phase 1) or evaluation runs (phase 2) */}

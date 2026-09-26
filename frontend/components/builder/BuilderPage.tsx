@@ -28,6 +28,7 @@ import { BuilderHeader } from "./BuilderHeader";
 import { CourtStrip } from "./CourtStrip";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
 import { NarrowScoreStrip } from "./NarrowScoreStrip";
+import { checkBuildLegality, describeBuildBlock } from "./buildLegality";
 import { BuilderFeedbackPanel, type BuilderInspectionSource } from "./BuilderFeedbackPanel";
 import { BuilderPlayerFit } from "./BuilderPlayerFit";
 import { PlayerProfileModal, playerWithSkillsToProfile } from "@/components/players/PlayerView";
@@ -435,7 +436,7 @@ export function BuilderPage() {
         cornerstone={cornerstone ?? null}
         ruleset={ruleset}
         teamLabel={teamLabel}
-        allSlotsFilled={roster.allSlots.every((p) => p !== null)}
+        evaluateBlockReason={describeBuildBlock(checkBuildLegality(roster.allSlots, { salaryCap, currency }), teamLabel)}
       />
 
       {/* Row 2: Court strip — salary gauge + centered slot row */}
