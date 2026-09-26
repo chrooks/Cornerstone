@@ -843,12 +843,12 @@
     },
     {
       "id": "i167",
-      "label": "#167 Review read endpoints answer\nwithout an admin login (V1, P2 bug)",
-      "group": "snapshot",
-      "description": "GET /review/queue, /review/<id>/flags and /review/<id>/skill-breakdown have no @require_admin. Add it; the admin screens already send the JWT.",
+      "label": "✅ #167 review reads auth\n— CLOSED as dup of #182 (2026-09-26)",
+      "group": "done",
+      "description": "Superseded by #182; its skill-breakdown route shipped in 6a7d56e.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/167",
-        "state": "open · afk",
+        "state": "closed",
         "priority": "p2"
       },
       "x": -1000,
@@ -1078,14 +1078,14 @@
     },
     {
       "id": "i182",
-      "label": "#182 Admin reads and a writing GET\nhave no auth (P1, V1 launch)",
-      "group": "snapshot",
+      "label": "✅ #182 admin gate on 5 reads\n— CLOSED (2026-09-26)",
+      "group": "done",
       "x": -1000,
       "y": -600,
-      "description": "GET review queue/flags and pipeline status skip @require_admin; GET league-averages?refresh=true writes. Fix before production.",
+      "description": "GET review queue/flags/skill-breakdown, pipeline status and league-averages now sit behind @require_admin (6a7d56e). Anonymous → 401 proven on dev. Folded in #167.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/182",
-        "state": "open",
+        "state": "closed",
         "priority": "p1",
         "milestone": "V1 launch"
       }
