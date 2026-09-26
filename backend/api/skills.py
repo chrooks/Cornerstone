@@ -217,6 +217,7 @@ def batch_skills():
 
 
 @skills_bp.route("/league-averages", methods=["GET"])
+@require_admin
 def league_averages():
     """
     Return league average stat values for the given season.

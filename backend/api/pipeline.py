@@ -68,6 +68,7 @@ def _get_draft_id() -> str | None:
 
 
 @pipeline_bp.route("/pipeline/status", methods=["GET"])
+@require_admin
 def pipeline_status():
     """Return aggregate pipeline status for the given season."""
     season = request.args.get("season", CURRENT_SEASON)

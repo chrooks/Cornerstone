@@ -91,6 +91,22 @@ def test_validate_publishable_composite_and_flag_reads_chunk():
     assert out["players_missing_composite"] == 0
 
 
+_ADMIN = {"Authorization": "Bearer fake-admin"}
+
+
+def _as_admin(monkeypatch):
+    """Bypass the #182 admin gate: fake the JWT and the user_roles lookup."""
+    from unittest.mock import MagicMock
+    import api.auth as auth_mod
+
+    monkeypatch.setattr(auth_mod, "_verify_jwt", lambda _t: {"sub": "test-admin"})
+    role = MagicMock()
+    role.data = {"role": "admin"}
+    client = MagicMock()
+    client.table.return_value.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value = role
+    monkeypatch.setattr(auth_mod, "get_supabase", lambda: client)
+
+
 def test_review_queue_chunks(monkeypatch):
     import api.review as review
     from app import create_app
@@ -104,10 +120,11 @@ def test_review_queue_chunks(monkeypatch):
         "players": [{"id": pid, "name": pid, "team": "BOS", "position": "G"} for pid in _IDS],
     })
     monkeypatch.setattr(review, "get_supabase", lambda: client)
+    _as_admin(monkeypatch)
     app = create_app()
     app.config["TESTING"] = True
     with app.test_client() as c:
-        resp = c.get("/api/review/queue")
+        resp = c.get("/api/review/queue", headers=_ADMIN)
     assert resp.status_code == 200, resp.get_json()
     assert len(resp.get_json()["data"]) == len(_IDS)
 
@@ -179,10 +196,11 @@ def test_pipeline_status_chunks_and_counts_past_the_row_cap(monkeypatch):
     })
     monkeypatch.setattr(pipeline, "get_supabase", lambda: client)
     monkeypatch.setattr(pipeline.runs_repo, "list_recent", lambda limit: [])
+    _as_admin(monkeypatch)
     app = create_app()
     app.config["TESTING"] = True
     with app.test_client() as c:
-        resp = c.get("/api/pipeline/status")
+        resp = c.get("/api/pipeline/status", headers=_ADMIN)
     assert resp.status_code == 200, resp.get_json()
     assert resp.get_json()["data"]["total_flags"] == len(flags)
 

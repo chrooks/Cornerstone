@@ -478,7 +478,7 @@ def test_review_queue_filters_by_skill_and_counts_agreements(admin_client, db):
         name="Other Player",
     )
 
-    resp = admin_client.get("/api/review/queue?skill_name=high_flyer")
+    resp = admin_client.get("/api/review/queue?skill_name=high_flyer", headers=admin_client.auth_header)
 
     assert resp.status_code == 200, resp.get_json()
     queue = resp.get_json()["data"]
@@ -491,7 +491,7 @@ def test_review_queue_without_skill_name_has_no_agreement_count(admin_client, db
     _seed(db)
     db.rows["players"] = [{"id": PID, "name": "OG", "team": "BOS", "position": "F"}]
 
-    queue = admin_client.get("/api/review/queue").get_json()["data"]
+    queue = admin_client.get("/api/review/queue", headers=admin_client.auth_header).get_json()["data"]
 
     assert "agreement_count" not in queue[0]
 
@@ -504,7 +504,7 @@ def test_review_queue_agreement_count_ignores_high_and_placeholder_none(admin_cl
         [{"id": "f-rim", "skill_name": "rim_protector", "stat_rating": "Elite", "claude_rating": "Elite"}],
     )
 
-    queue = admin_client.get("/api/review/queue?skill_name=rim_protector").get_json()["data"]
+    queue = admin_client.get("/api/review/queue?skill_name=rim_protector", headers=admin_client.auth_header).get_json()["data"]
 
     assert queue[0]["agreement_count"] == 0
 
@@ -918,7 +918,7 @@ def test_review_queue_counts_a_real_claude_none_as_an_agreement(admin_client, db
           "stat_rating": "None", "claude_rating": "None"}],
     )
 
-    queue = admin_client.get("/api/review/queue?skill_name=high_flyer").get_json()["data"]
+    queue = admin_client.get("/api/review/queue?skill_name=high_flyer", headers=admin_client.auth_header).get_json()["data"]
     assert queue[0]["agreement_count"] == 1
 
     data = _bulk_scope(
@@ -940,7 +940,7 @@ def test_review_queue_agreement_count_skips_a_human_reviewed_entry(admin_client,
           "stat_rating": "Capable", "claude_rating": "Capable"}],
     )
 
-    queue = admin_client.get("/api/review/queue?skill_name=high_flyer").get_json()["data"]
+    queue = admin_client.get("/api/review/queue?skill_name=high_flyer", headers=admin_client.auth_header).get_json()["data"]
 
     assert queue[0]["agreement_count"] == 0
 
@@ -1004,9 +1004,9 @@ def test_review_queue_reason_filter_matches_a_reason_family(admin_client, db):
         name="Other Player",
     )
 
-    family = admin_client.get("/api/review/queue?flag_reason=human_decision_contradicted").get_json()["data"]
-    exact = admin_client.get("/api/review/queue?flag_reason=low_notability").get_json()["data"]
-    prefix_only = admin_client.get("/api/review/queue?flag_reason=human_decision").get_json()["data"]
+    family = admin_client.get("/api/review/queue?flag_reason=human_decision_contradicted", headers=admin_client.auth_header).get_json()["data"]
+    exact = admin_client.get("/api/review/queue?flag_reason=low_notability", headers=admin_client.auth_header).get_json()["data"]
+    prefix_only = admin_client.get("/api/review/queue?flag_reason=human_decision", headers=admin_client.auth_header).get_json()["data"]
 
     assert [e["player_id"] for e in family] == [PID]
     assert [e["player_id"] for e in exact] == [PID2]
@@ -1030,7 +1030,7 @@ def test_review_queue_skill_filter_carries_the_deck_card(admin_client, db):
     )
     db.rows["players"][0].update({"games_played": 70, "minutes_per_game": 31.5, "nba_api_id": 1628384})
 
-    entry = admin_client.get("/api/review/queue?skill_name=high_flyer").get_json()["data"][0]
+    entry = admin_client.get("/api/review/queue?skill_name=high_flyer", headers=admin_client.auth_header).get_json()["data"][0]
 
     assert entry["flag"] == {
         "id":                   "f-hf",
@@ -1052,7 +1052,7 @@ def test_review_queue_deck_card_has_no_claude_tier_on_a_high_skill(admin_client,
         [{"id": "f-rim", "skill_name": "rim_protector", "stat_rating": "Elite", "claude_rating": "None"}],
     )
 
-    entry = admin_client.get("/api/review/queue?skill_name=rim_protector").get_json()["data"][0]
+    entry = admin_client.get("/api/review/queue?skill_name=rim_protector", headers=admin_client.auth_header).get_json()["data"][0]
 
     assert entry["flag"]["claude_tier"] is None
     assert entry["flag"]["tier_now"] == "Elite"
@@ -1062,7 +1062,7 @@ def test_review_queue_without_skill_name_has_no_deck_card(admin_client, db):
     _seed(db)
     db.rows["players"] = [{"id": PID, "name": "OG", "team": "BOS", "position": "F"}]
 
-    entry = admin_client.get("/api/review/queue").get_json()["data"][0]
+    entry = admin_client.get("/api/review/queue", headers=admin_client.auth_header).get_json()["data"][0]
 
     assert "flag" not in entry
     assert "nba_api_id" not in entry
@@ -1083,7 +1083,7 @@ def test_duplicate_open_flags_card_and_resolve_pick_the_same_flag(admin_client, 
         ],
     )
 
-    entry = admin_client.get("/api/review/queue?skill_name=high_flyer").get_json()["data"][0]
+    entry = admin_client.get("/api/review/queue?skill_name=high_flyer", headers=admin_client.auth_header).get_json()["data"][0]
     assert entry["flag"]["id"] == "f-a"
     assert entry["flag"]["stat_rating"] == "Capable"
 

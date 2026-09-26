@@ -186,6 +186,7 @@ def _deck_card(skill_name: str, flag: dict, player: dict, profile_data_by_id: di
 
 
 @review_bp.route("/review/queue", methods=["GET"])
+@require_admin
 def review_queue():
     """
     Return a list of players with at least one unresolved skill flag.
@@ -358,6 +359,7 @@ def review_queue():
 
 
 @review_bp.route("/review/<player_id>/flags", methods=["GET"])
+@require_admin
 def player_flags(player_id: str):
     """
     Return all skill flags and skill profiles for a single player.
@@ -1106,6 +1108,7 @@ def manual_override_skill(player_id: str):
 
 
 @review_bp.route("/review/<player_id>/skill-breakdown", methods=["GET"])
+@require_admin
 def skill_breakdown(player_id: str):
     """
     Return per-condition pass/fail details for a single player + skill.
