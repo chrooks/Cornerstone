@@ -654,7 +654,7 @@ function AnimatedScoreCaption({ score }: { score: number }) {
   const isGain = (delta?.value ?? 0) > 0;
 
   return (
-    <div id="builder-new-feedback-score-caption" className="mt-2 flex items-center justify-center gap-2">
+    <div id="builder-new-feedback-score-caption" className="flex items-center gap-2">
       <div
         key={delta?.seq ?? 0}
         className={cn(
@@ -698,7 +698,7 @@ function StarterProgressCaption({ filledCount }: { filledCount: number }) {
   return (
     <div
       id="builder-new-feedback-starter-progress"
-      className="mt-2 flex justify-center"
+      className="flex"
       role="status"
       aria-label={`${filledCount} of 5 starters picked`}
     >
@@ -718,6 +718,83 @@ function StarterProgressCaption({ filledCount }: { filledCount: number }) {
           {filledCount} of 5 starters
         </span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * #92: the preview only reads while the hover it was computed for is live,
+ * and never while the committed eval is still catching up — a lagging
+ * "before" against a fresh "after" is exactly the drift ADR 0005 bans.
+ */
+function resolveActivePreview(
+  evalPreview: EvalPreview | null | undefined,
+  isEvaluating: boolean,
+  inspectionSource: BuilderFeedbackPanelProps["inspectionSource"],
+  inspectedPlayer: BuilderFeedbackPanelProps["inspectedPlayer"],
+): EvalPreview | null {
+  return evalPreview &&
+    !isEvaluating &&
+    inspectionSource === "build-player" &&
+    inspectedPlayer !== null &&
+    evalPreview.forPlayerId === inspectedPlayer.id
+    ? evalPreview
+    : null;
+}
+
+/**
+ * #142: the score strip. Pinned above the scrolling read so the star (or the
+ * starter progress) and the hover preview never sit below the fold. The
+ * Team Shape glyph stays below, in the read.
+ */
+function FeedbackScoreStrip({
+  allSlots,
+  latestEval,
+  evalPreview,
+  isEvaluating,
+  inspectedPlayer,
+  inspectionSource,
+}: Pick<BuilderFeedbackPanelProps, "allSlots" | "latestEval" | "evalPreview" | "isEvaluating" | "inspectedPlayer" | "inspectionSource">) {
+  if (!latestEval) return null;
+  // Starters only — a filled bench can't stand in for an incomplete starting five.
+  const filledCount = allSlots.slice(0, 5).filter(Boolean).length;
+  const activePreview = resolveActivePreview(evalPreview, isEvaluating, inspectionSource, inspectedPlayer);
+  const previewMovers = activePreview ? topMovers(latestEval, activePreview.evaluation) : [];
+
+  return (
+    <div
+      id="builder-feedback-score-strip"
+      className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-[#d9d0c9] bg-[#f7f7f7] px-3 py-2"
+    >
+      {filledCount >= 5
+        ? <AnimatedScoreCaption score={latestEval.star_rating} />
+        : <StarterProgressCaption filledCount={filledCount} />}
+
+      {/* #92 feedforward: ghost preview of the eval after adding the hovered candidate */}
+      {activePreview && (
+        <div id="builder-eval-preview" aria-live="polite" className="min-w-0 flex-1 text-right">
+          <p id="builder-eval-preview-delta" className="text-[0.75rem] italic text-[#0e0907]/55">
+            With <span className="font-medium not-italic text-[#0e0907]/75">{inspectedPlayer?.name}</span>:{" "}
+            <span className="font-mono not-italic tabular-nums">
+              ★ {latestEval.star_rating.toFixed(2)} → {activePreview.evaluation.star_rating.toFixed(2)}
+            </span>
+          </p>
+          {previewMovers.length > 0 && (
+            <p id="builder-eval-preview-movers" className="mt-0.5 text-[0.6875rem] italic text-[#0e0907]/45">
+              {previewMovers[0].source === "rotation" && "Rotation: "}
+              {previewMovers.map((mover, index) => (
+                <span key={mover.key}>
+                  {index > 0 && " · "}
+                  {SUBSCORE_LABELS[mover.key] ?? mover.key}{" "}
+                  <span className="font-mono not-italic tabular-nums">
+                    {mover.delta > 0 ? "+" : "−"}{Math.abs(mover.delta).toFixed(1)}
+                  </span>
+                </span>
+              ))}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -742,18 +819,7 @@ function NewFeedbackRead({
   const targetPlayer = inspectedPlayer;
   const isPlayerRead = targetPlayer !== null;
   const isBuildPlayerRead = inspectionSource === "build-player" && targetPlayer !== null;
-  // #92: the preview only reads while the hover it was computed for is live,
-  // and never while the committed eval is still catching up — a lagging
-  // "before" against a fresh "after" is exactly the drift ADR 0005 bans.
-  const activePreview =
-    evalPreview &&
-    !isEvaluating &&
-    isBuildPlayerRead &&
-    evalPreview.forPlayerId === targetPlayer.id
-      ? evalPreview
-      : null;
-  const previewMovers =
-    activePreview && latestEval ? topMovers(latestEval, activePreview.evaluation) : [];
+  const activePreview = resolveActivePreview(evalPreview, isEvaluating, inspectionSource, inspectedPlayer);
   const skills = buildSkillTraceEntries(targetPlayer?.skills);
   const selectedSkill = skills.find((skill) => skill.skill === selectedSkillKey) ?? null;
   const affectedTraitKeys = new Set(getImpactTraitKeysForSkill(selectedSkill?.skill));
@@ -910,37 +976,6 @@ function NewFeedbackRead({
           />
         </div>
 
-        {latestEval && (filledCount >= 5
-          ? <AnimatedScoreCaption score={latestEval.star_rating} />
-          : <StarterProgressCaption filledCount={filledCount} />)}
-
-        {/* #92 feedforward: ghost preview of the eval after adding the hovered candidate */}
-        {latestEval &&
-          activePreview &&
-          (
-            <div id="builder-eval-preview" aria-live="polite" className="mt-1.5 border-t border-[#d9d0c9]/60 pt-1.5">
-              <p id="builder-eval-preview-delta" className="text-[0.75rem] italic text-[#0e0907]/55">
-                With <span className="font-medium not-italic text-[#0e0907]/75">{targetPlayer?.name}</span>:{" "}
-                <span className="font-mono not-italic tabular-nums">
-                  ★ {latestEval.star_rating.toFixed(2)} → {activePreview.evaluation.star_rating.toFixed(2)}
-                </span>
-              </p>
-              {previewMovers.length > 0 && (
-                <p id="builder-eval-preview-movers" className="mt-0.5 text-[0.6875rem] italic text-[#0e0907]/45">
-                  {previewMovers[0].source === "rotation" && "Rotation: "}
-                  {previewMovers.map((mover, index) => (
-                    <span key={mover.key}>
-                      {index > 0 && " · "}
-                      {SUBSCORE_LABELS[mover.key] ?? mover.key}{" "}
-                      <span className="font-mono not-italic tabular-nums">
-                        {mover.delta > 0 ? "+" : "−"}{Math.abs(mover.delta).toFixed(1)}
-                      </span>
-                    </span>
-                  ))}
-                </p>
-              )}
-            </div>
-          )}
       </section>
 
       <FeedbackNotesSection
@@ -1338,6 +1373,17 @@ export function BuilderFeedbackPanel({
           <X className="size-4" aria-hidden />
         </button>
       </div>
+
+      {activeTab === "feedback" && (
+        <FeedbackScoreStrip
+          allSlots={allSlots}
+          latestEval={latestEval}
+          evalPreview={evalPreview}
+          isEvaluating={isEvaluating}
+          inspectedPlayer={inspectedPlayer}
+          inspectionSource={inspectionSource}
+        />
+      )}
 
       <div id="builder-feedback-content" className="flex-1 overflow-visible p-3 lg:min-h-0 lg:overflow-x-hidden lg:overflow-y-auto">
         <div id="builder-feedback-tab-panel-feedback" className={cn(activeTab !== "feedback" && "hidden")}>

@@ -1,6 +1,7 @@
 /**
  * Lab V1 fixes on the dev Surface: #138 (picker and /players sort by Value,
- * unpriced players disabled) and #149 (starter progress instead of 0.00 stars).
+ * unpriced players disabled), #149 (starter progress instead of 0.00 stars)
+ * and #142 (the score strip pinned above the Team Shape).
  *
  * Run: PLAYWRIGHT_BASE_URL=https://cornerstone-dev.hestia.chrooks.com \
  *      npx playwright test tests/lab-build-fixes.spec.ts --reporter=line
@@ -16,6 +17,19 @@ async function pool(page: Page): Promise<Row[]> {
   const res = await page.request.get(`${API}/api/players/bulk?include_legends=true`);
   expect(res.ok()).toBe(true);
   return ((await res.json()).data ?? []) as Row[];
+}
+
+/** An 8-of-9 standard Rotation under the value cap: the Legend plus the 7 cheapest priced actives.
+ *  One slot stays open so the picker still has addable rows to hover. */
+function fullRotationUrl(players: Row[]): string {
+  const legend = players.find((p) => p.is_legend)!;
+  const cheapest = players
+    .filter((p) => !p.is_legend && p.value_price != null && p.value_price > 0)
+    .sort((a, b) => a.value_price! - b.value_price!)
+    .slice(0, 7);
+  const params = new URLSearchParams({ cornerstone: legend.id, s1: legend.id });
+  cheapest.forEach((p, i) => params.set(`s${i + 2}`, p.id));
+  return `${BASE}/lab/standard/build?${params}`;
 }
 
 function toMillions(text: string): number {
@@ -54,6 +68,28 @@ for (const [width, height, label] of [[1440, 900, "desktop"], [390, 844, "phone"
     const row = picker.locator("tbody tr", { hasText: unpriced.name }).first();
     await expect(row).toContainText("No Value price");
     await expect(row).toHaveAttribute("aria-disabled", "true");
+  });
+
+  test(`#142 the score strip is pinned above the Team Shape at ${label}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto(fullRotationUrl(await pool(page)), { waitUntil: "networkidle" });
+    if (label === "phone") await page.locator("#builder-narrow-workspace-tab-feedback").click();
+    const strip = page.locator("#builder-feedback-score-strip");
+    await expect(strip.locator("#builder-new-feedback-score")).toContainText(/\d\.\d\d/, { timeout: 30_000 });
+    await expect(strip).toBeInViewport({ ratio: 1 });
+    // The star no longer sits below the glyph, where desktop-09 cut it off.
+    await expect(page.locator("#builder-feedback-content #builder-new-feedback-score")).toHaveCount(0);
+    const glyph = page.locator("#builder-new-feedback-shape");
+    const [stripBox, glyphBox] = await Promise.all([strip.boundingBox(), glyph.boundingBox()]);
+    expect(stripBox!.y).toBeLessThan(glyphBox!.y);
+
+    if (label === "desktop") {
+      // Hover feedforward reads in the strip, not below the fold.
+      const row = page.locator("#player-picker-panel tbody tr:not([aria-disabled])").first();
+      await row.hover();
+      await expect(strip.locator("#builder-eval-preview-delta")).toContainText(/★ \d\.\d\d → \d\.\d\d/, { timeout: 5_000 });
+      await expect(strip).toBeInViewport({ ratio: 1 });
+    }
   });
 
   test(`#138 /players carries a Value column, sorted first, at ${label}`, async ({ page }) => {
