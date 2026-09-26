@@ -34,7 +34,10 @@ async function openBuild(page: Page): Promise<void> {
 }
 
 function pickerRows(page: Page) {
-  return page.locator("[id^='player-row-view-']");
+  // #138 sorts the picker by Value, so the first rows are the dearest; skip the
+  // rows the cap already gates out (they carry aria-disabled) instead of
+  // burning the 10-row budget on them.
+  return page.locator("[id^='player-row-view-']:not([aria-disabled])");
 }
 
 /** Hover rows until one previews — unavailable rows are gated out by design. */

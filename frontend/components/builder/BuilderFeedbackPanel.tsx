@@ -775,7 +775,7 @@ function FeedbackScoreStrip({
         <div id="builder-eval-preview" aria-live="polite" className="min-w-0 flex-1 text-right">
           <p id="builder-eval-preview-delta" className="text-[0.75rem] italic text-[#0e0907]/55">
             With <span className="font-medium not-italic text-[#0e0907]/75">{inspectedPlayer?.name}</span>:{" "}
-            <span className="font-mono not-italic tabular-nums">
+            <span className="whitespace-nowrap font-mono not-italic tabular-nums">
               ★ {latestEval.star_rating.toFixed(2)} → {activePreview.evaluation.star_rating.toFixed(2)}
             </span>
           </p>
