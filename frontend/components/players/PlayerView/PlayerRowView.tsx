@@ -68,7 +68,9 @@ export function PlayerRowView({
   return (
     <tr
       id={`player-row-view-${player.id}`}
-      aria-disabled={disabled || undefined}
+      // Not "aria-disabled": ARIA inherits that to every descendant, and the #141
+      // info button inside an unavailable row must stay usable.
+      data-unavailable={disabled || undefined}
       draggable={!!onDragStart && !disabled}
       onDragStart={onDragStart && !disabled ? onDragStart : undefined}
       onClick={onClick}
