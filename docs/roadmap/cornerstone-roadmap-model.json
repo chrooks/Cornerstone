@@ -371,11 +371,11 @@
     },
     {
       "id": "i119",
-      "label": "🧍 #119 Taxonomy can't see\n3&D value (V1, P1 — grilling)",
+      "label": "🧍 #119 Taxonomy can't see\n3&D value (V1, P1 — verdict posted)",
       "group": "value",
       "x": 350,
       "y": 280,
-      "description": "FIX BEFORE LAUNCH (Chris, 2026-09-21). Grilled together with Player Archetypes (#15/#17). Prototypes: no existing-Skill option lands OG within tolerance while keeping the #108 fit; open question is one new Assignment defender Skill from matchup difficulty (needs #134).",
+      "description": "Verdict posted 2026-09-25 after #185's v12: Barnes 14 ok, Mobley 19 ok, OG 80 (band 6–36) documented miss; 3-and-D mean price ratio 0.41. Gap sits in playoff reputation the ratings cannot see (#164) and height (#186). Chris's reading decides close-as-documented-miss vs stay open.",
       "meta": {
         "state": "open",
         "milestone": "Value Economy",
@@ -1119,15 +1119,29 @@
     },
     {
       "id": "i185",
-      "label": "#185 overall underprices non-creators:\ncenters, stretch bigs, spacing wings (V1, P1)",
+      "label": "✅ #185 overall underprices non-creators\n— CLOSED (EV v12, 2026-09-26)",
       "group": "value",
       "x": 130,
       "y": 280,
-      "description": "The widened #119 fix (M6.2, 2026-09-25). Gobert Ringer 39 → ours 218, Towns 12 → 77, Cam Johnson 90 → 224. Creation axes carry the price; rim defense, rebounding, screening do not. One design pass, one new Evaluation Version, measured on the Ringer 100. Lands before #164.",
+      "description": "CLOSED 2026-09-26. EV cohesion-v12-anchor-finishing live on dev: each axis scale anchored at the 98th percentile (not the single giraffe) + finishing route (vertical_spacer 0.5, pnr_finisher 0.35). Gobert 218→133, Allen 124→71, Towns 77→52, Holiday 23→31; Ringer top-10 8→9/10, Spearman 0.726→0.730. 3-and-D stays a documented miss (#119). Concentration 40% at the #111 line → #187.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/185",
-        "state": "open",
+        "state": "closed",
         "priority": "p1",
+        "milestone": "V1 launch"
+      }
+    },
+    {
+      "id": "i187",
+      "label": "#187 re-check roster concentration\non Clingan after salary refresh (P3)",
+      "group": "value",
+      "x": 130,
+      "y": 340,
+      "description": "#111 exploit finder after v12: top active 40% (Clingan, 20/50), was 36%. Rule 'not over 40%' met, at the line. Re-run concentration_harness.py --seed 0 after the next salary refresh or EV publish; over 40% → retune under ringer_fit.py.",
+      "meta": {
+        "url": "https://github.com/chrooks/Cornerstone/issues/187",
+        "state": "open",
+        "priority": "p3",
         "milestone": "V1 launch"
       }
     }
@@ -1444,6 +1458,12 @@
       "to": "i164",
       "label": "lands before",
       "description": "#185 changes the tiers→overall Seam in memory; #164's backfill changes stats→tiers and raises a review wave. #164 re-runs ringer_fit afterwards."
+    },
+    {
+      "from": "i187",
+      "to": "i185",
+      "label": "re-check after",
+      "description": "Filed at #185's close; the 40% count came from v12's rebounding-axis lift."
     }
   ]
 }
