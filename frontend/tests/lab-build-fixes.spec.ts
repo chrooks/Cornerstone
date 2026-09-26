@@ -67,7 +67,7 @@ for (const [width, height, label] of [[1440, 900, "desktop"], [390, 844, "phone"
     await picker.getByRole("button", { name: "Add Filter" }).click();
     const row = picker.locator("tbody tr", { hasText: unpriced.name }).first();
     await expect(row).toContainText("No Value price");
-    await expect(row).toHaveAttribute("aria-disabled", "true");
+    await expect(row).toHaveAttribute("data-unavailable", "true");
   });
 
   test(`#142 the score strip is pinned above the Team Shape at ${label}`, async ({ page }) => {
@@ -87,7 +87,7 @@ for (const [width, height, label] of [[1440, 900, "desktop"], [390, 844, "phone"
 
     if (label === "desktop") {
       // Hover feedforward reads in the strip, not below the fold.
-      const row = page.locator("#player-picker-panel tbody tr:not([aria-disabled])").first();
+      const row = page.locator("#player-picker-panel tbody tr:not([data-unavailable])").first();
       await row.hover();
       await expect(strip.locator("#builder-eval-preview-delta")).toContainText(/★ \d\.\d\d → \d\.\d\d/, { timeout: 5_000 });
       await expect(strip).toBeInViewport({ ratio: 1 });
@@ -120,7 +120,7 @@ test.describe("#141 the touch picker", () => {
     await expect(page.locator("#player-picker-selection-hint")).toContainText("Tap to add");
 
     // Tap the position cell so the info button is not what gets hit.
-    const rows = page.locator("#player-picker-panel tbody tr:not([aria-disabled])");
+    const rows = page.locator("#player-picker-panel tbody tr:not([data-unavailable])");
     await rows.first().locator("td:nth-child(3)").tap();
     await expect(page.locator("#builder-narrow-workspace-tab-players")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#builder-narrow-workspace-feedback-dot")).toBeVisible();

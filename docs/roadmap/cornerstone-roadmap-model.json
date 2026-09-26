@@ -562,14 +562,14 @@
     },
     {
       "id": "i141",
-      "label": "#141 Touch picker without hover\n(V1 Lab fix, P1)",
-      "group": "lab",
+      "label": "✅ #141 touch picker\n— CLOSED (2026-09-26)",
+      "group": "done",
       "x": 465,
       "y": 900,
-      "description": "#133 audit Tier 1 fix picked for V1 on 2026-09-21.",
+      "description": "Coarse-pointer twin of the mouse picker: tap stays on the list, score strip in the sticky tab bar, ⓘ opens the Profile on Build Fit, pointer-aware hint. 513fbbf, 65d7d82, 6f43512. Proven on dev at 390x844 with touch.",
       "meta": {
         "url": "https://github.com/chrooks/Cornerstone/issues/141",
-        "state": "open"
+        "state": "closed"
       }
     },
     {
