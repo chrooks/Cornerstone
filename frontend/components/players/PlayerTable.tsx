@@ -150,6 +150,11 @@ interface PlayerTableProps {
    */
   onRowContextMenu?: (e: React.MouseEvent, player: PlayerWithSkills) => void;
   /**
+   * #141: when provided, each row carries an info button that calls this. The
+   * touch twin of right-click — a coarse pointer has no context menu or hover.
+   */
+  onRowInfo?: (player: PlayerWithSkills) => void;
+  /**
    * Player IDs that should be rendered as disabled (dimmed, unclickable).
    * Used by the builder to mark rostered players and over-budget players.
    */
@@ -223,6 +228,7 @@ export function PlayerTable({
   onRowClick,
   onRowDragStart,
   onRowContextMenu,
+  onRowInfo,
   disabledPlayerIds,
   mutedPlayerIds,
   onRowHover,
@@ -423,12 +429,26 @@ export function PlayerTable({
         return (
           <PlayerHeadshot nba_api_id={player.nba_api_id} size={24} name={player.name} />
         );
-      case "name":
+      case "name": {
+        const infoButton = onRowInfo ? (
+          <button
+            id={`player-row-info-${player.id}`}
+            type="button"
+            aria-label={`Profile: ${player.name}`}
+            onClick={(e) => { e.stopPropagation(); onRowInfo(player); }}
+            className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border text-[0.8125rem] text-muted-foreground transition-colors hover:border-[#ffa05c] hover:text-foreground"
+          >
+            ⓘ
+          </button>
+        ) : null;
         if (player.is_legend) {
           return (
-            <span className="font-medium text-foreground">
-              <span className="text-amber-500 mr-1" aria-label="Legend">★</span>
-              {player.name}
+            <span className="flex items-center gap-1.5">
+              <span className="font-medium text-foreground">
+                <span className="text-amber-500 mr-1" aria-label="Legend">★</span>
+                {player.name}
+              </span>
+              {infoButton}
             </span>
           );
         }
@@ -458,8 +478,10 @@ export function PlayerTable({
                 ✕
               </button>
             )}
+            {infoButton}
           </span>
         );
+      }
       case "peak_year":
         return (
           <span className="text-muted-foreground tabular-nums">

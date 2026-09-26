@@ -21,6 +21,7 @@ import {
 import { PlayerViewSizeToggle, type PlayerViewSize } from "@/components/players/PlayerView";
 import { DEFAULT_CURRENCY, DEFAULT_MAX_ROSTER_SLOTS, getPlayerPrice } from "@/lib/builder-config";
 import type { RuleSetCurrency } from "@/lib/builder-config";
+import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { randomId } from "@/lib/utils";
 import type { PlayerWithSkills } from "@/lib/types";
 import type { SuggestionFilter } from "@/lib/noteFilters";
@@ -117,6 +118,8 @@ export function PlayerPickerPanel({
   const [filterRequest, setFilterRequest] = useState<PlayerPoolFilterRequest | null>(null);
   const [viewSize, setViewSize] = useState<PlayerViewSize>("row");
   const hasAvailableBuildSlot = rosterPlayerIds.size < maxRosterSlots;
+  // #141: no hover and no right-click on touch — the row info button opens the Profile instead.
+  const isCoarsePointer = useCoarsePointer();
 
   // ── Hint banner dismissal (persisted) ────────────────────────────────────
   const HINT_STORAGE_KEY = "cornerstone:picker-hint-dismissed";
@@ -200,8 +203,14 @@ export function PlayerPickerPanel({
 
       {/* Header — title + player count + view toggle */}
       <div id="player-picker-header" className="flex items-center justify-between flex-wrap gap-2 flex-shrink-0">
-        <div>
+        <div className="flex items-center gap-2">
           <h2 id="player-picker-title" className="text-[1.125rem] font-semibold text-[#0e0907]">Players</h2>
+          {/* #141: the slot target lives here, not in the dismissible tip. */}
+          {selectedSlot != null && selectedSlot !== 1 && (
+            <span id="player-picker-selected-slot" className="border border-[#ffa05c] bg-[#ffa05c]/15 px-1.5 py-0.5 font-mono text-[0.6875rem] font-medium text-[#0e0907]">
+              → Slot {String(selectedSlot).padStart(2, "0")}
+            </span>
+          )}
         </div>
         {!loading && !error && (
           <PlayerViewSizeToggle
@@ -225,10 +234,9 @@ export function PlayerPickerPanel({
           className="flex-shrink-0 flex items-center justify-between text-[0.8125rem] text-[#0e0907]/45 bg-[#f0f0f0] border border-[#d9d0c9]/60 rounded-sm px-3 py-1.5"
         >
           <span>
-            Left-click to add · Right-click or inspect icon for Profile · Click remaining salary to filter
-            {selectedSlot != null && selectedSlot !== 1 && (
-              <span className="ml-2 text-[#ffa05c] font-medium">→ Slot {selectedSlot} selected</span>
-            )}
+            {isCoarsePointer
+              ? "Tap to add · ⓘ for Profile · Tap remaining salary to filter"
+              : "Left-click to add · Right-click or inspect icon for Profile · Click remaining salary to filter"}
           </span>
           <button
             id="player-picker-hint-dismiss"
@@ -286,6 +294,7 @@ export function PlayerPickerPanel({
             new Set(visiblePlayers.filter(isUnavailable).map((player) => player.id))
           }
           onRowClick={handleRowClick}
+          showRowInfo={isCoarsePointer}
           onRowDragStart={handleRowDragStart}
           onRowHover={onPlayerHover ? handlePlayerHover : undefined}
           onRowHoverEnd={onPlayerHoverEnd ? handlePlayerHoverEnd : undefined}
@@ -297,7 +306,8 @@ export function PlayerPickerPanel({
             ...context,
             inBuild: rosterPlayerIds.has(player.id),
             canAddToBuild: !isUnavailable(player),
-            addToBuild: () => handleRowClick(player),
+            // Adding from the Profile returns you to the list — the Profile is the touch preview.
+            addToBuild: () => { handleRowClick(player); context.dismissProfile?.(); },
           })}
           renderViewToggle={() => null}
         />

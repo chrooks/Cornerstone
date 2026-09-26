@@ -22,10 +22,12 @@ import { useRosterSlots } from "@/lib/hooks/useRosterSlots";
 import { useBuilderSalary } from "@/lib/hooks/useBuilderSalary";
 import { useBuilderEvaluation } from "@/lib/hooks/useBuilderEvaluation";
 import { useEvalPreview } from "@/lib/hooks/useEvalPreview";
+import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { resolveRuleSetRules } from "@/lib/rulesets";
 import { BuilderHeader } from "./BuilderHeader";
 import { CourtStrip } from "./CourtStrip";
 import { PlayerPickerPanel } from "./PlayerPickerPanel";
+import { NarrowScoreStrip } from "./NarrowScoreStrip";
 import { BuilderFeedbackPanel, type BuilderInspectionSource } from "./BuilderFeedbackPanel";
 import { BuilderPlayerFit } from "./BuilderPlayerFit";
 import { PlayerProfileModal, playerWithSkillsToProfile } from "@/components/players/PlayerView";
@@ -169,6 +171,7 @@ export function BuilderPage() {
   const [feedbackCollapsed, setFeedbackCollapsed] = useState(false);
   const [hasUnreadFeedback, setHasUnreadFeedback] = useState(false);
   const [narrowWorkspaceView, setNarrowWorkspaceView] = useState<NarrowWorkspaceView>("players");
+  const isCoarsePointer = useCoarsePointer();
   const { state: evalState, latestEval } = useBuilderEvaluation({ allSlots: roster.allSlots, legendDetail, cornerstoneId, isAdmin });
 
   useEffect(() => {
@@ -232,10 +235,17 @@ export function BuilderPage() {
     const hasOpenSlot = roster.allSlots.some((slotPlayer) => slotPlayer === null);
 
     roster.handlePlayerClick(player);
-    if (canFillSelectedSlot || hasOpenSlot) {
-      handleShowPlayerInFeedback(player);
+    if (!(canFillSelectedSlot || hasOpenSlot)) return;
+    if (isCoarsePointer) {
+      // #141: a tap stays on the list. The score moves in the tab-bar strip and
+      // the Feedback tab gets its dot; jumping there lost the list on every add.
+      setFocusedPlayerName(player.name);
+      setFeedbackCollapsed(false);
+      setHasUnreadFeedback(true);
+      return;
     }
-  }, [cornerstoneId, handleShowPlayerInFeedback, roster]);
+    handleShowPlayerInFeedback(player);
+  }, [cornerstoneId, handleShowPlayerInFeedback, isCoarsePointer, roster]);
 
   const handleDropPlayer = useCallback((slotIndex: number, player: PlayerWithSkills) => {
     const canDropIntoSlot = roster.allSlots[slotIndex - 1]?.id !== cornerstoneId;
@@ -450,10 +460,9 @@ export function BuilderPage() {
 
       <div
         id="builder-narrow-workspace-tabs"
-        className="sticky top-12 z-20 mt-3 grid grid-cols-2 border border-[#d9d0c9] bg-[#f0f0f0]/95 text-[0.8125rem] font-medium backdrop-blur-sm lg:hidden"
-        role="tablist"
-        aria-label="Build workspace"
+        className="sticky top-12 z-20 mt-3 border border-[#d9d0c9] bg-[#f0f0f0]/95 text-[0.8125rem] font-medium backdrop-blur-sm lg:hidden"
       >
+      <div className="grid grid-cols-2" role="tablist" aria-label="Build workspace">
         <button
           id="builder-narrow-workspace-tab-players"
           type="button"
@@ -496,6 +505,17 @@ export function BuilderPage() {
             />
           )}
         </button>
+      </div>
+      {/* #141 / #142: the score strip pinned with the tabs — the Feedback panel's own strip hides below lg. */}
+      {latestEval && (
+        <NarrowScoreStrip
+          score={latestEval.star_rating}
+          filledStarters={roster.allSlots.slice(0, 5).filter(Boolean).length}
+          filledCount={roster.allSlots.filter(Boolean).length}
+          maxRosterSlots={maxRosterSlots}
+          remainingSalary={salary.remainingSalary}
+        />
+      )}
       </div>
 
       {/* Row 3: Workspace — PlayerPool (primary) | Feedback (secondary, collapsible) */}

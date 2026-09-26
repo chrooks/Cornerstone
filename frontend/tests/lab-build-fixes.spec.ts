@@ -1,7 +1,7 @@
 /**
  * Lab V1 fixes on the dev Surface: #138 (picker and /players sort by Value,
  * unpriced players disabled), #149 (starter progress instead of 0.00 stars)
- * and #142 (the score strip pinned above the Team Shape).
+ * #142 (the score strip pinned above the Team Shape) and #141 (the touch picker).
  *
  * Run: PLAYWRIGHT_BASE_URL=https://cornerstone-dev.hestia.chrooks.com \
  *      npx playwright test tests/lab-build-fixes.spec.ts --reporter=line
@@ -74,8 +74,10 @@ for (const [width, height, label] of [[1440, 900, "desktop"], [390, 844, "phone"
     await page.setViewportSize({ width, height });
     await page.goto(fullRotationUrl(await pool(page)), { waitUntil: "networkidle" });
     if (label === "phone") await page.locator("#builder-narrow-workspace-tab-feedback").click();
-    const strip = page.locator("#builder-feedback-score-strip");
-    await expect(strip.locator("#builder-new-feedback-score")).toContainText(/\d\.\d\d/, { timeout: 30_000 });
+    // #141: below lg the strip lives in the sticky tab bar; on lg it heads the Feedback panel.
+    const strip = page.locator(label === "phone" ? "#builder-narrow-score-strip" : "#builder-feedback-score-strip");
+    const scoreSel = label === "phone" ? "#builder-narrow-score-strip-score" : "#builder-new-feedback-score";
+    await expect(strip.locator(scoreSel)).toContainText(/\d\.\d\d/, { timeout: 30_000 });
     await expect(strip).toBeInViewport({ ratio: 1 });
     // The star no longer sits below the glyph, where desktop-09 cut it off.
     await expect(page.locator("#builder-feedback-content #builder-new-feedback-score")).toHaveCount(0);
@@ -107,3 +109,31 @@ for (const [width, height, label] of [[1440, 900, "desktop"], [390, 844, "phone"
     expect(top[1]).toBeGreaterThanOrEqual(top[2]);
   });
 }
+
+test.describe("#141 the touch picker", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test("a tap adds and stays on the list; ⓘ opens the Profile; the score sits in the tab bar", async ({ page }) => {
+    const players = await pool(page);
+    const legend = players.find((p) => p.is_legend)!;
+    await page.goto(`${BASE}/lab/standard/build?cornerstone=${legend.id}&s1=${legend.id}`, { waitUntil: "networkidle" });
+    await expect(page.locator("#player-picker-selection-hint")).toContainText("Tap to add");
+
+    // Tap the position cell so the info button is not what gets hit.
+    const rows = page.locator("#player-picker-panel tbody tr:not([aria-disabled])");
+    await rows.first().locator("td:nth-child(3)").tap();
+    await expect(page.locator("#builder-narrow-workspace-tab-players")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#builder-narrow-workspace-feedback-dot")).toBeVisible();
+    await expect(page.locator("#builder-narrow-score-strip-slots")).toHaveText("2/9");
+    await expect(page.locator("#builder-narrow-score-strip")).toBeInViewport({ ratio: 1 });
+
+    // The info button is the touch preview: the Profile, with Add to Build, and adding returns to the list.
+    await rows.first().locator("[id^='player-row-info-']").tap();
+    const add = page.getByRole("button", { name: "Add to Build" });
+    await expect(add).toBeVisible();
+    await add.tap();
+    await expect(add).toHaveCount(0);
+    await expect(page.locator("#builder-narrow-score-strip-slots")).toHaveText("3/9");
+    await expect(page.locator("#builder-narrow-workspace-tab-players")).toHaveAttribute("aria-selected", "true");
+  });
+});

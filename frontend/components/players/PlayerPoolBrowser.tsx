@@ -109,6 +109,8 @@ interface PlayerPoolBrowserProps {
   onRowClick?: (player: PlayerWithSkills) => void;
   onRowDragStart?: (event: React.DragEvent, player: PlayerWithSkills) => void;
   onRowContextMenu?: (event: React.MouseEvent, player: PlayerWithSkills) => void;
+  /** #141: put an info button on every row that opens the Profile (touch twin of right-click). */
+  showRowInfo?: boolean;
   onRowHover?: (player: PlayerWithSkills) => void;
   onRowHoverEnd?: () => void;
   renderPlayerFit?: (player: PlayerWithSkills, context: {
@@ -217,6 +219,7 @@ export function PlayerPoolBrowser({
   onRowClick,
   onRowDragStart,
   onRowContextMenu,
+  showRowInfo = false,
   onRowHover,
   onRowHoverEnd,
   renderPlayerFit,
@@ -621,6 +624,7 @@ export function PlayerPoolBrowser({
             event.preventDefault();
             openProfile(player);
           })}
+          onRowInfo={showRowInfo ? openProfile : undefined}
           disabledPlayerIds={disabledPlayerIds}
           mutedPlayerIds={mutedPlayerIds}
           onRowHover={onRowHover}
