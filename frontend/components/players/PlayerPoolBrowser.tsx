@@ -286,7 +286,9 @@ export function PlayerPoolBrowser({
     setSortKeys(keys);
   }, []);
 
-  const openProfile = useCallback(async (player: PlayerWithSkills) => {
+  const [profileInitialTab, setProfileInitialTab] = useState<"player" | "build-fit">("player");
+  const openProfile = useCallback(async (player: PlayerWithSkills, tab: "player" | "build-fit" = "player") => {
+    setProfileInitialTab(tab);
     const cachedProfile = profileCache.current.get(player.id);
     const cachedBoxStats = profileBoxStatsCache.current.get(player.id);
     const optimisticProfile = cachedProfile ?? playerWithSkillsToProfile(player);
@@ -624,7 +626,7 @@ export function PlayerPoolBrowser({
             event.preventDefault();
             openProfile(player);
           })}
-          onRowInfo={showRowInfo ? openProfile : undefined}
+          onRowInfo={showRowInfo ? (player) => openProfile(player, "build-fit") : undefined}
           disabledPlayerIds={disabledPlayerIds}
           mutedPlayerIds={mutedPlayerIds}
           onRowHover={onRowHover}
@@ -777,6 +779,7 @@ export function PlayerPoolBrowser({
           loading={profileLoading}
           error={profileError}
           onDismiss={closeProfile}
+          initialTab={profileInitialTab}
           fitContent={profilePlayer ? renderPlayerFit?.(profilePlayer, { surface: "profile", dismissProfile: closeProfile }) : null}
         />
       )}

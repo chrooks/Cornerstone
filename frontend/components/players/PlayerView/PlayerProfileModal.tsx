@@ -12,6 +12,8 @@ interface PlayerProfileModalProps {
   loading?: boolean;
   error?: string | null;
   fitContent?: ReactNode;
+  /** #141: the tab to open on. The row info button opens on Build Fit, the touch preview with its add action. */
+  initialTab?: "player" | "build-fit";
   onDismiss: () => void;
 }
 
@@ -21,9 +23,10 @@ export function PlayerProfileModal({
   loading = false,
   error = null,
   fitContent,
+  initialTab = "player",
   onDismiss,
 }: PlayerProfileModalProps) {
-  const [activeTab, setActiveTab] = useState<"player" | "build-fit">("player");
+  const [activeTab, setActiveTab] = useState<"player" | "build-fit">(fitContent ? initialTab : "player");
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
